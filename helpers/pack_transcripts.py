@@ -184,7 +184,11 @@ def main() -> None:
     if not transcripts_dir.is_dir():
         sys.exit(f"no transcripts directory at {transcripts_dir}")
 
-    json_files = sorted(transcripts_dir.glob("*.json"))
+    # Skip AppleDouble/dotfiles (e.g. ._name.json) that macOS creates on
+    # exFAT/network drives — they are binary metadata, not transcripts.
+    json_files = sorted(
+        p for p in transcripts_dir.glob("*.json") if not p.name.startswith(".")
+    )
     if not json_files:
         sys.exit(f"no .json files in {transcripts_dir}")
 

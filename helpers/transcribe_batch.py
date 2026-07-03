@@ -1,6 +1,6 @@
 """Batch-transcribe every video in a directory with 4 parallel workers.
 
-Walks <videos_dir> for common video extensions, runs ElevenLabs Scribe on
+Walks <videos_dir> for common video extensions, runs Groq Whisper on
 each, writes transcripts to <videos_dir>/edit/transcripts/<name>.json.
 
 Cached per-file: any source that already has a transcript is skipped.
@@ -20,7 +20,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from transcribe import load_api_key, transcribe_one
+from transcribe import DEFAULT_MODEL, load_api_key, transcribe_one
 
 
 VIDEO_EXTS = {".mp4", ".MP4", ".mov", ".MOV", ".mkv", ".MKV", ".avi", ".AVI", ".m4v"}
@@ -29,7 +29,7 @@ VIDEO_EXTS = {".mp4", ".MP4", ".mov", ".MOV", ".mkv", ".MKV", ".avi", ".AVI", ".
 def find_videos(videos_dir: Path) -> list[Path]:
     videos = sorted(
         p for p in videos_dir.iterdir()
-        if p.is_file() and p.suffix in VIDEO_EXTS
+        if p.is_file() and p.suffix in VIDEO_EXTS and not p.name.startswith(".")
     )
     return videos
 
@@ -54,7 +54,13 @@ def main() -> None:
         "--num-speakers",
         type=int,
         default=None,
-        help="Optional number of speakers. Improves diarization when known.",
+        help="Accepted for compatibility but ignored (Groq Whisper does not diarize).",
+    )
+    ap.add_argument(
+        "--model",
+        type=str,
+        default=DEFAULT_MODEL,
+        help=f"Groq transcription model (default: {DEFAULT_MODEL}).",
     )
     args = ap.parse_args()
 
@@ -92,6 +98,7 @@ def main() -> None:
                 api_key=api_key,
                 language=args.language,
                 num_speakers=args.num_speakers,
+                model=args.model,
                 verbose=False,
             ): v
             for v in pending

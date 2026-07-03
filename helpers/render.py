@@ -132,7 +132,13 @@ def is_hdr_source(video: Path) -> bool:
 
 
 def is_portrait_source(video: Path) -> bool:
-    """Return True if the video's height > width (portrait / vertical)."""
+    """Return True if the video DISPLAYS as portrait (height > width).
+
+    Phone/mirrorless footage is often stored landscape (e.g. 3840×2160) with a
+    ±90° display-matrix rotation, which ffmpeg auto-applies on decode. Reading
+    only the raw stream dims would call such a clip landscape and scale it to
+    the wrong size, so we swap dims when the rotation is ±90°/±270°.
+    """
     try:
         out = subprocess.run(
             ["ffprobe", "-v", "error", "-select_streams", "v:0",
@@ -140,10 +146,27 @@ def is_portrait_source(video: Path) -> bool:
              "-of", "csv=p=0", str(video)],
             capture_output=True, text=True, check=True,
         )
-        w, h = map(int, out.stdout.strip().split(","))
-        return h > w
+        parts = out.stdout.strip().split(",")
+        w, h = int(parts[0]), int(parts[1])
     except Exception:
         return False
+
+    rot = 0
+    try:
+        r = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream_side_data=rotation",
+             "-of", "default=noprint_wrappers=1:nokey=1", str(video)],
+            capture_output=True, text=True,
+        )
+        vals = [v for v in r.stdout.split() if v.lstrip("-").isdigit()]
+        if vals:
+            rot = int(vals[0])
+    except Exception:
+        pass
+    if abs(rot) % 180 == 90:
+        w, h = h, w
+    return h > w
 
 
 # -------- Per-segment extraction (Rule 2 + Rule 3) --------------------------
@@ -157,6 +180,7 @@ def extract_segment(
     out_path: Path,
     preview: bool = False,
     draft: bool = False,
+    keep_resolution: bool = False,
 ) -> None:
     """Extract a cut range as its own MP4 with grade + 30ms audio fades baked in.
 
@@ -167,19 +191,24 @@ def extract_segment(
       - final (default): 1080p libx264 fast CRF 20
       - preview:         1080p libx264 medium CRF 22 (evaluable for QC)
       - draft:           720p libx264 ultrafast CRF 28 (cut-point check only)
+      - keep_resolution: source resolution + source fps (LONGFORM / 16:9 YouTube).
+        Skips scaling and does not force 24 fps. Draft/preview still down-scale.
     """
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     portrait = is_portrait_source(source)
     if draft:
         scale = "scale=-2:1280" if portrait else "scale=1280:-2"
+    elif keep_resolution:
+        scale = ""  # keep native resolution (longform)
     else:
         scale = "scale=-2:1920" if portrait else "scale=1920:-2"
 
     vf_parts: list[str] = []
     if is_hdr_source(source):
         vf_parts.append(TONEMAP_CHAIN)
-    vf_parts.append(scale)
+    if scale:
+        vf_parts.append(scale)
     if grade_filter:
         vf_parts.append(grade_filter)
     vf = ",".join(vf_parts)
@@ -200,10 +229,13 @@ def extract_segment(
         "-ss", f"{seg_start:.3f}",
         "-i", str(source),
         "-t", f"{duration:.3f}",
-        "-vf", vf,
-        "-af", af,
-        "-c:v", "libx264", "-preset", preset, "-crf", crf,
-        "-pix_fmt", "yuv420p", "-r", "24",
+    ]
+    if vf:
+        cmd += ["-vf", vf]
+    cmd += ["-af", af, "-c:v", "libx264", "-preset", preset, "-crf", crf, "-pix_fmt", "yuv420p"]
+    if not keep_resolution:
+        cmd += ["-r", "24"]  # short-form standard; longform keeps source fps
+    cmd += [
         "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
         "-movflags", "+faststart",
         str(out_path),
@@ -216,6 +248,7 @@ def extract_all_segments(
     edit_dir: Path,
     preview: bool,
     draft: bool = False,
+    keep_resolution: bool = False,
 ) -> list[Path]:
     """Extract every EDL range into edit_dir/clips_graded/seg_NN.mp4.
     Returns the ordered list of segment paths.
@@ -255,7 +288,7 @@ def extract_all_segments(
         print(f"  [{i:02d}] {src_name}  {start:7.2f}-{end:7.2f}  ({duration:5.2f}s)  {note}")
         if is_auto:
             print(f"        grade: {seg_filter or '(none)'}")
-        extract_segment(src_path, start, duration, seg_filter, out_path, preview=preview, draft=draft)
+        extract_segment(src_path, start, duration, seg_filter, out_path, preview=preview, draft=draft, keep_resolution=keep_resolution)
         seg_paths.append(out_path)
 
     return seg_paths
@@ -426,6 +459,48 @@ def measure_loudness(video_path: Path) -> dict[str, str] | None:
     if not needed.issubset(data.keys()):
         return None
     return data
+
+
+# -------- Voice EQ + mastering (spoken-word broadcast chain) ----------------
+
+# A conservative broadcast chain for a single spoken voice. Applied BEFORE
+# loudnorm so the normalizer measures the already-mastered signal.
+#   1. highpass 80 Hz .......... kill rumble / HVAC / handling / plosive thump
+#   2. -2.5 dB @ 200 Hz (Q1.1) .. reduce boxiness / mud
+#   3. acompressor ............. even out dynamics, bring the voice forward
+#   4. +2.5 dB @ 3.2 kHz (Q1.6) . presence / intelligibility
+#   5. high-shelf +3 dB @ 9 kHz . air / brightness
+#   6. deesser ................. tame sibilance the presence boost exaggerates
+#   7. alimiter ................ safety ceiling before loudnorm
+# Every value is a starting point — tune per voice/room if the material asks.
+VOICE_MASTER_CHAIN = (
+    "highpass=f=80,"
+    "equalizer=f=200:t=q:w=1.1:g=-2.5,"
+    "acompressor=threshold=-20dB:ratio=3:attack=12:release=200:makeup=3:knee=6,"
+    "equalizer=f=3200:t=q:w=1.6:g=2.5,"
+    "treble=g=3:f=9000,"
+    "deesser=i=0.35,"
+    "alimiter=level_in=1:level_out=1:limit=0.95"
+)
+
+
+def apply_voice_master(input_path: Path, output_path: Path) -> None:
+    """Run the spoken-word EQ + mastering chain, video copied untouched.
+
+    Runs before loudnorm; loudnorm then normalizes the mastered signal to the
+    social target. Audio re-encoded to AAC 192k/48k, video stream copied.
+    """
+    cmd = [
+        "ffmpeg", "-y", "-hide_banner", "-nostats",
+        "-i", str(input_path),
+        "-c:v", "copy",
+        "-af", VOICE_MASTER_CHAIN,
+        "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
+        "-movflags", "+faststart",
+        str(output_path),
+    ]
+    print(f"  voice master: EQ + compression + de-ess → {output_path.name}")
+    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
 
 
 def apply_loudnorm_two_pass(
@@ -601,6 +676,19 @@ def main() -> None:
         action="store_true",
         help="Skip audio loudness normalization. Default is on (-14 LUFS, -1 dBTP, LRA 11).",
     )
+    ap.add_argument(
+        "--voice-master",
+        action="store_true",
+        help="Apply spoken-word EQ + mastering (highpass, mud cut, compression, "
+             "presence + air, de-ess, limiter) before loudnorm. Also enabled by "
+             'EDL field "voice_master": true.',
+    )
+    ap.add_argument(
+        "--keep-resolution",
+        action="store_true",
+        help="LONGFORM (16:9 YouTube): keep the source resolution and fps instead of "
+             "forcing 1080p @ 24. Grade/voice-master/loudnorm still apply.",
+    )
     args = ap.parse_args()
 
     edl_path = args.edl.resolve()
@@ -613,7 +701,8 @@ def main() -> None:
 
     # 1. Extract per-segment (auto-grade per range if EDL grade is "auto")
     segment_paths = extract_all_segments(
-        edl, edit_dir, preview=args.preview, draft=args.draft
+        edl, edit_dir, preview=args.preview, draft=args.draft,
+        keep_resolution=args.keep_resolution,
     )
 
     # 2. Concat → base
@@ -640,16 +729,35 @@ def main() -> None:
 
     # 4. Composite (overlays + subtitles LAST) → intermediate (pre-loudnorm) path
     overlays = edl.get("overlays") or []
-    if args.no_loudnorm:
+    voice_master = args.voice_master or bool(edl.get("voice_master"))
+
+    if args.no_loudnorm and not voice_master:
         # Composite directly to final output
         build_final_composite(base_path, overlays, subs_path, out_path, edit_dir)
     else:
-        # Composite to a temp file, then run loudnorm → final output
+        # Composite to a temp file, then optional voice master → optional loudnorm.
         tmp_composite = out_path.with_suffix(".prenorm.mp4")
         build_final_composite(base_path, overlays, subs_path, tmp_composite, edit_dir)
-        print("loudness normalization → social-ready (-14 LUFS / -1 dBTP / LRA 11)")
-        apply_loudnorm_two_pass(tmp_composite, out_path, preview=args.draft)
-        tmp_composite.unlink(missing_ok=True)
+        temps = [tmp_composite]
+
+        norm_input = tmp_composite
+        if voice_master:
+            print("voice mastering → EQ + compression + de-ess (spoken word)")
+            voiced = out_path.with_suffix(".voiced.mp4")
+            apply_voice_master(tmp_composite, voiced)
+            norm_input = voiced
+            temps.append(voiced)
+
+        if args.no_loudnorm:
+            # Voice master requested but loudnorm skipped: the mastered file is final.
+            norm_input.replace(out_path)
+            temps = [t for t in temps if t != norm_input]
+        else:
+            print("loudness normalization → social-ready (-14 LUFS / -1 dBTP / LRA 11)")
+            apply_loudnorm_two_pass(norm_input, out_path, preview=args.draft)
+
+        for t in temps:
+            t.unlink(missing_ok=True)
 
     size_mb = out_path.stat().st_size / (1024 * 1024)
     print(f"\ndone: {out_path} ({size_mb:.1f} MB)")

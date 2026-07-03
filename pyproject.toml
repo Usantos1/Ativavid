@@ -1,19 +1,25 @@
 [project]
-name = "video-use"
+name = "edvid"
 version = "0.1.0"
 description = "Conversation-driven video editor skill for Claude Code"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
 dependencies = [
     "requests",
-    "librosa",
-    "matplotlib",
     "pillow",
     "numpy",
+    # Face/eye tracking for the Phase-2 dynamic camera (face_track.py). Pinned:
+    # opencv-python-headless 5.0.0.93 ships without CascadeClassifier and breaks
+    # Haar detection — stay on the 4.10 line. Headless = no GUI/Qt deps.
+    "opencv-python-headless==4.10.0.84",
 ]
 
 [project.optional-dependencies]
 animations = ["manim"]
+# Person matting for the "element behind the subject" effect (person_matte.py).
+# Robust Video Matting via torch.hub — heavy (~2GB), so it's opt-in: install with
+# `uv sync --extra matting`. Base install stays light for users who don't need it.
+matting = ["torch", "torchvision"]
 
 [build-system]
 requires = ["setuptools>=61.0"]
