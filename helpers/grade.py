@@ -291,6 +291,82 @@ def apply_grade(input_path: Path, output_path: Path, filter_string: str) -> None
     subprocess.run(cmd, check=True)
 
 
+def render_candidates(video: Path, out_png: Path, spec: str, at: float | None) -> None:
+    """Render N grade candidates on the SAME frame into ONE labeled comparison
+    PNG — for showing the user grade options without burning N separate images.
+
+    spec: 'name=filter;name2=filter2;original=' — empty filter = untouched;
+    a preset name is accepted as the filter value.
+    """
+    import tempfile
+
+    from PIL import Image, ImageDraw, ImageFont
+
+    dur_out = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+         "-of", "csv=p=0", str(video)],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    t = at if at is not None else float(dur_out) / 2
+
+    pairs: list[tuple[str, str]] = []
+    for part in spec.split(";"):
+        part = part.strip()
+        if not part:
+            continue
+        name, _, filt = part.partition("=")
+        filt = filt.strip()
+        if filt in PRESETS:
+            filt = PRESETS[filt]
+        pairs.append((name.strip() or f"cand{len(pairs) + 1}", filt))
+    if not pairs:
+        sys.exit("--candidates: no candidates parsed")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        base = Path(tmp) / "base.png"
+        subprocess.run(
+            ["ffmpeg", "-y", "-v", "error", "-ss", f"{t:.3f}", "-i", str(video),
+             "-frames:v", "1", str(base)],
+            check=True,
+        )
+        tiles: list[tuple[str, "Image.Image"]] = []
+        for i, (name, filt) in enumerate(pairs):
+            if filt:
+                p = Path(tmp) / f"c{i}.png"
+                subprocess.run(
+                    ["ffmpeg", "-y", "-v", "error", "-i", str(base),
+                     "-vf", filt, "-frames:v", "1", str(p)],
+                    check=True,
+                )
+            else:
+                p = base
+            tiles.append((name, Image.open(p).convert("RGB")))
+
+        cols = min(3, len(tiles))
+        rows = (len(tiles) + cols - 1) // cols
+        tile_w = max(360, min(760, 1600 // cols))
+        aspect = tiles[0][1].height / tiles[0][1].width
+        tile_h = int(tile_w * aspect)
+        label_h = 54
+        gap = 8
+        sheet = Image.new("RGB", (cols * tile_w + (cols - 1) * gap,
+                                  rows * (tile_h + label_h) + (rows - 1) * gap), (12, 12, 14))
+        draw = ImageDraw.Draw(sheet)
+        try:
+            font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 32)
+        except OSError:
+            font = ImageFont.load_default()
+        for i, (name, img) in enumerate(tiles):
+            cx = (i % cols) * (tile_w + gap)
+            cy = (i // cols) * (tile_h + label_h + gap)
+            draw.text((cx + 14, cy + 10), name, fill=(255, 255, 255), font=font)
+            sheet.paste(img.resize((tile_w, tile_h)), (cx, cy + label_h))
+        out_png.parent.mkdir(parents=True, exist_ok=True)
+        sheet.save(out_png)
+    print(f"{out_png} — {len(tiles)} candidates on the frame at {t:.2f}s "
+          f"({sheet.width}×{sheet.height})")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Apply a color grade via ffmpeg filter chain")
     ap.add_argument("input", type=Path, nargs="?", help="Input video")
@@ -325,7 +401,29 @@ def main() -> None:
         action="store_true",
         help="List available presets and exit.",
     )
+    ap.add_argument(
+        "--candidates",
+        type=str,
+        default=None,
+        help='Compare grades on ONE frame: "punch=eq=contrast=1.15;suave=neutral_punch;'
+             'original=" (empty = untouched; preset names allowed). Writes a single '
+             "labeled PNG to -o. Use with --frame.",
+    )
+    ap.add_argument(
+        "--frame",
+        type=float,
+        default=None,
+        help="Timestamp (s) of the frame for --candidates (default: midpoint).",
+    )
     args = ap.parse_args()
+
+    if args.candidates is not None:
+        if not args.input or not args.output:
+            ap.error("--candidates requires <input> and -o <output.png>")
+        if not args.input.exists():
+            sys.exit(f"input not found: {args.input}")
+        render_candidates(args.input, args.output, args.candidates, args.frame)
+        return
 
     if args.list_presets:
         for name, f in PRESETS.items():

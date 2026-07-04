@@ -30,10 +30,12 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import requests
@@ -127,19 +129,30 @@ def call_groq(
     if language:
         data.append(("language", language))
 
-    with open(audio_path, "rb") as f:
-        resp = requests.post(
-            GROQ_URL,
-            headers={"Authorization": f"Bearer {api_key}"},
-            files={"file": (audio_path.name, f, "audio/flac")},
-            data=data,
-            timeout=1800,
-        )
+    # Groq occasionally returns transient 5xx/429s mid-job; on a long multi-chunk
+    # transcription a single blip would otherwise abort everything. Retry those
+    # with exponential backoff; fail fast on 4xx (bad key / bad request).
+    last_err = ""
+    for attempt in range(6):
+        with open(audio_path, "rb") as f:
+            resp = requests.post(
+                GROQ_URL,
+                headers={"Authorization": f"Bearer {api_key}"},
+                files={"file": (audio_path.name, f, "audio/flac")},
+                data=data,
+                timeout=1800,
+            )
+        if resp.status_code == 200:
+            return resp.json()
+        last_err = f"Groq returned {resp.status_code}: {resp.text[:500]}"
+        retryable = resp.status_code == 429 or resp.status_code >= 500
+        if not retryable or attempt == 5:
+            break
+        wait = min(2 ** attempt * 5, 60)  # 5,10,20,40,60,60s
+        print(f"    {last_err.splitlines()[0]} — retry {attempt + 1}/5 in {wait}s", flush=True)
+        time.sleep(wait)
 
-    if resp.status_code != 200:
-        raise RuntimeError(f"Groq returned {resp.status_code}: {resp.text[:500]}")
-
-    return resp.json()
+    raise RuntimeError(last_err)
 
 
 def _to_scribe_words(groq_words: list[dict], offset: float) -> list[dict]:
@@ -183,31 +196,60 @@ def _transcribe_audio(
     model: str,
     language: str | None,
     verbose: bool,
+    cache_dir: Path | None = None,
+    chunk_seconds: int = CHUNK_SECONDS,
 ) -> dict:
     """Transcribe one prepared audio file (chunking if large). Returns a
-    payload dict in ElevenLabs Scribe shape."""
+    payload dict in ElevenLabs Scribe shape.
+
+    Chunks are fetched in PARALLEL (offsets are precomputed, so order doesn't
+    matter) and each chunk's raw payload is cached in cache_dir — a failed run
+    resumes from the chunks that already succeeded instead of redoing them.
+    Smaller chunk_seconds = smaller requests: drop to ~300 when the provider is
+    shedding load on big payloads.
+    """
     duration = _probe_duration(audio_path)
-    words: list[dict] = []
-    text_parts: list[str] = []
-    detected_lang = language or ""
 
     with tempfile.TemporaryDirectory() as seg_tmp:
-        if duration > CHUNK_SECONDS:
-            chunks = _segment_audio(audio_path, Path(seg_tmp), CHUNK_SECONDS)
+        if duration > chunk_seconds:
+            chunks = _segment_audio(audio_path, Path(seg_tmp), chunk_seconds)
         else:
             chunks = [audio_path]
 
-        offset = 0.0
-        for i, chunk in enumerate(chunks):
+        # offsets up-front so chunk results are order-independent
+        offsets = [0.0]
+        for c in chunks[:-1]:
+            offsets.append(offsets[-1] + _probe_duration(c))
+
+        def fetch(i: int, chunk: Path) -> dict:
+            cache = cache_dir / f"chunk_{i:04d}.json" if cache_dir else None
+            if cache and cache.exists():
+                if verbose:
+                    print(f"    chunk {i + 1}/{len(chunks)} (cached)", flush=True)
+                return json.loads(cache.read_text())
             if verbose and len(chunks) > 1:
                 print(f"    chunk {i + 1}/{len(chunks)}", flush=True)
             payload = call_groq(chunk, api_key, model=model, language=language)
-            words.extend(_to_scribe_words(payload.get("words", []), offset))
-            if payload.get("text"):
-                text_parts.append(payload["text"].strip())
-            if not detected_lang and payload.get("language"):
-                detected_lang = payload["language"]
-            offset += _probe_duration(chunk)
+            if cache:
+                cache_dir.mkdir(parents=True, exist_ok=True)
+                cache.write_text(json.dumps(payload))
+            return payload
+
+        if len(chunks) == 1:
+            payloads = [fetch(0, chunks[0])]
+        else:
+            with ThreadPoolExecutor(max_workers=min(4, len(chunks))) as ex:
+                payloads = list(ex.map(fetch, range(len(chunks)), chunks))
+
+    words: list[dict] = []
+    text_parts: list[str] = []
+    detected_lang = language or ""
+    for i, payload in enumerate(payloads):
+        words.extend(_to_scribe_words(payload.get("words", []), offsets[i]))
+        if payload.get("text"):
+            text_parts.append(payload["text"].strip())
+        if not detected_lang and payload.get("language"):
+            detected_lang = payload["language"]
 
     return {
         "language_code": detected_lang,
@@ -226,6 +268,7 @@ def transcribe_one(
     num_speakers: int | None = None,
     model: str = DEFAULT_MODEL,
     verbose: bool = True,
+    chunk_seconds: int = CHUNK_SECONDS,
 ) -> Path:
     """Transcribe a single video. Returns path to transcript JSON.
 
@@ -245,6 +288,12 @@ def transcribe_one(
     if verbose:
         print(f"  extracting audio from {video.name}", flush=True)
 
+    # chunk-level resume cache, keyed by source identity + params — survives a
+    # failed run (e.g. a Groq outage mid-job) so a retry only redoes what failed
+    st = video.stat()
+    chunk_cache = (transcripts_dir / ".chunks"
+                   / f"{video.stem}-{st.st_size}-{int(st.st_mtime)}-{model}-{language or 'auto'}-{chunk_seconds}")
+
     t0 = time.time()
     with tempfile.TemporaryDirectory() as tmp:
         audio = Path(tmp) / f"{video.stem}.flac"
@@ -252,9 +301,12 @@ def transcribe_one(
         size_mb = audio.stat().st_size / (1024 * 1024)
         if verbose:
             print(f"  transcribing {video.stem}.flac ({size_mb:.1f} MB) via Groq", flush=True)
-        payload = _transcribe_audio(audio, api_key, model, language, verbose)
+        payload = _transcribe_audio(audio, api_key, model, language, verbose,
+                                    cache_dir=chunk_cache, chunk_seconds=chunk_seconds)
 
     out_path.write_text(json.dumps(payload, indent=2))
+    # only THIS video's chunk dir — siblings may belong to parallel batch workers
+    shutil.rmtree(chunk_cache, ignore_errors=True)
     dt = time.time() - t0
 
     if verbose:
@@ -292,6 +344,13 @@ def main() -> None:
         default=DEFAULT_MODEL,
         help=f"Groq transcription model (default: {DEFAULT_MODEL}).",
     )
+    ap.add_argument(
+        "--chunk-seconds",
+        type=int,
+        default=CHUNK_SECONDS,
+        help=f"Chunk length for long audio (default {CHUNK_SECONDS}). Drop to ~300 "
+             "when Groq is shedding load on big payloads (5xx on large chunks).",
+    )
     args = ap.parse_args()
 
     video = args.video.resolve()
@@ -308,6 +367,7 @@ def main() -> None:
         language=args.language,
         num_speakers=args.num_speakers,
         model=args.model,
+        chunk_seconds=args.chunk_seconds,
     )
 
 

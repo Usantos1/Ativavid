@@ -1,0 +1,210 @@
+"""Numeric self-eval of a rendered cut against its EDL — TEXT ONLY, no images.
+
+Replaces the old "timeline_view every boundary" pass: run this first, then open
+a timeline_view ONLY on the junctions it flags (usually 0–2, not all of them).
+
+Checks:
+  - duration: rendered vs EDL expectation
+  - per-junction audio, three tiny probe windows around each cut point t:
+      pre  [t-0.13, t-0.05]  hot (> -6 dBFS) → word may be clipped at segment end
+      jct  [t-0.015, t+0.015] hot (> -8 dBFS) → pop / missing 30ms fade
+      post [t+0.05, t+0.13]  hot (> -6 dBFS) → word onset may be clipped
+  - dead air: silences ≥ --min-silence anywhere in the cut (near-junction noted)
+  - black frames (blackdetect) — a cut should never produce black
+  - clipping: astats peak + flat factor on the whole render
+
+Usage:
+    python helpers/verify_cut.py <edit>/edl.json <edit>/cut.mp4
+    python helpers/verify_cut.py edl.json cut.mp4 --min-silence 1.2   # longform
+Exit code 0 = clean, 1 = has CHECK flags.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import subprocess
+import sys
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+
+POP_DB = -8.0     # junction window louder than this → suspected pop
+HOT_DB = -6.0     # pre/post window louder than this → suspected clipped word
+
+
+def probe_duration(path: Path) -> float:
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+         "-of", "csv=p=0", str(path)],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    return float(out)
+
+
+def peak_db(path: Path, start: float, dur: float) -> float:
+    """Max volume (dBFS) of a tiny audio window. -99 if silent/empty."""
+    if start < 0:
+        dur += start
+        start = 0.0
+    if dur <= 0:
+        return -99.0
+    r = subprocess.run(
+        ["ffmpeg", "-v", "info", "-ss", f"{start:.3f}", "-t", f"{dur:.3f}",
+         "-i", str(path), "-vn", "-af", "volumedetect", "-f", "null", "-"],
+        capture_output=True, text=True,
+    )
+    m = re.search(r"max_volume:\s*(-?[\d.]+)\s*dB", r.stderr)
+    return float(m.group(1)) if m else -99.0
+
+
+def audio_scan(path: Path, min_silence: float) -> tuple[list[tuple[float, float]], float, float]:
+    """One decode pass: silences [(start,end)...], overall peak dB, flat factor."""
+    r = subprocess.run(
+        ["ffmpeg", "-v", "info", "-i", str(path), "-vn",
+         "-af", f"silencedetect=noise=-35dB:d={min_silence},astats=measure_perchannel=none",
+         "-f", "null", "-"],
+        capture_output=True, text=True,
+    )
+    err = r.stderr
+    silences: list[tuple[float, float]] = []
+    cur: float | None = None
+    for line in err.splitlines():
+        ms = re.search(r"silence_start:\s*(-?[\d.]+)", line)
+        me = re.search(r"silence_end:\s*(-?[\d.]+)", line)
+        if ms:
+            cur = float(ms.group(1))
+        elif me and cur is not None:
+            silences.append((cur, float(me.group(1))))
+            cur = None
+    peak = -99.0
+    mp = re.search(r"Peak level dB:\s*(-?[\d.]+|-inf)", err)
+    if mp and mp.group(1) != "-inf":
+        peak = float(mp.group(1))
+    flat = 0.0
+    mf = re.search(r"Flat factor:\s*([\d.]+)", err)
+    if mf:
+        flat = float(mf.group(1))
+    return silences, peak, flat
+
+
+def black_scan(path: Path) -> list[tuple[float, float]]:
+    r = subprocess.run(
+        ["ffmpeg", "-v", "info", "-i", str(path), "-an",
+         "-vf", "blackdetect=d=0.05:pix_th=0.10", "-f", "null", "-"],
+        capture_output=True, text=True,
+    )
+    out: list[tuple[float, float]] = []
+    for m in re.finditer(r"black_start:\s*([\d.]+)\s+black_end:\s*([\d.]+)", r.stderr):
+        out.append((float(m.group(1)), float(m.group(2))))
+    return out
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description="Numeric verification of a rendered cut vs its EDL")
+    ap.add_argument("edl", type=Path)
+    ap.add_argument("video", type=Path)
+    ap.add_argument("--min-silence", type=float, default=0.5,
+                    help="silence length (s) worth flagging (longform: ~1.2)")
+    ap.add_argument("--json", action="store_true", help="machine output")
+    args = ap.parse_args()
+
+    edl = json.loads(args.edl.read_text())
+    ranges = edl["ranges"]
+    durs = [float(r["end"]) - float(r["start"]) for r in ranges]
+    expected = sum(durs)
+
+    # junction times on the output timeline (between consecutive ranges)
+    junctions: list[float] = []
+    t = 0.0
+    for d in durs[:-1]:
+        t += d
+        junctions.append(t)
+
+    actual = probe_duration(args.video)
+
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        pre_f = [ex.submit(peak_db, args.video, j - 0.13, 0.08) for j in junctions]
+        jct_f = [ex.submit(peak_db, args.video, j - 0.015, 0.03) for j in junctions]
+        post_f = [ex.submit(peak_db, args.video, j + 0.05, 0.08) for j in junctions]
+        sil_f = ex.submit(audio_scan, args.video, args.min_silence)
+        blk_f = ex.submit(black_scan, args.video)
+        pres = [f.result() for f in pre_f]
+        jcts = [f.result() for f in jct_f]
+        posts = [f.result() for f in post_f]
+        silences, peak, flat = sil_f.result()
+        blacks = blk_f.result()
+
+    flags = 0
+    rows = []
+    for i, j in enumerate(junctions):
+        verdicts = []
+        if jcts[i] > POP_DB:
+            verdicts.append("POP?")
+        if pres[i] > HOT_DB:
+            verdicts.append("HOT-TAIL")
+        if posts[i] > HOT_DB:
+            verdicts.append("HOT-HEAD")
+        v = " ".join(verdicts) if verdicts else "ok"
+        if verdicts:
+            flags += 1
+        rows.append((i + 1, j, pres[i], jcts[i], posts[i], v))
+
+    # silences not at the very head/tail, annotated with the nearest junction
+    sil_rows = []
+    for s, e in silences:
+        if e < 0.4 or s > actual - 0.4:
+            continue
+        near = min(junctions, key=lambda j: abs(j - (s + e) / 2)) if junctions else None
+        near_i = junctions.index(near) + 1 if near is not None and abs(near - (s + e) / 2) < 1.5 else None
+        sil_rows.append((s, e, near_i))
+        flags += 1
+
+    dur_ok = abs(actual - expected) <= 0.5
+    if not dur_ok:
+        flags += 1
+    clip_bad = flat > 0.001 or peak >= -0.1
+    if clip_bad:
+        flags += 1
+    flags += len(blacks)
+
+    if args.json:
+        print(json.dumps({
+            "expected_s": round(expected, 2), "actual_s": round(actual, 2),
+            "duration_ok": dur_ok, "peak_db": peak, "flat_factor": flat,
+            "junctions": [{"n": n, "t": round(j, 2), "pre_db": p, "jct_db": c,
+                           "post_db": q, "verdict": v}
+                          for n, j, p, c, q, v in rows],
+            "silences": [{"start": round(s, 2), "end": round(e, 2),
+                          "near_junction": n} for s, e, n in sil_rows],
+            "black": [{"start": s, "end": e} for s, e in blacks],
+            "flags": flags,
+        }, ensure_ascii=False))
+        sys.exit(0 if flags == 0 else 1)
+
+    print(f"{args.video.name} vs {args.edl.name} — {len(ranges)} ranges, {len(junctions)} junctions")
+    print(f"duration: {actual:.2f}s vs expected {expected:.2f}s (Δ {actual - expected:+.2f}s) "
+          f"{'ok' if dur_ok else 'CHECK'}")
+    print(f"audio: peak {peak:.1f} dBFS, flat_factor {flat:.2f} "
+          f"{'CHECK-CLIPPING' if clip_bad else 'ok'}")
+    print(f"junctions (dBFS peaks — pre[-130..-50ms] jct[±15ms] post[+50..+130ms]; "
+          f"pop > {POP_DB:.0f}, hot > {HOT_DB:.0f}):")
+    for n, j, p, c, q, v in rows:
+        print(f"  #{n:<3} {j:7.2f}s   pre {p:6.1f}   jct {c:6.1f}   post {q:6.1f}   {v}")
+    if sil_rows:
+        print(f"silences ≥ {args.min_silence:.2f}s:")
+        for s, e, n in sil_rows:
+            near = f" (near junction #{n})" if n else ""
+            print(f"  {s:7.2f}–{e:.2f}s ({e - s:.2f}s){near}  CHECK-DEADAIR")
+    else:
+        print(f"silences ≥ {args.min_silence:.2f}s: none")
+    print(f"black frames: {', '.join(f'{s:.2f}–{e:.2f}s' for s, e in blacks) or 'none'}"
+          f"{'  CHECK' if blacks else ''}")
+    if flags == 0:
+        print("VERDICT: clean — no visual inspection needed")
+    else:
+        print(f"VERDICT: {flags} flag(s) — inspect ONLY the flagged spots with timeline_view")
+    sys.exit(0 if flags == 0 else 1)
+
+
+if __name__ == "__main__":
+    main()

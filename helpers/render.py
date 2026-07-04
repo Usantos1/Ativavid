@@ -23,9 +23,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 try:
@@ -249,9 +251,14 @@ def extract_all_segments(
     preview: bool,
     draft: bool = False,
     keep_resolution: bool = False,
+    jobs: int = 0,
 ) -> list[Path]:
     """Extract every EDL range into edit_dir/clips_graded/seg_NN.mp4.
     Returns the ordered list of segment paths.
+
+    Segments are independent, so they encode in PARALLEL (`jobs` ffmpeg
+    processes; 0 = auto ≈ cores/3, capped at 4 — each libx264 already uses
+    several threads). Order is preserved by the seg_NN filenames.
 
     If the EDL `grade` is "auto", analyze each segment range with
     `auto_grade_for_clip` and apply a per-segment subtle correction.
@@ -267,11 +274,13 @@ def extract_all_segments(
     ranges = edl["ranges"]
     sources = edl["sources"]
 
-    seg_paths: list[Path] = []
-    print(f"extracting {len(ranges)} segment(s) → {clips_dir.name}/")
+    if jobs <= 0:
+        jobs = max(1, min(4, (os.cpu_count() or 4) // 3))
+    print(f"extracting {len(ranges)} segment(s) → {clips_dir.name}/  ({jobs} parallel)")
     if is_auto:
         print("  (auto-grade per segment: analyzing each range)")
-    for i, r in enumerate(ranges):
+
+    def work(i: int, r: dict) -> Path:
         src_name = r["source"]
         src_path = resolve_path(sources[src_name], edit_dir)
         start = float(r["start"])
@@ -285,13 +294,15 @@ def extract_all_segments(
             seg_filter = resolved
 
         note = r.get("beat") or r.get("note") or ""
-        print(f"  [{i:02d}] {src_name}  {start:7.2f}-{end:7.2f}  ({duration:5.2f}s)  {note}")
-        if is_auto:
-            print(f"        grade: {seg_filter or '(none)'}")
+        grade_note = f"  grade: {seg_filter or '(none)'}" if is_auto else ""
+        print(f"  [{i:02d}] {src_name}  {start:7.2f}-{end:7.2f}  ({duration:5.2f}s)  {note}{grade_note}", flush=True)
         extract_segment(src_path, start, duration, seg_filter, out_path, preview=preview, draft=draft, keep_resolution=keep_resolution)
-        seg_paths.append(out_path)
+        return out_path
 
-    return seg_paths
+    if jobs == 1 or len(ranges) == 1:
+        return [work(i, r) for i, r in enumerate(ranges)]
+    with ThreadPoolExecutor(max_workers=jobs) as ex:
+        return list(ex.map(work, range(len(ranges)), ranges))
 
 
 # -------- Lossless concat ----------------------------------------------------
@@ -689,6 +700,12 @@ def main() -> None:
         help="LONGFORM (16:9 YouTube): keep the source resolution and fps instead of "
              "forcing 1080p @ 24. Grade/voice-master/loudnorm still apply.",
     )
+    ap.add_argument(
+        "--jobs",
+        type=int,
+        default=0,
+        help="Parallel segment extractions (0 = auto ≈ cores/3, capped at 4).",
+    )
     args = ap.parse_args()
 
     edl_path = args.edl.resolve()
@@ -702,7 +719,7 @@ def main() -> None:
     # 1. Extract per-segment (auto-grade per range if EDL grade is "auto")
     segment_paths = extract_all_segments(
         edl, edit_dir, preview=args.preview, draft=args.draft,
-        keep_resolution=args.keep_resolution,
+        keep_resolution=args.keep_resolution, jobs=args.jobs,
     )
 
     # 2. Concat → base

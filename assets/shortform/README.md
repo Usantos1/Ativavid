@@ -1,61 +1,80 @@
-# Short-form editing style (Reels / TikTok / Shorts) — reference build
+# Short-form template (Reels / TikTok / Shorts) — DATA-DRIVEN
 
-This is the proven Phase-2 Remotion composition for vertical short-form videos.
-Copy these files into `edit/remotion/` and adapt the data (captions, track,
-segments, insert timings) per video. `Main.tsx` is the whole style in code.
+The proven Phase-2 Remotion composition for vertical short-form. **The code is
+immutable** — everything per-video is data. Do NOT read or edit `src/Main.tsx`;
+write `public/edit-data.json` instead. The only editable code file is
+`src/CustomGraphics.tsx` (bespoke motion graphics, worked examples inside).
 
-## The style (defaults)
+## Scaffold (one command)
 
-- **Format:** 1080×1920, 24fps, base is `<OffthreadVideo src=cut.mp4>` (the
-  approved Phase-1 graded cut).
-- **Karaoke captions** — one line, **≤3 words**, each word **rises in from
-  below** (opacity + translateY, `Easing.out(cubic)`). **Poppins Black**, white,
-  subtle shadow, lower third (`paddingBottom ~420`). Every line is measured with
-  `measureText` and scaled to a **safe width (~880px)** so it never touches the
-  edge. Lines hold until the next line starts (no flicker).
-- **Illustrative images** — a **consistent rounded card** (radius 28) with a
-  **subtle shadow** in the **upper zone** (`marginTop ~90`, fixed
-  `objectFit:cover` size so mixed aspect ratios stay uniform). Synced to spoken
-  nouns; each card does a slow **Ken-Burns zoom** (grows ~8% while on screen).
-  Pull them from Pexels (`helpers/pexels_search.py`).
-- **Custom motion graphics, not just photos** — when a word names something
-  animatable, build a bespoke animation instead of a stock image. Reference
-  components here: `TimelineGraphic` (an editing timeline being cut + caption
-  chips + animation shapes, for "cortes/legendas/animações") and `ScriptGraphic`
-  (a paper with typewriter text, for "roteiro"). Same upper-zone card motif.
-- **Dynamic camera** (on the base video only) — three layers that compose:
-  1. **Hard zoom on cuts:** each cut segment gets a different base scale
-     (`ZOOMS`, ~1.10–1.22) so size pops at every jump cut. Needs
-     `public/segments.json` (output-timeline cut boundaries).
-  2. **Slow push-in:** scale grows ~+0.04 within each segment.
-  3. **Eye tracking:** `public/track.json` (from `helpers/face_track.py`) holds
-     a smoothed per-frame eye point; translate so it maps to the upper third
-     (`TARGET_Y≈0.4`), **clamped so no black edge ever shows** (total scale must
-     exceed the pan).
-- **Layout zones:** inserts/graphics in the **upper third**, captions in the
-  **lower third**, face stays clear in the middle.
-- **Aesthetic:** minimalist. Accent green `#33e0a3`. Keep it clean.
+```bash
+cp -R <skill>/assets/shortform/. <edit>/remotion/ && cd <edit>/remotion && npm install
+```
 
-## Data pipeline (per video, all in `edit/`)
+Then copy `cut.mp4` into `public/` and generate the data files below.
+
+## Data pipeline (per video, all into `remotion/public/`)
 
 1. `transcribe.py cut.mp4 --edit-dir <edit>` → `transcripts/cut.json`
    (times already on the output timeline — do NOT map the source EDL).
-2. `captions_for_remotion.py --transcript transcripts/cut.json -o remotion/public/captions.json`
-3. `face_track.py cut.mp4 -o remotion/public/track.json`
-4. segments.json — output-timeline cut boundaries from the EDL:
-   `[{start,dur}...]` per range, cumulative. (tiny script; see the skill.)
-5. `pexels_search.py "<query>" --out-dir remotion/public/pexels ...` for images.
-6. Copy `cut.mp4` into `remotion/public/`.
+2. `captions_for_remotion.py --transcript transcripts/cut.json -o public/captions.json`
+3. `face_track.py cut.mp4 -o public/track.json`
+4. `public/segments.json` — output-timeline cut boundaries from the EDL:
+   `{"segments":[{"start":0,"dur":3.2}, …]}` cumulative per range.
+5. `pexels_search.py "<query>" --out-dir public/pexels …` for insert images.
+6. **Write `public/edit-data.json`** — the whole edit in one file (schema below).
 
-## Deps
+## edit-data.json schema (all times in seconds on the cut timeline)
 
-`remotion`, `@remotion/cli`, `@remotion/google-fonts` (Poppins),
-`@remotion/layout-utils` (measureText). See `package.json`. Node 18+.
-`create-video`'s `--no-tailwind` flag may be ignored by the prompt — scaffold
-manually (this `package.json` + `tsconfig.json` + `src/`) to stay
-non-interactive.
+```jsonc
+{
+  "width": 1080, "height": 1920, "fps": 24,
+  "durationSec": 87.5,              // EXACT cut.mp4 duration (ffprobe)
+  "camera": {                        // hard zoom on cuts + push-in + eye track
+    "enabled": true,
+    "zooms": [1.14, 1.2, 1.12, 1.22, 1.16, 1.1, 1.18],  // per cut segment, cycles
+    "pushIn": 0.04, "targetX": 0.5, "targetY": 0.4
+  },
+  "hook": {                          // static headline, first ~4s (always on)
+    "enabled": true, "endSec": 4.0,
+    "lines": ["A IA MAIS", "PERIGOSA DO MUNDO", "ACABOU DE SER LIBERADA"],
+    "logo": "brand/logo.webp",       // public/ path or null
+    "sign": "brand/warning.webp"     // transparent symbol or null
+  },
+  "captions": {                      // karaoke, ≤3 words, Poppins Black
+    "enabled": true, "fontSize": 76, "maxWords": 3,
+    "safeWidth": 720,                // clears the platform action rail — keep 720
+    "paddingBottom": 420
+  },
+  "inserts": [                       // rounded-card images, upper zone
+    {"src": "pexels/ai.jpg", "start": 1.95, "end": 3.35}
+  ],
+  "behind": [                        // behind-the-subject (person_matte.py first)
+    {"kind": "image", "src": "ill/x.jpg", "matte": "fg_x.mov", "start": 4.15, "dur": 1.65},
+    {"kind": "words", "matte": "fg_w.mov", "start": 19.55, "dur": 1.5,
+     "words": [{"t": "MAS", "at": 19.55}, {"t": "POR", "at": 19.9}, {"t": "QUE", "at": 20.26}]}
+  ],
+  "soundtrack": {"enabled": false, "file": "trilha.mp3", "volume": 0.12}
+  // Phase 3 flips soundtrack.enabled to true once trilha.mp3 exists
+}
+```
+
+## The style (locked defaults encoded in src/)
+
+- **1080×1920 @ 24**; base `<OffthreadVideo src=cut.mp4>` with the dynamic
+  camera (hard zoom per segment + slow push-in + clamped eye-tracking).
+- **Karaoke captions**: one line ≤3 words, words rise in from below, Poppins
+  Black, lower third, `measureText` fit into `safeWidth` 720 (action-rail safe).
+- **Hook**: static uniform-size headline on a dark-gray rounded card, optional
+  logo+symbol row. Copy written like a virality specialist; approve a still first.
+- **Inserts**: rounded card + shadow, upper zone, slow Ken-Burns, whoosh on entry.
+- **Behind-the-subject**: elements top-anchored; matte gets the same camera via
+  `frameOffset`; ProRes 4444 + `<OffthreadVideo transparent>`.
+- **Audio**: whoosh ~0.09 / pop ~0.12 / music ~0.12, and ALWAYS a final loudnorm
+  pass on the render (voice+music+SFX clip otherwise).
 
 ## Render
 
-`npx remotion render Reels out/final.mp4`, then copy to `edit/final.mp4`.
+`npx remotion render Reels out/render.mp4`, loudnorm → `edit/final.mp4`.
 Verify stills at cut boundaries (no black edges) before the full render.
+`generate_sfx.py` regenerates the sfx pack if ever needed.

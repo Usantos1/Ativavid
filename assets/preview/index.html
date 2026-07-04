@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Edvid — Preview</title>
+<link rel="icon" href="/assets/edvid-logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+
+<header class="glass">
+  <div class="logo-chip"><img src="/assets/edvid-logo-white.png" alt="Edvid"></div>
+  <div class="head-info">
+    <div id="projectName" class="project-name">—</div>
+    <div id="stateMessage" class="state-message"></div>
+  </div>
+  <div class="head-actions">
+    <span id="dirtyPill" class="pill hidden"><b id="dirtyCount">0</b> ajuste(s) não salvo(s)</span>
+    <span id="savedPill" class="pill saved hidden">✓ salvo — peça ao Claude para aplicar</span>
+    <button id="btnDiscard" class="btn ghost hidden">Descartar</button>
+    <button id="btnSave" class="btn primary hidden">Salvar ajustes</button>
+  </div>
+</header>
+
+<nav id="tabs" class="tabs">
+  <button class="tab active" data-tab="1"><span class="tab-num">FASE 1</span> Corte</button>
+  <button class="tab" data-tab="2"><span class="tab-num">FASE 2</span> Visual</button>
+</nav>
+
+<main>
+  <section id="emptyState" class="empty glass hidden">
+    <div class="empty-inner">
+      <div class="empty-icon">🎬</div>
+      <h2>Aguardando o primeiro render</h2>
+      <p>Assim que o <code>cut.mp4</code> existir, a timeline aparece aqui sozinha.</p>
+    </div>
+  </section>
+
+  <section id="playerWrap" class="player-wrap">
+    <div class="player-frame glass">
+      <video id="video" playsinline preload="auto"></video>
+    </div>
+    <div class="transport glass">
+      <button id="btnPlay" class="btn icon" title="Play/Pause (espaço)"></button>
+      <button id="btnMute" class="btn icon" title="Mudo"></button>
+      <span id="timeNow" class="time">0:00.00</span>
+      <span class="time dim">/</span>
+      <span id="timeTotal" class="time dim">0:00.00</span>
+      <div class="spacer"></div>
+      <span class="dim small">zoom</span>
+      <input id="zoom" type="range" min="0" max="100" value="0" title="Zoom da timeline">
+      <button id="btnFit" class="btn ghost small" title="Ajustar à janela">fit</button>
+    </div>
+  </section>
+
+  <section id="timelinePanel" class="timeline-panel glass">
+    <div id="timeline" class="timeline">
+      <div class="track ruler-track">
+        <div class="track-label"></div>
+        <div class="lane ruler-lane"><canvas id="ruler"></canvas></div>
+      </div>
+      <div id="trkCaptions" class="track hidden">
+        <div class="track-label teal">LEGENDAS</div>
+        <div class="lane" id="laneCaptions"></div>
+      </div>
+      <div class="track">
+        <div class="track-label">VÍDEO</div>
+        <div class="lane tall" id="laneVideo"></div>
+      </div>
+      <div class="track">
+        <div class="track-label olive">ÁUDIO</div>
+        <div class="lane" id="laneAudio"><canvas id="wave"></canvas></div>
+      </div>
+      <div id="insertTracks" class="hidden"></div>
+      <div id="needle" class="needle"><div class="needle-head"></div></div>
+    </div>
+  </section>
+
+  <footer class="hints">
+    <span><kbd>espaço</kbd> play/pause</span>
+    <span><kbd>←</kbd><kbd>→</kbd> frame a frame · <kbd>shift</kbd>+setas 1s</span>
+    <span>arraste as <b>bordas</b> de um take para ajustar · <kbd>delete</kbd> remove o take selecionado</span>
+    <span>duplo-clique num take = reset</span>
+  </footer>
+</main>
+
+<div id="tooltip" class="tooltip hidden"></div>
+<div id="toast" class="toast hidden"></div>
+
+<script src="/assets/app.js"></script>
+</body>
+</html>

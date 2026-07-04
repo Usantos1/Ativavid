@@ -1,13 +1,13 @@
 /**
- * LONGFORM reference composition (YouTube 16:9). Produced-but-not-saturated:
- * the frame is mostly the talker or a B-roll cutaway; graphics PUNCTUATE.
- * Layers (all optional, driven by the data arrays below):
+ * LONGFORM composition (YouTube 16:9) — DATA-DRIVEN. DO NOT EDIT.
+ * All per-video values live in ../public/edit-data.json (schema in README.md).
+ *
+ * Produced-but-not-saturated: the frame is mostly the talker or a B-roll
+ * cutaway; graphics PUNCTUATE. Layers (all optional, driven by the data):
  *   - base cut (full-frame)         - B-roll cutaways (image Ken-Burns / video)
  *   - lower-thirds (name/title)     - chapter cards (title at each chapter)
  *   - callouts (emphasis boxes)     - soundtrack bed
  * Captions are NOT here — longform ships a .srt for YouTube CC (captions_srt.py).
- * Set the composition size/fps in Root.tsx to match cut.mp4. Reuse the shortform
- * dynamic camera / behind-subject sparingly if a moment calls for it.
  */
 import {
   AbsoluteFill,
@@ -22,10 +22,32 @@ import {
   useVideoConfig,
 } from 'remotion';
 import {loadFont} from '@remotion/google-fonts/Poppins';
+import editData from '../public/edit-data.json';
 
 const {fontFamily} = loadFont('normal', {weights: ['400', '600', '900']});
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
-const ACCENT = '#33e0a3'; // rebrand here
+
+// ============ TYPES + DATA ====================================================
+type Broll = {kind: 'image' | 'video'; src: string; start: number; dur: number};
+type Lower = {name: string; title?: string; start: number; dur: number};
+type Chapter = {title: string; start: number; dur?: number};
+type Callout = {text: string; start: number; dur: number; x?: number; y?: number};
+
+export type EditData = {
+  width: number;
+  height: number;
+  fps: number;
+  durationSec: number;
+  accent: string;
+  broll: Broll[];
+  lowerThirds: Lower[];
+  chapters: Chapter[];
+  callouts: Callout[];
+  soundtrack: {enabled: boolean; file: string; volume: number};
+};
+
+const D = editData as unknown as EditData;
+const ACCENT = D.accent || '#33e0a3';
 const MARGIN = 96; // 16:9 safe margin
 
 const Sfx: React.FC<{src: string; volume?: number}> = ({src, volume = 0.08}) => (
@@ -39,12 +61,6 @@ const Base: React.FC = () => {
 };
 
 // ============ B-ROLL CUTAWAYS (cover the talker over narration) ================
-type Broll = {kind: 'image' | 'video'; src: string; start: number; dur: number};
-const BROLL: Broll[] = [
-  // {kind: 'image', src: 'broll/x.jpg', start: 12, dur: 4},
-  // {kind: 'video', src: 'broll/y.mp4', start: 40, dur: 6},
-];
-
 const BrollEl: React.FC<{item: Broll; totalFrames: number}> = ({item, totalFrames}) => {
   const f = useCurrentFrame();
   const inn = interpolate(f, [0, 10], [0, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
@@ -64,11 +80,6 @@ const BrollEl: React.FC<{item: Broll; totalFrames: number}> = ({item, totalFrame
 };
 
 // ============ LOWER-THIRDS (name / title) =====================================
-type Lower = {name: string; title?: string; start: number; dur: number};
-const LOWER_THIRDS: Lower[] = [
-  // {name: 'Fill Rocha', title: 'Criador · Edvid', start: 6, dur: 4},
-];
-
 const LowerThird: React.FC<{item: Lower; totalFrames: number}> = ({item, totalFrames}) => {
   const f = useCurrentFrame();
   const inn = interpolate(f, [0, 12], [0, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic)});
@@ -89,11 +100,6 @@ const LowerThird: React.FC<{item: Lower; totalFrames: number}> = ({item, totalFr
 };
 
 // ============ CHAPTER CARDS (title at each chapter start) ======================
-type Chapter = {title: string; start: number; dur?: number};
-const CHAPTERS: Chapter[] = [
-  // {title: 'O que é isso', start: 14},
-];
-
 const ChapterCard: React.FC<{title: string; totalFrames: number}> = ({title, totalFrames}) => {
   const f = useCurrentFrame();
   const inn = interpolate(f, [0, 14], [0, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic)});
@@ -113,11 +119,6 @@ const ChapterCard: React.FC<{title: string; totalFrames: number}> = ({title, tot
 };
 
 // ============ CALLOUTS (emphasis box / keyword) ================================
-type Callout = {text: string; start: number; dur: number; x?: number; y?: number};
-const CALLOUTS: Callout[] = [
-  // {text: '2x mais rápido', start: 33, dur: 3, x: 0.62, y: 0.28},
-];
-
 const CalloutEl: React.FC<{item: Callout; totalFrames: number}> = ({item, totalFrames}) => {
   const f = useCurrentFrame();
   const pop = interpolate(f, [0, 8], [0, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.back(1.6))});
@@ -137,10 +138,11 @@ const CalloutEl: React.FC<{item: Callout; totalFrames: number}> = ({item, totalF
 // ============ SOUNDTRACK (bed) ================================================
 const Soundtrack: React.FC = () => {
   const {durationInFrames} = useVideoConfig();
+  const S = D.soundtrack;
   return (
     <Audio
-      src={staticFile('trilha.mp3')}
-      volume={(f) => interpolate(f, [0, 20, durationInFrames - 40, durationInFrames], [0, 0.1, 0.1, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'})}
+      src={staticFile(S.file)}
+      volume={(f) => interpolate(f, [0, 20, durationInFrames - 40, durationInFrames], [0, S.volume, S.volume, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'})}
     />
   );
 };
@@ -169,12 +171,12 @@ function Timed<T extends {start: number; dur?: number}>(
 export const Main: React.FC = () => {
   return (
     <AbsoluteFill style={{backgroundColor: 'black'}}>
-      <Soundtrack />
+      {D.soundtrack.enabled ? <Soundtrack /> : null}
       <Base />
-      {Timed(BROLL, 4, (it, d) => <BrollEl item={it} totalFrames={d} />)}
-      {Timed(CHAPTERS, 2.4, (it, d) => <ChapterCard title={it.title} totalFrames={d} />)}
-      {Timed(LOWER_THIRDS, 4, (it, d) => <LowerThird item={it} totalFrames={d} />)}
-      {Timed(CALLOUTS, 3, (it, d) => <CalloutEl item={it} totalFrames={d} />)}
+      {Timed(D.broll, 4, (it, d) => <BrollEl item={it} totalFrames={d} />)}
+      {Timed(D.chapters, 2.4, (it, d) => <ChapterCard title={it.title} totalFrames={d} />)}
+      {Timed(D.lowerThirds, 4, (it, d) => <LowerThird item={it} totalFrames={d} />)}
+      {Timed(D.callouts, 3, (it, d) => <CalloutEl item={it} totalFrames={d} />)}
     </AbsoluteFill>
   );
 };
