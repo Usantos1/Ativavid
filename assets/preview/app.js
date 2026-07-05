@@ -383,6 +383,22 @@ function renderChips() {
     el('div', 'handle l', chip).dataset.i = i;
     el('div', 'handle r', chip).dataset.i = i;
   });
+
+  // soundtrack → its own read-only track, one chip spanning the whole video
+  const st = S.editData && S.editData.soundtrack;
+  if (st && st.enabled) {
+    const trk = el('div', 'track', insertTracksEl);
+    el('div', 'track-label olive', trk).textContent = 'TRILHA';
+    const lane = el('div', 'lane', trk);
+    const chip = el('div', 'chip music', lane);
+    const dur = S.editData.durationSec || S.videoDuration || draftTotal();
+    chip.style.left = '0px';
+    chip.style.width = `${Math.max(dur * S.pps, 10)}px`;
+    const name = (st.file || 'trilha.mp3').split('/').pop();
+    const vol = st.volume != null ? `  ·  vol ${st.volume}` : '';
+    chip.textContent = `♪ ${name}${vol}`;
+    chip.title = chip.textContent;
+  }
 }
 
 // ---------- canvases (viewport-sized, redrawn on scroll) ----------

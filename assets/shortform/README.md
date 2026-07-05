@@ -28,7 +28,7 @@ Then copy `cut.mp4` into `public/` and generate the data files below.
 
 ```jsonc
 {
-  "width": 1080, "height": 1920, "fps": 24,
+  "width": 1080, "height": 1920, "fps": 30,  // MATCH cut.mp4 (ffprobe it): 30 for 30fps+ sources, else 24
   "durationSec": 87.5,              // EXACT cut.mp4 duration (ffprobe)
   "camera": {                        // hard zoom on cuts + push-in + eye track
     "enabled": true,
@@ -61,7 +61,8 @@ Then copy `cut.mp4` into `public/` and generate the data files below.
 
 ## The style (locked defaults encoded in src/)
 
-- **1080×1920 @ 24**; base `<OffthreadVideo src=cut.mp4>` with the dynamic
+- **1080×1920**, **30fps when the source is 30fps+** (else 24) — `fps` in
+  edit-data.json must equal cut.mp4's fps; base `<OffthreadVideo src=cut.mp4>` with the dynamic
   camera (hard zoom per segment + slow push-in + clamped eye-tracking).
 - **Karaoke captions**: one line ≤3 words, words rise in from below, Poppins
   Black, lower third, `measureText` fit into `safeWidth` 720 (action-rail safe).

@@ -22,6 +22,26 @@ import requests
 BASE = "https://api.treblo.com/v1"
 
 
+def build_music_prompt(vibe: str) -> str:
+    """Frame the caller's vibe as a real, composed instrumental piece.
+
+    Treblo returns sound-design/SFX-like output when the prompt reads as
+    texture ("bed", "beat", "sound design") instead of music. Wrapping the vibe
+    in an explicit "composed instrumental song" frame — and banning SFX/risers/
+    vocals — reliably yields an actual musical track. The caller's vibe should
+    still name a genre, instruments, tempo and mood (see the skill's Phase-3
+    guidance); this frame only guarantees it renders AS music.
+    """
+    vibe = vibe.strip().rstrip(".")
+    return (
+        "Instrumental music track with a full musical arrangement — a clear "
+        "melody, chords/harmony and a steady rhythm section that develops over "
+        f"time. Style and mood: {vibe}. It must sound like a composed song, "
+        "NOT sound design: no isolated sound effects, no risers/whooshes/impacts, "
+        "no ambient drones, and no vocals."
+    )
+
+
 def load_api_key() -> str:
     for candidate in [Path(__file__).resolve().parent.parent / ".env", Path(".env")]:
         if candidate.exists():
@@ -37,10 +57,12 @@ def load_api_key() -> str:
 
 def generate(prompt: str, out: Path, api_key: str,
              length_min: int | None, length_max: int | None,
-             bit_rate: int = 192, timeout_s: int = 600) -> None:
+             bit_rate: int = 192, timeout_s: int = 600, raw: bool = False) -> None:
     H = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    final_prompt = prompt if raw else build_music_prompt(prompt)
+    print(f"  prompt → {final_prompt}", flush=True)
     payload: dict = {
-        "prompt": prompt,
+        "prompt": final_prompt,
         "instrumental": True,
         "output_format": "mp3",
         "output_bit_rate": bit_rate,
@@ -80,14 +102,21 @@ def generate(prompt: str, out: Path, api_key: str,
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Treblo instrumental soundtrack")
-    ap.add_argument("prompt", help="Vibe/mood prompt (let the model infer tags)")
+    ap.add_argument("prompt", help="MUSICAL vibe for the video's context: name a "
+                    "genre + instruments + tempo/BPM + mood (e.g. 'upbeat modern "
+                    "electronic, catchy synth melody, warm bass, light drums, ~110 "
+                    "BPM, bright and motivational'). Avoid SFX-y words like 'bed', "
+                    "bare 'beat', or 'sound design'. It is auto-framed as a composed "
+                    "instrumental song unless --raw is passed.")
     ap.add_argument("-o", "--output", type=Path, required=True)
     ap.add_argument("--length-min", type=int, default=None, help="min seconds (multiple of 30)")
     ap.add_argument("--length-max", type=int, default=None, help="max seconds (multiple of 30)")
     ap.add_argument("--bit-rate", type=int, default=192)
+    ap.add_argument("--raw", action="store_true", help="send the prompt verbatim "
+                    "(skip the composed-music framing)")
     args = ap.parse_args()
     generate(args.prompt, args.output.resolve(), load_api_key(),
-             args.length_min, args.length_max, args.bit_rate)
+             args.length_min, args.length_max, args.bit_rate, raw=args.raw)
 
 
 if __name__ == "__main__":

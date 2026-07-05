@@ -6,7 +6,11 @@ approved. Everything here rides on the **data-driven template** at
 
 ## The style (the proven default)
 
-- **Base:** 1080×1920 @ 24, `<OffthreadVideo src=cut.mp4>` with the **dynamic
+- **Frame rate:** render at **30fps when the source is 30fps or higher** (natural
+  motion, matches Instagram/TikTok/Shorts capture); only slower sources use 24.
+  `render.py` picks this automatically for `cut.mp4` — then set `edit-data.json`
+  `fps` to the SAME value as `cut.mp4` (ffprobe it) so the Remotion render matches.
+- **Base:** 1080×1920 (fps per the rule above), `<OffthreadVideo src=cut.mp4>` with the **dynamic
   camera**: hard zoom per cut segment (~1.10–1.22, cycles), slow push-in
   (+0.04/segment), clamped eye-tracking (target upper third, never reveals an
   edge). Always on — it's what makes a talking head feel edited.
@@ -106,10 +110,26 @@ licensing to the user for logos/celebrities). Keep photographer credits.
 
 ## Phase 3 — soundtrack (short-form)
 
-Ask: **AI-generated** (`treblo_music.py "<vibe>" -o public/trilha.mp3`, async
-~1 min, needs `TREBLO_API_KEY`) or **local file** (copy to `public/trilha.mp3`).
-Then flip `soundtrack.enabled: true` in edit-data.json (volume ~0.12) and
-re-render. Finish with the mandatory loudnorm:
+Ask: **AI-generated** (Treblo) or **local file** (copy to `public/trilha.mp3`).
+
+**Writing the Treblo prompt — derive it from the video's context, and ask for
+MUSIC, not a texture.** Read the cut transcript: what's the topic, energy and
+emotional arc? Then describe a real **composed instrumental piece** — name a
+**genre + key instruments + tempo/BPM + mood**, and (optionally) a reference
+artist/style. Match the content: a hype tech/AI reel wants upbeat modern
+electronic with a catchy synth melody; a calm tutorial wants warm lo-fi keys; a
+luxury/story piece wants cinematic strings. **Avoid SFX-y phrasing** ("bed",
+bare "beat", "sound design", "drones", "risers") — that's what makes Treblo
+return sound effects instead of a song. `treblo_music.py` auto-frames the vibe
+as a composed instrumental and bans SFX/vocals, but the vibe you pass still has
+to read musical.
+```bash
+python helpers/treblo_music.py "upbeat modern electronic, catchy synth melody, warm analog bass, crisp light drums, ~110 BPM, bright and motivational" -o public/trilha.mp3 --length-min 30 --length-max 60
+```
+Then flip `soundtrack.enabled: true` in edit-data.json. **Volume:** start ~0.25
+and check it's clearly audible under wall-to-wall narration (a bed at 0.12 is
+usually inaudible once the mix is loudnorm'd to the voice — confirm by listening,
+not just by the meter). Re-render. Finish with the mandatory loudnorm:
 
 ```bash
 ffmpeg -y -i out/render.mp4 -c:v copy -af "loudnorm=I=-14:TP=-1:LRA=11" -c:a aac -b:a 192k -ar 48000 ../final.mp4

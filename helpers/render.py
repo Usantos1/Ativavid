@@ -171,6 +171,34 @@ def is_portrait_source(video: Path) -> bool:
     return h > w
 
 
+def source_fps(video: Path) -> float:
+    """Return the source's video frame rate (frames per second).
+
+    Reads r_frame_rate ("30000/1001") and evaluates the fraction. Returns 0.0
+    if it can't be determined, so callers fall back to the safe default.
+    """
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=r_frame_rate",
+             "-of", "default=noprint_wrappers=1:nokey=1", str(video)],
+            capture_output=True, text=True, check=True,
+        )
+        num, _, den = out.stdout.strip().partition("/")
+        return float(num) / float(den) if den else float(num)
+    except Exception:
+        return 0.0
+
+
+def shortform_target_fps(video: Path) -> str:
+    """Short-form render fps as a string for ffmpeg `-r`.
+
+    Rule: sources shot at 30fps or higher render at 30 (keeps motion natural and
+    matches Instagram/TikTok/Shorts capture); slower sources keep the 24 standard.
+    """
+    return "30" if source_fps(video) >= 29.5 else "24"
+
+
 # -------- Per-segment extraction (Rule 2 + Rule 3) --------------------------
 
 
@@ -236,7 +264,9 @@ def extract_segment(
         cmd += ["-vf", vf]
     cmd += ["-af", af, "-c:v", "libx264", "-preset", preset, "-crf", crf, "-pix_fmt", "yuv420p"]
     if not keep_resolution:
-        cmd += ["-r", "24"]  # short-form standard; longform keeps source fps
+        # short-form fps: 30 if the source is 30fps+ (natural motion, matches
+        # IG/TikTok/Shorts capture), else the 24 standard; longform keeps source.
+        cmd += ["-r", shortform_target_fps(source)]
     cmd += [
         "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
         "-movflags", "+faststart",
