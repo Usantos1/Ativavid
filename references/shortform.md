@@ -15,10 +15,12 @@ approved. Everything here rides on the **data-driven template** at
   (+0.04/segment), clamped eye-tracking (target upper third, never reveals an
   edge). Always on — it's what makes a talking head feel edited.
 - **Visual hook (first ~4s):** static copywriting headline (see below). Always on.
-- **Captions:** karaoke, one line ≤3 words, words rise from below, Poppins
-  Black, lower third, `measureText` fit into **SAFE_WIDTH 720** (~180px each
-  side — clears Instagram/TikTok's right action rail; verified on a real
-  screenshot). Never rely on `nowrap` alone.
+- **Captions:** two styles — **karaoke** (default) and **stacked** (see the
+  "Caption style" section; SHOW the user the reference gallery to choose).
+  Karaoke: one line ≤3 words, words rise from below, Poppins Black, lower third,
+  `measureText` fit into **SAFE_WIDTH 720** (~180px each side — clears
+  Instagram/TikTok's right action rail; verified on a real screenshot). Never
+  rely on `nowrap` alone.
 - **Inserts (upper zone):** rounded-card + shadow motif synced to spoken nouns,
   slow Ken-Burns. Pexels for concrete objects; **bespoke motion graphics** when
   a word names something animatable (timeline for "cortes", typewriter sheet
@@ -39,6 +41,10 @@ approved. Everything here rides on the **data-driven template** at
    - `transcribe.py cut.mp4 --edit-dir <edit>` → `transcripts/cut.json`
      (cut times are already on the output timeline — never map the source EDL)
    - `captions_for_remotion.py --transcript transcripts/cut.json -o public/captions.json`
+   - **Caption style** — show the user `assets/shortform/caption-styles/stacked.png`
+     and ask: **karaoke** (default) or **stacked**. For stacked, ALSO run
+     `caption_style.py --transcript transcripts/cut.json -o public/caption-cues.json`
+     and set `captions.style:"stacked"` (see the "Caption style" section).
    - `face_track.py cut.mp4 -o public/track.json`
    - `public/segments.json` from the EDL: `{"segments":[{"start":0,"dur":3.2},…]}`
      (cumulative output-timeline boundaries)
@@ -55,6 +61,36 @@ approved. Everything here rides on the **data-driven template** at
 
 Never edit `src/Main.tsx`. Bespoke graphics go in `src/CustomGraphics.tsx`
 (the ONE editable file — read it only when the video needs a custom graphic).
+
+## Caption style — karaoke (default) or STACKED
+
+Short-form ships two caption styles. Let the user pick by **showing** the
+reference image `assets/shortform/caption-styles/stacked.png` (a montage over
+real footage) alongside the plain karaoke default, then set `captions.style`.
+
+- **`"karaoke"`** (default): one line ≤3 words, Poppins Black, lower third.
+- **`"stacked"`**: words stacked tight, mixing per line — Poppins bold-italic
+  (white→gray gradient) / Poppins regular (smaller) / Playfair serif bold-italic
+  in ORANGE `#ff5200` / Poppins bold. Emphasis words appear solo; key ones get a
+  hand-drawn green pencil ellipse. **Baked SFX** (no extra step, no Premiere): a
+  **click** on every solo word, a **scratch** when a word is circled.
+
+For stacked, the ONE extra data step is the director (reads the same cut
+transcript as `captions_for_remotion.py`):
+```bash
+python helpers/caption_style.py --transcript <edit>/transcripts/cut.json \
+    -o remotion/public/caption-cues.json
+```
+Then set `captions.style:"stacked"` in edit-data.json (keep the other caption
+fields — they stay valid). Defaults match the user-approved look: the stack sits
+~15.6% of the height below center and SFX play from `public/sfx/caption-click.mp3`
++ `caption-scratch.mp3` (both already in the template). Optional overrides inside
+`captions`: `stackedOffsetY` (0–1 of height), `fontScale`, and
+`sfx:{enabled,clickVolume(0.45),scratchVolume(0.16)}`. The director groups words
+into short cues, gives the orange serif accent to the content word (never a
+connective), keeps 1-letter/short connectors from standing alone, and flags
+solo/circled words. It is language-tuned for pt-BR (`--lang`); for other
+languages it falls back to length heuristics.
 
 ## Visual hook — static headline, first ~4s (always on)
 

@@ -31,6 +31,7 @@ import track from '../public/track.json';
 import segData from '../public/segments.json';
 import editData from '../public/edit-data.json';
 import {CustomGraphics} from './CustomGraphics';
+import {StackedCaptions} from './StackedCaptions';
 
 const {fontFamily} = loadFont('normal', {weights: ['400', '600', '900']});
 
@@ -48,7 +49,19 @@ export type EditData = {
   durationSec: number;
   camera: {enabled: boolean; zooms: number[]; pushIn: number; targetX: number; targetY: number};
   hook: {enabled: boolean; endSec: number; lines: string[]; logo: string | null; sign: string | null};
-  captions: {enabled: boolean; fontSize: number; maxWords: number; safeWidth: number; paddingBottom: number};
+  captions: {
+    enabled: boolean;
+    fontSize: number;
+    maxWords: number;
+    safeWidth: number;
+    paddingBottom: number;
+    // "karaoke" (default, single line) or "stacked" (multi-font stack + pencil
+    // outline + click/scratch SFX). Stacked reads public/caption-cues.json.
+    style?: 'karaoke' | 'stacked';
+    stackedOffsetY?: number;
+    fontScale?: number;
+    sfx?: {enabled?: boolean; clickVolume?: number; scratchVolume?: number};
+  };
   inserts: Insert[];
   behind: Behind[];
   soundtrack: {enabled: boolean; file: string; volume: number};
@@ -391,7 +404,11 @@ export const Main: React.FC = () => {
       <Inserts />
       <CustomGraphics />
       {D.hook.enabled ? <HookIntro /> : null}
-      {D.captions.enabled ? <Karaoke /> : null}
+      {D.captions.enabled
+        ? D.captions.style === 'stacked'
+          ? <StackedCaptions />
+          : <Karaoke />
+        : null}
     </AbsoluteFill>
   );
 };

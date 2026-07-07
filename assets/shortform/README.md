@@ -18,6 +18,10 @@ Then copy `cut.mp4` into `public/` and generate the data files below.
 1. `transcribe.py cut.mp4 --edit-dir <edit>` → `transcripts/cut.json`
    (times already on the output timeline — do NOT map the source EDL).
 2. `captions_for_remotion.py --transcript transcripts/cut.json -o public/captions.json`
+   - Stacked caption style only: also `caption_style.py --transcript
+     transcripts/cut.json -o public/caption-cues.json` and set
+     `captions.style:"stacked"`. Preview the two styles from
+     `caption-styles/stacked.png`.
 3. `face_track.py cut.mp4 -o public/track.json`
 4. `public/segments.json` — output-timeline cut boundaries from the EDL:
    `{"segments":[{"start":0,"dur":3.2}, …]}` cumulative per range.
@@ -44,7 +48,12 @@ Then copy `cut.mp4` into `public/` and generate the data files below.
   "captions": {                      // karaoke, ≤3 words, Poppins Black
     "enabled": true, "fontSize": 76, "maxWords": 3,
     "safeWidth": 720,                // clears the platform action rail — keep 720
-    "paddingBottom": 420
+    "paddingBottom": 420,
+    "style": "karaoke"               // "karaoke" (default) | "stacked" (see below)
+    // when "stacked": run caption_style.py → public/caption-cues.json, then the
+    // stacked style renders (multi-font stack + pencil outline + click/scratch).
+    // optional stacked overrides: "stackedOffsetY": 0.156, "fontScale": 1,
+    // "sfx": {"enabled": true, "clickVolume": 0.45, "scratchVolume": 0.16}
   },
   "inserts": [                       // rounded-card images, upper zone
     {"src": "pexels/ai.jpg", "start": 1.95, "end": 3.35}
@@ -64,8 +73,13 @@ Then copy `cut.mp4` into `public/` and generate the data files below.
 - **1080×1920**, **30fps when the source is 30fps+** (else 24) — `fps` in
   edit-data.json must equal cut.mp4's fps; base `<OffthreadVideo src=cut.mp4>` with the dynamic
   camera (hard zoom per segment + slow push-in + clamped eye-tracking).
-- **Karaoke captions**: one line ≤3 words, words rise in from below, Poppins
-  Black, lower third, `measureText` fit into `safeWidth` 720 (action-rail safe).
+- **Captions**: two styles via `captions.style`. **karaoke** (default) — one
+  line ≤3 words, words rise in, Poppins Black, lower third, `measureText` fit
+  into `safeWidth` 720 (action-rail safe). **stacked** — multi-font vertical
+  stack (Poppins bold-italic gradient / regular / Playfair serif orange #ff5200 /
+  bold), solo emphasis words, green pencil ellipse, and baked click/scratch SFX;
+  driven by `caption-cues.json` (from `caption_style.py`). Reference:
+  `caption-styles/stacked.png`.
 - **Hook**: static uniform-size headline on a dark-gray rounded card, optional
   logo+symbol row. Copy written like a virality specialist; approve a still first.
 - **Inserts**: rounded card + shadow, upper zone, slow Ken-Burns, whoosh on entry.
