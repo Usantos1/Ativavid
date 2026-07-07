@@ -32,6 +32,17 @@ description: Edvid — edit any video by conversation, in phases. Two tracks —
 12. **Verify numerically first.** Run `verify_cut.py` on every rendered cut; open images only for flagged junctions. Batch any multi-frame look into one `contact_sheet.py` / `grade.py --candidates` montage.
 13. **Never Read machine data into context**: `transcripts/*.json` (raw), `captions.json`, `track.json`, `segments.json`, matte/track binaries. Read `takes_packed.md` and helper stdout instead.
 
+## Execution medium — ffmpeg pipeline (default) vs Adobe Premiere (MCP)
+
+The default engine is the ffmpeg/Remotion pipeline below. **If the user wants the
+edit done inside Adobe Premiere Pro via the `premiere-pro` MCP** (e.g. "edite a
+sequência no Premiere", "corte via MCP"), the METHOD here is unchanged (audio-primary,
+cut on silence, phase gate, grade with taste) but the hands change — **read
+`references/premiere-mcp.md`** for the battle-tested Premiere workflow (razor +
+ripple recipe, the V/A-link ripple caveat, `color_correct` LOG-strength lesson,
+voice master, `export_frame` gotcha, tool cheat-sheet). Transcription/`edl.json`
+are identical and cached — reuse an approved `edl.json`; skip `cut.mp4`/preview.
+
 ## Directory layout
 
 ```
