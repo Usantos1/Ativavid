@@ -14,9 +14,11 @@
   "hook": {
     "enabled": false,
     "endSec": 4.0,
+    "style": "card",
     "lines": ["HEADLINE LINHA 1", "HEADLINE LINHA 2"],
     "logo": null,
-    "sign": null
+    "sign": null,
+    "_outline_hint": "style:'outline' → texto branco + contorno preto grosso, sem card, sentence-case, mais pra baixo. Escreva lines[] normal (não CAPS), tire logo/sign, e ajuste: fontSizePx(68), strokePx(12), paddingTop(330), lineHeight(1.06)."
   },
   "captions": {
     "enabled": true,

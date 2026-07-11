@@ -41,9 +41,14 @@ Then copy `cut.mp4` into `public/` and generate the data files below.
   },
   "hook": {                          // static headline, first ~4s (always on)
     "enabled": true, "endSec": 4.0,
+    "style": "card",                 // "card" (default) | "outline"
     "lines": ["A IA MAIS", "PERIGOSA DO MUNDO", "ACABOU DE SER LIBERADA"],
-    "logo": "brand/logo.webp",       // public/ path or null
-    "sign": "brand/warning.webp"     // transparent symbol or null
+    "logo": "brand/logo.webp",       // card only: public/ path or null
+    "sign": "brand/warning.webp"     // card only: transparent symbol or null
+    // "outline" style — white text + thick black stroke, no card, sentence-case,
+    // sits lower (may overlap top of head). Write lines[] in sentence case, drop
+    // logo/sign, and tune: "fontSizePx": 68, "strokePx": 12, "paddingTop": 330,
+    // "lineHeight": 1.06
   },
   "captions": {                      // karaoke, ≤3 words, Poppins Black
     "enabled": true, "fontSize": 76, "maxWords": 3,
@@ -80,8 +85,12 @@ Then copy `cut.mp4` into `public/` and generate the data files below.
   bold), solo emphasis words, green pencil ellipse, and baked click/scratch SFX;
   driven by `caption-cues.json` (from `caption_style.py`). Reference:
   `caption-styles/stacked.png`.
-- **Hook**: static uniform-size headline on a dark-gray rounded card, optional
-  logo+symbol row. Copy written like a virality specialist; approve a still first.
+- **Hook**: two styles via `hook.style`. **card** (default) — uniform-size
+  headline on a dark-gray rounded card, UPPERCASE, optional logo+symbol row.
+  **outline** — white text + thick black stroke, no card, sentence-case, sits
+  lower (may overlap the top of the head); tune `fontSizePx`/`strokePx`/
+  `paddingTop`/`lineHeight`. Copy written like a virality specialist; approve a
+  still first.
 - **Inserts**: rounded card + shadow, upper zone, slow Ken-Burns, whoosh on entry.
 - **Behind-the-subject**: elements top-anchored; matte gets the same camera via
   `frameOffset`; ProRes 4444 + `<OffthreadVideo transparent>`.

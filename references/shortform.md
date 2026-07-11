@@ -28,7 +28,10 @@ approved. Everything here rides on the **data-driven template** at
 - **Zones:** inserts/graphics upper third, captions lower third, face clear.
   Minimalist; accent `#33e0a3`.
 - **Audio:** whoosh ~0.09 on card entrances, pop ~0.12 on shapes, music ~0.12,
-  and ALWAYS a final loudnorm pass (voice+music+SFX summed will clip).
+  and ALWAYS a final loudnorm pass (voice+music+SFX summed will clip). The
+  shared sfx pack (`public/sfx/`) also ships `click1`/`click2` (element pops) and
+  `tictac` (clocks/countdowns) — trigger any at a local frame by wrapping
+  `<Sfx src="click2.mp3" volume={0.7}/>` in a `<Sequence from={frame} layout="none">`.
 
 ## Workflow
 
@@ -100,13 +103,21 @@ transcript, find the core promise/tension, and craft a scroll-stopper. Levers:
 **curiosity gap · high stakes/bold claim · specificity/number · urgency ·
 pattern interrupt**. Match the video's language; never clickbait it can't pay off.
 
-**Design is locked** (user-approved standard, encoded in the template): Poppins
-Black white UPPERCASE on a dark-gray `#232326` rounded card, **every line the
-same font size (~54)** — never a big hero line + smaller kicker. Static hold,
-fade+rise at the edges, soft whoosh. Optional row above the card: real brand
-logo (rounded card, w300) + transparent symbol (drop-shadow, w128) — prefer
-real assets in `public/brand/` over drawn SVG; pick a symbol that frames the
-angle (danger, money, trophy…).
+**Two locked styles via `hook.style`** (both user-approved, encoded in the
+template):
+- **`"card"`** (default): Poppins Black white UPPERCASE on a dark-gray `#232326`
+  rounded card, **every line the same font size (~54)** — never a big hero line +
+  smaller kicker. Optional row above the card: real brand logo (rounded card,
+  w300) + transparent symbol (drop-shadow, w128) — prefer real assets in
+  `public/brand/` over drawn SVG; pick a symbol that frames the angle (danger,
+  money, trophy…).
+- **`"outline"`**: white text + thick black stroke (`WebkitTextStroke` +
+  `paintOrder:'stroke fill'`), **no card**, **sentence-case** (write `lines[]`
+  normally, not caps), sits lower (`paddingTop` ~330 — may overlap the top of the
+  head, which is fine). The TikTok/MrBeast headline look. Tune `fontSizePx` (68),
+  `strokePx` (12), `paddingTop` (330), `lineHeight` (1.06). Drop logo/sign.
+
+Both are static hold, fade+rise at the edges, soft whoosh.
 
 Example (Claude Fable video): "A IA MAIS / PERIGOSA DO MUNDO / ACABOU DE SER
 LIBERADA". Draft 2–3 copy candidates in chat (text — no renders), let the user

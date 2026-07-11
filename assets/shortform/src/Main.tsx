@@ -48,7 +48,17 @@ export type EditData = {
   fps: number;
   durationSec: number;
   camera: {enabled: boolean; zooms: number[]; pushIn: number; targetX: number; targetY: number};
-  hook: {enabled: boolean; endSec: number; lines: string[]; logo: string | null; sign: string | null};
+  hook: {
+    enabled: boolean; endSec: number; lines: string[]; logo: string | null; sign: string | null;
+    // "card" (default): Poppins Black on a dark rounded card, written UPPERCASE.
+    // "outline": white text + thick black stroke, no card, sentence-case — the
+    // MrBeast/TikTok headline look. Optional style fields apply to "outline":
+    style?: 'card' | 'outline';
+    fontSizePx?: number;   // outline: headline size (default 68)
+    strokePx?: number;     // outline: black stroke width (default 12)
+    paddingTop?: number;   // outline: distance from top (default 330 — sits lower)
+    lineHeight?: number;   // outline: default 1.06
+  };
   captions: {
     enabled: boolean;
     fontSize: number;
@@ -353,9 +363,13 @@ const Soundtrack: React.FC = () => {
 // ============ VISUAL HOOK (static headline in the first ~4s — always on) =======
 // Copy comes from edit-data.json `hook.lines` — written like a copywriting/
 // virality specialist from the cut transcript (curiosity gap · high stakes ·
-// specificity · urgency). Design is THE locked standard: Poppins Black, white,
-// UPPERCASE, dark-gray rounded card, ALL LINES ONE SIZE, static (fade only),
-// optional logo + symbol row above.
+// specificity · urgency). Two styles via `hook.style`:
+//   "card" (default): Poppins Black, white, UPPERCASE, dark-gray rounded card,
+//     ALL LINES ONE SIZE, optional logo + symbol row above.
+//   "outline": white text + thick black stroke, no card, sentence-case, sits
+//     lower (paddingTop~330, may overlap the top of the head) — TikTok/MrBeast
+//     headline look. Tunables: fontSizePx, strokePx, paddingTop, lineHeight.
+// Both are static (fade + rise only) with a soft whoosh on entry.
 const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
   const f = useCurrentFrame();
   const H = D.hook;
@@ -363,6 +377,27 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
   const exit = interpolate(f, [totalFrames - 9, totalFrames], [1, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
   const op = Math.min(enter, exit);
   const y = interpolate(enter, [0, 1], [24, 0]);
+
+  if (H.style === 'outline') {
+    const stroke = H.strokePx ?? 12;
+    return (
+      <AbsoluteFill style={{justifyContent: 'flex-start', alignItems: 'center', paddingTop: H.paddingTop ?? 330}}>
+        <Sfx src="whoosh.mp3" volume={0.1} />
+        <div
+          style={{
+            opacity: op, translate: `0px ${y}px`, textAlign: 'center', fontFamily,
+            fontWeight: 800, fontSize: H.fontSizePx ?? 68, color: '#fff',
+            lineHeight: H.lineHeight ?? 1.06, letterSpacing: -1,
+            WebkitTextStroke: `${stroke}px #000`, paintOrder: 'stroke fill',
+            filter: 'drop-shadow(0 6px 14px rgba(0,0,0,0.45))', padding: '0 60px',
+          }}
+        >
+          {H.lines.map((l, i) => (<div key={i}>{l}</div>))}
+        </div>
+      </AbsoluteFill>
+    );
+  }
+
   return (
     <AbsoluteFill>
       <AbsoluteFill style={{justifyContent: 'flex-start', alignItems: 'center', paddingTop: 120}}>
