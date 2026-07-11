@@ -266,6 +266,45 @@ don't trust that as proof. To PROVE a scale/keyframe change renders, compare the
 68, `export_frame` at the same t — same pose, only scale differs. For keyframes,
 compare a keyframed frame at t against a static-50 frame at the same t.
 
+## Inserts — image / animation overlays (Remotion → Premiere)
+
+The user drops inserts onto the cut one at a time (exact content + timecode +
+"tela cheia" or "card"). Build each in the Remotion track (`references/shortform.md`
+insert style — one Composition per insert, `durationInFrames` = the exact frame
+count of the timecode range), preview in **Remotion Studio** for approval, then
+render + place.
+
+**Render as ProRes `4444` — NOT `hq`/422.** `--codec=prores --prores-profile=4444`
+(comes out `yuv422p12le`, opaque; use it even for opaque full-screen inserts).
+Learned the hard way (2026-07-08): one insert rendered `--prores-profile=hq`
+(ProRes 422 HQ, `yuv422p10le`) **hung Premiere** — the conform locked the whole
+MCP bridge for 30–45s and the clip wouldn't play on the timeline. Re-rendering the
+SAME comp as `4444` fixed it. Match the profile of the inserts that already play.
+For a true alpha card, use `4444` with a `yuva` pixel format (alpha preserved).
+
+**Organize in a bin named `Inserções`.** All rendered inserts live in one project
+bin. `import_media {binName:"Inserções"}` can silently drop the item at the project
+root instead (accented bin name not matched), so after importing, verify + relocate
+via ExtendScript: find-or-create the bin with `app.project.rootItem.createBin(name)`
+and move stray items with `projectItem.moveBin(bin)` (delete a footage item by
+moving it into a temp bin and calling `tempBin.deleteBin()` — classic DOM has no
+direct item delete). This bin is the standard home for every insert.
+
+**Place on a dedicated overlay track above the captions** (here `Animações` = V4,
+one above the caption track) so full-screen inserts cover the captions.
+`add_to_timeline {trackIndex, time:<timecode in seconds>, insertMode:"overwrite",
+linkAudio:false}` — `linkAudio:false` strips the silent PCM so the narration
+underneath survives (result reports `unlinkedAudioRemoved`). Timecode→seconds at
+30 fps: `HH*3600 + MM*60 + SS + FF/30`.
+
+**Verify placement with a LIGHT ExtendScript query, not `export_frame`.** Right
+after placing a fresh heavy ProRes, `export_frame` races the conform (renders the
+layers BELOW → looks empty) and can time out AND freeze the bridge. Instead read
+`app.project.activeSequence.videoTracks[n].clips` (name/start/end) to confirm the
+clip landed. The bridge can also drop between sessions (reopen panel → Start Bridge)
+and the user hand-adds their own B-roll inserts to this track — don't assume it
+only holds your rendered inserts.
+
 ## Verify (numeric-first, same spirit as verify_cut.py)
 
 - `get_full_sequence_info`: keep count, total duration vs EDL, zero gaps, V/A
@@ -303,6 +342,7 @@ branded/ad assemblies the server prefers `assemble_product_spot` /
 | Cut across layers | `razor_timeline_at_time {time}` |
 | Ripple-remove a clip | `remove_from_timeline {clipId, deleteMode:"ripple"}` (video AND audio) |
 | Grade | `color_correct {clipId,…}` / `apply_lut` |
+| Insert (overlay) | Remotion → ProRes **`4444`** (never `hq`/422) → bin `Inserções` → `add_to_timeline {trackIndex, time, insertMode:"overwrite", linkAudio:false}` |
 | Static clip scale | `set_clip_scale` / ExtendScript `setValue` (base fit 4K→1080 = 50) |
 | Zoom keyframes | `add_keyframe`/`get_keyframes` (Motion→Scale, **SOURCE time = inPoint→outPoint**) or ExtendScript batch |
 | Voice / audio FX | `apply_audio_effect_to_all_clips`, `apply_audio_effect` |
