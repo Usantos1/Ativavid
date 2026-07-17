@@ -70,7 +70,7 @@ First-time install lives in `install.md`. On cold start just verify:
 
 - `GROQ_API_KEY` resolves (env or `.env` at the edvid repo root). Groq Whisper `whisper-large-v3`; no diarization (every word is `speaker_0`).
 - `ELEVENLABS_API_KEY` (optional) — used for LONG sources (>5 min, e.g. YouTube/course lessons) via ElevenLabs Scribe `scribe_v1`, since Groq's free tier chokes on long uploads. `backend=auto` (default) picks Scribe over 5 min when the key exists, else Groq; short clips stay on Groq. No key → long sources fall back to Groq. Ask for it lazily the first time a >5 min source shows up, write to `.env`.
-- `ffmpeg` + `ffprobe` on PATH; Python deps (`uv sync`); Node 18+ for Phase 2.
+- `ffmpeg` + `ffprobe` on PATH; Python deps (`uv sync`); Node 18+ for Phase 2. `yt-dlp` only for URL sources (`ingest_url.py`) — install lazily (`brew install yt-dlp`) the first time a link shows up.
 - The `remotion-best-practices` skill for Phase-2 domain knowledge (install from https://github.com/remotion-dev/skills if missing).
 - Lazy keys, ask on first use, write to `.env` (never to `<videos_dir>`): `PEXELS_API_KEY` (images), `GOOGLE_API_KEY`+`GOOGLE_CSE_ID` (brand/people images fallback), `TREBLO_API_KEY` (AI music).
 
@@ -79,6 +79,7 @@ Helpers live in `helpers/`, resolved relative to this SKILL.md (symlinked at `~/
 ## Helpers
 
 Phase 1:
+- **`ingest_url.py <url> --dest <videos_dir> [--section 12:00-25:30] [--max-height 1080]`** — edit from a link: yt-dlp → MP4 (≤1080p, ascii-safe filename) straight into the videos dir; from there it's a source like any other. `--section` downloads ONLY a time range of a longform source (keyframe-accurate) — the cheap way to clip minutes 12–25 of a 1h video. `--simulate` prints title/duration/resolution without downloading (confirm before big fetches; run those in the background).
 - **`transcribe.py <video> --edit-dir <edit> [--language pt] [--backend auto|groq|elevenlabs]`** — word-level, cached. `backend=auto` (default): ElevenLabs Scribe for sources >5 min (when `ELEVENLABS_API_KEY` set), else Groq Whisper. Audio uploads as CBR 64kbps mono MP3 (~0.5 MB/min); oversized audio auto-chunks **by bytes**, so every chunk is guaranteed under Groq's 25 MB cap regardless of length. Chunks fetch **in parallel** with per-chunk resume cache and 5x backoff retries (provider blips don't restart the job).
 - **`transcribe_batch.py <videos_dir> [--backend auto|groq|elevenlabs]`** — 4-worker parallel transcription for multi-take shoots; same per-file auto backend selection by length.
 - **`pack_transcripts.py --edit-dir <dir>`** — transcripts → `takes_packed.md` (phrase-level, breaks on ≥0.5s silence). **The** reading view: 1/10 the tokens of raw JSON.
@@ -87,7 +88,8 @@ Phase 1:
 - **`verify_cut.py <edl.json> <cut.mp4> [--min-silence 1.2]`** — numeric self-eval: duration, per-junction pop/clipped-word probes, dead air, black frames, clipping. ~350 tokens of text instead of N images.
 - **`grade.py <in> -o <out>`** — grade presets/raw filters. **`--candidates "a=<filter>;b=<preset>;original=" --frame <t> -o cmp.png`** renders N looks on the SAME frame into one labeled montage.
 - **`timeline_view.py <video> <start> <end>`** — filmstrip+waveform PNG for ONE flagged spot, not a scan tool.
-- **`contact_sheet.py <video> --times t1 t2 … -o sheet.png`** — N frames in one labeled grid; the way to eyeball several moments.
+- **`contact_sheet.py <video> --times t1 t2 … -o sheet.png`** — N frames in one labeled grid; the way to eyeball several moments **you already know**.
+- **`watch_video.py <video> [--mode scene|keyframe|uniform] [--times t1 t2 …] [--start/--end] [--max-frames 24]`** — "what is IN this footage?" when you *don't* know where to look: scene-change detection (auto-fallback to uniform sampling on static/talking-head sources) + perceptual dedup (near-identical frames collapse — a held take becomes a handful of tiles) → labeled contact sheets in `edit/verify/watch_<stem>/`, one Read per sheet. Use for visual inventory of unknown material, eyeballing takes across sources, and surveying `cut.mp4` beyond verify_cut's numbers. `--times` pins transcript-cue frames: deictic moments from `takes_packed.md` ("olha isso", "como você pode ver") are LOW visual change and invisible to scene detection — pin them to decide B-roll/callout/zoom placement in Phase 2.
 
 Phase 2/3 (see the track references for usage):
 - **`captions_for_remotion.py`** (karaoke JSON) · **`face_track.py`** (eye-track JSON) · **`person_matte.py`** (RVM alpha matte; `uv sync --extra matting`) · **`pexels_search.py`** · **`wikimedia_images.py`** (no key, brands/people first choice) · **`google_images.py`** (fallback, mind rights) · **`captions_srt.py`** (longform .srt) · **`chapters.py`** (YouTube chapters) · **`treblo_music.py`** (AI soundtrack — pass a context-driven MUSICAL vibe: genre + instruments + tempo + mood, not SFX-y phrasing; auto-framed as a composed instrumental).
@@ -122,7 +124,7 @@ Every edit session gets the same interactive interface in the user's preview pan
 
 Goal: best take of every beat, cut on silence, graded image, clean `cut.mp4` for approval. No text, no graphics.
 
-1. **Inventory.** `ffprobe` every source. `transcribe_batch.py` (or `transcribe.py`) → `pack_transcripts.py` → read `takes_packed.md`. Note dimensions/orientation and whether it looks flat/LOG.
+1. **Inventory.** URL source? `ingest_url.py` first (`--section` when only a range of a longform video matters). `ffprobe` every source. `transcribe_batch.py` (or `transcribe.py`) → `pack_transcripts.py` → read `takes_packed.md`. Note dimensions/orientation and whether it looks flat/LOG. Material you can't picture from the transcript → `watch_video.py` for a one-Read visual survey.
 2. **Pre-scan** `takes_packed.md` for verbal slips, mis-speaks, and dead-air-stretched words (Whisper stretches a word's end across silence — verify long "phrases" against `speech_regions.py`/waveform before trusting them).
 3. **Converse.** Describe what you see; ask questions shaped by the material (content type, target length/aspect, pacing, must-keep/must-cut). No fixed checklist.
 4. **Ask about the color profile:** "Was this shot in LOG/flat (S-Log, V-Log, HLG) or standard/Rec.709?" LOG needs a real grade; standard needs light correction or none. Don't guess.
