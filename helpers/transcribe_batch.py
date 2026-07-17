@@ -20,7 +20,13 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from transcribe import DEFAULT_MODEL, load_api_key, transcribe_one
+from transcribe import (
+    DEFAULT_MODEL,
+    LONG_SOURCE_SECONDS,
+    load_api_key,
+    load_elevenlabs_key,
+    transcribe_one,
+)
 
 
 VIDEO_EXTS = {".mp4", ".MP4", ".mov", ".MOV", ".mkv", ".MKV", ".avi", ".AVI", ".m4v"}
@@ -62,6 +68,15 @@ def main() -> None:
         default=DEFAULT_MODEL,
         help=f"Groq transcription model (default: {DEFAULT_MODEL}).",
     )
+    ap.add_argument(
+        "--backend",
+        type=str,
+        default="auto",
+        choices=["auto", "groq", "elevenlabs"],
+        help=f"Transcription backend per file. 'auto' (default) uses ElevenLabs Scribe "
+             f"for sources longer than {LONG_SOURCE_SECONDS}s when ELEVENLABS_API_KEY is "
+             "set, else Groq. Force with 'groq' or 'elevenlabs'.",
+    )
     args = ap.parse_args()
 
     videos_dir = args.videos_dir.resolve()
@@ -84,6 +99,7 @@ def main() -> None:
         return
 
     api_key = load_api_key()
+    elevenlabs_key = load_elevenlabs_key()
 
     print(f"transcribing {len(pending)} files with {args.workers} parallel workers")
     t0 = time.time()
@@ -100,6 +116,8 @@ def main() -> None:
                 num_speakers=args.num_speakers,
                 model=args.model,
                 verbose=False,
+                elevenlabs_key=elevenlabs_key,
+                backend=args.backend,
             ): v
             for v in pending
         }

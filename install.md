@@ -21,6 +21,7 @@ Must exist on this machine:
 4. **Node.js 18+ and npm** on `$PATH` (for Remotion). — Phase 2
 5. The **`remotion-best-practices` skill** installed and discoverable (clone https://github.com/remotion-dev/skills and symlink `skills/remotion` into the agent's skills dir). — Phase 2
 6. *(Optional, all lazy — ask only when the feature is first used, then write to `.env`)*:
+   - `ELEVENLABS_API_KEY` — Phase 1 transcription of **long sources** (>5 min: YouTube videos, course lessons). With `backend=auto`, sources over 5 min transcribe via ElevenLabs Scribe (`scribe_v1`) when this key is set — Groq's free tier struggles with long/large uploads. Short clips stay on Groq; no key means long sources fall back to Groq (with chunking). Ask for it the first time a >5 min source appears. https://elevenlabs.io/app/settings/api-keys
    - `PEXELS_API_KEY` — Phase 2 illustrative images (stock photos/videos). https://www.pexels.com/api/
    - `TREBLO_API_KEY` — Phase 3 AI-generated soundtrack, only if the user picks "create with AI" (a local music file needs no key). https://sonauto.ai (Treblo)
    - `GOOGLE_API_KEY` + `GOOGLE_CSE_ID` — Phase 2 images of **named brands/people/logos** that Pexels lacks. Optional and finicky to provision (the key and the Custom Search API must live in the same Google Cloud project). **Wikimedia Commons is the no-key fallback** (`wikimedia_images.py`) and covers most people/places, so Google is rarely required.
@@ -99,7 +100,7 @@ If you can't tell which agent you're in, ask the user once: "which agent am I ru
 
 ### 5. Groq API key
 
-Groq Whisper (`whisper-large-v3`) does all transcription. Without a key, nothing transcribes. (Groq does not diarize speakers or tag audio events — every word gets `speaker_id: speaker_0`.)
+Groq Whisper (`whisper-large-v3`) is the base transcription backend and handles short sources (≤5 min). Without a Groq key, nothing transcribes. (Groq does not diarize speakers or tag audio events — every word gets `speaker_id: speaker_0`.) Long sources (>5 min) prefer the optional `ELEVENLABS_API_KEY` (Scribe) when present — see requirement 6 — but fall back to Groq when it isn't, so Groq is still required.
 
 1. Check existing state in this order and stop at the first hit:
 
@@ -148,7 +149,7 @@ mkdir -p ~/.claude/skills
 ln -sfn ~/Developer/remotion-skills/skills/remotion ~/.claude/skills/remotion
 ```
 
-None of the optional keys (`PEXELS_API_KEY`, `TREBLO_API_KEY`, `GOOGLE_API_KEY`/`GOOGLE_CSE_ID` — see requirement 6) are needed at install time. Ask for each **lazily**, the first time its feature is used in Phase 2/3, and append it to `.env` next to `GROQ_API_KEY`. Image search also works with **zero keys** via Wikimedia Commons, so Phase 2 images are never hard-blocked.
+None of the optional keys (`ELEVENLABS_API_KEY`, `PEXELS_API_KEY`, `TREBLO_API_KEY`, `GOOGLE_API_KEY`/`GOOGLE_CSE_ID` — see requirement 6) are needed at install time. Ask for each **lazily**, the first time its feature is used, and append it to `.env` next to `GROQ_API_KEY`. `ELEVENLABS_API_KEY` is the Phase-1 exception to "Phase 2/3": ask for it the first time a **>5 min source** shows up (long lessons / YouTube), since that's when the auto backend wants Scribe. Image search also works with **zero keys** via Wikimedia Commons, so Phase 2 images are never hard-blocked.
 
 ### 7. Verify end-to-end
 
