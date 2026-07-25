@@ -65,6 +65,9 @@ export type EditData = {
     maxWords: number;
     safeWidth: number;
     paddingBottom: number;
+    // ranges (seconds) where the caption sits somewhere else — used by the
+    // "tela dividida" style to park it on the seam between image and video
+    windows?: {start: number; end: number; paddingBottom: number}[];
     // "karaoke" (default, single line) or "stacked" (multi-font stack + pencil
     // outline + click/scratch SFX). Stacked reads public/caption-cues.json.
     style?: 'karaoke' | 'stacked';
@@ -109,10 +112,13 @@ export const DynamicVideo: React.FC<{src?: string; frameOffset?: number; transpa
     // which cut segment is this frame in?
     const segs = segData.segments;
     let idx = 0;
+    // -1: OffthreadVideo draws the source frame at or before frame/fps, which on an
+    // exact boundary lands a frame late. Without this the hard zoom steps one frame
+    // BEFORE the picture cuts (same lag CustomGraphics compensates with VIDEO_LAG).
     for (let i = 0; i < segs.length; i++) {
-      if (frame >= Math.round(segs[i].start * fps)) idx = i;
+      if (frame - 1 >= Math.round(segs[i].start * fps)) idx = i;
     }
-    const segFrom = Math.round(segs[idx].start * fps);
+    const segFrom = Math.round(segs[idx].start * fps) + 1;
     const segLen = Math.max(1, Math.round(segs[idx].dur * fps));
     const base = cam.zooms[idx % cam.zooms.length] ?? 1.14;
     const push = cam.pushIn * clamp01((frame - segFrom) / segLen);
@@ -254,6 +260,30 @@ const Word: React.FC<{caption: Caption; lineFromFrame: number}> = ({caption, lin
   );
 };
 
+// captions.windows lets the caption sit somewhere else for part of the video —
+// the "tela dividida" style parks it on the seam between image and video. It is
+// resolved PER FRAME, not per line: a line that starts before a window and runs
+// into it has to move mid-line, otherwise it stays stuck at the bottom.
+const CaptionShell: React.FC<{fromFrame: number; children: React.ReactNode}> = ({fromFrame, children}) => {
+  const {fps} = useVideoConfig();
+  const local = useCurrentFrame();
+  const C = D.captions;
+  // Compared in FRAMES, never seconds: window bounds are rounded in the JSON, and
+  // an epsilon comparison there lands a frame off. +1 is the same video lag the
+  // split layout compensates for (see VIDEO_LAG in CustomGraphics).
+  const f = fromFrame + local;
+  const w = (C.windows || []).find(
+    (x) => f >= Math.round(x.start * fps) + 1 && f < Math.round(x.end * fps) + 1,
+  );
+  return (
+    <AbsoluteFill
+      style={{justifyContent: 'flex-end', alignItems: 'center', paddingBottom: w ? w.paddingBottom : C.paddingBottom}}
+    >
+      {children}
+    </AbsoluteFill>
+  );
+};
+
 const Karaoke: React.FC = () => {
   const {fps, durationInFrames} = useVideoConfig();
   const C = D.captions;
@@ -276,7 +306,7 @@ const Karaoke: React.FC = () => {
         const fit = Math.min(1, C.safeWidth / width);
         return (
           <Sequence key={i} from={from} durationInFrames={duration} layout="none">
-            <AbsoluteFill style={{justifyContent: 'flex-end', alignItems: 'center', paddingBottom: C.paddingBottom}}>
+            <CaptionShell fromFrame={from}>
               <div
                 style={{
                   fontFamily,
@@ -294,7 +324,7 @@ const Karaoke: React.FC = () => {
                   <Word key={j} caption={w} lineFromFrame={from} />
                 ))}
               </div>
-            </AbsoluteFill>
+            </CaptionShell>
           </Sequence>
         );
       })}

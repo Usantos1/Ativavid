@@ -23,8 +23,10 @@ Then copy `cut.mp4` into `public/` and generate the data files below.
      `captions.style:"stacked"`. Preview the two styles from
      `caption-styles/stacked.png`.
 3. `face_track.py cut.mp4 -o public/track.json`
-4. `public/segments.json` — output-timeline cut boundaries from the EDL:
-   `{"segments":[{"start":0,"dur":3.2}, …]}` cumulative per range.
+4. `public/segments.json` — cumulative cut boundaries, measured from the ENCODED
+   segments' frame counts (`ffprobe -count_frames` over `clips_graded/seg_*.mp4`),
+   never summed from the EDL's seconds. ffmpeg rounds each segment up to a whole
+   frame, so EDL arithmetic drifts and the error accumulates across the video.
 5. `pexels_search.py "<query>" --out-dir public/pexels …` for insert images.
 6. **Write `public/edit-data.json`** — the whole edit in one file (schema below).
 
@@ -54,6 +56,9 @@ Then copy `cut.mp4` into `public/` and generate the data files below.
     "enabled": true, "fontSize": 76, "maxWords": 3,
     "safeWidth": 720,                // clears the platform action rail — keep 720
     "paddingBottom": 420,
+    // optional: ranges where the caption sits elsewhere (split screen parks it
+    // on the seam). Resolved per FRAME, so a line crossing the boundary moves.
+    "windows": [{"start": 11.64, "end": 14.73, "paddingBottom": 1074}],
     "style": "karaoke"               // "karaoke" (default) | "stacked" (see below)
     // when "stacked": run caption_style.py → public/caption-cues.json, then the
     // stacked style renders (multi-font stack + pencil outline + click/scratch).
@@ -67,6 +72,9 @@ Then copy `cut.mp4` into `public/` and generate the data files below.
     {"kind": "image", "src": "ill/x.jpg", "matte": "fg_x.mov", "start": 4.15, "dur": 1.65},
     {"kind": "words", "matte": "fg_w.mov", "start": 19.55, "dur": 1.5,
      "words": [{"t": "MAS", "at": 19.55}, {"t": "POR", "at": 19.9}, {"t": "QUE", "at": 20.26}]}
+  ],
+  "splitInserts": [                  // STYLE "tela dividida" — see below
+    {"src": "brand/logo.jpg", "start": 11.64, "end": 14.73, "fit": "cover", "bandH": 750}
   ],
   "soundtrack": {"enabled": false, "file": "trilha.mp3", "volume": 0.12}
   // Phase 3 flips soundtrack.enabled to true once trilha.mp3 exists
@@ -102,3 +110,41 @@ Then copy `cut.mp4` into `public/` and generate the data files below.
 `npx remotion render Reels out/render.mp4`, loudnorm → `edit/final.mp4`.
 Verify stills at cut boundaries (no black edges) before the full render.
 `generate_sfx.py` regenerates the sfx pack if ever needed.
+
+
+## Style: "TELA DIVIDIDA" (split screen)
+
+Image on top, talking head re-drawn underneath. Set `splitInserts[]` in
+edit-data.json; `CustomGraphics.tsx` maps over it (never hardcode the windows —
+the preview timeline only shows what is in the data).
+
+Rules that make it read as a style and not an accident:
+- **The seam sits at the subject's hairline.** `bandH` is the band height in px
+  (750 on a 1080×1920 frame for a medium close-up). Check a still: the top of the
+  head should just touch the seam, with no dead gap and no crop.
+- **Hard cut, never a fade.** A dissolve shows the full-frame take ghosting
+  through the band for a beat and reads as a glitch.
+- **Every window starts and ends ON a take cut**, from a `segments.json` built
+  out of real frame counts (see above). With EDL-derived seconds the split flips a
+  few frames BEFORE the picture cuts — small, but it reads as a mistake. Express
+  the times as `frame / fps` so `Math.round(sec * fps)` lands on that exact frame.
+- **No SFX on the transition.** A whoosh implies motion; this is a hard cut.
+- **Mount the split as ONE flat layer, never a `<Sequence>` per window with
+  `<OffthreadVideo startFrom>`.** Wrapped that way the layer samples cut.mp4 a
+  frame behind the base video, so the first frame of the split still shows the
+  PREVIOUS take.
+- **`VIDEO_LAG = 1`.** OffthreadVideo draws the source frame at or before
+  `frame/fps`; on an exact frame boundary that resolves one frame late, so the
+  decoded picture changes one composition frame after the index does. Verify per
+  project rather than trusting it: disable the split, render stills either side of
+  a cut, and see which frame the picture actually changes on — the camera zoom
+  (index-driven) steps a frame earlier than the take itself.
+- **Compare window bounds in FRAMES, not seconds.** Window values are rounded in
+  the JSON; an epsilon comparison on seconds lands a frame off (this is what made
+  the caption move one frame after the layout).
+- **Consecutive images share one window run** — leave no gap between them, or the
+  split blinks off for a frame or two between pictures.
+- **Captions ride the seam** while the split is up: add matching `captions.windows`
+  with `paddingBottom = height - bandH - ~96`, and they drop back on their own.
+- The head is re-framed by `VID_ZOOM`/`VID_FOCUS_Y` inside `HookSplitInner`;
+  without it the source's headroom leaves a dead gap under the band.

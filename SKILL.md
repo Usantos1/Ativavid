@@ -83,9 +83,10 @@ Phase 1:
 - **`transcribe.py <video> --edit-dir <edit> [--language pt] [--backend auto|groq|elevenlabs]`** — word-level, cached. `backend=auto` (default): ElevenLabs Scribe for sources >5 min (when `ELEVENLABS_API_KEY` set), else Groq Whisper. Audio uploads as CBR 64kbps mono MP3 (~0.5 MB/min); oversized audio auto-chunks **by bytes**, so every chunk is guaranteed under Groq's 25 MB cap regardless of length. Chunks fetch **in parallel** with per-chunk resume cache and 5x backoff retries (provider blips don't restart the job).
 - **`transcribe_batch.py <videos_dir> [--backend auto|groq|elevenlabs]`** — 4-worker parallel transcription for multi-take shoots; same per-file auto backend selection by length.
 - **`pack_transcripts.py --edit-dir <dir>`** — transcripts → `takes_packed.md` (phrase-level, breaks on ≥0.5s silence). **The** reading view: 1/10 the tokens of raw JSON.
-- **`speech_regions.py <video>`** — acoustic speech intervals via silencedetect. The source of truth for cut edges (Whisper times drift/stretch).
+- **`speech_regions.py <video>`** — acoustic speech intervals via silencedetect. The source of truth for cut EDGES (Whisper times drift/stretch). Answers *where* speech is — never *how loud* it is.
+- **`voice_levels.py <video> [--edit-dir <dir>] [--edl edl.json] [--drop-db 5]`** — the source of truth for speech LEVEL. Learns the noise floor (Ridler-Calvard intermeans, not a percentile) and the speaker's own median from the recording itself, then flags every phrase, sub-phrase run, and EDL range sitting ≥5 dB under that median and sizes a `gain_db` for each. Catches the failure nothing else sees: a whispered aside or a trailing-off sentence where every word is present, the transcript is perfect, `speech_regions` says "speech", `verify_cut` finds no pop and no dead air — and the viewer still hits a passage they cannot hear. **Run it in Phase 1 before writing the EDL.**
 - **`render.py <edl.json> -o cut.mp4 --no-subtitles [--voice-master] [--keep-resolution] [--jobs N]`** — per-segment extract (grade + fades, **parallel**) → lossless concat → optional voice master → loudnorm. Short-form fps is automatic: **30fps for 30fps+ sources, else 24** (longform keeps source fps via `--keep-resolution`). Set `edit-data.json` `fps` to match the resulting `cut.mp4`.
-- **`verify_cut.py <edl.json> <cut.mp4> [--min-silence 1.2]`** — numeric self-eval: duration, per-junction pop/clipped-word probes, dead air, black frames, clipping. ~350 tokens of text instead of N images.
+- **`verify_cut.py <edl.json> <cut.mp4> [--min-silence 1.2]`** — numeric self-eval: duration, per-junction pop/clipped-word probes, dead air, black frames, clipping, **and range level balance** (each range's RMS vs the median range; `LOW-LEVEL` under −4 dB). ~350 tokens of text instead of N images. The range-balance line is the convergence test for a `gain_db` fix — unlike `voice_levels`' run detector it compares a range against its peers rather than against a threshold it was selected by, so a corrected take actually stops being flagged.
 - **`grade.py <in> -o <out>`** — grade presets/raw filters. **`--candidates "a=<filter>;b=<preset>;original=" --frame <t> -o cmp.png`** renders N looks on the SAME frame into one labeled montage.
 - **`timeline_view.py <video> <start> <end>`** — filmstrip+waveform PNG for ONE flagged spot, not a scan tool.
 - **`contact_sheet.py <video> --times t1 t2 … -o sheet.png`** — N frames in one labeled grid; the way to eyeball several moments **you already know**.
@@ -99,7 +100,7 @@ Interface:
 
 ## Preview interface (standard — launch it at the start of every edit)
 
-Every edit session gets the same interactive interface in the user's preview panel: a video-editor timeline (video track with filmstrip + audio track with waveform), a live playhead that scrubs the render in real time, per-take trim handles and take removal, and — from Phase 2 — caption and insert tracks. Dark glass, Edvid brand. **Never build a UI per session and never edit `assets/preview/`** — it is data-driven, like the Remotion templates.
+Every edit session gets the same interactive interface in the user's preview panel: a video-editor timeline (video track with filmstrip + audio track with waveform), a live playhead that scrubs the render in real time, per-take trim handles and take removal, and — from Phase 2 — caption and insert tracks. The layout follows the source aspect on its own: **vertical** sources put a tall player on the right with the transport + timeline on the left; **horizontal** sources keep the player stacked above the timeline. Dark glass, Edvid brand. **Never build a UI per session and never edit `assets/preview/`** — it is data-driven, like the Remotion templates.
 
 **Launch (do this when a session starts, even before the first render — the UI shows a waiting state):**
 1. Write `<edit>/state.json`:
@@ -110,13 +111,39 @@ Every edit session gets the same interactive interface in the user's preview pan
     "sourceDurations": {"C0000": 1038.5}}
    ```
    (`captions`/`editData`/`finalVideo` only when they exist; the Fase-2 tab plays `finalVideo` — the render WITH captions/inserts — while Fase 1 plays the clean cut; `sourceDurations` lets the UI clamp take extensions.)
-2. Ensure `.claude/launch.json` has the config (adjust `--root` per session):
-   `{"name": "edvid-preview", "runtimeExecutable": "python3", "runtimeArgs": ["<skill>/helpers/preview_server.py", "--root", "<edit>", "--port", "4820"], "port": 4820}`
+2. Ensure `.claude/launch.json` has the config (adjust `--root` per session). The
+   server takes the port by flag only, so pass the harness-assigned `$PORT` and
+   set `autoPort` — port 4820 is often held by another session:
+   `{"name": "edvid-preview", "runtimeExecutable": "sh", "runtimeArgs": ["-c", "exec python3 <skill>/helpers/preview_server.py --root '<edit>' --port \"$PORT\""], "autoPort": true, "port": 4820}`
 3. `preview_start` with name `edvid-preview`.
+4. **Arm the watcher** so the user's saves reach you without them having to ask:
+   `Monitor(command="python3 <skill>/helpers/watch_edits.py '<edit>'", description="marcações do preview", persistent=true)`
 
 **Keep state.json fresh** — bump `phase` and `message` at each milestone (cut rendered, cut approved, Phase 2 rendered…). The UI polls and hot-reloads by itself; waveform + filmstrip regenerate automatically when cut.mp4 changes.
 
-**When the user saves timeline adjustments in the UI**, it writes `<edit>/preview_edits.json` (never touches edl.json). To apply: read its `edl.changes` / `edl.removed` digest (small), validate each new edge against `speech_regions.py` (warn if an edge clips a word — the user's intent wins, but say so), update `edl.json`, re-render, `verify_cut.py`, delete `preview_edits.json`, update `state.json`. Same for `editData` adjustments (insert/hook/behind timings → edit-data.json → re-render Phase 2).
+The timeline shows one track per KIND: markers, captions, video, audio, **text**
+overlays (hook), **images** (inserts + any data-driven CustomGraphics windows),
+soundtrack. Anything you leave in code instead of data simply will not appear.
+
+**What the user can do in the UI:** scrub, trim take edges, delete takes, drag
+insert/hook chips — and **mark correction ranges**: park the needle, press `M`
+(or the IN button), move to the end of the problem, press `M` again — the note box
+opens centred over the timeline — then type what should change. Many ranges per pass. Zoom: the slider is anchored on the needle, trackpad pinch
+on the pointer. Shortcuts live behind the **?** button at the bottom right.
+
+**When the user saves**, the UI writes `<edit>/preview_edits.json` (never touches
+edl.json) and `watch_edits.py` notifies you automatically. To apply:
+- `notes[]` — free-text correction requests, each with `start`/`end` on the draft
+  timeline plus `renderedStart`/`renderedEnd` on the current `cut.mp4`, and the
+  `phase` tab the user was on. Use the RENDERED pair to find the moment in the
+  existing render. These are instructions in the user's words — read them, then do
+  the edit they describe (re-cut, re-grade, swap an insert, fix a caption…).
+- `edl.changes` / `edl.removed` — validate each new edge against
+  `speech_regions.py` (warn if an edge clips a word — the user's intent wins, but
+  say so), update `edl.json`, re-render, `verify_cut.py`.
+- `editData` — insert/hook/behind timings → edit-data.json → re-render Phase 2.
+
+Then delete `preview_edits.json` and update `state.json`.
 
 ---
 
@@ -125,9 +152,16 @@ Every edit session gets the same interactive interface in the user's preview pan
 Goal: best take of every beat, cut on silence, graded image, clean `cut.mp4` for approval. No text, no graphics.
 
 1. **Inventory.** URL source? `ingest_url.py` first (`--section` when only a range of a longform video matters). `ffprobe` every source. `transcribe_batch.py` (or `transcribe.py`) → `pack_transcripts.py` → read `takes_packed.md`. Note dimensions/orientation and whether it looks flat/LOG. Material you can't picture from the transcript → `watch_video.py` for a one-Read visual survey.
-2. **Pre-scan** `takes_packed.md` for verbal slips, mis-speaks, and dead-air-stretched words (Whisper stretches a word's end across silence — verify long "phrases" against `speech_regions.py`/waveform before trusting them).
+2. **Pre-scan** `takes_packed.md` for verbal slips, mis-speaks, and dead-air-stretched words (Whisper stretches a word's end across silence — verify long "phrases" against `speech_regions.py`/waveform before trusting them). **Then run `voice_levels.py` on every source** — the transcript is level-blind, so an inaudible passage reads exactly like a normal one. Anything it flags is a decision to make BEFORE the EDL: boost it with `gain_db`, or cut the take entirely.
 3. **Converse.** Describe what you see; ask questions shaped by the material (content type, target length/aspect, pacing, must-keep/must-cut). No fixed checklist.
-4. **Ask about the color profile:** "Was this shot in LOG/flat (S-Log, V-Log, HLG) or standard/Rec.709?" LOG needs a real grade; standard needs light correction or none. Don't guess.
+4. **Ask ONE question about the image: NORMAL or LOG?** — "Esse vídeo foi gravado
+   em perfil NORMAL ou em LOG?" Nothing else; do not ask which LOG.
+   - **NORMAL** → no grade. Clean cut only. `"grade": ""` in the EDL. A standard
+     profile already carries its look; "improving" it is how you lose the match
+     with the rest of the user's material.
+   - **LOG** → YOU identify the flavour from the file, then apply the grade that
+     belongs to it (see "LOG profiles" below). A LOG source is flat by design and
+     needs a real expansion; the wrong curve's grade looks wrong.
 5. **Propose the cut strategy** (4–8 sentences: shape, takes, cut direction, grade direction, length estimate). **Wait for confirmation.**
 6. **Execute.** Produce `edl.json` (schema below; editor sub-agent brief for multi-take). Set cut edges from `speech_regions.py`, not raw Whisper times. Render: `render.py edl.json -o cut.mp4 --no-subtitles` (+`--voice-master` if wanted; longform: `--keep-resolution`).
 7. **Self-eval (numeric first).** `verify_cut.py edl.json cut.mp4` (longform: `--min-silence 1.2`). Clean → done. Flags → `timeline_view` ONLY the flagged junctions, fix, re-render. Cap 3 loops, then surface remaining flags to the user.
@@ -140,9 +174,53 @@ Reason about the image, don't preset-blind. Mental model ASC CDL: per channel `o
 - **Iterate on ONE frame via a candidates montage, and let the user choose:**
   `grade.py <src> --candidates "punch=eq=contrast=1.15:saturation=1.25;suave=…;original=" --frame <t> -o edit/verify/grades.png` — one image, all looks labeled, side by side. Only render the full cut once the grade is locked.
 - **Build from spaceless filters** so the string survives the EDL: `eq=…`, `colorbalance=…`, `colorlevels=…`. No `curves` with spaces (breaks filtergraph parsing).
-- **Standard/Rec.709** → light corrective or none. **LOG/flat** → real expansion, e.g. `eq=contrast=1.15:saturation=1.25:gamma=1.05` as a start; a user `.cube` goes first as `lut3d=`.
+- **Standard/Rec.709** → light corrective or none. A user `.cube` goes first as `lut3d=`.
+
+### LOG profiles — identify, then apply
+
+The user only says "LOG". Read the file and decide:
+
+```bash
+ffprobe -v error -select_streams v:0 \
+  -show_entries stream=codec_name,profile,color_transfer,color_primaries,color_space \
+  -show_entries stream_tags=com.apple.proapps.logprofile -of default=nw=1 <source>
+```
+
+| What you see | Profile | Grade |
+|---|---|---|
+| `codec_name=prores`, `pix_fmt=yuv422p10le`, `color_primaries=bt2020`, `color_transfer=unknown`, encoder tag `Apple ProRes` | **Apple Log** | preset `apple_log` |
+| `color_transfer=arib-std-b67` | HLG | tonemapped by `render.py`; light corrective only |
+| `color_transfer=smpte2084` | PQ / HDR10 | tonemapped by `render.py`; light corrective only |
+| Sony `slog3`/`s-gamut3`, Panasonic `v-log`, Canon `clog3` in the tags | that vendor's LOG | its own expansion — build one, then add it to `PRESETS` |
+
+**Nothing in the file says "Apple Log".** The signature above IS the
+identification — measured on a real iPhone ProRes file: BT.2020 primaries, a
+10-bit 4:2:2 ProRes stream, and an EMPTY transfer tag. If you wait for a tag that
+names the profile you will never find one, and an HDR-only check calls it plain SDR.
+
+**Apple Log is the one that is already proven** (`apple_log` in `grade.py`,
+approved 2026-07 on an iPhone ProRes talking head): cool, contrasty, skin rosy.
+Two things about it that are not obvious:
+- The file declares **BT.2020 primaries with an empty transfer tag**, so an
+  HDR-only check reads it as ordinary SDR. `render.py`'s `wide_gamut_chain`
+  converts it to Rec.709 before the grade — the preset assumes that already ran.
+- `hue=h=-9` is load-bearing: expanding Apple Log pushes skin yellow-green, and
+  the negative rotation brings it back. Rotating positive makes it worse.
+
+Still show the candidates montage and get a pick — a preset is a starting point,
+not permission to skip the approval.
 - **Skin is the guardrail.** The moment skin goes orange/magenta/clipped, back off. Check a mid-shot face at each step.
 - **Relative tweaks** ("+1 exposure", "mais saturação") → nudge that one term, re-montage the same frame, show again.
+- **Rec.709 is the only color space allowed to leave Phase 1.** `render.py` handles
+  this (tonemaps HDR, converts wide-gamut SDR, tags every output bt709/tv) — but
+  VERIFY on the rendered cut: `ffprobe -v error -select_streams v:0
+  -show_entries stream=color_space,color_primaries,color_range cut.mp4` must read
+  bt709 / bt709 / tv. Anything else means a second interpretation is still alive
+  downstream: Chrome (Remotion's decoder in Phase 2) re-reads those tags and
+  silently re-grades the image — typically ~1.2 gamma darker with a hue shift — so
+  the Phase-2 render stops matching the cut the user approved. Phone/mirrorless
+  sources routinely write bt2020 primaries with `color_transfer=unknown`; that is
+  wide-gamut SDR, **not** HDR, and an HDR-only check will miss it.
 
 ## Voice EQ + mastering (optional Phase-1 audio polish)
 
@@ -160,7 +238,16 @@ Tune per voice: brighter → raise treble/3.2k; warmer → back those off, lift 
 - Onsets drift early (bakes dead air at a segment head); ends stretch across silence (a 4s "phrase" may be 1s of talk); restarts get collapsed into one stretched word (the doubled take is invisible in text but audible).
 - Fix: edges from `speech_regions.py` — start → region onset −30ms, end → offset +50–80ms (the trail keeps the word's decay; cutting at the offset clips the last sibilant). Inside merged speech blocks, place the edge by eye on a fine `timeline_view`.
 - If the user flags a gap/clip after render, re-run `speech_regions.py` around that timestamp — don't nudge blindly.
+- **A stretched word can hide a false start, and the stretch also mis-attributes every word around it.** When "de" spans 6.16→8.64, the words the source transcript places on either side may belong to *different takes* — the speaker trailed off, paused, and restarted the whole sentence. The text shows one clean sentence; the audio holds two attempts.
+- **Never conclude a range is missing content from the SOURCE transcript's word times.** Extract the exact range and transcribe it in isolation — no surrounding context for the LM to complete from. If the answer changes a deliverable (a caption rewrite, dropping a take), get a second opinion from the other backend (`--backend elevenlabs` vs `groq`); two models agreeing on an isolated clip is trustworthy, one model reading the full file is not.
 - **Rotation:** phone clips are often stored landscape with a ±90° display-matrix; render.py handles it — don't force dimensions.
+
+**Level the takes — presence is not audibility:**
+- People drop their voice on asides, parentheticals and sentence tails ("além de, *claro*, …"). It sounds natural in the room and disappears on a phone speaker. The transcript is perfect, so nothing in the text pipeline flags it.
+- Find it with `voice_levels.py --edl edl.json`: it reports each range's average AND the worst low run inside it, and suggests a `gain_db`. Size the gain off the **worst run**.
+- Fix it per-range with `gain_db`, never with a global compressor.
+- Confirm with `verify_cut.py`'s range-balance line. Target a ~2 dB spread between ranges — that is levelled. Driving it to 0 dB flattens the delivery and lifts room tone for nothing.
+- Room tone is the real ceiling on a boost, not clipping. Before committing a large gain, compare the boosted take's internal pause against a pause elsewhere in the cut; if the boosted one is now the louder pause, back off.
 
 ## Editor sub-agent brief (multi-take selection)
 
@@ -191,13 +278,21 @@ For a single long source (longform), the main context can pick cuts directly fro
   "voice_master": true,
   "ranges": [
     {"source": "C0103", "start": 2.42, "end": 6.85, "beat": "HOOK",
-     "quote": "…", "reason": "…", "chapter": "Only on longform section openers"}
+     "quote": "…", "reason": "…", "gain_db": 0,
+     "chapter": "Only on longform section openers"}
   ],
   "total_duration_s": 87.4
 }
 ```
 
 `grade`: preset name, raw filter, or `"auto"`. `chapter` fields feed `chapters.py` (longform).
+
+`gain_db`: per-range level correction in dB, sized by `voice_levels.py`. Applied at
+extraction, before the edge fades, with a limiter on any boost so a loud syllable
+inside a quiet take cannot clip. This is the fix for an under-level take — not a
+global compressor, which would pump the good takes to rescue the bad one.
+Cap around +12 dB: past that the room tone rises with the voice and the take
+starts sounding like a different microphone.
 
 ---
 
@@ -228,14 +323,26 @@ On startup, read it if it exists and summarize the last session in one sentence 
 - Starting Phase 2 before cut approval (the gate is a Hard Rule).
 - Reading `transcripts/*.json`, `captions.json`, `track.json`, `segments.json`, or template TSX into context — machine data; read `takes_packed.md`/helper output instead.
 - Editing `src/Main.tsx` — the template is data-driven; the JSON is the edit.
+- Hardcoding a bespoke graphic's timings inside `CustomGraphics.tsx`. Put the
+  windows in an `edit-data.json` array (a key the template ignores, e.g.
+  `splitInserts`) and map over it — otherwise the graphic is invisible to the
+  preview timeline and the user cannot see or retime it.
 - `timeline_view` on every boundary — run `verify_cut.py` and image ONLY the flags.
 - N single-frame images when one `contact_sheet.py` / `--candidates` montage answers it.
 - Setting cut edges from Whisper word times (drift/stretch/collapsed repeats) — use `speech_regions.py`.
+- Judging audio by the transcript. A perfect transcript says nothing about level: Whisper reads a whisper fine, the viewer does not. Run `voice_levels.py` on every source in Phase 1.
+- Rewriting a caption, or telling the user a sentence broke, on the strength of the source transcript's word times. Transcribe the isolated range first — a stretched word mis-attributes its neighbours and an under-level passage is usually a false start the speaker already re-took.
+- Sizing a range's `gain_db` off the range average — a range holding a whispered clause plus a normal one averages out to "fine" while the whisper stays inaudible. Size it off the WORST low run inside the range (`voice_levels.py --edl` does this).
+- Chasing `voice_levels`' low-run numbers to zero on a corrected render. Runs are SELECTED for being under the threshold, so the passage you just fixed still lists its decay tails. Convergence is `verify_cut.py`'s range-balance line; a ~2 dB spread between ranges is a finished job, 0 dB is over-flattened delivery.
+- Fixing an under-level take with a global compressor or `--voice-master` — that pumps the takes that were already fine. Use per-range `gain_db`.
 - Cutting exactly at a word's offset (clips the sibilant) — leave the 50–80ms trail.
 - Committing a grade without the one-frame candidates montage + user pick.
+- Shipping a `cut.mp4` that is not tagged bt709/tv — Phase 2 will re-interpret it and the approved grade drifts.
+- Delivering Phase 2 with Remotion's own audio track — it drifts progressively against the source (+0.66s by 78s on a 95s edit). Re-mux `cut.mp4`'s audio and mix the soundtrack in ffmpeg (recipe in the track reference).
+- Judging A/V sync with short correlation windows — speech is quasi-periodic and a 2–3s window happily locks onto the wrong syllable, inventing a drift. Use 15s+ windows, and remember a PARTIAL render cannot show drift that accumulates over the full timeline.
 - Burning captions/overlays with ffmpeg/PIL — Phase 2 is Remotion-only.
 - Assuming the color profile — ask about LOG explicitly.
 - Re-transcribing cached sources; re-rendering Phase 1 when only Phase 2 changed.
-- Building a per-session preview UI or editing `assets/preview/` — launch the standard interface and feed it `state.json`.
+- Building a per-session preview UI — launch the standard interface and feed it `state.json`. (Improving `assets/preview/` itself IS allowed when the user asks for a UI change; it is shared, so the improvement lands for every project.)
 - Applying `preview_edits.json` blindly — validate new edges against `speech_regions.py` first (flag clipped words to the user).
 - Assuming what kind of video it is. Look first, ask second, edit last.

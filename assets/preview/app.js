@@ -3,6 +3,28 @@
  * edl.json) + /gen/* (waveform, thumbs) + /media/* (video, captions, edit-data).
  * User adjustments are POSTed to /api/save → <edit>/preview_edits.json and
  * applied by the skill (which re-renders and bumps state).
+ *
+ * Three interaction rules worth knowing before editing this file:
+ *  - Tracks are identified by ICON only (ICON.captions/video/audio/inserts/music),
+ *    painted into .tl-chip cards. LABEL_W must stay in sync with .track-label's
+ *    width. The gutter masks the lanes with .track-label::before painted in
+ *    --panel-bg (the panel is a solid surface for exactly this reason), pinned by
+ *    native position:sticky. #gutterLine is the divider, pinned by a scroll-driven
+ *    CSS timeline on `translate`. Do NOT re-drive either from a JS scroll handler
+ *    or a clip-path animation — both lag a frame and the column visibly breathes
+ *    while scrolling. JS only publishes --max-scroll (on zoom/resize).
+ *  - Correction markers: M (or the transport button) drops an IN, the next M closes
+ *    the range and opens the note editor. They ride in S.notes and ship as
+ *    payload.notes on save; watch_edits.py turns each save into a chat notification.
+ *  - Zoom: the slider is anchored on the needle, trackpad pinch (wheel+ctrlKey)
+ *    on the pointer. Both go through applyZoom(pps, t, anchorX) — never on scroll 0.
+ *  - Layout follows the SOURCE aspect: portrait clips get body.portrait (player
+ *    right at full column height, transport+timeline left), landscape keeps the
+ *    stacked layout. #stage keeps the split from swallowing anything below it.
+ *  - Timecode uses a MONOSPACE stack: Poppins ships no tabular figures, so
+ *    `font-variant-numeric: tabular-nums` silently does nothing and every digit
+ *    change resized the readout, shoving the whole transport row sideways.
+ *  - No glows anywhere — depth shadows are fine, coloured halos are not.
  */
 'use strict';
 
@@ -26,9 +48,18 @@ const ICON = {
   pause: '<svg viewBox="0 0 16 16"><rect x="3" y="2" width="3.6" height="12" rx="1"/><rect x="9.4" y="2" width="3.6" height="12" rx="1"/></svg>',
   vol: '<svg viewBox="0 0 16 16"><path d="M2 6v4h2.8L9 13.4V2.6L4.8 6H2z"/><path d="M11 5.2a3.4 3.4 0 0 1 0 5.6V9.4a2 2 0 0 0 0-2.8V5.2z"/></svg>',
   mute: '<svg viewBox="0 0 16 16"><path d="M2 6v4h2.8L9 13.4V2.6L4.8 6H2z"/><path d="M11.2 6.2l3.6 3.6m0-3.6l-3.6 3.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/></svg>',
+  // track identity — icons replace text labels (data-icon in index.html)
+  captions: '<svg viewBox="0 0 16 16"><rect x="1" y="3" width="14" height="10" rx="2.4" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="3.4" y="8.4" width="4.4" height="1.5" rx=".75"/><rect x="8.9" y="8.4" width="3.7" height="1.5" rx=".75"/></svg>',
+  video: '<svg viewBox="0 0 16 16"><rect x="1" y="3" width="14" height="10" rx="2.4" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M6.5 5.9v4.2c0 .4.44.64.79.42l3.3-2.1a.5.5 0 0 0 0-.85l-3.3-2.1a.5.5 0 0 0-.79.43z"/></svg>',
+  audio: '<svg viewBox="0 0 16 16"><path d="M2.4 6.2v3.6h2.4l3.5 2.8V3.4L4.8 6.2H2.4z"/><path d="M10.5 5.7a3.2 3.2 0 0 1 0 4.6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M12.4 3.9a5.7 5.7 0 0 1 0 8.2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
+  inserts: '<svg viewBox="0 0 16 16"><rect x="1.2" y="3.2" width="13.6" height="9.6" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="5.3" cy="6.6" r="1.15"/><path d="M2.6 11.7l3-2.9a1 1 0 0 1 1.34-.05l1.84 1.58 1.5-1.24a1 1 0 0 1 1.29.02l1.72 1.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  music: '<svg viewBox="0 0 16 16"><path d="M13.1 1.9 6.6 3.5a.8.8 0 0 0-.6.78v6.06a2.25 2.25 0 1 0 1.5 2.12V6.6l5-1.22v3.5a2.25 2.25 0 1 0 1.5 2.12V2.68a.8.8 0 0 0-.9-.78z"/></svg>',
+  text: '<svg viewBox="0 0 16 16"><path d="M2 2.6h12v2.5h-1.5V4.1H8.75v8.1h1.6v1.3H5.65v-1.3h1.6V4.1H3.5v1H2V2.6z"/></svg>',
+  notes: '<svg viewBox="0 0 16 16"><rect x="1.9" y="1.4" width="1.6" height="13.2" rx=".8"/><path d="M5 2.7h7.6a.6.6 0 0 1 .47.97L11.36 6l1.71 2.33a.6.6 0 0 1-.47.97H5V2.7z"/></svg>',
+  flag: '<svg viewBox="0 0 16 16"><rect x="1.9" y="1.4" width="1.6" height="13.2" rx=".8"/><path d="M5 2.7h7.6a.6.6 0 0 1 .47.97L11.36 6l1.71 2.33a.6.6 0 0 1-.47.97H5V2.7z"/></svg>',
 };
 
-const LABEL_W = 86; // .track-label width (content x offset of lanes)
+const LABEL_W = 48; // .track-label width (content x offset of lanes)
 const MIN_SEG = 0.2; // s
 const THUMB_EVERY = 2.0;
 
@@ -50,6 +81,9 @@ let S = {
   selected: -1, // selected clip index (draft)
   lastSig: '', // change detection
   savedPending: false,
+  notes: [], // correction markers [{id,start,end,text}] — draft-timeline seconds
+  pendingIn: null, // an IN is open, waiting for its OUT
+  editingNote: null, // id of the note the editor is bound to
 };
 
 const fmt = (t) => {
@@ -123,6 +157,7 @@ function insertsDirty() {
 function dirtyCount() {
   let n = S.draft.filter((r) => r.removed || r.start !== r.orig.start || r.end !== r.orig.end).length;
   n += S.insertsDraft.filter((c) => c.start !== c.orig.start || c.end !== c.orig.end).length;
+  n += S.notes.length; // each correction marker is an unsaved adjustment too
   return n;
 }
 function refreshHeader() {
@@ -171,7 +206,7 @@ async function applyState(data) {
   const hasVideo = S.videoDuration > 0;
   $('emptyState').classList.toggle('hidden', hasVideo);
   $('playerWrap').classList.toggle('hidden', !hasVideo);
-  $('timelinePanel').classList.toggle('hidden', !hasVideo);
+  $('editorCol').classList.toggle('hidden', !hasVideo);
 
   if (hasVideo) {
     updateVideoSrc();
@@ -244,6 +279,15 @@ function buildInsertsDraft() {
   (d.inserts || []).forEach((it, i) => {
     list.push({ kind: 'insert', label: (it.src || '').split('/').pop(), start: +it.start, end: +it.end, ref: i });
   });
+  // split-layout images (CustomGraphics reads the same array) — they are images
+  // like any other insert, so they belong on the image track, not in code
+  (d.splitInserts || []).forEach((it, i) => {
+    list.push({
+      kind: 'split',
+      label: it.label || (it.src || '').split('/').pop(),
+      start: +it.start, end: +it.end, ref: i,
+    });
+  });
   (d.behind || []).forEach((b, i) => {
     list.push({ kind: 'behind', label: `BEHIND ${b.kind === 'words' ? (b.words || []).map((w) => w.t).join(' ') : (b.src || '').split('/').pop()}`, start: +b.start, end: +b.start + +b.dur, ref: i });
   });
@@ -273,10 +317,48 @@ function fitZoom() {
   S.pps = S.minPps;
   $('zoom').value = 0;
 }
-function setZoom(v) { // slider 0..100 → minPps..200
-  const maxPps = 200;
-  S.pps = S.minPps * Math.pow(maxPps / S.minPps, v / 100);
+const MAX_PPS = 200;
+
+// Zoom keeping `t` (seconds) parked at `anchorX` (px from the panel's left edge).
+function applyZoom(pps, t, anchorX) {
+  S.pps = Math.min(MAX_PPS, Math.max(S.minPps, pps));
+  const span = Math.log(MAX_PPS / S.minPps);
+  $('zoom').value = span > 0 ? Math.round((100 * Math.log(S.pps / S.minPps)) / span) : 0;
   renderAll();
+  panel.scrollLeft = Math.max(0, LABEL_W + t * S.pps - anchorX);
+  drawRuler();
+  drawWave();
+  positionNeedle();
+}
+
+// Trackpad pinch arrives as a wheel event with ctrlKey set. Anchored on the
+// pointer (a direct gesture zooms where the fingers are); the slider stays
+// anchored on the needle.
+panel.addEventListener('wheel', (e) => {
+  if (!e.ctrlKey) return; // plain two-finger scrolling stays untouched
+  e.preventDefault();
+  const pr = panel.getBoundingClientRect();
+  const anchorX = e.clientX - pr.left;
+  const t = (panel.scrollLeft + anchorX - LABEL_W) / S.pps;
+  applyZoom(S.pps * Math.exp(-e.deltaY * 0.01), Math.max(0, t), anchorX);
+}, { passive: false });
+
+function setZoom(v) { // slider 0..100 → minPps..200, anchored on the needle
+  const t = renderedToDraft(video.currentTime || 0);
+  // viewport x of the needle before the zoom; if it is off-screen, pull it to
+  // the middle so zooming always lands on the playhead the user is looking at
+  const xBefore = LABEL_W + t * S.pps - panel.scrollLeft;
+  const visible = xBefore >= LABEL_W && xBefore <= panel.clientWidth;
+  const anchor = visible ? xBefore : LABEL_W + (panel.clientWidth - LABEL_W) / 2;
+  applyZoom(S.minPps * Math.pow(MAX_PPS / S.minPps, v / 100), t, anchor);
+}
+
+// Lanes are clipped at the gutter (and the divider is positioned) by a
+// scroll-driven CSS timeline, so both stay pinned to scrollLeft with zero lag.
+// All JS has to publish is the scroll RANGE, which only changes on zoom/resize.
+function updateScrollRange() {
+  const max = Math.max(0, panel.scrollWidth - panel.clientWidth);
+  timelineEl.style.setProperty('--max-scroll', `${max}px`);
 }
 
 // ---------- rendering ----------
@@ -284,9 +366,88 @@ function renderAll() {
   timelineEl.style.width = `${contentWidth()}px`;
   renderClips();
   renderChips();
+  renderNotes();
   drawRuler();
   drawWave();
+  updateScrollRange();
   positionNeedle();
+}
+
+// ---------- correction markers ----------
+function renderNotes() {
+  const lane = $('laneNotes');
+  lane.innerHTML = '';
+  for (const n of S.notes) {
+    const chip = el('div', 'note-chip', lane);
+    chip.style.left = `${n.start * S.pps}px`;
+    chip.style.width = `${Math.max((n.end - n.start) * S.pps, 10)}px`;
+    chip.textContent = n.text || '(sem descrição)';
+    chip.title = `${fmt(n.start)} → ${fmt(n.end)}\n${n.text || ''}\n\nclique para editar`;
+    chip.dataset.id = n.id;
+  }
+  if (S.pendingIn != null) {
+    const p = el('div', 'note-pending', lane);
+    p.style.left = `${S.pendingIn * S.pps}px`;
+  }
+  const btn = $('btnMark');
+  btn.classList.toggle('armed', S.pendingIn != null);
+  $('markText').textContent = S.pendingIn != null ? 'OUT' : 'IN';
+}
+
+function toggleMark() {
+  const t = renderedToDraft(video.currentTime || 0);
+  if (S.pendingIn == null) {
+    S.pendingIn = t;
+    renderNotes();
+    toast('IN marcado — leve a agulha ao fim do trecho e marque o OUT', 2600);
+    return;
+  }
+  const start = Math.min(S.pendingIn, t);
+  const end = Math.max(S.pendingIn, t);
+  if (end - start < 0.05) {
+    toast('Trecho curto demais — afaste a agulha do IN', 2200);
+    return;
+  }
+  S.pendingIn = null;
+  const note = { id: `n${Date.now()}`, start, end, text: '' };
+  S.notes.push(note);
+  S.notes.sort((a, b) => a.start - b.start);
+  renderNotes();
+  openNoteEditor(note.id, true);
+}
+
+function openNoteEditor(id, isNew) {
+  const n = S.notes.find((x) => x.id === id);
+  if (!n) return;
+  S.editingNote = id;
+  $('noteRange').textContent = `${fmt(n.start)} → ${fmt(n.end)}`;
+  $('noteText').value = n.text || '';
+  $('noteDelete').classList.toggle('hidden', !!isNew);
+  // centred over the timeline (where the user's eyes are), then clamped so a
+  // short timeline panel cannot push the editor off-screen
+  const ed = $('noteEditor');
+  ed.classList.remove('hidden');
+  const p = panel.getBoundingClientRect();
+  const h = ed.offsetHeight;
+  const w = ed.offsetWidth;
+  const cy = Math.min(
+    Math.max(p.top + p.height / 2, h / 2 + 12),
+    window.innerHeight - h / 2 - 12,
+  );
+  const cx = Math.min(Math.max(p.left + p.width / 2, w / 2 + 12), window.innerWidth - w / 2 - 12);
+  ed.style.left = `${cx}px`;
+  ed.style.top = `${cy}px`;
+  $('noteText').focus();
+}
+
+function closeNoteEditor() {
+  // a brand-new marker with no text is not worth keeping
+  const n = S.notes.find((x) => x.id === S.editingNote);
+  if (n && !n.text.trim()) S.notes = S.notes.filter((x) => x.id !== n.id);
+  S.editingNote = null;
+  $('noteEditor').classList.add('hidden');
+  renderNotes();
+  refreshHeader();
 }
 
 function renderClips() {
@@ -355,40 +516,52 @@ function renderChips() {
     chip.title = c.text;
   }
 
-  // inserts → numbered tracks; overlapping elements stack onto extra tracks
-  const order = S.insertsDraft.map((c, i) => ({ c, i }))
-    .sort((a, b) => a.c.start - b.c.start || a.c.end - b.c.end);
-  const trackEnd = []; // last occupied end per track
-  const assign = new Map();
-  for (const { c, i } of order) {
-    let t = trackEnd.findIndex((end) => c.start >= end - 1e-6);
-    if (t < 0) { t = trackEnd.length; trackEnd.push(0); }
-    trackEnd[t] = c.end;
-    assign.set(i, t);
+  // TEXT and IMAGE get their own tracks — a headline and a photo are different
+  // kinds of edit, and mixing them on one lane hid the images entirely.
+  const isText = (c) => c.kind === 'hook';
+  const groups = [
+    { icon: 'text', cls: 'teal', items: S.insertsDraft.map((c, i) => ({ c, i })).filter(({ c }) => isText(c)) },
+    { icon: 'inserts', cls: 'orange', items: S.insertsDraft.map((c, i) => ({ c, i })).filter(({ c }) => !isText(c)) },
+  ];
+
+  for (const g of groups) {
+    if (!g.items.length) continue;
+    // overlapping elements stack onto extra lanes within the same group
+    const order = [...g.items].sort((a, b) => a.c.start - b.c.start || a.c.end - b.c.end);
+    const trackEnd = [];
+    const assign = new Map();
+    for (const { c, i } of order) {
+      let t = trackEnd.findIndex((end) => c.start >= end - 1e-6);
+      if (t < 0) { t = trackEnd.length; trackEnd.push(0); }
+      trackEnd[t] = c.end;
+      assign.set(i, t);
+    }
+    const lanes = [];
+    for (let t = 0; t < Math.max(trackEnd.length, 1); t++) {
+      const trk = el('div', 'track', insertTracksEl);
+      const lab = el('div', 'track-label', trk);
+      // only the first lane of a group carries the icon; the rest are continuations
+      if (t === 0) el('span', `tl-chip ${g.cls}`, lab).innerHTML = ICON[g.icon];
+      lanes.push(el('div', 'lane', trk));
+    }
+    for (const { c, i } of g.items) {
+      const chip = el('div', `chip insert ${c.kind === 'hook' ? 'hook' : ''}`, lanes[assign.get(i) ?? 0]);
+      chip.style.left = `${c.start * S.pps}px`;
+      chip.style.width = `${Math.max((c.end - c.start) * S.pps, 10)}px`;
+      chip.textContent = c.label;
+      chip.title = c.label;
+      chip.dataset.i = i;
+      if (c.start !== c.orig.start || c.end !== c.orig.end) chip.classList.add('dirty');
+      el('div', 'handle l', chip).dataset.i = i;
+      el('div', 'handle r', chip).dataset.i = i;
+    }
   }
-  const lanes = [];
-  for (let t = 0; t < Math.max(trackEnd.length, 1); t++) {
-    const trk = el('div', 'track', insertTracksEl);
-    el('div', 'track-label orange', trk).textContent = `TRACK ${t + 1}`;
-    lanes.push(el('div', 'lane', trk));
-  }
-  S.insertsDraft.forEach((c, i) => {
-    const chip = el('div', `chip insert ${c.kind === 'hook' ? 'hook' : ''}`, lanes[assign.get(i) ?? 0]);
-    chip.style.left = `${c.start * S.pps}px`;
-    chip.style.width = `${Math.max((c.end - c.start) * S.pps, 10)}px`;
-    chip.textContent = c.label;
-    chip.title = c.label;
-    chip.dataset.i = i;
-    if (c.start !== c.orig.start || c.end !== c.orig.end) chip.classList.add('dirty');
-    el('div', 'handle l', chip).dataset.i = i;
-    el('div', 'handle r', chip).dataset.i = i;
-  });
 
   // soundtrack → its own read-only track, one chip spanning the whole video
   const st = S.editData && S.editData.soundtrack;
   if (st && st.enabled) {
     const trk = el('div', 'track', insertTracksEl);
-    el('div', 'track-label olive', trk).textContent = 'TRILHA';
+    el('span', 'tl-chip olive', el('div', 'track-label', trk)).innerHTML = ICON.music;
     const lane = el('div', 'lane', trk);
     const chip = el('div', 'chip music', lane);
     const dur = S.editData.durationSec || S.videoDuration || draftTotal();
@@ -396,7 +569,7 @@ function renderChips() {
     chip.style.width = `${Math.max(dur * S.pps, 10)}px`;
     const name = (st.file || 'trilha.mp3').split('/').pop();
     const vol = st.volume != null ? `  ·  vol ${st.volume}` : '';
-    chip.textContent = `♪ ${name}${vol}`;
+    chip.textContent = `${name}${vol}`;
     chip.title = chip.textContent;
   }
 }
@@ -472,10 +645,27 @@ function drawWave() {
   }
 }
 
+// Vertical sources get the split layout (player right, editor left) — stacked,
+// a 9:16 clip is tiny above a full-width timeline. Driven off the decoded frame
+// size, so it works for cut.mp4 and the Phase-2 render alike.
+function applyOrientation() {
+  const w = video.videoWidth;
+  const h = video.videoHeight;
+  if (!w || !h) return;
+  const portrait = h > w;
+  if (portrait === document.body.classList.contains('portrait')) return;
+  document.body.classList.toggle('portrait', portrait);
+  // the timeline's width just changed — re-fit after layout settles
+  requestAnimationFrame(() => { fitZoom(); renderAll(); });
+}
+video.addEventListener('loadedmetadata', applyOrientation);
+
 // ---------- needle / playback sync ----------
 function positionNeedle() {
   const tDraft = renderedToDraft(video.currentTime || 0);
-  needle.style.left = `${LABEL_W + tDraft * S.pps}px`;
+  const x = LABEL_W + tDraft * S.pps;
+  needle.style.left = `${x}px`;
+  needle.style.visibility = x < panel.scrollLeft + LABEL_W ? 'hidden' : '';
   $('timeNow').textContent = fmt(tDraft);
   $('timeTotal').textContent = fmt(draftTotal() || S.videoDuration);
 }
@@ -594,7 +784,27 @@ laneVideo.addEventListener('dblclick', (e) => {
 
 // keyboard
 document.addEventListener('keydown', (e) => {
-  if (e.target.tagName === 'INPUT') return;
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.key === 'm' || e.key === 'M') {
+    e.preventDefault();
+    toggleMark();
+    return;
+  }
+  if (e.key === 'Escape' && !$('helpModal').classList.contains('hidden')) {
+    toggleHelp(false);
+    return;
+  }
+  if (e.key === '?' || (e.key === '/' && e.shiftKey)) {
+    e.preventDefault();
+    toggleHelp($('helpModal').classList.contains('hidden'));
+    return;
+  }
+  if (e.key === 'Escape' && S.pendingIn != null) {
+    S.pendingIn = null;
+    renderNotes();
+    toast('IN cancelado', 1600);
+    return;
+  }
   if (e.code === 'Space') {
     e.preventDefault();
     video.paused ? video.play() : video.pause();
@@ -622,8 +832,48 @@ $('btnMute').addEventListener('click', () => {
   $('btnMute').innerHTML = video.muted ? ICON.mute : ICON.vol;
 });
 $('zoom').addEventListener('input', (e) => setZoom(+e.target.value));
+
+// ---------- correction markers: button, chips, editor ----------
+$('markIcon').innerHTML = ICON.flag;
+$('btnMark').addEventListener('click', toggleMark);
+$('laneNotes').addEventListener('click', (e) => {
+  const chip = e.target.closest('.note-chip');
+  if (chip) openNoteEditor(chip.dataset.id, false);
+});
+$('noteOk').addEventListener('click', () => {
+  const n = S.notes.find((x) => x.id === S.editingNote);
+  if (n) {
+    n.text = $('noteText').value.trim();
+    if (!n.text) { toast('Escreva o ajuste desejado', 2000); return; }
+  }
+  S.editingNote = null;
+  $('noteEditor').classList.add('hidden');
+  renderNotes();
+  refreshHeader();
+});
+$('noteDelete').addEventListener('click', () => {
+  S.notes = S.notes.filter((x) => x.id !== S.editingNote);
+  S.editingNote = null;
+  $('noteEditor').classList.add('hidden');
+  renderNotes();
+  refreshHeader();
+});
+$('noteClose').addEventListener('click', closeNoteEditor);
+
+// ---------- help modal (the old footer hint strip) ----------
+function toggleHelp(open) {
+  $('helpModal').classList.toggle('hidden', !open);
+  $('helpBackdrop').classList.toggle('hidden', !open);
+}
+$('btnHelp').addEventListener('click', () => toggleHelp($('helpModal').classList.contains('hidden')));
+$('helpClose').addEventListener('click', () => toggleHelp(false));
+$('helpBackdrop').addEventListener('click', () => toggleHelp(false));
+$('noteText').addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { e.stopPropagation(); closeNoteEditor(); }
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); $('noteOk').click(); }
+});
 $('btnFit').addEventListener('click', () => { fitZoom(); renderAll(); });
-panel.addEventListener('scroll', () => requestAnimationFrame(() => { drawRuler(); drawWave(); }));
+panel.addEventListener('scroll', () => requestAnimationFrame(() => { drawRuler(); drawWave(); positionNeedle(); }));
 window.addEventListener('resize', () => { fitZoom(); renderAll(); });
 
 // tabs
@@ -658,19 +908,34 @@ $('btnSave').addEventListener('click', async () => {
   if (insertsDirty()) {
     payload.editData = {
       inserts: S.insertsDraft.filter((c) => c.kind === 'insert').map((c) => ({ ref: c.ref, start: +c.start.toFixed(3), end: +c.end.toFixed(3) })),
+      splitInserts: S.insertsDraft.filter((c) => c.kind === 'split').map((c) => ({ ref: c.ref, label: c.label, start: +c.start.toFixed(3), end: +c.end.toFixed(3) })),
       hook: S.insertsDraft.filter((c) => c.kind === 'hook').map((c) => ({ endSec: +c.end.toFixed(3) }))[0] || null,
       behind: S.insertsDraft.filter((c) => c.kind === 'behind').map((c) => ({ ref: c.ref, start: +c.start.toFixed(3), dur: +(c.end - c.start).toFixed(3) })),
     };
   }
+  if (S.notes.length) {
+    // written in the draft timeline the user was actually looking at, plus the
+    // rendered-timeline equivalent so the skill can find the spot in cut.mp4
+    payload.notes = S.notes.map((n) => ({
+      start: +n.start.toFixed(3),
+      end: +n.end.toFixed(3),
+      renderedStart: +draftToRendered(n.start).toFixed(3),
+      renderedEnd: +draftToRendered(n.end).toFixed(3),
+      phase: S.tab,
+      text: n.text,
+    }));
+  }
   const res = await fetch('/api/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
   if ((await res.json()).ok) {
     S.savedPending = true;
+    S.notes = [];
+    S.pendingIn = null;
     S.draft.forEach((r) => { r.orig = { start: r.start, end: r.end }; if (r.removed) r.hardRemoved = true; });
     // keep visual state but clear dirty counters
     S.draft = S.draft.filter((r) => !r.removed);
     S.insertsDraft.forEach((c) => { c.orig = { start: c.start, end: c.end }; });
     renderAll(); refreshHeader();
-    toast('✓ Ajustes salvos em preview_edits.json — peça ao Claude para aplicar e re-renderizar', 5000);
+    toast('✓ Salvo — o Claude foi avisado e vai aplicar os ajustes', 5000);
   } else {
     toast('Erro ao salvar — o servidor está de pé?', 4000);
   }
@@ -679,6 +944,10 @@ $('btnSave').addEventListener('click', async () => {
 $('btnDiscard').addEventListener('click', () => {
   S.draft = S.rendered.map((r) => ({ ...r, removed: false, orig: { start: r.start, end: r.end } }));
   buildInsertsDraft();
+  S.notes = [];
+  S.pendingIn = null;
+  S.editingNote = null;
+  $('noteEditor').classList.add('hidden');
   S.selected = -1;
   renderAll(); refreshHeader();
   toast('Ajustes descartados', 2000);
@@ -702,5 +971,8 @@ function toast(msg, ms) {
 }
 
 // ---------- boot ----------
+document.querySelectorAll('.tl-chip[data-icon]').forEach((c) => {
+  c.innerHTML = ICON[c.dataset.icon] || '';
+});
 poll();
 rafLoop();

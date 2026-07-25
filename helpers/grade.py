@@ -36,6 +36,28 @@ from pathlib import Path
 
 
 PRESETS: dict[str, str] = {
+    # ---- LOG profiles -------------------------------------------------------
+    # A LOG source is FLAT by design: it stores range, not a look. It needs a real
+    # expansion, not a nudge. Pick by the actual profile (ask the user, then read
+    # the file's tags) — a grade built for one LOG curve looks wrong on another.
+    #
+    # Apple Log (iPhone 15 Pro+ ProRes). Approved on a talking head, 2026-07:
+    # cool, contrasty, skin held rosy. `render.py` already converts the source's
+    # BT.2020 primaries to Rec.709 BEFORE the grade, so this expands an already
+    # Rec.709 signal — do not add another conversion in front of it.
+    #   colorlevels  expand the flat LOG range (blacks up off 0, whites pulled in)
+    #   eq           the actual punch: contrast 1.42, saturation 1.26, gamma 0.94
+    #   hue -9       Apple Log skin goes yellow-green on expansion; this pulls it
+    #                back to rosy. Positive hue makes it worse — do not "correct"
+    #                the sign.
+    #   colorbalance cools all three luminance bands, shadows hardest
+    "apple_log": (
+        "colorlevels=rimin=0.09:gimin=0.085:bimin=0.05:rimax=0.82:gimax=0.84:bimax=0.89,"
+        "eq=contrast=1.42:saturation=1.26:gamma=0.94,"
+        "hue=h=-9,"
+        "colorbalance=rs=-0.07:bs=0.12:rm=-0.05:bm=0.06:rh=-0.02:bh=0.04"
+    ),
+
     # Subtle baseline — barely perceptible cleanup. No color shift.
     # Use when auto-analysis isn't available or when you want a safe floor.
     "subtle": "eq=contrast=1.03:saturation=0.98",

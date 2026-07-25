@@ -14,6 +14,9 @@
 import {
   AbsoluteFill,
   Sequence,
+  Img,
+  OffthreadVideo,
+  staticFile,
   interpolate,
   Easing,
   useCurrentFrame,
@@ -21,12 +24,25 @@ import {
 } from 'remotion';
 import {loadFont} from '@remotion/google-fonts/Poppins';
 import {Sfx} from './Main';
+import editData from '../public/edit-data.json';
 
 const {fontFamily} = loadFont('normal', {weights: ['400', '600', '900']});
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
 // ============ MOUNT POINT (edit this) ==========================================
+// STYLE "TELA DIVIDIDA" (split screen) — driven by edit-data.json `splitInserts`.
+// Leave the array out and this renders nothing, as before.
+type SplitInsert = {
+  src: string;
+  start: number;
+  end: number;
+  fit?: 'cover' | 'contain';
+  bandH?: number;
+};
+
 export const CustomGraphics: React.FC = () => {
+  const splits = ((editData as {splitInserts?: SplitInsert[]}).splitInserts) ?? [];
+  if (splits.length) return <SplitScreen items={splits} />;
   return null;
   // Example — mount worked examples (or your own) with per-video timings:
   // return (
@@ -36,6 +52,96 @@ export const CustomGraphics: React.FC = () => {
   //     <ShapesGraphic startSec={12.85} endSec={14.15} />
   //   </>
   // );
+};
+
+// ============ SPLIT SCREEN ("tela dividida") ==================================
+// Art on top, the talking head re-drawn underneath, seam at the subject's hairline.
+//
+// ONE always-mounted layer, NOT a <Sequence> per window. The obvious version wraps
+// each window in <Sequence from> + <OffthreadVideo startFrom>, and that samples
+// cut.mp4 ONE FRAME BEHIND the base video: on the first frame of the split you
+// still see the previous take, so the layout appears to change before the picture
+// does. Mounted flat with no startFrom, this layer decodes the same frame the base
+// layer does, and the window edges land exactly on the cut.
+const SplitFrame: React.FC<{
+  image: string;
+  bandH: number;
+  fit: 'cover' | 'contain';
+  progress: number;
+}> = ({image, bandH, fit, progress}) => {
+  // slow Ken-Burns so the band is not a dead still
+  const artScale = 1 + 0.03 * progress;
+  // The head is re-framed into the remaining height: without a zoom the source's
+  // headroom leaves a dead gap under the band.
+  const VID_ZOOM = 1.25;
+  const VID_FOCUS_Y = 400;
+  const videoH = 1920 - bandH;
+
+  return (
+    <AbsoluteFill style={{backgroundColor: '#0a0a0c'}}>
+      <div style={{position: 'absolute', left: 0, top: bandH, width: 1080, height: videoH, overflow: 'hidden'}}>
+        <OffthreadVideo
+          src={staticFile('cut.mp4')}
+          muted
+          style={{
+            position: 'absolute',
+            width: 1080 * VID_ZOOM,
+            height: 1920 * VID_ZOOM,
+            left: -(1080 * (VID_ZOOM - 1)) / 2,
+            top: -VID_FOCUS_Y * VID_ZOOM,
+          }}
+        />
+      </div>
+
+      <div style={{position: 'absolute', left: 0, top: 0, width: 1080, height: bandH, overflow: 'hidden'}}>
+        <Img
+          src={staticFile(image)}
+          style={{width: '100%', height: '100%', objectFit: fit, scale: String(artScale)}}
+        />
+        {/* soft falloff into the seam so the headline reads over both sides */}
+        <div
+          style={{
+            position: 'absolute',
+            left: 0,
+            bottom: 0,
+            width: '100%',
+            height: 110,
+            background: 'linear-gradient(180deg,rgba(10,10,12,0),rgba(10,10,12,0.75))',
+          }}
+        />
+      </div>
+    </AbsoluteFill>
+  );
+};
+
+// OffthreadVideo draws the source frame at or before frame/fps; on an exact frame
+// boundary that lands one frame LATE, so the decoded picture changes one
+// composition frame after the index says it should. Measured, not guessed: with
+// the split disabled, the camera zoom (index-driven) steps at frame 350 while the
+// take itself changes at 351. Delay the layout by the same frame or the split
+// visibly precedes the cut.
+export const VIDEO_LAG = 1;
+
+export const SplitScreen: React.FC<{items: SplitInsert[]}> = ({items}) => {
+  const frame = useCurrentFrame();
+  const {fps} = useVideoConfig();
+  // frame-indexed, not seconds: the window edges ARE cut frames
+  const active = items.find((it) => {
+    const a = Math.round(it.start * fps) + VIDEO_LAG;
+    const b = Math.round(it.end * fps) + VIDEO_LAG;
+    return frame >= a && frame < b;
+  });
+  if (!active) return null;
+  const a = Math.round(active.start * fps) + VIDEO_LAG;
+  const b = Math.round(active.end * fps) + VIDEO_LAG;
+  return (
+    <SplitFrame
+      image={active.src}
+      bandH={active.bandH ?? 750}
+      fit={active.fit ?? 'cover'}
+      progress={clamp((frame - a) / Math.max(1, b - a), 0, 1)}
+    />
+  );
 };
 
 // ============ WORKED EXAMPLE 1: editing timeline being cut + caption tracks =====

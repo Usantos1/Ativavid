@@ -11,6 +11,9 @@
   --text: #eef1f5;
   --dim: #8b94a3;
   --radius: 16px;
+  /* the timeline panel is a SOLID surface so the gutter mask can use the exact
+     same colour and become invisible — see .track-label::before */
+  --panel-bg: #0f1218;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -78,7 +81,7 @@ header {
 
 .btn {
   font-family: inherit;
-  font-weight: 700;
+  font-weight: 600;
   font-size: 13px;
   color: var(--text);
   background: var(--glass-strong);
@@ -94,7 +97,6 @@ header {
   background: linear-gradient(135deg, var(--orange), #ff9440);
   border-color: transparent;
   color: #fff;
-  box-shadow: 0 6px 20px rgba(255, 119, 19, 0.35);
 }
 .btn.ghost { background: transparent; }
 .btn.icon { padding: 8px 12px; font-size: 14px; line-height: 1; display: flex; align-items: center; justify-content: center; }
@@ -141,6 +143,23 @@ main { flex: 1 1 auto; display: flex; flex-direction: column; gap: 10px; padding
 /* ---------- player ---------- */
 .player-wrap { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 8px; min-height: 0; }
 
+/* transport + timeline travel together, so the pair can sit under the player
+   (landscape) or beside it (portrait) without touching the DOM again */
+/* the stage holds player + editor; main keeps the footer out of the split */
+.stage { flex: 1 1 auto; display: flex; flex-direction: column; gap: 10px; min-height: 0; min-width: 0; }
+.editor-col { flex: 1 1 0; display: flex; flex-direction: column; gap: 10px; min-height: 0; min-width: 0; }
+.editor-col .transport { align-self: center; }
+
+/* ---------- portrait layout: tall player right, editor left ----------
+   A 9:16 clip is postage-stamp sized when stacked above a full-width timeline.
+   Side by side, the player takes the full column height instead. */
+body.portrait .stage { flex-direction: row; align-items: stretch; gap: 12px; }
+body.portrait .player-wrap { order: 2; height: 100%; justify-content: flex-start; }
+body.portrait .player-frame { height: 100%; max-height: none; align-items: center; }
+body.portrait .player-frame video { height: 100%; width: auto; max-height: none; max-width: 38vw; }
+body.portrait .editor-col { order: 1; }
+body.portrait .editor-col .transport { align-self: stretch; width: auto; }
+
 .player-frame {
   padding: 8px;
   border-radius: 18px;
@@ -165,7 +184,13 @@ main { flex: 1 1 auto; display: flex; flex-direction: column; gap: 10px; padding
   width: min(860px, 96%);
 }
 .transport .spacer { flex: 1; }
-.time { font-variant-numeric: tabular-nums; font-weight: 700; font-size: 13px; }
+.time {
+  font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  font-size: 12.5px;
+  letter-spacing: -0.2px;
+}
 
 input[type="range"] {
   -webkit-appearance: none;
@@ -181,14 +206,14 @@ input[type="range"]::-webkit-slider-thumb {
   border-radius: 50%;
   background: var(--orange);
   cursor: pointer;
-  box-shadow: 0 0 10px rgba(255, 119, 19, 0.6);
 }
 
 /* ---------- timeline ---------- */
 .timeline-panel {
   flex: 1 1 0;
   min-height: 190px;
-  padding: 10px 12px;
+  background: var(--panel-bg);
+  padding: 10px 12px 10px 0;
   overflow-x: auto;
   overflow-y: auto;
   position: relative;
@@ -206,27 +231,85 @@ input[type="range"]::-webkit-slider-thumb {
 .timeline-panel::-webkit-scrollbar-thumb:hover { background: rgba(255, 119, 19, 0.45); background-clip: padding-box; }
 .timeline-panel::-webkit-scrollbar-corner { background: transparent; }
 
-.timeline { position: relative; min-width: 100%; }
+.timeline { position: relative; min-width: 100%; min-height: 100%; }
 
 .track { display: flex; align-items: stretch; margin-bottom: 6px; }
 
 .track-label {
-  flex: 0 0 86px;
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: 1.2px;
-  color: var(--dim);
+  flex: 0 0 48px;
   display: flex;
   align-items: center;
+  justify-content: center; /* icon centred in the gutter */
   position: sticky;
   left: 0;
-  z-index: 15; /* fully masks lane content scrolling underneath */
-  background: #101319;
-  box-shadow: 10px 0 14px -10px rgba(0, 0, 0, 0.8);
+  z-index: 15;
 }
-.track-label.teal { color: var(--teal); }
-.track-label.orange { color: var(--orange); }
-.track-label.olive { color: #a8c22b; }
+
+/* The gutter mask. Painted in the panel's own colour, so it reads as "no
+   background" while still hiding the lanes that scroll under it. It rides on the
+   sticky .track-label, which the browser pins natively — unlike a clip-path or a
+   JS scroll handler, this can never drift a frame behind the scroll.
+   top/bottom overshoot bridges the 6px gap between tracks so the column reads as
+   one piece. Absolutely positioned → .tl-chip needs position:relative. */
+.track-label::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -4px;
+  bottom: -8px;
+  background: var(--panel-bg);
+  pointer-events: none;
+}
+.ruler-track .track-label::before { bottom: -4px; }
+
+.gutter-line {
+  position: absolute;
+  top: -10px; /* eat the panel's vertical padding — the line runs edge to edge */
+  bottom: -10px;
+  left: 0;
+  width: 48px;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  pointer-events: none;
+  /* above .track-label (15) — the gutter mask would otherwise paint over the
+     divider on every row that has a track, leaving it visible only below them */
+  z-index: 16;
+  animation-name: gutter-follow-x;
+  animation-duration: auto;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+  animation-timeline: scroll(nearest inline);
+}
+
+/* The divider must track scrollLeft exactly. A JS scroll handler lags a frame
+   (the column visibly grew scrolling left and shrank scrolling right), so this
+   rides a scroll-driven timeline instead. `translate` is compositor-animatable;
+   clip-path is NOT — do not go back to clipping the lanes this way.
+   --max-scroll is the scroll range, set in JS on zoom/resize only. */
+@keyframes gutter-follow-x {
+  from { translate: 0 0; }
+  to { translate: var(--max-scroll, 0px) 0; }
+}
+/* icon card — same rounded language as the lanes/chips, no text labels */
+.tl-chip {
+  /* positioned so it paints ABOVE .track-label::before — an absolutely
+     positioned pseudo-element would otherwise cover a static child */
+  position: relative;
+  width: 30px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  color: var(--dim);
+  background: var(--glass);
+  border: 1px solid var(--stroke);
+}
+.tl-chip svg { width: 16px; height: 16px; fill: currentColor; display: block; }
+.tl-chip.teal { color: var(--teal); border-color: rgba(9, 181, 183, 0.3); background: rgba(9, 181, 183, 0.09); }
+.tl-chip.orange { color: var(--orange); border-color: rgba(255, 119, 19, 0.3); background: rgba(255, 119, 19, 0.09); }
+.tl-chip.olive { color: #a8c22b; border-color: rgba(168, 194, 43, 0.3); background: rgba(168, 194, 43, 0.09); }
+.tl-chip.notes { color: #ff5470; border-color: rgba(255, 84, 112, 0.32); background: rgba(255, 84, 112, 0.1); }
 
 .lane {
   position: relative;
@@ -256,7 +339,7 @@ canvas { display: block; }
   transition: box-shadow 0.12s;
 }
 .clip:hover { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.3); z-index: 3; }
-.clip.selected { box-shadow: 0 0 0 2px var(--orange), 0 0 18px rgba(255, 119, 19, 0.35); z-index: 4; }
+.clip.selected { box-shadow: 0 0 0 2px var(--orange); z-index: 4; }
 .clip.dirty { border: 1.5px dashed var(--orange); }
 .clip.removed { opacity: 0.28; filter: grayscale(1); }
 .clip.removed::after {
@@ -273,7 +356,7 @@ canvas { display: block; }
   position: absolute;
   left: 6px; top: 3px;
   font-size: 9px;
-  font-weight: 900;
+  font-weight: 600;
   letter-spacing: 0.6px;
   color: #fff;
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
@@ -310,7 +393,7 @@ canvas { display: block; }
   top: 5px; bottom: 5px;
   border-radius: 6px;
   font-size: 9.5px;
-  font-weight: 700;
+  font-weight: 500;
   display: flex;
   align-items: center;
   padding: 0 7px;
@@ -351,7 +434,6 @@ canvas { display: block; }
   border-left: 2px solid var(--orange);
   z-index: 10;
   pointer-events: none;
-  filter: drop-shadow(0 0 6px rgba(255, 119, 19, 0.7));
 }
 .needle-head {
   position: absolute;
@@ -362,16 +444,6 @@ canvas { display: block; }
 }
 
 /* ---------- footer / tooltip / toast ---------- */
-.hints {
-  flex: 0 0 auto;
-  display: flex;
-  gap: 22px;
-  justify-content: center;
-  font-size: 10.5px;
-  color: var(--dim);
-  padding: 2px 0 6px;
-  flex-wrap: wrap;
-}
 kbd {
   font-family: inherit;
   font-size: 9.5px;
@@ -410,4 +482,166 @@ kbd {
   font-weight: 700;
   backdrop-filter: blur(12px);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+
+/* ---------- correction markers (IN/OUT + note) ---------- */
+.btn.mark {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  margin-left: 4px;
+  border-color: rgba(255, 84, 112, 0.35);
+  background: rgba(255, 84, 112, 0.1);
+  color: #ff8098;
+}
+.btn.mark svg { width: 13px; height: 13px; fill: currentColor; display: block; }
+/* an IN is open — the button now closes the range */
+.btn.mark.armed {
+  border-color: transparent;
+  color: #fff;
+  background: linear-gradient(135deg, #ff5470, #ff8098);
+}
+
+.notes-lane { height: 32px; background: rgba(255, 84, 112, 0.045); border-color: rgba(255, 84, 112, 0.14); }
+
+.note-chip {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  min-width: 8px;
+  border-radius: 7px;
+  background: rgba(255, 84, 112, 0.26);
+  border: 1px solid rgba(255, 84, 112, 0.6);
+  color: #ffd7de;
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 24px;
+  padding: 0 7px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+.note-chip:hover { background: rgba(255, 84, 112, 0.4); }
+/* the open IN, still waiting for its OUT */
+.note-pending {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #ff5470;
+}
+.note-pending::after {
+  content: 'IN';
+  position: absolute;
+  top: 2px;
+  left: 4px;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.6px;
+  color: #ff8098;
+}
+
+.note-editor {
+  position: fixed;
+  z-index: 120;
+  transform: translate(-50%, -50%);
+  width: min(560px, calc(100vw - 40px));
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: rgba(12, 16, 22, 0.97);
+  border: 1px solid rgba(255, 84, 112, 0.4);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(14px);
+}
+.note-head { display: flex; align-items: center; justify-content: space-between; }
+.note-range { font-size: 12px; font-weight: 900; letter-spacing: 0.8px; color: #ff8098; }
+.note-editor textarea {
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--stroke);
+  border-radius: 10px;
+  padding: 10px 12px;
+  resize: vertical;
+  outline: none;
+}
+.note-editor textarea:focus { border-color: rgba(255, 84, 112, 0.55); }
+.note-actions { display: flex; align-items: center; gap: 8px; }
+.note-actions .spacer { flex: 1; }
+
+/* ---------- help (was the footer hint strip) ---------- */
+.help-fab {
+  position: fixed;
+  left: 8px;
+  bottom: 8px;
+  z-index: 90;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--dim);
+  /* opaque: in the portrait split it sits over the player, and a translucent
+     chip disappears against the footage */
+  background: rgba(14, 18, 24, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.help-fab:hover { color: var(--text); border-color: rgba(255, 255, 255, 0.3); }
+
+.help-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 130;
+  background: rgba(0, 0, 0, 0.5);
+}
+.help-modal {
+  position: fixed;
+  z-index: 131;
+  left: 16px;
+  bottom: 44px;
+  width: min(420px, calc(100vw - 32px));
+  padding: 14px 16px 16px;
+  background: rgba(12, 16, 22, 0.97);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.6);
+}
+.help-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.help-title { font-size: 12px; font-weight: 600; letter-spacing: 0.6px; color: var(--text); }
+.help-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.help-list li {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 10px;
+  align-items: baseline;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--dim);
+}
+.help-list li > span:first-child { text-align: right; color: rgba(255, 255, 255, 0.55); }
+.help-list b { color: var(--text); font-weight: 600; }
+.help-list kbd {
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text);
+  background: var(--glass-strong);
+  border: 1px solid var(--stroke);
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin: 0 1px;
 }

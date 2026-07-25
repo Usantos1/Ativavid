@@ -49,8 +49,27 @@ approved. Everything here rides on the **data-driven template** at
      `caption_style.py --transcript transcripts/cut.json -o public/caption-cues.json`
      and set `captions.style:"stacked"` (see the "Caption style" section).
    - `face_track.py cut.mp4 -o public/track.json`
-   - `public/segments.json` from the EDL: `{"segments":[{"start":0,"dur":3.2},…]}`
-     (cumulative output-timeline boundaries)
+   - `public/segments.json` — cumulative cut boundaries **measured from the
+     encoded segments' frame counts, never summed from the EDL's seconds**.
+     ffmpeg quantises each segment to whole frames, so EDL arithmetic drifts a
+     fraction of a frame per cut and the error ACCUMULATES (~5 frames by 40s on a
+     28-cut video). Anything that must land on a cut then sits visibly early.
+     ```bash
+     python - <<'EOF'
+     import subprocess, glob, json
+     cum, t = [0], 0
+     for f in sorted(glob.glob("clips_graded/seg_*.mp4")):
+         n = int(subprocess.run(["ffprobe","-v","error","-select_streams","v:0",
+             "-count_frames","-show_entries","stream=nb_read_frames",
+             "-of","default=nw=1:nk=1",f], capture_output=True, text=True).stdout)
+         t += n; cum.append(t)
+     fps = 30  # match cut.mp4
+     json.dump({"segments": [{"start": round(cum[i]/fps,4),
+                              "dur": round((cum[i+1]-cum[i])/fps,4)}
+                             for i in range(len(cum)-1)]},
+               open("remotion/public/segments.json","w"), indent=2)
+     EOF
+     ```
    - `pexels_search.py "<query>" --out-dir public/pexels --count 3 --orientation portrait`
 3. **Write `public/edit-data.json`** — the whole edit in one file (schema in
    `assets/shortform/README.md`): durationSec (exact ffprobe of cut.mp4),
@@ -95,6 +114,13 @@ connective), keeps 1-letter/short connectors from standing alone, and flags
 solo/circled words. It is language-tuned for pt-BR (`--lang`); for other
 languages it falls back to length heuristics.
 
+A solo word also needs DURATION, not just weight — a word spoken in under
+`MIN_SOLO_MS` (340ms) renders as a one-frame flash and reads as a glitch, so the
+director folds it into a neighbouring stack instead. Fast connective speech hits
+this often. After generating cues, sanity-check the plan (it prints a summary):
+every non-`STACK_MIXED` cue should span ≥0.34s, and the word list across all
+cues must match the transcript exactly, in order.
+
 ## Visual hook — static headline, first ~4s (always on)
 
 The first 1–2 seconds decide the swipe. Write `hook.lines` like a
@@ -126,6 +152,14 @@ pick, then render ONE still for design approval before the full render.
 **De-conflict:** the hook owns the upper zone for its window — push any insert
 that wants the same zone to after `hook.endSec` (e.g. move a 2.5s cutaway to
 ~4.1s).
+
+## Style: "tela dividida" (split screen)
+
+Image on top, talking head below, seam at the subject's hairline. Data lives in
+`edit-data.json` `splitInserts[]`; the component is already in the template's
+`CustomGraphics.tsx`. Hard cut (no fade), every window snapped to a take cut,
+consecutive images contiguous, and `captions.windows` parks the caption on the
+seam while it is up. Full rules in `assets/shortform/README.md`.
 
 ## Behind-the-subject (element between person and background)
 
@@ -178,8 +212,39 @@ and check it's clearly audible under wall-to-wall narration (a bed at 0.12 is
 usually inaudible once the mix is loudnorm'd to the voice — confirm by listening,
 not just by the meter). Re-render. Finish with the mandatory loudnorm:
 
+**Take the PICTURE from Remotion and the AUDIO from `cut.mp4`.** Remotion's own
+audio track drifts against the source — measured on a 95s edit: the voice is
++90ms late by 8s and +660ms by 78s, i.e. it slides progressively out of lip sync,
+unnoticeable at the start and obvious by the end. Its audio track also comes out
+~0.7s longer than its video. So never re-encode Remotion's audio; re-mux the
+approved master instead and mix the soundtrack here:
+
 ```bash
-ffmpeg -y -i out/render.mp4 -c:v copy -af "loudnorm=I=-14:TP=-1:LRA=11" -c:a aac -b:a 192k -ar 48000 ../final.mp4
+VD=$(ffprobe -v error -select_streams v:0 -show_entries stream=duration -of default=nw=1:nk=1 out/render.mp4)
+FADE=$(python3 -c "print(f'{$VD-1.5:.3f}')")
+ffmpeg -y -i out/render.mp4 -i ../cut.mp4 -i public/trilha.mp3 \
+  -filter_complex "[1:a]adelay=33:all=1[v];\
+                   [2:a]volume=0.10,afade=t=in:st=0:d=0.4,afade=t=out:st=$FADE:d=1.5[m];\
+                   [v][m]amix=inputs=2:duration=first:normalize=0[mix];\
+                   [mix]loudnorm=I=-14:TP=-1:LRA=11[out]" \
+  -map 0:v -map "[out]" -c:v copy -c:a aac -b:a 192k -ar 48000 -t "$VD" \
+  -movflags +faststart ../final.mp4
+```
+
+`adelay=33` is one frame at 30fps: OffthreadVideo draws the source frame one
+composition frame late (the same VIDEO_LAG the overlays compensate for), so the
+picture sits a frame behind cut.mp4's timeline and the voice must follow it.
+`-t "$VD"` keeps the audio from outliving the video. **Verify** by correlating the
+delivered voice against `cut.mp4` at three points — the offset must be CONSTANT
+(≈+33ms). Use 15s windows: short windows lock onto the wrong syllable and report
+a drift that is not there. Drop this re-mux ONLY if Phase 2 baked SFX into the
+audio (stacked captions' click/scratch), and then verify sync by hand.
+
+If the video has no soundtrack, the same shape without input 2:
+
+```bash
+ffmpeg -y -i out/render.mp4 -i ../cut.mp4 -filter_complex "[1:a]adelay=33:all=1,loudnorm=I=-14:TP=-1:LRA=11[out]" \
+  -map 0:v -map "[out]" -c:v copy -c:a aac -b:a 192k -ar 48000 -t "$VD" -movflags +faststart ../final.mp4
 ```
 
 Verify `max_volume ≤ -1 dB` (`-af volumedetect`). Copy to `edit/final.mp4`.

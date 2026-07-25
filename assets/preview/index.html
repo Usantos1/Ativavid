@@ -40,53 +40,93 @@
     </div>
   </section>
 
+  <div id="stage" class="stage">
   <section id="playerWrap" class="player-wrap">
     <div class="player-frame glass">
       <video id="video" playsinline preload="auto"></video>
     </div>
+  </section>
+
+  <div id="editorCol" class="editor-col">
     <div class="transport glass">
       <button id="btnPlay" class="btn icon" title="Play/Pause (espaço)"></button>
       <button id="btnMute" class="btn icon" title="Mudo"></button>
       <span id="timeNow" class="time">0:00.00</span>
       <span class="time dim">/</span>
       <span id="timeTotal" class="time dim">0:00.00</span>
+      <button id="btnMark" class="btn mark" title="Marcar IN / OUT (tecla M)">
+        <span id="markIcon"></span><span id="markText">IN</span>
+      </button>
       <div class="spacer"></div>
       <span class="dim small">zoom</span>
-      <input id="zoom" type="range" min="0" max="100" value="0" title="Zoom da timeline">
+      <input id="zoom" type="range" min="0" max="100" value="0" title="Zoom da timeline (centrado na agulha)">
       <button id="btnFit" class="btn ghost small" title="Ajustar à janela">fit</button>
     </div>
-  </section>
 
-  <section id="timelinePanel" class="timeline-panel glass">
+    <section id="timelinePanel" class="timeline-panel glass">
     <div id="timeline" class="timeline">
       <div class="track ruler-track">
         <div class="track-label"></div>
         <div class="lane ruler-lane"><canvas id="ruler"></canvas></div>
       </div>
+      <div class="track" id="trkNotes">
+        <div class="track-label"><span class="tl-chip notes" data-icon="notes" title="Marcações de ajuste"></span></div>
+        <div class="lane notes-lane" id="laneNotes"></div>
+      </div>
       <div id="trkCaptions" class="track hidden">
-        <div class="track-label teal">LEGENDAS</div>
+        <div class="track-label"><span class="tl-chip teal" data-icon="captions" title="Legendas"></span></div>
         <div class="lane" id="laneCaptions"></div>
       </div>
       <div class="track">
-        <div class="track-label">VÍDEO</div>
+        <div class="track-label"><span class="tl-chip" data-icon="video" title="Vídeo"></span></div>
         <div class="lane tall" id="laneVideo"></div>
       </div>
       <div class="track">
-        <div class="track-label olive">ÁUDIO</div>
+        <div class="track-label"><span class="tl-chip olive" data-icon="audio" title="Áudio"></span></div>
         <div class="lane" id="laneAudio"><canvas id="wave"></canvas></div>
       </div>
       <div id="insertTracks" class="hidden"></div>
+      <div id="gutterLine" class="gutter-line"></div>
       <div id="needle" class="needle"><div class="needle-head"></div></div>
-    </div>
-  </section>
+      </div>
+    </section>
+  </div>
+  </div>
 
-  <footer class="hints">
-    <span><kbd>espaço</kbd> play/pause</span>
-    <span><kbd>←</kbd><kbd>→</kbd> frame a frame · <kbd>shift</kbd>+setas 1s</span>
-    <span>arraste as <b>bordas</b> de um take para ajustar · <kbd>delete</kbd> remove o take selecionado</span>
-    <span>duplo-clique num take = reset</span>
-  </footer>
 </main>
+
+<button id="btnHelp" class="help-fab" title="Atalhos e gestos" aria-label="Atalhos e gestos">?</button>
+
+<div id="helpBackdrop" class="help-backdrop hidden"></div>
+<div id="helpModal" class="help-modal glass hidden" role="dialog" aria-label="Atalhos e gestos">
+  <div class="help-head">
+    <span class="help-title">Atalhos e gestos</span>
+    <button id="helpClose" class="btn ghost small" title="Fechar">✕</button>
+  </div>
+  <ul class="help-list">
+    <li><span><kbd>espaço</kbd></span><span>play / pause</span></li>
+    <li><span><kbd>←</kbd><kbd>→</kbd></span><span>frame a frame · com <kbd>shift</kbd>, 1 segundo</span></li>
+    <li><span><kbd>M</kbd></span><span>marca <b>IN</b>, depois <b>OUT</b> — aí escreva o ajuste</span></li>
+    <li><span><kbd>delete</kbd></span><span>remove o take selecionado</span></li>
+    <li><span>arrastar</span><span>as <b>bordas</b> de um take ajustam o corte</span></li>
+    <li><span>duplo-clique</span><span>num take desfaz o ajuste dele</span></li>
+    <li><span>pinça</span><span>zoom no trackpad, onde está o cursor</span></li>
+    <li><span>barra de zoom</span><span>amplia a partir da agulha</span></li>
+  </ul>
+</div>
+
+<div id="noteEditor" class="note-editor glass hidden">
+  <div class="note-head">
+    <span class="note-range" id="noteRange">0:00 → 0:00</span>
+    <button id="noteClose" class="btn ghost small" title="Fechar">✕</button>
+  </div>
+  <textarea id="noteText" rows="3" placeholder="O que precisa mudar nesse trecho? Ex.: “corta o gaguejo”, “insere o logo da Amazon”, “abaixa a trilha”."></textarea>
+  <div class="note-actions">
+    <button id="noteDelete" class="btn ghost small hidden">remover</button>
+    <div class="spacer"></div>
+    <button id="noteOk" class="btn primary small">salvar marcação</button>
+  </div>
+</div>
 
 <div id="tooltip" class="tooltip hidden"></div>
 <div id="toast" class="toast hidden"></div>

@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import re
 import subprocess
@@ -119,18 +120,63 @@ TONEMAP_CHAIN = (
 )
 
 
-def is_hdr_source(video: Path) -> bool:
-    """Return True if the source uses a PQ or HLG transfer function."""
+def _color_tags(video: Path) -> dict[str, str]:
+    """Read the source's color tags (empty strings when absent/unknown)."""
     try:
         out = subprocess.run(
             ["ffprobe", "-v", "error", "-select_streams", "v:0",
-             "-show_entries", "stream=color_transfer",
-             "-of", "default=noprint_wrappers=1:nokey=1", str(video)],
+             "-show_entries", "stream=color_transfer,color_primaries,color_space,color_range",
+             "-of", "default=noprint_wrappers=1", str(video)],
             capture_output=True, text=True, check=True,
         )
-        return out.stdout.strip() in HDR_TRANSFERS
     except subprocess.CalledProcessError:
-        return False
+        return {}
+    tags = {}
+    for line in out.stdout.splitlines():
+        if "=" in line:
+            k, v = line.split("=", 1)
+            v = v.strip()
+            tags[k.strip()] = "" if v in ("unknown", "N/A") else v
+    return tags
+
+
+def is_hdr_source(video: Path) -> bool:
+    """Return True if the source uses a PQ or HLG transfer function."""
+    return _color_tags(video).get("color_transfer", "") in HDR_TRANSFERS
+
+
+# Wide-gamut SDR (BT.2020 primaries with an ordinary transfer) is NOT caught by
+# is_hdr_source — phone/mirrorless cameras routinely write bt2020 primaries with
+# color_transfer=unknown. Left unconverted, cut.mp4 inherits the bt2020 tags and
+# every downstream decoder re-interprets them: Chrome (which Remotion composites
+# through) darkens the image by roughly a 1.2 gamma and shifts hue, so the Phase-2
+# render no longer matches the Phase-1 grade the user approved. Convert to Rec.709
+# at extraction so exactly one interpretation exists from the grade onwards.
+WIDE_GAMUT_PRIMARIES = {"bt2020"}
+WIDE_GAMUT_MATRICES = {"bt2020nc", "bt2020_ncl", "bt2020c", "bt2020_cl"}
+
+
+def wide_gamut_chain(video: Path) -> str:
+    """Filter chain converting a wide-gamut SDR source to Rec.709, or ''.
+
+    Returns '' for HDR sources (TONEMAP_CHAIN already lands on Rec.709) and for
+    sources that are already Rec.709 or untagged.
+    """
+    if is_hdr_source(video):
+        return ""
+    tags = _color_tags(video)
+    primaries = tags.get("color_primaries", "")
+    matrix = tags.get("color_space", "")
+    if primaries not in WIDE_GAMUT_PRIMARIES and matrix not in WIDE_GAMUT_MATRICES:
+        return ""
+    in_range = "pc" if tags.get("color_range", "") == "pc" else "tv"
+    # itrc: bt2020-10 is the SDR BT.2020 transfer; it matches Rec.709's curve, so
+    # this converts the gamut without altering the tone curve the grade was cut on.
+    return (
+        f"colorspace=ispace={matrix or 'bt2020nc'}:iprimaries={primaries or 'bt2020'}"
+        f":itrc=bt2020-10:irange={in_range}"
+        ":space=bt709:primaries=bt709:trc=bt709:range=tv"
+    )
 
 
 def is_portrait_source(video: Path) -> bool:
@@ -211,6 +257,7 @@ def extract_segment(
     preview: bool = False,
     draft: bool = False,
     keep_resolution: bool = False,
+    gain_db: float = 0.0,
 ) -> None:
     """Extract a cut range as its own MP4 with grade + 30ms audio fades baked in.
 
@@ -237,15 +284,30 @@ def extract_segment(
     vf_parts: list[str] = []
     if is_hdr_source(source):
         vf_parts.append(TONEMAP_CHAIN)
+    else:
+        wide = wide_gamut_chain(source)
+        if wide:
+            vf_parts.append(wide)
     if scale:
         vf_parts.append(scale)
     if grade_filter:
         vf_parts.append(grade_filter)
     vf = ",".join(vf_parts)
 
+    # Per-segment level match (whisper/mumble rescue). Applied BEFORE the fades
+    # so the edges still land at true silence. A boosted segment gets a limiter
+    # so a loud syllable inside a quiet take cannot clip after the gain.
+    af_parts: list[str] = []
+    if abs(gain_db) > 0.05:
+        af_parts.append(f"volume={gain_db:+.2f}dB")
+        if gain_db > 0:
+            af_parts.append("alimiter=level_in=1:level_out=1:limit=0.95")
+
     # 30ms audio fades at both edges (Rule 3) — prevent pops
     fade_out_start = max(0.0, duration - 0.03)
-    af = f"afade=t=in:st=0:d=0.03,afade=t=out:st={fade_out_start:.3f}:d=0.03"
+    af_parts.append("afade=t=in:st=0:d=0.03")
+    af_parts.append(f"afade=t=out:st={fade_out_start:.3f}:d=0.03")
+    af = ",".join(af_parts)
 
     if draft:
         preset, crf = "ultrafast", "28"
@@ -263,6 +325,12 @@ def extract_segment(
     if vf:
         cmd += ["-vf", vf]
     cmd += ["-af", af, "-c:v", "libx264", "-preset", preset, "-crf", crf, "-pix_fmt", "yuv420p"]
+    # Every path above lands on Rec.709 (tonemap for HDR, wide_gamut_chain for
+    # BT.2020 SDR, passthrough for the rest), so tag it explicitly. Without this
+    # the segments can inherit the source's tags and downstream decoders
+    # (Chrome/Remotion in Phase 2) silently re-interpret the graded image.
+    cmd += ["-colorspace", "bt709", "-color_primaries", "bt709",
+            "-color_trc", "bt709", "-color_range", "tv"]
     if not keep_resolution:
         # short-form fps: 30 if the source is 30fps+ (natural motion, matches
         # IG/TikTok/Shorts capture), else the 24 standard; longform keeps source.
@@ -273,6 +341,31 @@ def extract_segment(
         str(out_path),
     ]
     subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+
+
+def snap_ranges_to_frames(edl: dict, fps: int) -> int:
+    """Round every range's DURATION up to a whole number of frames.
+
+    ffmpeg encodes a segment's video as whole frames but keeps its audio at the
+    exact requested length, so a range whose duration is not a frame multiple
+    produces a clip whose audio is a few ms shorter than its picture. Across a
+    28-cut edit that summed to +0.44s of video over audio here, and cut.mp4 came
+    out with an audio track LONGER than its video. Remotion then stretches that
+    audio across the composition and the voice slides progressively out of sync —
+    barely visible at the start, half a second adrift by the end.
+
+    Snapping UP only ever extends a range into its trailing pad (≤1 frame), so it
+    cannot clip a word. Returns how many ranges were changed.
+    """
+    changed = 0
+    for r in edl.get("ranges", []):
+        dur = r["end"] - r["start"]
+        frames = math.ceil(dur * fps - 1e-9)
+        snapped = r["start"] + frames / fps
+        if abs(snapped - r["end"]) > 1e-9:
+            r["end"] = round(snapped, 6)
+            changed += 1
+    return changed
 
 
 def extract_all_segments(
@@ -323,10 +416,17 @@ def extract_all_segments(
         else:
             seg_filter = resolved
 
+        gain_db = float(r.get("gain_db", 0.0) or 0.0)
+
         note = r.get("beat") or r.get("note") or ""
         grade_note = f"  grade: {seg_filter or '(none)'}" if is_auto else ""
-        print(f"  [{i:02d}] {src_name}  {start:7.2f}-{end:7.2f}  ({duration:5.2f}s)  {note}{grade_note}", flush=True)
-        extract_segment(src_path, start, duration, seg_filter, out_path, preview=preview, draft=draft, keep_resolution=keep_resolution)
+        gain_note = f"  gain: {gain_db:+.1f}dB" if abs(gain_db) > 0.05 else ""
+        print(f"  [{i:02d}] {src_name}  {start:7.2f}-{end:7.2f}  ({duration:5.2f}s)  {note}{grade_note}{gain_note}", flush=True)
+        extract_segment(
+            src_path, start, duration, seg_filter, out_path,
+            preview=preview, draft=draft, keep_resolution=keep_resolution,
+            gain_db=gain_db,
+        )
         return out_path
 
     if jobs == 1 or len(ranges) == 1:
@@ -566,6 +666,8 @@ def apply_loudnorm_two_pass(
             "-c:v", "copy",
             "-af", filter_str,
             "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
+            # never let audio outlive the video (see snap_ranges_to_frames)
+            "-shortest",
             "-movflags", "+faststart",
             str(output_path),
         ]
@@ -598,6 +700,8 @@ def apply_loudnorm_two_pass(
         "-c:v", "copy",
         "-af", filter_str,
         "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
+        # never let audio outlive the video (see snap_ranges_to_frames)
+        "-shortest",
         "-movflags", "+faststart",
         str(output_path),
     ]
@@ -676,6 +780,9 @@ def build_final_composite(
         "-map", "0:a",
         "-c:v", "libx264", "-preset", "fast", "-crf", "18",
         "-pix_fmt", "yuv420p",
+        # keep the Rec.709 tags the segments carry — this pass re-encodes video
+        "-colorspace", "bt709", "-color_primaries", "bt709",
+        "-color_trc", "bt709", "-color_range", "tv",
         "-c:a", "copy",
         "-movflags", "+faststart",
         str(out_path),
@@ -745,6 +852,17 @@ def main() -> None:
     edl = json.loads(edl_path.read_text())
     edit_dir = edl_path.parent
     out_path = args.output.resolve()
+
+    # Frame-align every range BEFORE extraction, and persist it: the EDL, the
+    # preview timeline and segments.json must all describe the same cut as the
+    # rendered file, or anything that has to land on a cut lands beside it.
+    first_src = next(iter(edl.get("sources", {}).values()), None)
+    target_fps = int(shortform_target_fps(Path(first_src))) if (first_src and not args.keep_resolution) else 30
+    snapped = snap_ranges_to_frames(edl, target_fps)
+    if snapped:
+        edl["total_duration_s"] = round(sum(r["end"] - r["start"] for r in edl["ranges"]), 3)
+        edl_path.write_text(json.dumps(edl, ensure_ascii=False, indent=2))
+        print(f"  frame-aligned {snapped} range(s) to {target_fps}fps → edl.json updated")
 
     # 1. Extract per-segment (auto-grade per range if EDL grade is "auto")
     segment_paths = extract_all_segments(
