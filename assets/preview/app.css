@@ -579,6 +579,292 @@ kbd {
 .note-actions { display: flex; align-items: center; gap: 8px; }
 .note-actions .spacer { flex: 1; }
 
+/* ---------- style setup (the gate between Fase 1 and Fase 2) ----------
+   Shown INSTEAD of the stage, so the choice is a step and not a floating dialog
+   the user can ignore. Everything here is built from STYLE_CATALOG in app.js. */
+.setup {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+}
+.setup::-webkit-scrollbar { width: 9px; }
+.setup::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.setup-inner {
+  width: min(1200px, 100%);
+  margin: 0 auto;
+  padding: 2px 4px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.setup-head h2 { font-size: 16px; font-weight: 900; letter-spacing: 0.2px; }
+
+.setup-group { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.group-head { display: flex; align-items: baseline; gap: 10px; }
+.group-title { font-size: 11px; font-weight: 600; letter-spacing: 1.4px; text-transform: uppercase; }
+
+.opt-grid { display: flex; flex-wrap: wrap; gap: 10px; }
+.check-row { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* option card — preview + title, nothing else. The preview IS the description:
+   the split mockup shows the layout, the caption demos render the real thing. */
+.opt {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 7px;
+  border-radius: 12px;
+  background: var(--glass);
+  border: 1px solid var(--stroke);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.opt:hover { border-color: rgba(255, 255, 255, 0.22); }
+.opt.on { border-color: var(--orange); background: rgba(255, 119, 19, 0.07); }
+/* only shown where the catalog has a SINGLE option — it explains the lone card */
+.opt.ghost {
+  border-style: dashed;
+  cursor: default;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--dim);
+  padding: 10px;
+  max-width: 108px;
+}
+.opt.ghost:hover { border-color: var(--stroke); }
+.opt-name { font-size: 12px; font-weight: 600; text-align: center; }
+
+/* the tick — a ring that fills, no glow */
+.opt-mark {
+  position: absolute;
+  top: 15px; right: 15px;
+  width: 15px; height: 15px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.3);
+  background: rgba(0, 0, 0, 0.35);
+}
+.opt.on .opt-mark { border-color: var(--orange); background: var(--orange); }
+.opt.on .opt-mark::after {
+  content: '';
+  position: absolute;
+  left: 4.4px; top: 1.6px;
+  width: 3.4px; height: 7px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(43deg);
+}
+
+.opt-preview {
+  position: relative;
+  border-radius: 9px;
+  background: #05070a;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* 9:16 mockup of the editing style */
+.opt-preview.frame { height: 110px; }
+.opt-preview.frame svg { height: 100%; width: auto; display: block; }
+/* caption demos: a crop of the caption band, at the real proportions */
+.opt-preview.cap { height: 74px; width: 182px; }
+.opt-preview.hlbox { height: 64px; }
+
+/* Short panes (the preview often lives in a half-height pane): shrink the
+   previews instead of scrolling. The demos are rebuilt on resize, so their
+   internal scale follows the box — see renderSetup on the resize handler. */
+@media (max-height: 760px) {
+  .setup-inner { gap: 10px; }
+  .setup-head h2 { font-size: 16px; }
+  .setup-head p { display: none; }
+  .opt-preview.frame { height: 108px; }
+  .opt-preview.cap { height: 76px; width: 162px; }
+  .opt-preview.hlbox { height: 64px; }
+  .chk { padding: 7px 12px 7px 10px; }
+  .opt-name { font-size: 11.5px; }
+}
+/* very short panes: the summary line is the first thing to go — the cards and
+   the checkboxes already say the same thing, in place */
+@media (max-height: 620px) {
+  .setup-summary { display: none; }
+  .setup-head h2 { font-size: 15px; }
+  .opt-preview.frame { height: 92px; }
+  .opt-preview.cap { height: 64px; width: 142px; }
+  .opt-preview.hlbox { height: 56px; }
+}
+
+/* ---- caption demos: the template's own styles, not an impression of them ----
+   Karaoke: Poppins 900, white, letterSpacing -1, words rise 34px and fade in
+   over 7 frames. Stacked: the STACK_MIXED line styles (bold-italic gradient,
+   regular small, Playfair italic orange), words rise 46px with a blur-off.
+   Geometry is scaled from 1080-wide, so every ratio matches the render.
+   Positions/opacities are written by JS each frame (capAnims in app.js). */
+.cap-demo { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+.kar-line {
+  position: absolute;
+  display: flex;
+  justify-content: center;
+  align-items: baseline;
+  white-space: nowrap;
+  font-family: 'Poppins', sans-serif;
+  font-weight: 900;
+  color: #fff;
+  line-height: 1;
+  letter-spacing: -1px;
+  text-shadow: 0 4px 20px rgba(0, 0, 0, 0.55);
+}
+.kar-line span { display: inline-block; will-change: opacity, translate; }
+
+.stk-cue { position: absolute; display: flex; flex-direction: column; align-items: center; text-align: center; }
+.stk-line { white-space: pre; letter-spacing: -1.5px; line-height: 1.12; }
+.stk-line + .stk-line { margin-top: -0.34em; }
+.stk-line span { display: inline-block; padding: 0 0.06em; will-change: opacity, translate, filter; }
+/* 0 = bold-italic, 1 = regular (small), 2 = serif orange — the cycle the
+   template applies per line (LINE_STYLES in StackedCaptions.tsx).
+   These land on the WORD spans, exactly like the template spreads `...ls` onto
+   each span. On the line div the gradient renders nothing: the spans carry a
+   drop-shadow filter, which paints them in their own layer, and an inherited
+   -webkit-text-fill-color:transparent then leaves plain invisible text. */
+.stk-line .s0, .stk-line .s1, .stk-line .s3 {
+  background-image: linear-gradient(180deg, #fff 0%, #fff 46%, #cfcfcf 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+.stk-line .s0 { font-family: 'Poppins', sans-serif; font-weight: 900; font-style: italic; }
+.stk-line .s1 { font-family: 'Poppins', sans-serif; font-weight: 400; }
+.stk-line .s2 { font-family: 'Playfair Display', serif; font-weight: 900; font-style: italic; color: #ff5200; }
+.stk-line .s3 { font-family: 'Poppins', sans-serif; font-weight: 800; }
+
+/* scatter ("disperso") — Lora, lowercase, off-white with the same baseline
+   darkening the render uses. The gradient sits on the WORD, not the block:
+   per-block it reads as a wash instead of ink weight. */
+.scat-cue { position: absolute; display: flex; flex-direction: column; align-items: center; }
+.scat-line { display: flex; align-items: baseline; white-space: pre; line-height: 1.03; }
+.scat-line span {
+  font-family: 'Lora', serif;
+  font-weight: 400;
+  background-image: linear-gradient(180deg, #f8f5ef 0%, #f4f1e9 54%, #d5cec1 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  will-change: opacity, filter;
+}
+.scat-line span.hi { font-weight: 600; font-style: italic; }
+
+/* the three static styles — flat off-white, no animation, nothing to drive */
+.stat-demo {
+  position: absolute;
+  text-align: center;
+  color: #f4f1e9;
+  line-height: 1.18;
+  white-space: pre;
+  text-shadow: 0 1px 5px rgba(0, 0, 0, 0.55);
+}
+
+/* ---- headline demos: the template's hook styles, same scaling contract ----
+   Sizes and line breaks are computed in JS (buildHeadlineDemo) because the
+   template computes them too — only the look lives here. */
+.hl-demo {
+  position: absolute;
+  text-align: center;
+  font-family: 'Poppins', sans-serif;
+  color: #fff;
+  white-space: pre;
+}
+.hl-outline {
+  font-weight: 800;
+  paint-order: stroke fill;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.45));
+}
+.hl-card {
+  font-weight: 900;
+  background: #232326;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+}
+.hl-realce { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.hl-realce .hl-block {
+  background: #ff5200;
+  color: #fff;
+  font-weight: 900;
+  padding: 0.08em 0.3em 0.16em;
+  box-shadow: 0 3px 7px rgba(0, 0, 0, 0.45);
+}
+.hl-misto { filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.55)); }
+
+/* element chip — icon + title, one line */
+.chk {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 13px 7px 10px;
+  border-radius: 11px;
+  background: var(--glass);
+  border: 1px solid var(--stroke);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.chk:hover { border-color: rgba(255, 255, 255, 0.22); }
+.chk.on { border-color: rgba(9, 181, 183, 0.5); background: rgba(9, 181, 183, 0.06); }
+.chk-box {
+  position: relative;
+  flex: 0 0 auto;
+  width: 16px; height: 16px;
+  border-radius: 5px;
+  border: 1.5px solid rgba(255, 255, 255, 0.25);
+}
+.chk.on .chk-box { border-color: var(--teal); background: var(--teal); }
+.chk.on .chk-box::after {
+  content: '';
+  position: absolute;
+  left: 4.6px; top: 1.4px;
+  width: 3.6px; height: 7.4px;
+  border: solid #071417;
+  border-width: 0 2px 2px 0;
+  transform: rotate(43deg);
+}
+.chk-ico { flex: 0 0 auto; width: 17px; height: 17px; color: var(--dim); }
+.chk-ico svg { width: 17px; height: 17px; fill: currentColor; display: block; }
+.chk.on .chk-ico { color: var(--teal); }
+.chk-name { font-size: 12.5px; font-weight: 500; white-space: nowrap; }
+
+#setupNote {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 400;
+  line-height: 1.4;
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.32);
+  border: 1px solid var(--stroke);
+  border-radius: 11px;
+  padding: 9px 12px;
+  resize: none;
+  outline: none;
+}
+#setupNote:focus { border-color: rgba(255, 119, 19, 0.5); }
+
+.setup-actions { display: flex; align-items: center; gap: 12px; }
+.setup-actions .btn { flex: 0 0 auto; }
+.setup-summary { font-size: 11px; font-weight: 400; color: var(--dim); }
+
 /* ---------- help (was the footer hint strip) ---------- */
 .help-fab {
   position: fixed;

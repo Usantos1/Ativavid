@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""Emit one event per save of <edit>/preview_edits.json.
+"""Emit one event per save from the preview UI.
 
-The preview UI writes the user's timeline adjustments and correction markers to
-preview_edits.json; nothing in that path can reach the chat on its own. Run this
-under the Monitor tool so every save notifies the session automatically:
+Two files, both written by the UI and neither able to reach the chat on its own:
+  - preview_edits.json — timeline adjustments and correction markers
+  - preview_style.json — the Fase 1 → Fase 2 gate: editing style, caption style,
+    edit elements
+
+Run this under the Monitor tool so every save notifies the session automatically:
 
     Monitor(command="python3 <skill>/helpers/watch_edits.py '<edit>'",
             description="marcações do preview", persistent=True)
@@ -53,6 +56,37 @@ def digest(p: Path) -> str:
     return "\n".join(out)
 
 
+def style_digest(p: Path) -> str:
+    """The gate choice: what Fase 2 should be built as."""
+    try:
+        d = json.loads(p.read_text())
+    except (OSError, json.JSONDecodeError) as e:
+        return f"preview_style.json ilegível ({e.__class__.__name__}) — peça ao usuário para salvar de novo"
+
+    els = d.get("elementNames") or [
+        k for k, v in (d.get("elements") or {}).items() if v
+    ]
+    head = (
+        "TROCA DE ESTILO NO PREVIEW ({}) — REFAÇA a Fase 2 assim:"
+        if d.get("rerender")
+        else "ESTILO ESCOLHIDO NO PREVIEW ({}) — monte a Fase 2 assim:"
+    ).format(d.get("savedAt", ""))
+    out = [
+        head,
+        f'  · tipo de edição: {d.get("editName") or d.get("edit")}',
+        f'  · headline: {d.get("headlineName") or d.get("headline")}',
+        f'  · legenda: {d.get("captionsName") or d.get("captions")}',
+        f'  · elementos: {", ".join(els) if els else "nenhum"}',
+    ]
+    # everything NOT chosen is an instruction too — it is what must stay out
+    off = [k for k, v in (d.get("elements") or {}).items() if not v]
+    if off:
+        out.append(f'  · fora: {", ".join(off)}')
+    if (d.get("note") or "").strip():
+        out.append(f'  · observação do usuário: {d["note"].strip()}')
+    return "\n".join(out)
+
+
 def fmt(t: float) -> str:
     m, s = divmod(max(0.0, float(t)), 60)
     return f"{int(m)}:{s:05.2f}"
@@ -60,24 +94,29 @@ def fmt(t: float) -> str:
 
 def main() -> int:
     root = Path(sys.argv[1] if len(sys.argv) > 1 else ".").expanduser().resolve()
-    target = root / "preview_edits.json"
-    last: float | None = None
-    # a file already sitting there at startup means edits are pending — say so once
-    if target.exists():
-        last = target.stat().st_mtime
-        print(digest(target), flush=True)
+    watched = {
+        root / "preview_edits.json": digest,
+        root / "preview_style.json": style_digest,
+    }
+    # a file already sitting there at startup means it is pending — say so once
+    last: dict[Path, float | None] = {}
+    for target, fn in watched.items():
+        last[target] = target.stat().st_mtime if target.exists() else None
+        if last[target] is not None:
+            print(fn(target), flush=True)
 
     while True:
-        try:
-            cur = target.stat().st_mtime if target.exists() else None
-        except OSError:
-            cur = None
-        if cur is not None and cur != last:
-            last = cur
-            time.sleep(0.15)  # let the atomic replace settle before reading
-            print(digest(target), flush=True)
-        elif cur is None:
-            last = None  # applied and deleted — re-arm for the next save
+        for target, fn in watched.items():
+            try:
+                cur = target.stat().st_mtime if target.exists() else None
+            except OSError:
+                cur = None
+            if cur is not None and cur != last[target]:
+                last[target] = cur
+                time.sleep(0.15)  # let the atomic replace settle before reading
+                print(fn(target), flush=True)
+            elif cur is None:
+                last[target] = None  # applied and deleted — re-arm for the next save
         time.sleep(2)
 
 

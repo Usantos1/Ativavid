@@ -11,12 +11,16 @@ approved. Everything here rides on the **data-driven template** at
   `render.py` picks this automatically for `cut.mp4` — then set `edit-data.json`
   `fps` to the SAME value as `cut.mp4` (ffprobe it) so the Remotion render matches.
 - **Base:** 1080×1920 (fps per the rule above), `<OffthreadVideo src=cut.mp4>` with the **dynamic
-  camera**: hard zoom per cut segment (~1.10–1.22, cycles), slow push-in
-  (+0.04/segment), clamped eye-tracking (target upper third, never reveals an
-  edge). Always on — it's what makes a talking head feel edited.
-- **Visual hook (first ~4s):** static copywriting headline (see below). Always on.
-- **Captions:** two styles — **karaoke** (default) and **stacked** (see the
-  "Caption style" section; SHOW the user the reference gallery to choose).
+  camera**, whose three parts are separate picks on the Estilo tab: hard zoom per
+  cut segment (`zoomCuts`, ~1.10–1.22, cycles), slow push-in (`zoomAuto`,
+  +0.04/segment), clamped eye-tracking (`tracking`, target upper third, never
+  reveals an edge). `zoomCuts` is what makes a talking head feel edited — if the
+  user turns everything off, say what they lose and build it anyway.
+- **Visual hook (first ~4s):** static copywriting headline, **always two lines**
+  with the size fitted to them (see "Headline styles"). Always on.
+- **Captions:** six styles — three animated (**karaoke**, **stacked**, **scatter**)
+  and three static (**simples**, **serifada**, **classica**). The user already
+  picked one on the Estilo tab; see the "Caption style" section.
   Karaoke: one line ≤3 words, words rise from below, Poppins Black, lower third,
   `measureText` fit into **SAFE_WIDTH 720** (~180px each side — clears
   Instagram/TikTok's right action rail; verified on a real screenshot). Never
@@ -35,6 +39,23 @@ approved. Everything here rides on the **data-driven template** at
 
 ## Workflow
 
+**Read `<edit>/preview_style.json` first — it IS the brief.** The user chose it on
+the Estilo tab at the end of Fase 1; every key maps to something here:
+
+| Pick | What it means |
+|---|---|
+| `edit: "split" \| "split2"` | the split-screen variant below — every image insert uses it |
+| `headline: "outline" \| "card" \| "realce" \| "misto"` | `hook.style` in edit-data.json |
+| `captions: "karaoke" \| "stacked" \| "scatter" \| "simples" \| "serifada" \| "classica"` | `captions.style` in edit-data.json (+ the director step for stacked) |
+| `elements.tracking` | `face_track.py` + `track.json`; OFF → skip it, fixed frame |
+| `elements.zoomAuto` | the slow push-in inside each segment (`+0.04/segment`) |
+| `elements.zoomCuts` | the hard zoom change ON each cut (~1.10–1.22, cycles) |
+| `elements.musicAI` | Phase 3 via `treblo_music.py`; OFF → deliver with voice only |
+| `note` | free text — read it, it overrides the defaults above |
+
+An unchecked box is an explicit NO, not a silence. Copy the picks into
+`state.json` as `style`, clear `awaitingStyle`, delete `preview_style.json`.
+
 1. **Scaffold (one command, never read the TSX):**
    ```bash
    cp -R <skill>/assets/shortform/. <edit>/remotion/ && cd <edit>/remotion && npm install
@@ -44,11 +65,12 @@ approved. Everything here rides on the **data-driven template** at
    - `transcribe.py cut.mp4 --edit-dir <edit>` → `transcripts/cut.json`
      (cut times are already on the output timeline — never map the source EDL)
    - `captions_for_remotion.py --transcript transcripts/cut.json -o public/captions.json`
-   - **Caption style** — show the user `assets/shortform/caption-styles/stacked.png`
-     and ask: **karaoke** (default) or **stacked**. For stacked, ALSO run
+   - **Caption style** — from the Estilo tab pick. `stacked` ALSO needs
      `caption_style.py --transcript transcripts/cut.json -o public/caption-cues.json`
-     and set `captions.style:"stacked"` (see the "Caption style" section).
-   - `face_track.py cut.mp4 -o public/track.json`
+     plus `captions.style:"stacked"` (see the "Caption style" section).
+   - `face_track.py cut.mp4 -o public/track.json` — **only when
+     `elements.tracking` is on.** Off, the frame stays put and `track.json` is
+     not generated at all.
    - `public/segments.json` — cumulative cut boundaries **measured from the
      encoded segments' frame counts, never summed from the EDL's seconds**.
      ffmpeg quantises each segment to whole frames, so EDL arithmetic drifts a
@@ -84,13 +106,81 @@ approved. Everything here rides on the **data-driven template** at
 Never edit `src/Main.tsx`. Bespoke graphics go in `src/CustomGraphics.tsx`
 (the ONE editable file — read it only when the video needs a custom graphic).
 
-## Caption style — karaoke (default) or STACKED
+## Headline styles — always two lines
 
-Short-form ships two caption styles. Let the user pick by **showing** the
-reference image `assets/shortform/caption-styles/stacked.png` (a montage over
-real footage) alongside the plain karaoke default, then set `captions.style`.
+Four looks via `hook.style`, picked by the user on the Estilo tab: **`outline`**
+(default, white + thick black stroke), **`card`** (dark rounded card, UPPERCASE,
+optional logo row), **`realce`** (each line on a solid orange marker block),
+**`misto`** (line 1 light white, line 2 heavy orange).
+
+**Author `hook.text` as one plain sentence.** Whatever you write — `text`, or a
+hand-broken `lines[]` — is joined and re-broken into exactly TWO lines balanced by
+MEASURED width, then the size is fitted to the widest one. A third line shrinks
+the type and costs the glance the headline exists to win.
+
+- The break is measured, not counted: "É assim que vai" (4 words) and "ficar a sua
+  headline" (3 words) are nearly the same width. Counting words breaks it wrong.
+- **`fontSizePx` is a CEILING, not a fixed size.** As a hard override it defeats
+  the whole feature: at a size the text cannot fit in, the line wraps and you are
+  back to three lines. Measured, not guessed — the uppercase `card` style did
+  exactly that at an inherited `fontSizePx: 66`.
+- Per-style geometry (weights, cap, safeWidth, lineHeight, paddingTop) lives in
+  `HL_STYLES` in `src/Main.tsx` **and is mirrored in the preview's `app.js`** so
+  the Estilo tab shows the real break at the real size. Change one, change both.
+- In a split layout, `paddingTop` still has to follow the seam — see the split
+  section.
+
+## Caption style — six of them
+
+Three are animated (karaoke, stacked, scatter) and three are STATIC
+(`simples`, `serifada`, `classica`) — no animation at all, a cue just replaces
+the previous one. All three static ones live in `SimpleCaptions.tsx`, read
+`captions.json` alone, and share one rule that is the whole point:
+
+**Lines group by MEASURED WIDTH, capped at `maxWords` — never by word count.**
+"inteligência" and "de" cannot obey the same rule: the long word takes the line
+alone and the short ones ride together. A fixed 3-words-per-line gets this
+backwards on every long word.
+
+- `simples` — Poppins 600 at 82, squeezed to 0.9 on BOTH axes, one line, ≤3 words.
+  Poppins ships no condensed cut, so this is a distorted regular: it thins the
+  stems in both directions. If it ever reads too light, raise the weight to 700
+  rather than compressing further.
+- `serifada` — Libre Baskerville 700 at 84, same rules, no distortion.
+- `classica` — Inter 500 at 52, TWO lines, classic subtitle. The split is width
+  balance PLUS a penalty for ending a line on a short function word ("o", "de"),
+  which a pure balance does constantly and no real subtitle ever does.
+- **The horizontal squeeze changes the line grouping** (narrower glyphs → more
+  words fit); the vertical one does not (grouping is measured on width). Worth
+  knowing before "just squashing it a bit".
+- All three sit at `bottom: 430`, the same band as the others. Lower than that
+  and a 9:16 caption lands under the platform's own UI.
+
+### karaoke (default), STACKED or SCATTER
+
+Short-form ships two caption styles. **The user already picked one on the Estilo
+tab**, where both previews run the real animation — do not ask again, just set
+`captions.style` from `preview_style.json`. (`caption-styles/stacked.png` is
+still there as a montage over real footage if a still is useful.)
 
 - **`"karaoke"`** (default): one line ≤3 words, Poppins Black, lower third.
+- **`"scatter"`** ("Disperso"): Lora serif, lowercase, off-white with a slight
+  darkening toward the baseline, one word at a time in short ragged lines. Reads
+  `captions.json` alone — no extra generation step. Ordinary words FADE only; one
+  word per cue (the longest, ≥7 chars) resolves out of a heavy blur at 1.62× and
+  dissolves back into blur on the way out. Tunables in `captions`:
+  `scatterOffsetY` (block centre, default 0.72), `scatterFontSize` (72),
+  `scatterSafeWidth` (820); `SPREAD` in the component caps how far a line wanders.
+  Three things it took real footage to learn:
+  - **Never `Math.random()`.** Remotion renders frames independently, so a true
+    random re-rolls the layout every frame and the text shakes. Positions are
+    hashed off the cue index.
+  - **The middle of the frame is the FACE.** The reference look lives over B-roll;
+    on a talking head the block belongs on the chest (`scatterOffsetY` 0.72).
+    Raise it only when the shot behind is not a face.
+  - **Motion on every word is motion on nothing.** Ordinary words used to drop in
+    from above too, and at one word per ~200ms the screen read as frantic. The
+    blur on the highlighted word only reads because everything else is still.
 - **`"stacked"`**: words stacked tight, mixing per line — Poppins bold-italic
   (white→gray gradient) / Poppins regular (smaller) / Playfair serif bold-italic
   in ORANGE `#ff5200` / Poppins bold. Emphasis words appear solo; key ones get a
@@ -153,13 +243,37 @@ pick, then render ONE still for design approval before the full render.
 that wants the same zone to after `hook.endSec` (e.g. move a 2.5s cutaway to
 ~4.1s).
 
-## Style: "tela dividida" (split screen)
+## Style: "tela dividida" (split screen) — two variants
 
-Image on top, talking head below, seam at the subject's hairline. Data lives in
-`edit-data.json` `splitInserts[]`; the component is already in the template's
-`CustomGraphics.tsx`. Hard cut (no fade), every window snapped to a take cut,
-consecutive images contiguous, and `captions.windows` parks the caption on the
-seam while it is up. Full rules in `assets/shortform/README.md`.
+Both pin the FACE to a fixed region and give the rest of the frame to the image.
+Data lives in `edit-data.json` `splitInserts[]` (`layout: "top" | "bottom"`); the
+component is already in the template's `CustomGraphics.tsx`. Hard cut (no fade),
+every window snapped to a take cut, consecutive images contiguous, and
+`captions.windows` moves the caption to the seam while a window is up. Full rules
+in `assets/shortform/README.md`.
+
+| | **Tela dividida** (`top`) | **Tela dividida 2** (`bottom`) |
+|---|---|---|
+| Art | top band (750) | bottom band (750) |
+| Head | raised underneath, `zoom 1.25 / focusY 400` | held high above, `zoom 1.0 / focusY 225` |
+| Caption | ON the seam (`paddingBottom` 1074) | just ABOVE the seam (`paddingBottom` 790) |
+| Seam gradient | yes — the caption sits over the art | **no** — it only greys the top of the photo |
+
+**`focusY` is a SOURCE y that lands at the top of the video window** — a point
+`y_src` renders at `(y_src - focusY) * zoom`. **Measure before trusting the
+numbers:** pull a frame out of `cut.mp4`, read the hair-top and chin y, and set
+`focusY` so the head lands where the user asked. The defaults fit a head ~660px
+tall starting at y 455.
+
+The two are opposites in one specific way, and it is the whole trick: the source
+has a lot of headroom above the head. `top` has to zoom in to throw that headroom
+away; `bottom` **keeps** it, and that is what puts the face under the frame edge
+instead of in the middle. Swapping the zoom/focus pair between them breaks both.
+
+**The hook does not transfer for free.** `hook.paddingTop` is tuned to the seam of
+whichever layout is up: 738 for `top` (text on the seam under the art), ~920 for
+`bottom` (text in the gap between chin and seam). Left at the `top` value, the
+headline lands across the speaker's mouth. Render one hook still after switching.
 
 ## Behind-the-subject (element between person and background)
 

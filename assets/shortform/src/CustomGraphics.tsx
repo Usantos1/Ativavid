@@ -38,7 +38,26 @@ type SplitInsert = {
   end: number;
   fit?: 'cover' | 'contain';
   bandH?: number;
+  layout?: 'top' | 'bottom';
 };
+
+// Two variants of one idea — both PIN THE FACE to a fixed region and give the
+// rest of the frame to the image:
+//   'top'    "Tela dividida"   — art on top, head raised underneath
+//   'bottom' "Tela dividida 2" — head held high, art underneath
+// The zoom/focus pair is what pins the face and is NOT interchangeable between
+// them. `focusY` is a SOURCE y that lands at the top of the video window, so a
+// point y_src renders at (y_src - focusY) * zoom.
+//   top:    the head must be lifted out of the source's headroom → zoom in hard.
+//   bottom: that headroom is the point — it is what puts the face under the
+//           frame edge instead of in the middle.
+// MEASURE THE SOURCE before trusting these numbers: ffmpeg a frame out of
+// cut.mp4, read the hair-top and chin y, and set focusY so the head lands where
+// the user asked. The values below fit a head ~660px tall starting at y 455.
+const LAYOUT = {
+  top: {zoom: 1.25, focusY: 400},
+  bottom: {zoom: 1.0, focusY: 225},
+} as const;
 
 export const CustomGraphics: React.FC = () => {
   const splits = ((editData as {splitInserts?: SplitInsert[]}).splitInserts) ?? [];
@@ -68,47 +87,52 @@ const SplitFrame: React.FC<{
   bandH: number;
   fit: 'cover' | 'contain';
   progress: number;
-}> = ({image, bandH, fit, progress}) => {
+  layout: 'top' | 'bottom';
+}> = ({image, bandH, fit, progress, layout}) => {
   // slow Ken-Burns so the band is not a dead still
   const artScale = 1 + 0.03 * progress;
-  // The head is re-framed into the remaining height: without a zoom the source's
-  // headroom leaves a dead gap under the band.
-  const VID_ZOOM = 1.25;
-  const VID_FOCUS_Y = 400;
+  const {zoom, focusY} = LAYOUT[layout];
   const videoH = 1920 - bandH;
+  const bandTop = layout === 'top' ? 0 : videoH;
+  const videoTop = layout === 'top' ? bandH : 0;
 
   return (
     <AbsoluteFill style={{backgroundColor: '#0a0a0c'}}>
-      <div style={{position: 'absolute', left: 0, top: bandH, width: 1080, height: videoH, overflow: 'hidden'}}>
+      <div style={{position: 'absolute', left: 0, top: videoTop, width: 1080, height: videoH, overflow: 'hidden'}}>
         <OffthreadVideo
           src={staticFile('cut.mp4')}
           muted
           style={{
             position: 'absolute',
-            width: 1080 * VID_ZOOM,
-            height: 1920 * VID_ZOOM,
-            left: -(1080 * (VID_ZOOM - 1)) / 2,
-            top: -VID_FOCUS_Y * VID_ZOOM,
+            width: 1080 * zoom,
+            height: 1920 * zoom,
+            left: -(1080 * (zoom - 1)) / 2,
+            top: -focusY * zoom,
           }}
         />
       </div>
 
-      <div style={{position: 'absolute', left: 0, top: 0, width: 1080, height: bandH, overflow: 'hidden'}}>
+      <div style={{position: 'absolute', left: 0, top: bandTop, width: 1080, height: bandH, overflow: 'hidden'}}>
         <Img
           src={staticFile(image)}
           style={{width: '100%', height: '100%', objectFit: fit, scale: String(artScale)}}
         />
-        {/* soft falloff into the seam so the headline reads over both sides */}
-        <div
-          style={{
-            position: 'absolute',
-            left: 0,
-            bottom: 0,
-            width: '100%',
-            height: 110,
-            background: 'linear-gradient(180deg,rgba(10,10,12,0),rgba(10,10,12,0.75))',
-          }}
-        />
+        {/* Soft falloff into the seam — 'top' ONLY. There the caption sits ON the
+            seam over the art and needs the darkening to stay legible. On
+            'bottom' the caption sits above the seam over the video, so the same
+            gradient only smears grey across the top of the photo. */}
+        {layout === 'top' ? (
+          <div
+            style={{
+              position: 'absolute',
+              left: 0,
+              bottom: 0,
+              width: '100%',
+              height: 110,
+              background: 'linear-gradient(180deg,rgba(10,10,12,0),rgba(10,10,12,0.75))',
+            }}
+          />
+        ) : null}
       </div>
     </AbsoluteFill>
   );
@@ -139,6 +163,7 @@ export const SplitScreen: React.FC<{items: SplitInsert[]}> = ({items}) => {
       image={active.src}
       bandH={active.bandH ?? 750}
       fit={active.fit ?? 'cover'}
+      layout={active.layout ?? 'top'}
       progress={clamp((frame - a) / Math.max(1, b - a), 0, 1)}
     />
   );

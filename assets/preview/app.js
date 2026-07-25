@@ -25,6 +25,11 @@
  *    `font-variant-numeric: tabular-nums` silently does nothing and every digit
  *    change resized the readout, shoving the whole transport row sideways.
  *  - No glows anywhere — depth shadows are fine, coloured halos are not.
+ *  - The style gate (STYLE_CATALOG → #styleSetup) stands BETWEEN the phases: when
+ *    state.awaitingStyle is true it replaces the stage entirely, so the choice of
+ *    editing style / caption style / edit elements cannot be skipped. It saves to
+ *    <edit>/preview_style.json (never preview_edits.json — different screens,
+ *    different moments, one would clobber the other).
  */
 'use strict';
 
@@ -59,6 +64,467 @@ const ICON = {
   flag: '<svg viewBox="0 0 16 16"><rect x="1.9" y="1.4" width="1.6" height="13.2" rx=".8"/><path d="M5 2.7h7.6a.6.6 0 0 1 .47.97L11.36 6l1.71 2.33a.6.6 0 0 1-.47.97H5V2.7z"/></svg>',
 };
 
+/* ---------- style catalog (the Fase 1 → Fase 2 gate) ----------
+ * The one place that knows which looks Edvid can build. It is APP-level, not
+ * session-level: a new editing style or caption style is a new entry here plus
+ * its implementation in the track reference — never a per-session UI.
+ * The user's pick ships to <edit>/preview_style.json; the skill reads it once,
+ * at the gate, and builds Fase 2 from it.
+ */
+const STYLE_CATALOG = {
+  edits: [
+    {
+      id: 'split',
+      name: 'Tela dividida',
+      mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
+        <rect x=".5" y=".5" width="65" height="117" rx="7" fill="#0b0e13" stroke="rgba(255,255,255,.12)"/>
+        <rect x="3" y="3" width="60" height="36" rx="5" fill="rgba(255,119,19,.16)"/>
+        <circle cx="17" cy="15" r="3.6" fill="rgba(255,119,19,.6)"/>
+        <path d="M6 36l11-11a2 2 0 013 0l7 7 5-4a2 2 0 013 0l11 8" fill="none" stroke="rgba(255,119,19,.6)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M3 40.5h60" stroke="rgba(255,255,255,.5)" stroke-width="1.2"/>
+        <rect x="3" y="42" width="60" height="73" rx="5" fill="rgba(255,255,255,.05)"/>
+        <circle cx="33" cy="70" r="12" fill="rgba(255,255,255,.16)"/>
+        <path d="M15 115a18 18 0 0136 0z" fill="rgba(255,255,255,.16)"/>
+        <rect x="12" y="35" width="42" height="11" rx="5.5" fill="#0b0e13" stroke="rgba(9,181,183,.65)"/>
+        <rect x="16" y="39.5" width="12" height="2.4" rx="1.2" fill="rgba(9,181,183,.9)"/>
+        <rect x="30" y="39.5" width="8" height="2.4" rx="1.2" fill="rgba(255,255,255,.5)"/>
+        <rect x="40" y="39.5" width="10" height="2.4" rx="1.2" fill="rgba(255,255,255,.5)"/>
+      </svg>`,
+    },
+    {
+      id: 'split2',
+      name: 'Tela dividida 2',
+      mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
+        <rect x=".5" y=".5" width="65" height="117" rx="7" fill="#0b0e13" stroke="rgba(255,255,255,.12)"/>
+        <rect x="3" y="3" width="60" height="65" rx="5" fill="rgba(255,255,255,.05)"/>
+        <circle cx="33" cy="24" r="11" fill="rgba(255,255,255,.16)"/>
+        <path d="M16 68a17 17 0 0134 0z" fill="rgba(255,255,255,.16)"/>
+        <path d="M3 69.5h60" stroke="rgba(255,255,255,.5)" stroke-width="1.2"/>
+        <rect x="3" y="71" width="60" height="44" rx="5" fill="rgba(255,119,19,.16)"/>
+        <circle cx="17" cy="83" r="3.6" fill="rgba(255,119,19,.6)"/>
+        <path d="M6 111l11-11a2 2 0 013 0l7 7 5-4a2 2 0 013 0l11 8" fill="none" stroke="rgba(255,119,19,.6)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <rect x="12" y="58" width="42" height="11" rx="5.5" fill="#0b0e13" stroke="rgba(9,181,183,.65)"/>
+        <rect x="16" y="62.5" width="12" height="2.4" rx="1.2" fill="rgba(9,181,183,.9)"/>
+        <rect x="30" y="62.5" width="8" height="2.4" rx="1.2" fill="rgba(255,255,255,.5)"/>
+        <rect x="40" y="62.5" width="10" height="2.4" rx="1.2" fill="rgba(255,255,255,.5)"/>
+      </svg>`,
+    },
+  ],
+  // No names on purpose: the sample headline IS the label. Ids and geometry
+  // mirror HL_STYLES in the template's Main.tsx — keep the two in step.
+  headlines: [
+    {id: 'outline', name: 'Contorno', hl: 'outline'},
+    {id: 'card', name: 'Cartão', hl: 'card'},
+    {id: 'realce', name: 'Realce', hl: 'realce'},
+    {id: 'misto', name: 'Misto', hl: 'misto'},
+  ],
+  captions: [
+    {id: 'karaoke', name: 'Karaokê', demo: 'karaoke'},
+    {id: 'stacked', name: 'Empilhado', demo: 'stacked'},
+    {id: 'scatter', name: 'Disperso', demo: 'scatter'},
+    {id: 'simples', name: 'Simples', stat: 'simples'},
+    {id: 'serifada', name: 'Serifada', stat: 'serifada'},
+    {id: 'classica', name: 'Clássica', stat: 'classica'},
+  ],
+  elements: [
+    {
+      id: 'tracking',
+      name: 'Movimento de tracking',
+      def: false,
+      icon: '<svg viewBox="0 0 16 16"><path d="M2 5.6V3.4A1.4 1.4 0 013.4 2h2.2M10.4 2h2.2A1.4 1.4 0 0114 3.4v2.2M14 10.4v2.2a1.4 1.4 0 01-1.4 1.4h-2.2M5.6 14H3.4A1.4 1.4 0 012 12.6v-2.2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="8" r="2.1"/></svg>',
+    },
+    {
+      id: 'zoomAuto',
+      name: 'Automação de zoom in',
+      def: true,
+      icon: '<svg viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.6 10.6L14 14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" fill="none"/><path d="M7 5.1v3.8M5.1 7h3.8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></svg>',
+    },
+    {
+      id: 'zoomCuts',
+      name: 'Zoom in e out nos cortes',
+      def: true,
+      icon: '<svg viewBox="0 0 16 16"><rect x="1.2" y="3.4" width="6" height="9.2" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="9.6" y="1.9" width="5.2" height="12.2" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8.4 8h.7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
+    },
+    {
+      id: 'musicAI',
+      name: 'Trilha sonora com IA',
+      def: true,
+      icon: '<svg viewBox="0 0 16 16"><path d="M12.6 1.6L6.9 3a.7.7 0 00-.55.68v5.6a2 2 0 101.35 1.9V5.9l4.4-1.05v2.9a2 2 0 101.35 1.9V2.3a.7.7 0 00-.85-.7z"/><path d="M2.4 2.2l.6 1.5 1.5.6-1.5.6-.6 1.5-.6-1.5-1.5-.6 1.5-.6z"/></svg>',
+    },
+  ],
+};
+
+/* ---------- caption previews: the template's animation, not an impression ----
+ * Every number here is lifted from the render (Main.tsx Karaoke/Word and
+ * StackedCaptions.tsx STACK_MIXED) and scaled by boxWidth/1080, so the preview
+ * shows the real proportions, the real faces and the real motion. If the
+ * template's caption look changes, change it HERE too — a preview that lies
+ * about the style is worse than no preview.
+ */
+const CAP_TEXT = 'É assim que sua legenda irá aparecer';
+const FPS_REF = 30; // the template's reference fps for frame-based timings
+
+// cubic-bezier solver — the stacked style eases on bezier(.16,1,.3,1)
+function bez(x1, y1, x2, y2) {
+  const cx = 3 * x1, bx = 3 * (x2 - x1) - cx, ax = 1 - cx - bx;
+  const cy = 3 * y1, by = 3 * (y2 - y1) - cy, ay = 1 - cy - by;
+  const fx = (t) => ((ax * t + bx) * t + cx) * t;
+  const dfx = (t) => (3 * ax * t + 2 * bx) * t + cx;
+  return (x) => {
+    let t = x;
+    for (let i = 0; i < 6; i++) {
+      const e = fx(t) - x;
+      if (Math.abs(e) < 1e-4) break;
+      const d = dfx(t);
+      if (Math.abs(d) < 1e-6) break;
+      t -= e / d;
+    }
+    return ((ay * t + by) * t + cy) * t;
+  };
+}
+const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3); // Easing.out(Easing.cubic)
+const easeStack = bez(0.16, 1, 0.3, 1);
+const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
+
+let capAnims = []; // step(nowSeconds) per visible caption demo
+
+// Karaoke: lines of ≤3 words (captions.maxWords), Poppins 900 white, each word
+// rises 34px and fades in over 7 frames; the line is replaced by the next one.
+function buildKaraokeDemo(host) {
+  const s = host.clientWidth / 1080;
+  host.innerHTML = '';
+  const wrap = el('div', 'cap-demo', host);
+  const words = CAP_TEXT.split(' ');
+  const lines = [];
+  for (let i = 0; i < words.length; i += 3) lines.push(words.slice(i, i + 3));
+
+  const STEP = 0.26, ENTER = 7 / FPS_REF, HOLD = 0.6;
+  const rise = 34 * s;
+  const built = [];
+  let t = 0;
+  for (const ln of lines) {
+    const box = el('div', 'kar-line', wrap);
+    box.style.fontSize = `${76 * s}px`;
+    const spans = ln.map((w) => {
+      const sp = el('span', '', box);
+      sp.textContent = w;
+      sp.style.marginRight = `${18 * s}px`;
+      return sp;
+    });
+    const start = t;
+    t = start + (ln.length - 1) * STEP + ENTER + HOLD;
+    built.push({ box, spans, start, end: t });
+  }
+  const cycle = t + 0.3;
+
+  return (now) => {
+    const p = now % cycle;
+    for (const L of built) {
+      const on = p >= L.start && p < L.end;
+      L.box.style.display = on ? '' : 'none';
+      if (!on) continue;
+      L.spans.forEach((sp, j) => {
+        const e = easeOutCubic(clamp01((p - (L.start + j * STEP)) / ENTER));
+        sp.style.opacity = e;
+        sp.style.translate = `0px ${((1 - e) * rise).toFixed(2)}px`;
+      });
+    }
+  };
+}
+
+// Stacked: one cue, lines cycling the STACK_MIXED styles (bold-italic gradient →
+// regular small → Playfair italic orange). Words rise 46px with a blur that
+// resolves; the cue leaves with the blur_up exit.
+const STK_LINES = [
+  { words: ['É', 'assim'], style: 0 },
+  { words: ['que', 'sua', 'legenda'], style: 1 },
+  { words: ['irá', 'aparecer'], style: 2 },
+];
+function buildStackedDemo(host) {
+  const s = host.clientWidth / 1080;
+  host.innerHTML = '';
+  const wrap = el('div', 'cap-demo', host);
+  const cue = el('div', 'stk-cue', wrap);
+
+  const STEP = 0.2, ENTER = 8 / FPS_REF, HOLD = 0.8, EXIT = 7 / FPS_REF;
+  const rise = 46 * s, blurIn = 5 * s, upY = 55 * s, cueBlur = 14 * s;
+  const shadow = `drop-shadow(0 ${(5 * s).toFixed(2)}px ${(9 * s).toFixed(2)}px rgba(0,0,0,0.5))`;
+  const all = [];
+  let idx = 0;
+  for (const L of STK_LINES) {
+    const row = el('div', 'stk-line', cue);
+    let size = 86;
+    if (L.style === 1) size = Math.round(size * 0.72);
+    if (L.style === 2) size = Math.round(size * 0.95);
+    row.style.fontSize = `${size * s}px`;
+    L.words.forEach((w, i) => {
+      // the face/gradient belongs to the WORD, like the template's `...ls` spread
+      const sp = el('span', `s${L.style}`, row);
+      sp.textContent = w + (i < L.words.length - 1 ? ' ' : '');
+      all.push({ sp, start: idx * STEP });
+      idx++;
+    });
+  }
+  const exitStart = (idx - 1) * STEP + ENTER + HOLD;
+  // short gap after the exit: side by side with the karaoke card, a preview that
+  // sits blank for half a second reads as broken rather than as a cue boundary
+  const cycle = exitStart + EXIT + 0.15;
+
+  return (now) => {
+    const p = now % cycle;
+    const ex = clamp01((p - exitStart) / EXIT);
+    cue.style.opacity = 1 - ex;
+    cue.style.translate = `0px ${(-upY * ex).toFixed(2)}px`;
+    cue.style.filter = ex > 0.02 ? `blur(${(cueBlur * ex).toFixed(2)}px)` : '';
+    for (const w of all) {
+      const e = easeStack(clamp01((p - w.start) / ENTER));
+      const eb = (1 - e) * blurIn;
+      w.sp.style.opacity = e;
+      w.sp.style.translate = `0px ${((1 - e) * rise).toFixed(2)}px`;
+      w.sp.style.filter = `${eb > 0.06 ? `blur(${eb.toFixed(2)}px) ` : ''}${shadow}`;
+    }
+  };
+}
+
+/* ---------- headline previews: the template's own hook styles ----------------
+ * Same contract as the caption demos — these render what `HookInner` renders,
+ * scaled from 1080-wide. The two-line break and the size fit run the SAME
+ * algorithm as the template (balance by measured width, then fit to safeW), so
+ * the preview shows the real break at the real size, not an approximation.
+ * HL_STYLES exists on both sides; change one, change the other.
+ */
+const HEADLINE_TEXT = 'É assim que vai ficar a sua headline';
+const HL_MIN = 40;
+const HL_STYLES = {
+  outline: { weights: [800, 800], cap: 92, safeW: 900, lh: 1.02 },
+  card: { weights: [900, 900], cap: 82, safeW: 820, lh: 1.06 },
+  realce: { weights: [900, 900], cap: 86, safeW: 830, lh: 1.04 },
+  misto: { weights: [400, 900], cap: 98, safeW: 900, lh: 0.98 },
+};
+
+// Measured in RENDER units (1080-wide), scaled to the box only at the end — the
+// template's letterSpacing is -1px at 1080, which is NOT proportional once the
+// preview shrinks it, so measuring in preview px would break the fit.
+let hlMeter = null;
+function measureType(text, size, weight, family, tracking) {
+  if (!text) return 0;
+  if (!hlMeter) {
+    hlMeter = document.createElement('span');
+    hlMeter.style.cssText =
+      'position:absolute;left:-9999px;top:0;visibility:hidden;white-space:pre;';
+    document.body.appendChild(hlMeter);
+  }
+  hlMeter.style.fontFamily = family || "'Poppins',sans-serif";
+  hlMeter.style.letterSpacing = `${tracking == null ? -1 : tracking}px`;
+  hlMeter.style.fontSize = `${size}px`;
+  hlMeter.style.fontWeight = String(weight);
+  hlMeter.textContent = text;
+  return hlMeter.offsetWidth;
+}
+const hlWidth = (text, size, weight) => measureType(text, size, weight);
+
+// Balance by MEASURED width, not word count: "É assim que vai" and "ficar a sua
+// headline" are 4 and 3 words but nearly the same width — counting words breaks
+// the line in the wrong place.
+function hlTwoLines(text, weights) {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (words.length < 2) return [words[0] || '', ''];
+  let best = [words[0], words.slice(1).join(' ')];
+  let bestDiff = Infinity;
+  for (let i = 1; i < words.length; i++) {
+    const a = words.slice(0, i).join(' ');
+    const b = words.slice(i).join(' ');
+    const d = Math.abs(hlWidth(a, 100, weights[0]) - hlWidth(b, 100, weights[1]));
+    if (d < bestDiff) { bestDiff = d; best = [a, b]; }
+  }
+  return best;
+}
+
+function hlFit(lines, S) {
+  const widest = (size) =>
+    Math.max(hlWidth(lines[0], size, S.weights[0]), hlWidth(lines[1], size, S.weights[1]));
+  let size = Math.floor((S.safeW / Math.max(1, widest(100))) * 100);
+  size = Math.floor((S.safeW / Math.max(1, widest(size))) * size);
+  return Math.max(HL_MIN, Math.min(size, S.cap));
+}
+
+function buildHeadlineDemo(host, styleId) {
+  const s = host.clientWidth / 1080;
+  const S = HL_STYLES[styleId];
+  host.innerHTML = '';
+  const wrap = el('div', 'cap-demo', host);
+  const raw = styleId === 'card' ? HEADLINE_TEXT.toUpperCase() : HEADLINE_TEXT;
+  const lines = hlTwoLines(raw, S.weights);
+  const size = hlFit(lines, S) * s;
+  const box = el('div', `hl-demo hl-${styleId}`, wrap);
+  box.style.lineHeight = String(S.lh);
+  box.style.letterSpacing = `${-1 * s}px`;
+
+  if (styleId === 'realce') {
+    for (const l of lines) {
+      if (!l) continue;
+      const b = el('div', 'hl-block', box);
+      b.style.fontSize = `${size}px`;
+      b.style.borderRadius = `${12 * s}px`;
+      b.textContent = l;
+    }
+    return;
+  }
+  if (styleId === 'card') {
+    box.style.borderRadius = `${24 * s}px`;
+    box.style.padding = `${28 * s}px ${46 * s}px`;
+  }
+  if (styleId === 'outline') {
+    box.style.webkitTextStroke = `${12 * s}px #000`;
+  }
+  lines.forEach((l, i) => {
+    if (!l) return;
+    const d = el('div', '', box);
+    d.style.fontSize = `${size}px`;
+    d.style.fontWeight = String(S.weights[i]);
+    if (styleId === 'misto') d.style.color = i === 1 ? '#ff5200' : '#fff';
+    d.textContent = l;
+  });
+}
+
+// Scatter ("disperso"): serif, lowercase, one word at a time, off-white with a
+// slight darkening toward the baseline. Ordinary words FADE only — no movement;
+// the one highlighted word resolves out of a blur and dissolves back into it.
+// Mirrors ScatterCaptions.tsx: same line rules, same SPREAD, same hash.
+const SCAT = { base: 72, hiScale: 1.62, gap: 12, spread: 0.45, safeW: 820 };
+const scatHash = (n) => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+
+function buildScatterDemo(host) {
+  const s = host.clientWidth / 1080;
+  host.innerHTML = '';
+  const wrap = el('div', 'cap-demo', host);
+  const cue = el('div', 'scat-cue', wrap);
+
+  const words = CAP_TEXT.toLowerCase().split(' ');
+  // highlight = longest word of the cue, and only if it carries weight (>6)
+  let hiIdx = -1, hiLen = 6;
+  words.forEach((w, i) => { if (w.length > hiLen) { hiLen = w.length; hiIdx = i; } });
+
+  // ragged lines of 3–4 words; the highlighted word takes a line of its own
+  const lines = [];
+  let line = [];
+  words.forEach((w, i) => {
+    if (i === hiIdx) {
+      if (line.length) lines.push(line);
+      lines.push([{ w, i, hi: true }]);
+      line = [];
+      return;
+    }
+    line.push({ w, i, hi: false });
+    if (line.length >= (scatHash(31 + i) > 0.5 ? 4 : 3)) { lines.push(line); line = []; }
+  });
+  if (line.length) lines.push(line);
+
+  const STEP = 0.22, ENTER = 7 / FPS_REF, HI_ENTER = 10 / FPS_REF, HOLD = 0.9, EXIT = 8 / FPS_REF;
+  const all = [];
+  lines.forEach((ln, li) => {
+    const row = el('div', 'scat-line', cue);
+    row.style.gap = `${SCAT.gap * s}px`;
+    let w = 0;
+    for (const it of ln) {
+      const sp = el('span', it.hi ? 'hi' : '', row);
+      sp.textContent = it.w;
+      sp.style.fontSize = `${(it.hi ? SCAT.base * SCAT.hiScale : SCAT.base) * s}px`;
+      all.push({ sp, start: it.i * STEP, hi: it.hi });
+      w += sp.offsetWidth + SCAT.gap * s;
+    }
+    const room = Math.max(0, (SCAT.safeW * s - w) / 2) * SCAT.spread;
+    row.style.translate = `${((scatHash(17 + li * 5 + 3) * 2 - 1) * room).toFixed(1)}px 0px`;
+  });
+
+  const exitStart = (words.length - 1) * STEP + ENTER + HOLD;
+  const cycle = exitStart + EXIT + 0.35;
+  const blurIn = 26 * s, blurOut = 30 * s;
+
+  return (now) => {
+    const p = now % cycle;
+    const out = clamp01((p - exitStart) / EXIT);
+    for (const w of all) {
+      const t = easeOutCubic(clamp01((p - w.start) / (w.hi ? HI_ENTER : ENTER)));
+      w.sp.style.opacity = t * (1 - out);
+      if (w.hi) {
+        const b = (1 - t) * blurIn + out * blurOut;
+        w.sp.style.filter = b > 0.1 ? `blur(${b.toFixed(2)}px)` : '';
+      }
+    }
+  };
+}
+
+/* ---------- the three STATIC caption styles ---------------------------------
+ * No animation, so no entry in capAnims — built once and left alone. Mirrors
+ * SIMPLE_VARIANTS in SimpleCaptions.tsx, including the rule that matters most:
+ * lines are grouped by MEASURED WIDTH, capped at maxWords. That is why a long
+ * word ends up alone and short ones ride together.
+ */
+const STATIC_VARIANTS = {
+  simples: {family: "'Poppins',sans-serif", weight: 600, size: 82, maxWords: 3, lines: 1, sx: 0.9, sy: 0.9, tracking: -3, maxW: 860},
+  serifada: {family: "'Libre Baskerville',serif", weight: 700, size: 84, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: -1, maxW: 860},
+  classica: {family: "'Inter',sans-serif", weight: 500, size: 52, maxWords: 14, lines: 2, sx: 1, sy: 1, tracking: 0, maxW: 840},
+};
+const ORPHAN_PT = /^(o|a|os|as|e|é|de|do|da|em|no|na|um|uma|que|se|ao|à|por|com)$/i;
+
+function buildStaticDemo(host, id) {
+  const V = STATIC_VARIANTS[id];
+  const s = host.clientWidth / 1080;
+  host.innerHTML = '';
+  const wrap = el('div', 'cap-demo', host);
+  const words = CAP_TEXT.split(' ');
+  const wOf = (ws) => measureType(ws.join(' '), V.size, V.weight, V.family, V.tracking) * V.sx;
+
+  // the WHOLE sentence, cut into cues exactly as the render would
+  const cues = [];
+  let cur = [];
+  for (const w of words) {
+    const trial = [...cur, w];
+    if (cur.length && (trial.length > V.maxWords || wOf(trial) > V.maxW * V.lines)) {
+      cues.push(cur);
+      cur = [w];
+    } else {
+      cur = trial;
+    }
+  }
+  if (cur.length) cues.push(cur);
+
+  const boxes = cues.map((cue) => {
+    let lines = [cue];
+    if (V.lines === 2 && cue.length > 1) {
+      let best = 1, bestScore = Infinity;
+      for (let i = 1; i < cue.length; i++) {
+        const score = Math.abs(wOf(cue.slice(0, i)) - wOf(cue.slice(i))) + (ORPHAN_PT.test(cue[i - 1]) ? 200 : 0);
+        if (score < bestScore) { bestScore = score; best = i; }
+      }
+      lines = [cue.slice(0, best), cue.slice(best)];
+    }
+    const box = el('div', 'stat-demo', wrap);
+    box.style.fontFamily = V.family;
+    box.style.fontWeight = String(V.weight);
+    box.style.fontSize = `${V.size * s}px`;
+    box.style.letterSpacing = `${V.tracking * s}px`;
+    box.style.transform = V.sx === 1 && V.sy === 1 ? '' : `scale(${V.sx}, ${V.sy})`;
+    for (const ln of lines) el('div', '', box).textContent = ln.join(' ');
+    return box;
+  });
+
+  // A style with no animation still has a RHYTHM — the cues replacing each other
+  // is what the viewer sees. So the card plays the whole sentence, cue by cue,
+  // on hard cuts. A single-cue style (the two-line "classica" fits the sentence
+  // whole) has nothing to step through and stays still.
+  if (boxes.length < 2) return null;
+  const HOLD = 0.95;
+  const cycle = boxes.length * HOLD;
+  return (now) => {
+    const i = Math.floor((now % cycle) / HOLD);
+    boxes.forEach((b, k) => { b.style.display = k === i ? '' : 'none'; });
+  };
+}
+
+const CAP_BUILDERS = { karaoke: buildKaraokeDemo, stacked: buildStackedDemo, scatter: buildScatterDemo };
+
 const LABEL_W = 48; // .track-label width (content x offset of lanes)
 const MIN_SEG = 0.2; // s
 const THUMB_EVERY = 2.0;
@@ -84,7 +550,20 @@ let S = {
   notes: [], // correction markers [{id,start,end,text}] — draft-timeline seconds
   pendingIn: null, // an IN is open, waiting for its OUT
   editingNote: null, // id of the note the editor is bound to
+  style: null, // current picks {edit, captions, elements:{…}, note}
 };
+
+function defaultStyle() {
+  const elements = {};
+  for (const e of STYLE_CATALOG.elements) elements[e.id] = !!e.def;
+  return {
+    edit: STYLE_CATALOG.edits[0].id,
+    headline: STYLE_CATALOG.headlines[0].id,
+    captions: STYLE_CATALOG.captions[0].id,
+    elements,
+    note: '',
+  };
+}
 
 const fmt = (t) => {
   if (!isFinite(t) || t < 0) t = 0;
@@ -203,8 +682,15 @@ async function applyState(data) {
   S.draft = S.rendered.map((r) => ({ ...r, removed: false, orig: { start: r.start, end: r.end } }));
   S.selected = -1;
 
+  // style picks: the skill's copy wins, so applying a change (or reopening the
+  // session) shows what is actually rendered — not a stale local selection
+  S.style = { ...defaultStyle(), ...(S.state.style || {}) };
+  S.style.elements = { ...defaultStyle().elements, ...((S.state.style || {}).elements || {}) };
+  $('setupNote').value = S.style.note || '';
+  // the skill opened the gate → land the user on the Estilo tab
+  if (S.state.awaitingStyle) S.tab = 'style';
+
   const hasVideo = S.videoDuration > 0;
-  $('emptyState').classList.toggle('hidden', hasVideo);
   $('playerWrap').classList.toggle('hidden', !hasVideo);
   $('editorCol').classList.toggle('hidden', !hasVideo);
 
@@ -217,6 +703,14 @@ async function applyState(data) {
   // phase 2 data
   const tab2 = document.querySelector('[data-tab="2"]');
   tab2.disabled = (S.state.phase || 1) < 2;
+  // Estilo opens when the catalog applies to this job: the skill asked for a
+  // pick, or one is already recorded. Before that there is nothing to choose.
+  const tabS = document.querySelector('[data-tab="style"]');
+  tabS.disabled = !S.state.awaitingStyle && !S.state.style;
+  if (tabS.disabled && S.tab === 'style') S.tab = 1;
+  document.querySelectorAll('.tab').forEach((x) => {
+    x.classList.toggle('active', String(x.dataset.tab) === String(S.tab));
+  });
   S.captions = [];
   S.editData = null;
   S.insertsDraft = [];
@@ -237,6 +731,7 @@ async function applyState(data) {
 
   fitZoom();
   renderAll();
+  renderSetup();
   refreshHeader();
 }
 
@@ -449,6 +944,136 @@ function closeNoteEditor() {
   renderNotes();
   refreshHeader();
 }
+
+// ---------- style setup ----------
+const styleName = (group, id) => (STYLE_CATALOG[group].find((o) => o.id === id) || {}).name || '—';
+
+// The Estilo tab. It sits BETWEEN the phases and is always reachable once the
+// catalog applies to this job: changing the caption style after Fase 2 exists,
+// or ticking one more element and re-rendering, is normal editing — not a
+// decision the user gets exactly one shot at.
+let wasShowing = false; // gate was up on the previous render (for the re-fit)
+
+function renderSetup() {
+  const show = S.tab === 'style';
+  $('styleSetup').classList.toggle('hidden', !show);
+  const hasVideo = S.videoDuration > 0;
+  $('stage').classList.toggle('hidden', show || !hasVideo);
+  $('emptyState').classList.toggle('hidden', hasVideo || show);
+
+  if (!show) {
+    capAnims = []; // stop stepping demos that are not on screen
+    // the timeline was display:none while the tab was up, so its panel had no
+    // width to fit against — re-fit once it is back on screen
+    if (wasShowing && hasVideo) requestAnimationFrame(() => { fitZoom(); renderAll(); });
+    wasShowing = false;
+    return;
+  }
+  if (!wasShowing) $('styleSetup').scrollTop = 0; // open at the top, always
+  wasShowing = true;
+
+  $('setupGo').textContent = S.state.awaitingStyle
+    ? 'Confirmar e iniciar a Fase 2'
+    : 'Salvar e refazer a Fase 2';
+
+  capAnims = [];
+  const radios = (host, group, chosen) => {
+    const opts = STYLE_CATALOG[group];
+    host.innerHTML = '';
+    for (const o of opts) {
+      const card = el('div', `opt${o.id === chosen ? ' on' : ''}`, host);
+      card.dataset.group = group;
+      card.dataset.id = o.id;
+      // headline previews are two short lines — they do not need the caption
+      // box's height, and with four groups on one screen that height is scarce
+      const kind = o.mock ? 'frame' : o.hl ? 'cap hlbox' : 'cap';
+      const prev = el('div', `opt-preview ${kind}`, card);
+      if (o.demo) capAnims.push(CAP_BUILDERS[o.demo](prev));
+      else if (o.hl) buildHeadlineDemo(prev, o.hl);
+      else if (o.stat) {
+        const step = buildStaticDemo(prev, o.stat);
+        if (step) capAnims.push(step);
+      }
+      else prev.innerHTML = o.mock || '';
+      // Only the abstract mockups get a title. A card that renders the real
+      // caption or the real headline is already labelled — by itself.
+      if (o.mock) el('div', 'opt-name', card).textContent = o.name;
+      el('div', 'opt-mark', card);
+    }
+    // the ghost only earns its space where there is a single option to explain
+    if (opts.length < 2) el('div', 'opt ghost', host).textContent = 'mais estilos em breve';
+  };
+  radios($('optEdit'), 'edits', S.style.edit);
+  radios($('optHeadline'), 'headlines', S.style.headline);
+  radios($('optCaptions'), 'captions', S.style.captions);
+
+  const host = $('optElements');
+  host.innerHTML = '';
+  for (const e of STYLE_CATALOG.elements) {
+    const on = !!S.style.elements[e.id];
+    const row = el('div', `chk${on ? ' on' : ''}`, host);
+    row.dataset.id = e.id;
+    el('div', 'chk-box', row);
+    el('div', 'chk-ico', row).innerHTML = e.icon || '';
+    el('div', 'chk-name', row).textContent = e.name;
+  }
+
+  const on = STYLE_CATALOG.elements.filter((e) => S.style.elements[e.id]);
+  $('setupSummary').textContent =
+    `${styleName('edits', S.style.edit)} · headline ${styleName('headlines', S.style.headline)}` +
+    ` · legenda ${styleName('captions', S.style.captions)} · ` +
+    (on.length ? on.map((e) => e.name).join(', ') : 'sem elementos extras');
+}
+
+$('styleSetup').addEventListener('click', (e) => {
+  const opt = e.target.closest('.opt:not(.ghost)');
+  if (opt) {
+    const key = {edits: 'edit', headlines: 'headline', captions: 'captions'}[opt.dataset.group];
+    S.style[key] = opt.dataset.id;
+    renderSetup();
+    return;
+  }
+  const chk = e.target.closest('.chk');
+  if (chk) {
+    S.style.elements[chk.dataset.id] = !S.style.elements[chk.dataset.id];
+    renderSetup();
+  }
+});
+
+$('setupGo').addEventListener('click', async () => {
+  S.style.note = $('setupNote').value.trim();
+  const rerender = !S.state.awaitingStyle;
+  const payload = {
+    // a save with Fase 2 already on disk is a RE-RENDER request, not a first
+    // pick — the skill has to know which of the two it is looking at
+    type: 'style-setup',
+    rerender,
+    edit: S.style.edit,
+    editName: styleName('edits', S.style.edit),
+    headline: S.style.headline,
+    headlineName: styleName('headlines', S.style.headline),
+    captions: S.style.captions,
+    captionsName: styleName('captions', S.style.captions),
+    elements: { ...S.style.elements },
+    elementNames: STYLE_CATALOG.elements
+      .filter((e) => S.style.elements[e.id])
+      .map((e) => e.name),
+    note: S.style.note,
+  };
+  const res = await fetch('/api/save', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if ((await res.json()).ok) {
+    renderSetup();
+    toast(rerender
+      ? '✓ Novo estilo enviado — o Claude vai refazer a Fase 2 com ele'
+      : '✓ Estilo enviado — o Claude vai montar a Fase 2 com essas escolhas', 5000);
+  } else {
+    toast('Erro ao enviar — o servidor está de pé?', 4000);
+  }
+});
 
 function renderClips() {
   laneVideo.innerHTML = '';
@@ -670,6 +1295,10 @@ function positionNeedle() {
   $('timeTotal').textContent = fmt(draftTotal() || S.videoDuration);
 }
 function rafLoop() {
+  if (capAnims.length) {
+    const now = performance.now() / 1000;
+    for (const step of capAnims) step(now);
+  }
   positionNeedle();
   if (!video.paused && !video.ended) {
     // keep needle visible
@@ -874,7 +1503,9 @@ $('noteText').addEventListener('keydown', (e) => {
 });
 $('btnFit').addEventListener('click', () => { fitZoom(); renderAll(); });
 panel.addEventListener('scroll', () => requestAnimationFrame(() => { drawRuler(); drawWave(); positionNeedle(); }));
-window.addEventListener('resize', () => { fitZoom(); renderAll(); });
+// renderSetup too: the caption demos bake their scale from the box width, so a
+// resize (or the short-pane media query kicking in) has to rebuild them
+window.addEventListener('resize', () => { fitZoom(); renderAll(); renderSetup(); });
 
 // tabs
 document.querySelectorAll('.tab').forEach((tab) =>
@@ -882,10 +1513,11 @@ document.querySelectorAll('.tab').forEach((tab) =>
     if (tab.disabled) return;
     document.querySelectorAll('.tab').forEach((t) => t.classList.remove('active'));
     tab.classList.add('active');
-    S.tab = +tab.dataset.tab;
+    S.tab = tab.dataset.tab === 'style' ? 'style' : +tab.dataset.tab;
     S.selected = -1;
     updateVideoSrc(); // Fase 2 plays the Phase-2 render when available
     renderAll();
+    renderSetup();
   })
 );
 
@@ -921,7 +1553,7 @@ $('btnSave').addEventListener('click', async () => {
       end: +n.end.toFixed(3),
       renderedStart: +draftToRendered(n.start).toFixed(3),
       renderedEnd: +draftToRendered(n.end).toFixed(3),
-      phase: S.tab,
+      phase: S.tab === 2 ? 2 : 1,
       text: n.text,
     }));
   }
@@ -976,3 +1608,8 @@ document.querySelectorAll('.tl-chip[data-icon]').forEach((c) => {
 });
 poll();
 rafLoop();
+// the headline fit is MEASURED, so it is wrong until Poppins is actually
+// loaded — rebuild once the fonts land
+if (document.fonts && document.fonts.ready) {
+  document.fonts.ready.then(() => { if (S.style) renderSetup(); });
+}

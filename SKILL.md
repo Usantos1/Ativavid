@@ -108,9 +108,12 @@ Every edit session gets the same interactive interface in the user's preview pan
    {"project": "Nome — C0000", "phase": 1, "video": "cut.mp4", "edl": "edl.json",
     "captions": "remotion/public/captions.json", "editData": "remotion/public/edit-data.json",
     "finalVideo": "final.mp4", "fps": 24, "message": "Fase 1 — cortando",
-    "sourceDurations": {"C0000": 1038.5}}
+    "sourceDurations": {"C0000": 1038.5},
+    "awaitingStyle": false,
+    "style": {"edit": "split", "captions": "karaoke",
+              "elements": {"tracking": false, "zoomAuto": true, "zoomCuts": true, "musicAI": true}}}
    ```
-   (`captions`/`editData`/`finalVideo` only when they exist; the Fase-2 tab plays `finalVideo` — the render WITH captions/inserts — while Fase 1 plays the clean cut; `sourceDurations` lets the UI clamp take extensions.)
+   (`captions`/`editData`/`finalVideo` only when they exist; the Fase-2 tab plays `finalVideo` — the render WITH captions/inserts — while Fase 1 plays the clean cut; `sourceDurations` lets the UI clamp take extensions; `awaitingStyle`/`style` drive the Estilo tab below.)
 2. Ensure `.claude/launch.json` has the config (adjust `--root` per session). The
    server takes the port by flag only, so pass the harness-assigned `$PORT` and
    set `autoPort` — port 4820 is often held by another session:
@@ -131,8 +134,44 @@ insert/hook chips — and **mark correction ranges**: park the needle, press `M`
 opens centred over the timeline — then type what should change. Many ranges per pass. Zoom: the slider is anchored on the needle, trackpad pinch
 on the pointer. Shortcuts live behind the **?** button at the bottom right.
 
-**When the user saves**, the UI writes `<edit>/preview_edits.json` (never touches
-edl.json) and `watch_edits.py` notifies you automatically. To apply:
+### The Estilo tab (between Fase 1 and Fase 2)
+
+The cut is approved and nothing about the LOOK of Fase 2 is decided yet. **Do not
+ask the style questions in chat** — set `"awaitingStyle": true` in `state.json`
+and the UI opens its own tab, sitting between FASE 1 and FASE 2:
+
+- **Tipo de edição** — `split` ("Tela dividida") or `split2` ("Tela dividida 2").
+- **Estilo de headline** — `outline`, `card`, `realce`, `misto`. Always two
+  lines, size fitted to the text (see the track reference).
+- **Estilo de legenda** — three animated (`karaoke`, `stacked`/"Empilhado",
+  `scatter`/"Disperso") and three static (`simples`, `serifada`, `classica`).
+- **Elementos da edição** — checkboxes: `tracking` (movimento de tracking),
+  `zoomAuto` (automação de zoom in), `zoomCuts` (zoom in/out nos cortes),
+  `musicAI` (trilha sonora com IA), plus a free-text observation field.
+
+Saving writes `<edit>/preview_style.json` (its OWN file — a style pick and a
+timeline correction are different screens at different moments, and one shared
+file would clobber the other) and `watch_edits.py` notifies you with the picks,
+**what was left out**, and the observation. Then: build Fase 2 from exactly those
+choices, **copy them into `state.json` as `style`**, clear `awaitingStyle`, and
+delete `preview_style.json`.
+
+Writing `style` back is not bookkeeping — it is what keeps the tab open. The tab
+is enabled while `awaitingStyle` OR `style` is set, so the user can return, change
+a caption style or tick one more element, and save again. That save arrives with
+`"rerender": true` and the watcher says **REFAÇA a Fase 2** — re-render with the
+new choices, don't treat it as a first pick.
+
+**The catalog lives in `STYLE_CATALOG` (app.js), not in a session.** A new editing
+or caption style is one entry there plus its implementation in the track
+reference; adding it in chat only, for one project, makes it invisible to every
+other project. What is in it today is the **short-form** vocabulary (tela
+dividida, karaokê/empilhado) — on a longform job the gate has nothing to offer
+yet, so skip `awaitingStyle` and ask the layer questions in chat until longform
+entries exist here.
+
+**When the user saves timeline edits**, the UI writes `<edit>/preview_edits.json`
+(never touches edl.json) and `watch_edits.py` notifies you automatically. To apply:
 - `notes[]` — free-text correction requests, each with `start`/`end` on the draft
   timeline plus `renderedStart`/`renderedEnd` on the current `cut.mp4`, and the
   `phase` tab the user was on. Use the RENDERED pair to find the moment in the
@@ -165,7 +204,11 @@ Goal: best take of every beat, cut on silence, graded image, clean `cut.mp4` for
 5. **Propose the cut strategy** (4–8 sentences: shape, takes, cut direction, grade direction, length estimate). **Wait for confirmation.**
 6. **Execute.** Produce `edl.json` (schema below; editor sub-agent brief for multi-take). Set cut edges from `speech_regions.py`, not raw Whisper times. Render: `render.py edl.json -o cut.mp4 --no-subtitles` (+`--voice-master` if wanted; longform: `--keep-resolution`).
 7. **Self-eval (numeric first).** `verify_cut.py edl.json cut.mp4` (longform: `--min-silence 1.2`). Clean → done. Flags → `timeline_view` ONLY the flagged junctions, fix, re-render. Cap 3 loops, then surface remaining flags to the user.
-8. **Show `cut.mp4` and wait for approval.** The phase gate. Then read the track reference: **`references/shortform.md`** or **`references/longform.md`**.
+8. **Show `cut.mp4` and wait for approval.** The phase gate.
+9. **Open the Estilo tab** — `"awaitingStyle": true` in `state.json`, and let the
+   user pick the editing style, the caption style and the edit elements in the UI
+   (see "The Estilo tab"). Do NOT ask this in chat. Only then read the track
+   reference: **`references/shortform.md`** or **`references/longform.md`**.
 
 ## Color grade
 
@@ -298,7 +341,8 @@ starts sounding like a different microphone.
 
 # PHASE 2 + 3 — read the track reference (after the gate)
 
-The cut is approved → ask which layers the user wants, then load **one** file:
+The cut is approved and the user picked the style in the UI (`preview_style.json`)
+→ load **one** file and build exactly what was picked:
 
 - **Vertical / Reels / TikTok / Shorts → read `references/shortform.md`.** Karaoke captions, static hook headline, dynamic camera, inserts, behind-the-subject, SFX, soundtrack.
 - **Horizontal / YouTube / tutorial / vlog → read `references/longform.md`.** Retention cut is there too (read it BEFORE Phase 1 on longform jobs), B-roll, lower-thirds, chapter cards, callouts, .srt + chapters, soundtrack.
@@ -321,6 +365,18 @@ On startup, read it if it exists and summarize the last session in one sentence 
 ## Anti-patterns
 
 - Starting Phase 2 before cut approval (the gate is a Hard Rule).
+- Asking the style questions in chat, or starting Phase 2 before the pick lands.
+  The gate screen exists so the user SEES what each style does — a chat list of
+  names asks them to choose blind. Set `awaitingStyle` and wait for
+  `preview_style.json`.
+- Treating an unchecked element as "não pediu". It is an explicit NO: the user
+  looked at "Movimento de tracking" and left it off. `watch_edits.py` prints the
+  `fora:` line for exactly this reason.
+- Changing a caption's look in the template without changing its preview in
+  `app.js` (`buildKaraokeDemo` / `buildStackedDemo`). The gate's previews render
+  the real faces, sizes and motion, scaled from 1080-wide — that is the whole
+  reason the user can choose by looking. A preview that lies about the style is
+  worse than no preview.
 - Reading `transcripts/*.json`, `captions.json`, `track.json`, `segments.json`, or template TSX into context — machine data; read `takes_packed.md`/helper output instead.
 - Editing `src/Main.tsx` — the template is data-driven; the JSON is the edit.
 - Hardcoding a bespoke graphic's timings inside `CustomGraphics.tsx`. Put the

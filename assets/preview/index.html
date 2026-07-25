@@ -7,7 +7,10 @@
 <link rel="icon" href="/assets/edvid-logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;700;900&display=swap" rel="stylesheet">
+<!-- Poppins italic 900 + Playfair italic 900 are NOT decoration here: the caption
+     previews render the real template styles, and the stacked style is built out
+     of exactly these faces (see STACK_MIXED in StackedCaptions.tsx). -->
+<link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,400;0,600;0,700;0,800;0,900;1,900&family=Playfair+Display:ital,wght@1,900&family=Lora:ital,wght@0,400;0,600;1,400;1,600&family=Libre+Baskerville:wght@700&family=Inter:wght@500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/app.css">
 </head>
 <body>
@@ -28,6 +31,9 @@
 
 <nav id="tabs" class="tabs">
   <button class="tab active" data-tab="1"><span class="tab-num">FASE 1</span> Corte</button>
+  <!-- the gate lives BETWEEN the phases and stays reachable: changing the style
+       after Fase 2 exists is a normal thing to want, not a one-shot decision -->
+  <button class="tab" data-tab="style">Estilo</button>
   <button class="tab" data-tab="2"><span class="tab-num">FASE 2</span> Visual</button>
 </nav>
 
@@ -37,6 +43,42 @@
       <div class="empty-icon">🎬</div>
       <h2>Aguardando o primeiro render</h2>
       <p>Assim que o <code>cut.mp4</code> existir, a timeline aparece aqui sozinha.</p>
+    </div>
+  </section>
+
+  <!-- The style tab: what Fase 2 gets built as. Groups come from STYLE_CATALOG.
+       No descriptions anywhere — each preview renders the thing it names. -->
+  <section id="styleSetup" class="setup hidden">
+    <div class="setup-inner">
+      <div class="setup-head">
+        <h2>Como vamos montar a Fase 2?</h2>
+      </div>
+
+      <div class="setup-group">
+        <div class="group-head"><span class="group-title">Tipo de edição</span></div>
+        <div id="optEdit" class="opt-grid"></div>
+      </div>
+
+      <div class="setup-group">
+        <div class="group-head"><span class="group-title">Estilo de headline</span></div>
+        <div id="optHeadline" class="opt-grid"></div>
+      </div>
+
+      <div class="setup-group">
+        <div class="group-head"><span class="group-title">Estilo de legenda</span></div>
+        <div id="optCaptions" class="opt-grid"></div>
+      </div>
+
+      <div class="setup-group">
+        <div class="group-head"><span class="group-title">Elementos da edição</span></div>
+        <div id="optElements" class="check-row"></div>
+      </div>
+
+      <div class="setup-actions">
+        <textarea id="setupNote" rows="1" placeholder="Observações para a Fase 2 (opcional)"></textarea>
+        <button id="setupGo" class="btn primary">Confirmar e iniciar a Fase 2</button>
+      </div>
+      <span id="setupSummary" class="setup-summary"></span>
     </div>
   </section>
 

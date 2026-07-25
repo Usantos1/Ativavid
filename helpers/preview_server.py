@@ -8,6 +8,8 @@ per-session it is fed by data only:
   - <edit>/preview_edits.json  WRITTEN BY THE UI when the user saves timeline
                                adjustments — the skill reads, validates, applies
                                and re-renders. The UI never touches edl.json.
+  - <edit>/preview_style.json  WRITTEN BY THE UI at the Fase 1 → Fase 2 gate:
+                               editing style, caption style, edit elements.
 
 Routes:
   /                     the app (from <skill>/assets/preview/)
@@ -16,7 +18,8 @@ Routes:
   /gen/waveform.json    min/max audio peaks of cut.mp4 (auto-(re)generated)
   /gen/thumbs/<n>.jpg   timeline filmstrip thumbs (auto-generated, 1 per 2s)
   /api/state    GET     state.json + mtimes (UI polls this to hot-reload)
-  /api/save     POST    body → <edit>/preview_edits.json (atomic)
+  /api/save     POST    body → <edit>/preview_edits.json (atomic), or
+                        <edit>/preview_style.json when body.type=="style-setup"
 
 Usage:
     uv run helpers/preview_server.py --root <videos_dir>/edit [--port 4820]
@@ -222,7 +225,12 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"error": "invalid JSON"}, 400)
             return
         body["savedAt"] = time.strftime("%Y-%m-%d %H:%M:%S")
-        out = self.root / "preview_edits.json"
+        # The style pick goes to its own file. It is a one-time setup decision,
+        # not a correction, and sharing preview_edits.json would make one save
+        # clobber the other (they are written at different moments, by different
+        # screens, and the skill consumes+deletes them independently).
+        name = "preview_style.json" if body.get("type") == "style-setup" else "preview_edits.json"
+        out = self.root / name
         tmp = out.with_suffix(".tmp")
         tmp.write_text(json.dumps(body, ensure_ascii=False, indent=2))
         tmp.replace(out)

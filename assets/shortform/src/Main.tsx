@@ -32,6 +32,8 @@ import segData from '../public/segments.json';
 import editData from '../public/edit-data.json';
 import {CustomGraphics} from './CustomGraphics';
 import {StackedCaptions} from './StackedCaptions';
+import {ScatterCaptions} from './ScatterCaptions';
+import {SimpleCaptions, SIMPLE_VARIANTS} from './SimpleCaptions';
 
 const {fontFamily} = loadFont('normal', {weights: ['400', '600', '900']});
 
@@ -50,14 +52,22 @@ export type EditData = {
   camera: {enabled: boolean; zooms: number[]; pushIn: number; targetX: number; targetY: number};
   hook: {
     enabled: boolean; endSec: number; lines: string[]; logo: string | null; sign: string | null;
-    // "card" (default): Poppins Black on a dark rounded card, written UPPERCASE.
-    // "outline": white text + thick black stroke, no card, sentence-case — the
-    // MrBeast/TikTok headline look. Optional style fields apply to "outline":
-    style?: 'card' | 'outline';
-    fontSizePx?: number;   // outline: headline size (default 68)
+    // `text` is preferred over `lines`: the headline is ALWAYS re-broken into
+    // exactly two balanced lines and the size fitted to them (see twoLines /
+    // fitHeadline). Anything in `lines` is joined back into one string first.
+    text?: string;
+    // "outline" (default): white text + thick black stroke, no card — the
+    //   MrBeast/TikTok headline.
+    // "card": Poppins Black on a dark rounded card, UPPERCASE, optional logo row.
+    // "realce": each line on its own solid orange marker block.
+    // "misto": line 1 light white, line 2 heavy orange.
+    style?: 'outline' | 'card' | 'realce' | 'misto';
+    fontSizePx?: number;   // auto-fit CEILING (alias of maxFontPx, kept for compat)
+    maxFontPx?: number;    // auto-fit ceiling (per-style default)
+    safeWidth?: number;    // auto-fit width budget (per-style default)
     strokePx?: number;     // outline: black stroke width (default 12)
-    paddingTop?: number;   // outline: distance from top (default 330 — sits lower)
-    lineHeight?: number;   // outline: default 1.06
+    paddingTop?: number;   // distance from top (per-style default)
+    lineHeight?: number;
   };
   captions: {
     enabled: boolean;
@@ -68,9 +78,15 @@ export type EditData = {
     // ranges (seconds) where the caption sits somewhere else — used by the
     // "tela dividida" style to park it on the seam between image and video
     windows?: {start: number; end: number; paddingBottom: number}[];
-    // "karaoke" (default, single line) or "stacked" (multi-font stack + pencil
-    // outline + click/scratch SFX). Stacked reads public/caption-cues.json.
-    style?: 'karaoke' | 'stacked';
+    // "karaoke" (default, single line), "stacked" (multi-font stack + pencil
+    // outline + click/scratch SFX, reads public/caption-cues.json) or "scatter"
+    // (serif, lowercase, scattered word-by-word — reads captions.json alone).
+    // The three STATIC ones ("simples", "serifada", "classica") live in
+    // SimpleCaptions.tsx and take no tunables — they ARE the tuning.
+    style?: 'karaoke' | 'stacked' | 'scatter' | 'simples' | 'serifada' | 'classica';
+    scatterOffsetY?: number;   // scatter: block centre, fraction of height
+    scatterFontSize?: number;  // scatter: ordinary word size (default 74)
+    scatterSafeWidth?: number; // scatter: layout width budget (default 940)
     stackedOffsetY?: number;
     fontScale?: number;
     sfx?: {enabled?: boolean; clickVolume?: number; scratchVolume?: number};
@@ -393,13 +409,68 @@ const Soundtrack: React.FC = () => {
 // ============ VISUAL HOOK (static headline in the first ~4s — always on) =======
 // Copy comes from edit-data.json `hook.lines` — written like a copywriting/
 // virality specialist from the cut transcript (curiosity gap · high stakes ·
-// specificity · urgency). Two styles via `hook.style`:
-//   "card" (default): Poppins Black, white, UPPERCASE, dark-gray rounded card,
-//     ALL LINES ONE SIZE, optional logo + symbol row above.
-//   "outline": white text + thick black stroke, no card, sentence-case, sits
-//     lower (paddingTop~330, may overlap the top of the head) — TikTok/MrBeast
-//     headline look. Tunables: fontSizePx, strokePx, paddingTop, lineHeight.
-// Both are static (fade + rise only) with a soft whoosh on entry.
+// specificity · urgency). Four styles via `hook.style`, ALL of them two lines
+// with the size fitted to the text:
+//   "outline" (default): white + thick black stroke, no card, sentence-case,
+//     sits lower (paddingTop~330, may overlap the top of the head) — TikTok.
+//   "card": Poppins Black on a dark-gray rounded card, UPPERCASE, optional
+//     logo + symbol row above.
+//   "realce": each line on its own solid orange marker block.
+//   "misto": line 1 light white, line 2 heavy orange.
+// All static (fade + rise only) with a soft whoosh on entry. Tunables:
+// fontSizePx / maxFontPx (ceiling for the fit — NOT a fixed size), safeWidth,
+// strokePx, paddingTop, lineHeight.
+// ---- ALWAYS two lines, size fitted to them ----------------------------------
+// The headline has one job: be read in a glance. A third line shrinks the type
+// and costs exactly that, so whatever comes in is re-broken into TWO balanced
+// lines and the size is fitted to the widest one. Author `hook.text` as a plain
+// sentence and let this do the breaking — hand-broken `lines` get rejoined.
+const HL_MIN = 40;
+
+type HlStyle = {weights: [number, number]; cap: number; safeW: number; lh: number; top: number};
+const HL_STYLES: Record<string, HlStyle> = {
+  outline: {weights: [800, 800], cap: 92, safeW: 900, lh: 1.02, top: 330},
+  card: {weights: [900, 900], cap: 82, safeW: 820, lh: 1.06, top: 120},
+  realce: {weights: [900, 900], cap: 86, safeW: 830, lh: 1.04, top: 300},
+  misto: {weights: [400, 900], cap: 98, safeW: 900, lh: 0.98, top: 300},
+};
+
+const hlWidth = (text: string, size: number, weight: number) =>
+  text
+    ? measureText({text, fontFamily, fontSize: size, fontWeight: weight, letterSpacing: '-1px'}).width
+    : 0;
+
+// Balance by MEASURED width, not word count: "É assim que vai" and "ficar a sua
+// headline" are 4 words and 3 words but nearly the same width — counting words
+// would break it in the wrong place.
+function twoLines(text: string, weights: [number, number]): [string, string] {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (words.length < 2) return [words[0] ?? '', ''];
+  let best: [string, string] = [words[0], words.slice(1).join(' ')];
+  let bestDiff = Infinity;
+  for (let i = 1; i < words.length; i++) {
+    const a = words.slice(0, i).join(' ');
+    const b = words.slice(i).join(' ');
+    const d = Math.abs(hlWidth(a, 100, weights[0]) - hlWidth(b, 100, weights[1]));
+    if (d < bestDiff) {
+      bestDiff = d;
+      best = [a, b];
+    }
+  }
+  return best;
+}
+
+// Width scales with size, but letterSpacing (-1px per gap) does NOT — so the
+// first estimate is off by a few px on long lines. One refinement pass at the
+// estimated size fixes that; iterating further buys nothing.
+function fitHeadline(lines: [string, string], s: HlStyle): number {
+  const widest = (size: number) =>
+    Math.max(hlWidth(lines[0], size, s.weights[0]), hlWidth(lines[1], size, s.weights[1]));
+  let size = Math.floor((s.safeW / Math.max(1, widest(100))) * 100);
+  size = clamp(Math.floor((s.safeW / Math.max(1, widest(size))) * size), HL_MIN, s.cap);
+  return size;
+}
+
 const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
   const f = useCurrentFrame();
   const H = D.hook;
@@ -408,29 +479,71 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
   const op = Math.min(enter, exit);
   const y = interpolate(enter, [0, 1], [24, 0]);
 
-  if (H.style === 'outline') {
-    const stroke = H.strokePx ?? 12;
+  const styleId = H.style ?? 'outline';
+  const S = HL_STYLES[styleId] ?? HL_STYLES.outline;
+  const raw = (H.text ?? (H.lines || []).join(' ')).trim();
+  const lines = twoLines(styleId === 'card' ? raw.toUpperCase() : raw, S.weights);
+  // fontSizePx is a CEILING, never a fixed size. As a hard override it silently
+  // defeats the whole point: at a size the text cannot fit in, the line wraps and
+  // the headline becomes three lines again — which is exactly what happened with
+  // the uppercase "card" style at the project's inherited fontSizePx of 66.
+  const cap = H.fontSizePx ?? H.maxFontPx ?? S.cap;
+  const size = fitHeadline(lines, {...S, cap, safeW: H.safeWidth ?? S.safeW});
+  const lh = H.lineHeight ?? S.lh;
+  const top = H.paddingTop ?? S.top;
+  const shell: React.CSSProperties = {
+    opacity: op,
+    translate: `0px ${y}px`,
+    textAlign: 'center',
+    fontFamily,
+    lineHeight: lh,
+    letterSpacing: -1,
+    // the two-line promise is structural: if a fit is ever off, this overflows
+    // visibly instead of quietly wrapping into a third line
+    whiteSpace: 'nowrap',
+  };
+
+  if (styleId === 'realce') {
     return (
-      <AbsoluteFill style={{justifyContent: 'flex-start', alignItems: 'center', paddingTop: H.paddingTop ?? 330}}>
+      <AbsoluteFill style={{justifyContent: 'flex-start', alignItems: 'center', paddingTop: top}}>
         <Sfx src="whoosh.mp3" volume={0.1} />
-        <div
-          style={{
-            opacity: op, translate: `0px ${y}px`, textAlign: 'center', fontFamily,
-            fontWeight: 800, fontSize: H.fontSizePx ?? 68, color: '#fff',
-            lineHeight: H.lineHeight ?? 1.06, letterSpacing: -1,
-            WebkitTextStroke: `${stroke}px #000`, paintOrder: 'stroke fill',
-            filter: 'drop-shadow(0 6px 14px rgba(0,0,0,0.45))', padding: '0 60px',
-          }}
-        >
-          {H.lines.map((l, i) => (<div key={i}>{l}</div>))}
+        <div style={{...shell, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10}}>
+          {lines.filter(Boolean).map((l, i) => (
+            <div
+              key={i}
+              style={{
+                background: '#ff5200',
+                color: '#fff',
+                fontWeight: 900,
+                fontSize: size,
+                padding: '0.08em 0.3em 0.16em',
+                borderRadius: 12,
+                boxShadow: '0 10px 28px rgba(0,0,0,0.45)',
+              }}
+            >
+              {l}
+            </div>
+          ))}
         </div>
       </AbsoluteFill>
     );
   }
 
-  return (
-    <AbsoluteFill>
-      <AbsoluteFill style={{justifyContent: 'flex-start', alignItems: 'center', paddingTop: 120}}>
+  if (styleId === 'misto') {
+    return (
+      <AbsoluteFill style={{justifyContent: 'flex-start', alignItems: 'center', paddingTop: top}}>
+        <Sfx src="whoosh.mp3" volume={0.1} />
+        <div style={{...shell, filter: 'drop-shadow(0 6px 16px rgba(0,0,0,0.55))'}}>
+          <div style={{fontWeight: 400, fontSize: size, color: '#fff'}}>{lines[0]}</div>
+          <div style={{fontWeight: 900, fontSize: size, color: '#ff5200'}}>{lines[1]}</div>
+        </div>
+      </AbsoluteFill>
+    );
+  }
+
+  if (styleId === 'card') {
+    return (
+      <AbsoluteFill style={{justifyContent: 'flex-start', alignItems: 'center', paddingTop: top}}>
         <Sfx src="whoosh.mp3" volume={0.1} />
         <div style={{opacity: op, translate: `0px ${y}px`, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 28}}>
           {H.logo || H.sign ? (
@@ -439,12 +552,32 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
               {H.sign ? <Img src={staticFile(H.sign)} style={{width: 128, filter: 'drop-shadow(0 8px 20px rgba(0,0,0,0.45))'}} /> : null}
             </div>
           ) : null}
-          {/* headline card — caption-style text, ALL LINES ONE SIZE */}
-          <div style={{background: '#232326', borderRadius: 24, padding: '28px 46px', textAlign: 'center', fontFamily, fontWeight: 900, fontSize: 54, color: '#fff', lineHeight: 1.08, letterSpacing: -1, textShadow: '0 4px 20px rgba(0,0,0,0.55)', boxShadow: '0 18px 50px rgba(0,0,0,0.45)'}}>
-            {H.lines.map((l, i) => (<div key={i}>{l}</div>))}
+          <div style={{background: '#232326', borderRadius: 24, padding: '28px 46px', textAlign: 'center', fontFamily, fontWeight: 900, fontSize: size, color: '#fff', lineHeight: lh, letterSpacing: -1, textShadow: '0 4px 20px rgba(0,0,0,0.55)', boxShadow: '0 18px 50px rgba(0,0,0,0.45)'}}>
+            {lines.filter(Boolean).map((l, i) => (<div key={i}>{l}</div>))}
           </div>
         </div>
       </AbsoluteFill>
+    );
+  }
+
+  const stroke = H.strokePx ?? 12;
+  return (
+    <AbsoluteFill style={{justifyContent: 'flex-start', alignItems: 'center', paddingTop: top}}>
+      <Sfx src="whoosh.mp3" volume={0.1} />
+      <div
+        style={{
+          ...shell,
+          fontWeight: 800,
+          fontSize: size,
+          color: '#fff',
+          WebkitTextStroke: `${stroke}px #000`,
+          paintOrder: 'stroke fill',
+          filter: 'drop-shadow(0 6px 14px rgba(0,0,0,0.45))',
+          padding: '0 60px',
+        }}
+      >
+        {lines.filter(Boolean).map((l, i) => (<div key={i}>{l}</div>))}
+      </div>
     </AbsoluteFill>
   );
 };
@@ -472,7 +605,11 @@ export const Main: React.FC = () => {
       {D.captions.enabled
         ? D.captions.style === 'stacked'
           ? <StackedCaptions />
-          : <Karaoke />
+          : D.captions.style === 'scatter'
+            ? <ScatterCaptions />
+            : SIMPLE_VARIANTS[D.captions.style as string]
+              ? <SimpleCaptions variant={D.captions.style as string} />
+              : <Karaoke />
         : null}
     </AbsoluteFill>
   );
