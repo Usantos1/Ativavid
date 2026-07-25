@@ -119,8 +119,15 @@ Every edit session gets the same interactive interface in the user's preview pan
    set `autoPort` — port 4820 is often held by another session:
    `{"name": "edvid-preview", "runtimeExecutable": "sh", "runtimeArgs": ["-c", "exec python3 <skill>/helpers/preview_server.py --root '<edit>' --port \"$PORT\""], "autoPort": true, "port": 4820}`
 3. `preview_start` with name `edvid-preview`.
-4. **Arm the watcher** so the user's saves reach you without them having to ask:
-   `Monitor(command="python3 <skill>/helpers/watch_edits.py '<edit>'", description="marcações do preview", persistent=true)`
+4. **Arm the watcher IN THE SAME TURN as `preview_start`** — never later, never
+   "when the user starts editing":
+   `Monitor(command="python3 <skill>/helpers/watch_edits.py '<edit>'", description="escolhas e marcações salvas no preview", persistent=true)`
+
+   Without it the UI still writes `preview_style.json` / `preview_edits.json` and
+   **nothing happens** — the user clicks Salvar, sees the confirmation toast, and
+   waits for work that was never triggered. The failure is silent on both ends:
+   they think they told you, and you never heard. `ps aux | grep watch_edits`
+   is the one-second check when you are unsure.
 
 **Keep state.json fresh** — bump `phase` and `message` at each milestone (cut rendered, cut approved, Phase 2 rendered…). The UI polls and hot-reloads by itself; waveform + filmstrip regenerate automatically when cut.mp4 changes.
 
@@ -399,6 +406,10 @@ On startup, read it if it exists and summarize the last session in one sentence 
 - Burning captions/overlays with ffmpeg/PIL — Phase 2 is Remotion-only.
 - Assuming the color profile — ask about LOG explicitly.
 - Re-transcribing cached sources; re-rendering Phase 1 when only Phase 2 changed.
+- Launching the preview without arming `watch_edits.py` in the same turn. This
+  is the one failure mode where the user reasonably believes they handed you a
+  decision and you never got it — the toast says saved, the file is written, and
+  no one is reading it.
 - Building a per-session preview UI — launch the standard interface and feed it `state.json`. (Improving `assets/preview/` itself IS allowed when the user asks for a UI change; it is shared, so the improvement lands for every project.)
 - Applying `preview_edits.json` blindly — validate new edges against `speech_regions.py` first (flag clipped words to the user).
 - Assuming what kind of video it is. Look first, ask second, edit last.
