@@ -44,6 +44,14 @@ ENDBREAK = (".", ",", "!", "?", "…", ";", ":")
 PAUSE_MS = 400
 MAX_WORDS = 4
 
+# A solo word is a design beat — it drops everything else off the screen to hold
+# one word. That only reads if the word is actually ON screen long enough. Below
+# this it renders as a one-frame flash the viewer registers as a glitch, and the
+# stack it interrupted looks like it dropped a word. Fast connective speech
+# routinely produces 150ms words, so this fires often; those words belong inside
+# a neighbouring stack, not alone on screen.
+MIN_SOLO_MS = 340
+
 
 def strip_p(t: str) -> str:
     return t.strip(" .,!?;:…\"'-")
@@ -93,6 +101,21 @@ def is_degenerate(w: dict) -> bool:
     return len(strip_p(w["text"])) <= 2 or (t in STOP and len(strip_p(w["text"])) <= 3)
 
 
+def too_brief(w: dict) -> bool:
+    """Spoken too fast to survive as a solo cue, whatever the word is.
+
+    Duration, not spelling — `is_degenerate` rejects words that are too SMALL to
+    carry a beat; this rejects words that are too QUICK. An emphatic, meaningful
+    word said in 160ms still cannot be read alone on screen.
+    """
+    return (w["endMs"] - w["startMs"]) < MIN_SOLO_MS
+
+
+def unsolo(w: dict) -> bool:
+    """Should this one-word cue be folded into a neighbour instead of standing alone?"""
+    return is_degenerate(w) or too_brief(w)
+
+
 def group_cues(words: list[dict]) -> list[list[dict]]:
     cues: list[list[dict]] = []
     cur: list[dict] = []
@@ -108,10 +131,17 @@ def group_cues(words: list[dict]) -> list[list[dict]]:
         if brk:
             cues.append(cur)
             cur = []
-    # merge degenerate one-word cues ("do", "B") backwards, then forwards
+    # merge unstandable one-word cues backwards, then forwards — either too small
+    # to carry a beat ("do", "B") or spoken too fast to be read alone
     merged: list[list[dict]] = []
     for cw in cues:
-        if len(cw) == 1 and is_degenerate(cw[0]) and merged and cw[0]["startMs"] - merged[-1][-1]["endMs"] <= PAUSE_MS:
+        if (
+            len(cw) == 1
+            and unsolo(cw[0])
+            and merged
+            and len(merged[-1]) < MAX_WORDS
+            and cw[0]["startMs"] - merged[-1][-1]["endMs"] <= PAUSE_MS
+        ):
             merged[-1].append(cw[0])
         else:
             merged.append(cw)
@@ -121,8 +151,9 @@ def group_cues(words: list[dict]) -> list[list[dict]]:
         cw = merged[i]
         if (
             len(cw) == 1
-            and is_degenerate(cw[0])
+            and unsolo(cw[0])
             and i + 1 < len(merged)
+            and len(merged[i + 1]) < MAX_WORDS
             and merged[i + 1][0]["startMs"] - cw[0]["endMs"] <= PAUSE_MS
         ):
             merged[i + 1].insert(0, cw[0])

@@ -30,6 +30,11 @@ from pathlib import Path
 
 POP_DB = -8.0     # junction window louder than this → suspected pop
 HOT_DB = -6.0     # pre/post window louder than this → suspected clipped word
+# A range this far under the median range reads as "I can't hear that bit" on a
+# phone speaker. Deliberately looser than voice_levels' 5dB source threshold:
+# by this point a gain has been applied and the remaining gap is intentional
+# delivery dynamics, which should not be flattened to zero.
+LEVEL_DROP_DB = 4.0
 
 
 def probe_duration(path: Path) -> float:
@@ -55,6 +60,33 @@ def peak_db(path: Path, start: float, dur: float) -> float:
     )
     m = re.search(r"max_volume:\s*(-?[\d.]+)\s*dB", r.stderr)
     return float(m.group(1)) if m else -99.0
+
+
+def rms_db(path: Path, start: float, dur: float) -> float:
+    """Overall RMS (dBFS) of a window. -99 if silent/empty.
+
+    RMS, not peak: this measures how loud a passage FEELS across its length,
+    which is what an under-level take fails at. Peak only reports the single
+    loudest plosive and a whispered clause can share a peak with a shouted one.
+    """
+    if start < 0:
+        dur += start
+        start = 0.0
+    if dur <= 0:
+        return -99.0
+    r = subprocess.run(
+        ["ffmpeg", "-v", "info", "-ss", f"{start:.3f}", "-t", f"{dur:.3f}",
+         "-i", str(path), "-vn", "-af", "astats=measure_perchannel=none",
+         "-f", "null", "-"],
+        capture_output=True, text=True,
+    )
+    m = re.search(r"RMS level dB:\s*(-?[\d.]+|-?inf)", r.stderr)
+    if not m:
+        return -99.0
+    try:
+        return float(m.group(1))
+    except ValueError:
+        return -99.0
 
 
 def audio_scan(path: Path, min_silence: float) -> tuple[list[tuple[float, float]], float, float]:
@@ -128,11 +160,19 @@ def main() -> None:
         post_f = [ex.submit(peak_db, args.video, j + 0.05, 0.08) for j in junctions]
         sil_f = ex.submit(audio_scan, args.video, args.min_silence)
         blk_f = ex.submit(black_scan, args.video)
+        # Each range's level ON THE OUTPUT TIMELINE, so gains already applied.
+        out_spans = []
+        _t = 0.0
+        for d in durs:
+            out_spans.append((_t, d))
+            _t += d
+        rms_f = [ex.submit(rms_db, args.video, s, d) for s, d in out_spans]
         pres = [f.result() for f in pre_f]
         jcts = [f.result() for f in jct_f]
         posts = [f.result() for f in post_f]
         silences, peak, flat = sil_f.result()
         blacks = blk_f.result()
+        rmss = [f.result() for f in rms_f]
 
     flags = 0
     rows = []
@@ -159,6 +199,24 @@ def main() -> None:
         sil_rows.append((s, e, near_i))
         flags += 1
 
+    # Range level balance: does any take sit well under the rest of the cut?
+    #
+    # This is the post-render counterpart to voice_levels.py. voice_levels finds
+    # under-level speech in the SOURCE and sizes a gain_db; this checks whether
+    # the gain actually landed, by comparing each range against the median of
+    # the others in the finished render. Unlike voice_levels' run detector, the
+    # reference here is not a threshold the range was selected by, so it does
+    # converge — a corrected take stops being flagged.
+    valid_rms = [x for x in rmss if x > -90]
+    ref_rms = sorted(valid_rms)[len(valid_rms) // 2] if valid_rms else -99.0
+    level_rows = []
+    for i, x in enumerate(rmss):
+        delta = x - ref_rms
+        low = x > -90 and delta <= -LEVEL_DROP_DB
+        if low:
+            flags += 1
+        level_rows.append((i, x, delta, "LOW-LEVEL" if low else "ok"))
+
     dur_ok = abs(actual - expected) <= 0.5
     if not dur_ok:
         flags += 1
@@ -176,6 +234,9 @@ def main() -> None:
                           for n, j, p, c, q, v in rows],
             "silences": [{"start": round(s, 2), "end": round(e, 2),
                           "near_junction": n} for s, e, n in sil_rows],
+            "range_levels": [{"index": i, "rms_db": round(x, 1),
+                              "delta_db": round(d, 1), "verdict": v}
+                             for i, x, d, v in level_rows],
             "black": [{"start": s, "end": e} for s, e in blacks],
             "flags": flags,
         }, ensure_ascii=False))
@@ -199,6 +260,16 @@ def main() -> None:
         print(f"silences ≥ {args.min_silence:.2f}s: none")
     print(f"black frames: {', '.join(f'{s:.2f}–{e:.2f}s' for s, e in blacks) or 'none'}"
           f"{'  CHECK' if blacks else ''}")
+    n_low = sum(1 for _, _, _, v in level_rows if v != "ok")
+    print(f"range levels (RMS vs median range, low < {-LEVEL_DROP_DB:.0f} dB): "
+          f"{'balanced' if n_low == 0 else f'{n_low} under-level'}")
+    for i, x, d, v in level_rows:
+        if v != "ok":
+            beat = ranges[i].get("beat", "")
+            g = float(ranges[i].get("gain_db", 0.0) or 0.0)
+            gtxt = f", gain_db {g:+.1f} applied" if g else ", no gain_db set"
+            print(f"  [{i:02d}] {x:6.1f} dBFS  {d:+5.1f} dB  {beat}  {v}{gtxt}"
+                  f"  → raise gain_db (voice_levels.py sizes it)")
     if flags == 0:
         print("VERDICT: clean — no visual inspection needed")
     else:
