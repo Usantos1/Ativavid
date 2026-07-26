@@ -73,6 +73,12 @@ An unchecked box is an explicit NO, not a silence. Copy the picks into
      not generated at all.
    - `public/segments.json` — cumulative cut boundaries **measured from the
      encoded segments' frame counts, never summed from the EDL's seconds**.
+     **Regenerate it after EVERY Phase-1 re-render.** A stale segments.json is
+     invisible: the render succeeds, the overlays look plausible, and every cut
+     is off by a frame or three. Measured on this project after a re-grade — the
+     file still carried EDL-summed times and drifted +1 frame by the 3rd cut and
+     +3 by the 20th, while `VIDEO_LAG` quietly absorbed the first frame of it and
+     made the error look fixed.
      ffmpeg quantises each segment to whole frames, so EDL arithmetic drifts a
      fraction of a frame per cut and the error ACCUMULATES (~5 frames by 40s on a
      28-cut video). Anything that must land on a cut then sits visibly early.
@@ -92,6 +98,18 @@ An unchecked box is an explicit NO, not a silence. Copy the picks into
                open("remotion/public/segments.json","w"), indent=2)
      EOF
      ```
+   - **VERIFY segments.json against the picture — do not trust it.** `scdet`
+     scores every frame by how much it differs from the one before, so a hard
+     cut is a spike. The spike frame in `cut.mp4` must equal
+     `round(segments[i].start * fps)`:
+     ```bash
+     ffmpeg -v info -i cut.mp4 -vf "select='between(n,344,358)',setpts=N/30/TB,scdet=threshold=0" \
+       -an -f null - 2>&1 | grep scd.score
+     ```
+     In the RENDER the same cut lands one frame later — that is the
+     `OffthreadVideo` lag `VIDEO_LAG` exists for. Both numbers together are the
+     proof: cut spike at frame F in cut.mp4, at F+1 in the render, overlay
+     window opening at F+1.
    - `pexels_search.py "<query>" --out-dir public/pexels --count 3 --orientation portrait`
 3. **Write `public/edit-data.json`** — the whole edit in one file (schema in
    `assets/shortform/README.md`): durationSec (exact ffprobe of cut.mp4),

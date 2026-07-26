@@ -390,6 +390,11 @@ On startup, read it if it exists and summarize the last session in one sentence 
   windows in an `edit-data.json` array (a key the template ignores, e.g.
   `splitInserts`) and map over it — otherwise the graphic is invisible to the
   preview timeline and the user cannot see or retime it.
+- Re-rendering Phase 1 without regenerating `segments.json`. Every Phase-2
+  overlay that must land on a cut is indexed off that file; stale, it is off by
+  frames and nothing errors. Worse, a `VIDEO_LAG`-style constant can absorb the
+  first frame of the drift and make a broken file look correct at the one
+  boundary you happen to check.
 - `timeline_view` on every boundary — run `verify_cut.py` and image ONLY the flags.
 - N single-frame images when one `contact_sheet.py` / `--candidates` montage answers it.
 - Setting cut edges from Whisper word times (drift/stretch/collapsed repeats) — use `speech_regions.py`.
