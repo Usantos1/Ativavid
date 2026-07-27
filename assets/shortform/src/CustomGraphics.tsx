@@ -59,18 +59,84 @@ const LAYOUT = {
   bottom: {zoom: 1.0, focusY: 225},
 } as const;
 
+// A cut transition: a light beam whips across the frame while a short flash
+// blooms, with a click on the cut. Data, not JSX — `transitions` in
+// edit-data.json — so the windows stay visible to the preview timeline and
+// retimeable without touching code.
+type CutFlash = {at: number; intensity?: number; sfx?: string; volume?: number};
+
 export const CustomGraphics: React.FC = () => {
-  const splits = ((editData as {splitInserts?: SplitInsert[]}).splitInserts) ?? [];
-  if (splits.length) return <SplitScreen items={splits} />;
-  return null;
-  // Example — mount worked examples (or your own) with per-video timings:
-  // return (
-  //   <>
-  //     <TimelineGraphic startSec={3.3} endSec={5.6} />
-  //     <ScriptGraphic startSec={9.9} endSec={11.9} lines={['Esse vídeo foi 100%', 'editado com IA.']} />
-  //     <ShapesGraphic startSec={12.85} endSec={14.15} />
-  //   </>
-  // );
+  const d = editData as {splitInserts?: SplitInsert[]; transitions?: CutFlash[]};
+  const splits = d.splitInserts ?? [];
+  const flashes = d.transitions ?? [];
+  return (
+    <>
+      {splits.length ? <SplitScreen items={splits} /> : null}
+      {flashes.length ? <CutFlashes items={flashes} /> : null}
+    </>
+  );
+};
+
+// ============ CUT FLASH =======================================================
+// Starts BEFORE the cut and peaks on it. A transition that begins on the cut
+// frame reads as a flash after the fact; leading it by two frames makes the
+// light look like the thing that caused the change.
+// `at` is the cut time exactly as segments.json states it — VIDEO_LAG lines it
+// up with the frame the picture actually changes on, same as the split windows.
+const FLASH_LEAD = 2; // frames before the cut
+const FLASH_LEN = 7; // total, ~230ms at 30fps
+
+const CutFlashes: React.FC<{items: CutFlash[]}> = ({items}) => {
+  const frame = useCurrentFrame();
+  const {fps, width} = useVideoConfig();
+
+  const active = items.find((it) => {
+    const c = Math.round(it.at * fps) + VIDEO_LAG;
+    return frame >= c - FLASH_LEAD && frame < c - FLASH_LEAD + FLASH_LEN;
+  });
+  if (!active) return null;
+
+  const c = Math.round(active.at * fps) + VIDEO_LAG;
+  const k = active.intensity ?? 1;
+  const p = (frame - (c - FLASH_LEAD)) / (FLASH_LEN - 1); // 0..1 pela janela
+
+  // beam sweeps left→right, brightest as it crosses centre
+  const x = interpolate(p, [0, 1], [-1.35 * width, 1.35 * width]);
+  const beam = interpolate(p, [0, 0.35, 1], [0, 1 * k, 0], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+  });
+  // the bloom is short and lands ON the cut, not spread across the window
+  const bloom = interpolate(frame, [c - 1, c, c + 2], [0, 0.5 * k, 0], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+  });
+
+  return (
+    <AbsoluteFill style={{pointerEvents: 'none'}}>
+      <AbsoluteFill style={{backgroundColor: '#fff', opacity: bloom, mixBlendMode: 'screen'}} />
+      <AbsoluteFill style={{overflow: 'hidden'}}>
+        <div
+          style={{
+            position: 'absolute',
+            top: '-30%',
+            left: 0,
+            width: width * 0.46,
+            height: '160%',
+            transform: `translateX(${x.toFixed(1)}px) rotate(-18deg)`,
+            background:
+              'linear-gradient(90deg,rgba(255,255,255,0) 0%,rgba(255,255,255,0.95) 50%,rgba(255,255,255,0) 100%)',
+            opacity: beam,
+            mixBlendMode: 'screen',
+            filter: 'blur(16px)',
+          }}
+        />
+      </AbsoluteFill>
+      <Sequence from={c} durationInFrames={10} layout="none">
+        <Sfx src={active.sfx ?? 'cut-click.mp3'} volume={active.volume ?? 0.9} />
+      </Sequence>
+    </AbsoluteFill>
+  );
 };
 
 // ============ SPLIT SCREEN ("tela dividida") ==================================

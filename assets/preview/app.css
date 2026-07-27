@@ -677,10 +677,10 @@ kbd {
   justify-content: center;
 }
 /* 9:16 mockup of the editing style */
-.opt-preview.frame { height: 110px; }
+.opt-preview.frame { height: 100px; }
 .opt-preview.frame svg { height: 100%; width: auto; display: block; }
 /* caption demos: a crop of the caption band, at the real proportions */
-.opt-preview.cap { height: 74px; width: 182px; }
+.opt-preview.cap { height: 64px; width: 182px; }
 .opt-preview.hlbox { height: 64px; }
 
 /* Short panes (the preview often lives in a half-height pane): shrink the

@@ -154,7 +154,8 @@ and the UI opens its own tab, sitting between FASE 1 and FASE 2:
   `scatter`/"Disperso") and three static (`simples`, `serifada`, `classica`).
 - **Elementos da edição** — checkboxes: `tracking` (movimento de tracking),
   `zoomAuto` (automação de zoom in), `zoomCuts` (zoom in/out nos cortes),
-  `musicAI` (trilha sonora com IA), plus a free-text observation field.
+  `flashCut` (flash na transição), `musicAI` (trilha sonora com IA), plus a
+  free-text observation field.
 
 Saving writes `<edit>/preview_style.json` (its OWN file — a style pick and a
 timeline correction are different screens at different moments, and one shared

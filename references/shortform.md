@@ -50,6 +50,7 @@ the Estilo tab at the end of Fase 1; every key maps to something here:
 | `elements.tracking` | `face_track.py` + `track.json`; OFF → skip it, fixed frame |
 | `elements.zoomAuto` | the slow push-in inside each segment (`+0.04/segment`) |
 | `elements.zoomCuts` | the hard zoom change ON each cut (~1.10–1.22, cycles) |
+| `elements.flashCut` | `transitions[]` in edit-data.json — see "Flash na transição" |
 | `elements.musicAI` | Phase 3 via `treblo_music.py`; OFF → deliver with voice only |
 | `note` | free text — read it, it overrides the defaults above |
 
@@ -78,10 +79,9 @@ An unchecked box is an explicit NO, not a silence. Copy the picks into
      is off by a frame or three. Measured on this project after a re-grade — the
      file still carried EDL-summed times and drifted +1 frame by the 3rd cut and
      +3 by the 20th, while `VIDEO_LAG` quietly absorbed the first frame of it and
-     made the error look fixed.
-     ffmpeg quantises each segment to whole frames, so EDL arithmetic drifts a
-     fraction of a frame per cut and the error ACCUMULATES (~5 frames by 40s on a
-     28-cut video). Anything that must land on a cut then sits visibly early.
+     made the error look fixed. The mechanism: ffmpeg quantises each segment to
+     whole frames, so EDL arithmetic drifts a fraction of a frame per cut and the
+     error ACCUMULATES. Anything that must land on a cut then sits visibly early.
      ```bash
      python - <<'EOF'
      import subprocess, glob, json
@@ -260,6 +260,41 @@ pick, then render ONE still for design approval before the full render.
 **De-conflict:** the hook owns the upper zone for its window — push any insert
 that wants the same zone to after `hook.endSec` (e.g. move a 2.5s cutaway to
 ~4.1s).
+
+## Flash na transição (`elements.flashCut`)
+
+A light beam whips across the frame with a bloom and a dry click. Data-driven:
+one entry per cut in `transitions[]`, `at` being the cut time **exactly as
+segments.json states it** — `VIDEO_LAG` lines it up with the frame the picture
+changes on, same as the split windows. Never index it off its own clock.
+
+```json
+"transitions": [{"at": 11.7}]
+```
+
+Default placement when the element is ON: **one per split-insert entry, not per
+cut.** The video has ~27 cuts; a flash on each one stops reading as an accent and
+starts reading as a strobe. Put it where the layout changes, which is where the
+transition means something. Optional per entry: `intensity` (default 1), `sfx`,
+`volume`.
+
+- **The beam LEADS the cut by 2 frames.** Starting it on the cut frame reads as a
+  flash after the fact — the eye sees the picture change, then the light. Leading
+  it makes the light look like the cause.
+- **Blur is what separates a beam from a wash.** At 26px it read as a general
+  brightening; 16px reads as a beam. Raise opacity and lower blur together.
+- **CHECK THE SFX FILE BEFORE TRUSTING IT.** The pack's `click2.mp3` peaks at
+  −25 dB — it is inaudible under speech at any sane volume, and the mix looks
+  fine while nothing is heard. `ffmpeg -i <sfx> -af volumedetect -f null -` is
+  the check. `cut-click.mp3` (−2 dB, 57ms) is the one that reads.
+- **And check WHERE the transient sits inside the file.** The source this click
+  came from had 180ms of silence before the hit; delayed to the cut it would have
+  landed 180ms late — after a 230ms effect had already finished. Trim the lead-in
+  so the transient is at t=0, then delay by the cut time.
+- **The delivered click is mixed by ffmpeg, not by Remotion.** The delivery
+  re-mux discards Remotion's audio (it drifts), so add the SFX as another input
+  with `adelay=<frame/fps*1000>`. The `<Sfx>` in the component only sounds in a
+  plain `remotion render`.
 
 ## Style: "tela dividida" (split screen) — two variants
 
