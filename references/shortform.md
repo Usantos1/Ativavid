@@ -44,9 +44,11 @@ the Estilo tab at the end of Fase 1; every key maps to something here:
 
 | Pick | What it means |
 |---|---|
+| `edit: "limpa"` | **the default** — NO split inserts, full frame throughout. See the "Limpa" section |
 | `edit: "split" \| "split2"` | the split-screen variant below — every image insert uses it |
 | `headline: "outline" \| "card" \| "realce" \| "misto"` | `hook.style` in edit-data.json |
 | `captions: "karaoke" \| "stacked" \| "scatter" \| "simples" \| "serifada" \| "classica"` | `captions.style` in edit-data.json (+ the director step for stacked) |
+| `accent` (hex) | `hook.accent` + `captions.accent`. Only `realce`/`misto`/`stacked` paint it; `accentUsed:false` means the picked styles have none |
 | `elements.tracking` | `face_track.py` + `track.json`; OFF → skip it, fixed frame |
 | `elements.zoomAuto` | the slow push-in inside each segment (`+0.04/segment`) |
 | `elements.zoomCuts` | the hard zoom change ON each cut (~1.10–1.22, cycles) |
@@ -128,8 +130,21 @@ Never edit `src/Main.tsx`. Bespoke graphics go in `src/CustomGraphics.tsx`
 
 Four looks via `hook.style`, picked by the user on the Estilo tab: **`outline`**
 (default, white + thick black stroke), **`card`** (dark rounded card, UPPERCASE,
-optional logo row), **`realce`** (each line on a solid orange marker block),
-**`misto`** (line 1 light white, line 2 heavy orange).
+optional logo row), **`realce`** (each line on a solid accent marker block),
+**`misto`** (line 1 light white, line 2 heavy accent).
+
+### The accent colour (`accent` in preview_style.json)
+
+`realce`, `misto` and the `stacked` caption are the only things that paint an
+accent; the default is `#ff5200`. The user picks it on the Estilo tab and it
+arrives as a hex — set it on **`hook.accent`** and **`captions.accent`** in
+edit-data.json so headline and caption stay the same colour. `preview_style.json`
+also carries `accentUsed`: when it is `false`, the picked styles have no accent
+and the colour is not a request to find somewhere to put one.
+
+Hardcoding `#ff5200` anywhere in the template re-breaks this — the preview will
+show the user's colour and the render will show orange, which is worse than not
+offering the choice.
 
 **Author `hook.text` as one plain sentence.** Whatever you write — `text`, or a
 hand-broken `lines[]` — is joined and re-broken into exactly TWO lines balanced by
@@ -295,6 +310,29 @@ transition means something. Optional per entry: `intensity` (default 1), `sfx`,
   re-mux discards Remotion's audio (it drifts), so add the SFX as another input
   with `adelay=<frame/fps*1000>`. The `<Sfx>` in the component only sounds in a
   plain `remotion render`.
+
+## Style: "Limpa" (`edit: "limpa"`) — no split inserts
+
+The whole frame stays on the speaker. **Leave `splitInserts` out of
+`edit-data.json` entirely** (an empty array is fine; a populated one is not) and
+skip the split director step. Everything else is unchanged — captions, hook,
+zoom, tracking, soundtrack and behind-the-subject all still apply, and they are
+where the edit gets its life when there is no art on screen.
+
+Two consequences of the frame never being split, both easy to miss:
+
+- **The hook keeps its full-frame padding.** `hook.paddingTop` is tuned per split
+  layout (738 / ~920 for a seam that does not exist here). Under `limpa` the
+  headline places against the frame, not a seam — start from the template default
+  and render one still, rather than carrying a split value over.
+- **`captions.windows` has nothing to dodge.** Those entries only exist to move
+  the caption off a split seam. Leave the array empty; a stale window from a
+  previous render shoves the caption up for no reason.
+
+**This is the default** (`STYLE_CATALOG.edits[0]`), so it is also what a user who
+never opens the Estilo tab gets. Split inserts are opted INTO, not out of. It is a
+legitimate final look — a talking-head cut, images to be placed by hand later, or
+simply no B-roll worth showing — not a placeholder.
 
 ## Style: "tela dividida" (split screen) — two variants
 

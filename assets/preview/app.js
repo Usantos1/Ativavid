@@ -74,6 +74,25 @@ const ICON = {
 const STYLE_CATALOG = {
   edits: [
     {
+      // First on purpose: defaultStyle() takes edits[0], so this is also the
+      // default for every new project — a clean full-frame cut, with inserts as
+      // something the user opts into.
+      id: 'limpa',
+      name: 'Limpa',
+      mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
+        <rect x=".5" y=".5" width="65" height="117" rx="7" fill="#0b0e13" stroke="rgba(255,255,255,.12)"/>
+        <rect x="3" y="3" width="60" height="112" rx="5" fill="rgba(255,255,255,.05)"/>
+        <circle cx="33" cy="48" r="13" fill="rgba(255,255,255,.16)"/>
+        <path d="M12 115a21 21 0 0142 0z" fill="rgba(255,255,255,.16)"/>
+        <rect x="14" y="14" width="38" height="4.4" rx="2.2" fill="rgba(255,255,255,.5)"/>
+        <rect x="20" y="21.5" width="26" height="4.4" rx="2.2" fill="rgba(255,255,255,.3)"/>
+        <rect x="12" y="74" width="42" height="11" rx="5.5" fill="#0b0e13" stroke="rgba(9,181,183,.65)"/>
+        <rect x="16" y="78.5" width="12" height="2.4" rx="1.2" fill="rgba(9,181,183,.9)"/>
+        <rect x="30" y="78.5" width="8" height="2.4" rx="1.2" fill="rgba(255,255,255,.5)"/>
+        <rect x="40" y="78.5" width="10" height="2.4" rx="1.2" fill="rgba(255,255,255,.5)"/>
+      </svg>`,
+    },
+    {
       id: 'split',
       name: 'Tela dividida',
       mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
@@ -388,7 +407,9 @@ function buildHeadlineDemo(host, styleId) {
     const d = el('div', '', box);
     d.style.fontSize = `${size}px`;
     d.style.fontWeight = String(S.weights[i]);
-    if (styleId === 'misto') d.style.color = i === 1 ? '#ff5200' : '#fff';
+    // var(), not a literal — an inline colour would beat the accent variable and
+    // this preview would keep painting orange while the others followed the pick
+    if (styleId === 'misto') d.style.color = i === 1 ? 'var(--hl-accent)' : '#fff';
     d.textContent = l;
   });
 }
@@ -557,6 +578,11 @@ let S = {
   pendingIn: null, // an IN is open, waiting for its OUT
   editingNote: null, // id of the note the editor is bound to
   style: null, // current picks {edit, captions, elements:{…}, note}
+  jcut: null, // jcut_timeline from edl.json — real output positions per take
+  // A1/A2 live folded inside the audio track. They answer "where is the J-cut",
+  // which is a question you ask once — so the default is closed, and the choice
+  // is remembered rather than re-made every reload.
+  jcutOpen: localStorage.getItem('edvid.jcutOpen') === '1',
 };
 
 function defaultStyle() {
@@ -566,6 +592,7 @@ function defaultStyle() {
     edit: STYLE_CATALOG.edits[0].id,
     headline: STYLE_CATALOG.headlines[0].id,
     captions: STYLE_CATALOG.captions[0].id,
+    accent: ACCENT_DEFAULT,
     elements,
     note: '',
   };
@@ -585,17 +612,50 @@ const el = (tag, cls, parent) => {
 };
 
 // ---------- draft layout (output-timeline positions) ----------
+/* Per-take J-cut geometry, in seconds. `lead` is how far the take's sound runs
+ * ahead of its picture; `tail` is what was trimmed off its end. Both are fixed
+ * frame counts, so they survive the user trimming a take in the UI. */
+function jcutGeom(i) {
+  const j = S.jcut && S.jcut[i];
+  if (!j) return { lead: 0, tail: 0 };
+  return {
+    lead: Math.max(0, (j.video_start_in_output || 0) - (j.audio_start_in_output || 0)),
+    tail: (j.tail_trim_frames || 0) / (S.fps || 30),
+  };
+}
+
+/* The draft timeline has to model the J-cut, not just sum the ranges: a take's
+ * picture is shorter than its range by the lead it gives up plus the tail it had
+ * trimmed. Summing raw ranges made the ruler read 8.07s over a 7.60s render, and
+ * every clip after the first sat late by the accumulated lead. Each item also
+ * carries its AUDIO placement (aout/adur), which is what the A1/A2 lanes draw —
+ * derived here so the lanes follow the user's trims instead of going stale. */
 function draftLayout() {
   let t = 0;
-  return S.draft.map((r) => {
-    if (r.removed) return { ...r, out: t, dur: 0 };
-    const dur = r.end - r.start;
-    const item = { ...r, out: t, dur };
+  let at = 0;
+  return S.draft.map((r, i) => {
+    if (r.removed) return { ...r, out: t, dur: 0, aout: at, adur: 0 };
+    const g = jcutGeom(i);
+    const span = r.end - r.start;
+    const adur = Math.max(0, span - g.tail);
+    const dur = Math.max(0, adur - g.lead);
+    const item = { ...r, out: t, dur, aout: Math.max(0, at - g.lead), adur, lead: g.lead };
     t += dur;
+    at = item.aout + adur;
     return item;
   });
 }
 function renderedLayout() {
+  // Under a J-cut the rendered positions come from render.py, not from summing
+  // the ranges — the takes overlap in sound and the picture of each one starts
+  // a few frames in. Summing here would place every clip after the first too late.
+  if (S.jcut && S.jcut.length === S.rendered.length) {
+    return S.rendered.map((r, i) => ({
+      ...r,
+      out: S.jcut[i].video_start_in_output,
+      dur: S.jcut[i].video_duration,
+    }));
+  }
   let t = 0;
   return S.rendered.map((r) => {
     const dur = r.end - r.start;
@@ -684,6 +744,11 @@ async function applyState(data) {
   $('stateMessage').textContent = S.state.message || '';
 
   const ranges = (data.edl && data.edl.ranges) || [];
+  // J-cut timeline, written by render.py. Under a J-cut the picture of every take
+  // after the first starts a few frames into itself, so the rendered clip is
+  // SHORTER than end-start and the takes do not simply abut. Without this the
+  // filmstrip and the needle drift a little further at each junction.
+  S.jcut = (data.edl && data.edl.jcut_timeline) || null;
   S.rendered = ranges.map((r) => ({ source: r.source, start: +r.start, end: +r.end, beat: r.beat || '' }));
   S.draft = S.rendered.map((r) => ({ ...r, removed: false, orig: { start: r.start, end: r.end } }));
   S.selected = -1;
@@ -866,6 +931,7 @@ function updateScrollRange() {
 function renderAll() {
   timelineEl.style.width = `${contentWidth()}px`;
   renderClips();
+  renderJcutAudio();
   renderChips();
   renderNotes();
   drawRuler();
@@ -953,6 +1019,104 @@ function closeNoteEditor() {
 
 // ---------- style setup ----------
 const styleName = (group, id) => (STYLE_CATALOG[group].find((o) => o.id === id) || {}).name || '—';
+// the accent is a free colour, not a named entry in a list — it names itself
+const accentName = (hex) => String(hex || ACCENT_DEFAULT).toUpperCase();
+const normHex = (v) => {
+  let s = String(v || '').trim().replace(/^#/, '');
+  if (/^[0-9a-f]{3}$/i.test(s)) s = s.split('').map((c) => c + c).join(''); // #abc → #aabbcc
+  return /^[0-9a-f]{6}$/i.test(s) ? `#${s.toLowerCase()}` : null;
+};
+
+/* Which styles actually paint the accent. Kept as data because the honest UI
+ * note depends on it: with `karaoke` + `outline` picked, nothing on screen uses
+ * the colour, and saying so beats letting the user wonder why the previews did
+ * not move. Mirrors the template — update both together. */
+const ACCENT_USERS = {headlines: ['realce', 'misto'], captions: ['stacked']};
+const ACCENT_DEFAULT = '#ff5200';
+
+function applyAccent() {
+  $('styleSetup').style.setProperty('--hl-accent', S.style.accent || ACCENT_DEFAULT);
+}
+
+/* One spectral swatch (the OS picker) plus a hex field — no preset row. A grid of
+ * canned colours competes with the style cards for attention and still never has
+ * the brand colour the user actually wants. */
+function renderAccents() {
+  const host = $('optAccent');
+  host.innerHTML = '';
+  const cur = normHex(S.style.accent) || ACCENT_DEFAULT;
+
+  const custom = el('label', 'swatch custom', host);
+  custom.title = 'Escolher cor';
+  custom.style.setProperty('--swatch-fill', cur);
+  const inp = el('input', '', custom);
+  inp.type = 'color';
+  inp.value = cur;
+
+  const field = el('div', 'hex-field', host);
+  el('span', 'hex-hash', field).textContent = '#';
+  const hex = el('input', 'hex-input', field);
+  hex.type = 'text';
+  hex.spellcheck = false;
+  hex.maxLength = 7;
+  hex.value = cur.slice(1).toUpperCase();
+  hex.setAttribute('aria-label', 'Cor de destaque em hexadecimal');
+
+  const commit = (v, {fromHexField} = {}) => {
+    const n = normHex(v);
+    if (!n) return false;
+    S.style.accent = n;
+    custom.style.setProperty('--swatch-fill', n);
+    inp.value = n;
+    if (!fromHexField) hex.value = n.slice(1).toUpperCase();
+    applyAccent();   // live — no full rebuild, so dragging the picker stays smooth
+    updateAccentNote();
+    updateSummary();
+    return true;
+  };
+
+  inp.addEventListener('input', () => commit(inp.value));
+  // typing: accept as soon as it parses, but never fight the user mid-keystroke
+  hex.addEventListener('input', () => {
+    field.classList.toggle('bad', !normHex(hex.value) && hex.value.trim() !== '');
+    commit(hex.value, {fromHexField: true});
+  });
+  // leaving an unparseable value snaps back rather than silently keeping the old
+  // colour behind text that says something else
+  hex.addEventListener('blur', () => {
+    field.classList.remove('bad');
+    hex.value = (normHex(S.style.accent) || ACCENT_DEFAULT).slice(1).toUpperCase();
+  });
+  hex.addEventListener('keydown', (e) => { if (e.key === 'Enter') hex.blur(); });
+
+  updateAccentNote();
+}
+
+const accentUsed = () =>
+  ACCENT_USERS.headlines.includes(S.style.headline)
+  || ACCENT_USERS.captions.includes(S.style.captions);
+
+function updateAccentNote() {
+  const where = [
+    ACCENT_USERS.headlines.includes(S.style.headline) && 'na headline',
+    ACCENT_USERS.captions.includes(S.style.captions) && 'na legenda',
+  ].filter(Boolean);
+  $('accentNote').textContent = where.length
+    ? `aplicada ${where.join(' e ')}`
+    : 'os estilos escolhidos não usam destaque';
+}
+
+/* Separate from renderSetup so the live colour drag can refresh it without
+ * rebuilding every demo. Skipping it there left the footer naming the previous
+ * colour while the previews already showed the new one. */
+function updateSummary() {
+  const on = STYLE_CATALOG.elements.filter((e) => S.style.elements[e.id]);
+  const accentBit = accentUsed() ? ` · destaque ${accentName(S.style.accent)}` : '';
+  $('setupSummary').textContent =
+    `${styleName('edits', S.style.edit)} · headline ${styleName('headlines', S.style.headline)}` +
+    ` · legenda ${styleName('captions', S.style.captions)}${accentBit} · ` +
+    (on.length ? on.map((e) => e.name).join(', ') : 'sem elementos extras');
+}
 
 // The Estilo tab. It sits BETWEEN the phases and is always reachable once the
 // catalog applies to this job: changing the caption style after Fase 2 exists,
@@ -1009,9 +1173,14 @@ function renderSetup() {
     // the ghost only earns its space where there is a single option to explain
     if (opts.length < 2) el('div', 'opt ghost', host).textContent = 'mais estilos em breve';
   };
+  // set BEFORE the demos are built: buildHeadlineDemo reads the accent through
+  // var(), so the variable has to be in place when the previews first paint
+  applyAccent();
+
   radios($('optEdit'), 'edits', S.style.edit);
   radios($('optHeadline'), 'headlines', S.style.headline);
   radios($('optCaptions'), 'captions', S.style.captions);
+  renderAccents();
 
   const host = $('optElements');
   host.innerHTML = '';
@@ -1024,14 +1193,13 @@ function renderSetup() {
     el('div', 'chk-name', row).textContent = e.name;
   }
 
-  const on = STYLE_CATALOG.elements.filter((e) => S.style.elements[e.id]);
-  $('setupSummary').textContent =
-    `${styleName('edits', S.style.edit)} · headline ${styleName('headlines', S.style.headline)}` +
-    ` · legenda ${styleName('captions', S.style.captions)} · ` +
-    (on.length ? on.map((e) => e.name).join(', ') : 'sem elementos extras');
+  updateSummary();
 }
 
 $('styleSetup').addEventListener('click', (e) => {
+  // the accent controls manage themselves (live, no rebuild) — keep the card
+  // handler off them, or a click in the hex field would count as a style pick
+  if (e.target.closest('#optAccent')) return;
   const opt = e.target.closest('.opt:not(.ghost)');
   if (opt) {
     const key = {edits: 'edit', headlines: 'headline', captions: 'captions'}[opt.dataset.group];
@@ -1060,6 +1228,11 @@ $('setupGo').addEventListener('click', async () => {
     headlineName: styleName('headlines', S.style.headline),
     captions: S.style.captions,
     captionsName: styleName('captions', S.style.captions),
+    accent: S.style.accent,
+    accentName: accentName(S.style.accent),
+    // whether the picked styles actually paint it — so the skill does not go
+    // hunting for an accent in a look that has none
+    accentUsed: accentUsed(),
     elements: { ...S.style.elements },
     elementNames: STYLE_CATALOG.elements
       .filter((e) => S.style.elements[e.id])
@@ -1126,6 +1299,59 @@ function renderClips() {
       el('div', 'handle l', c).dataset.i = i;
       el('div', 'handle r', c).dataset.i = i;
     }
+  });
+}
+
+/* J-cut audio lanes.
+ * The point is legibility, not decoration: on one lane an overlap is invisible,
+ * because two blocks that overlap in time just look like one continuous block.
+ * Alternating takes across A1/A2 is what makes the "J" readable — exactly how it
+ * reads in Premiere. The overlap itself gets a marker on the incoming block, so
+ * the user can see how many frames of voice arrive before the picture.
+ */
+function renderJcutAudio() {
+  const t1 = $('trkAudioA1'), t2 = $('trkAudioA2');
+  const l1 = $('laneAudioA1'), l2 = $('laneAudioA2');
+  const btn = $('jcutToggle');
+  l1.innerHTML = ''; l2.innerHTML = '';
+
+  const has = !!(S.jcut && S.jcut.length && S.tab !== 'style');
+  // the caret only appears when there is a J-cut to expand; otherwise the chip
+  // stays an ordinary track icon
+  btn.classList.toggle('disclose', has);
+  btn.disabled = !has;
+  btn.setAttribute('aria-expanded', String(has && S.jcutOpen));
+  btn.title = !has ? 'Áudio (mix)'
+    : S.jcutOpen ? 'Áudio (mix) — recolher as faixas do J-cut (A1/A2)'
+                 : 'Áudio (mix) — expandir as faixas do J-cut (A1/A2)';
+
+  const on = has && S.jcutOpen;
+  t1.classList.toggle('hidden', !on);
+  t2.classList.toggle('hidden', !on);
+  if (!on) return;
+
+  // drawn off the DRAFT layout so the blocks move with the user's trims
+  draftLayout().forEach((r, i) => {
+    if (r.removed && r.adur === 0) return;
+    const lane = i % 2 === 0 ? l1 : l2;
+    const b = el('div', 'ablock', lane);
+    b.style.left = `${r.aout * S.pps}px`;
+    b.style.width = `${Math.max(r.adur * S.pps, 6)}px`;
+    el('div', 'ablock-label', b).textContent = r.beat || r.source || '';
+
+    // the lead: sound already playing while the previous take is still on screen
+    if (r.lead > 1e-6) {
+      const ov = el('div', 'ablock-lead', b);
+      ov.style.width = `${r.lead * S.pps}px`;
+    }
+    const tf = (S.jcut[i] || {}).tail_trim_frames || 0;
+    let tip = `${r.beat || r.source}\náudio ${r.adur.toFixed(2)}s`;
+    if (r.lead > 1e-6) {
+      tip += `\nJ-cut: ${Math.round(r.lead * S.fps)}f (${Math.round(r.lead * 1000)}ms) `
+           + 'de voz antes da imagem';
+    }
+    if (tf) tip += `\ncauda aparada ${tf}f`;
+    b.title = tip;
   });
 }
 
@@ -1325,6 +1551,14 @@ function seekDraft(tDraft) {
 let drag = null; // {type:'scrub'|'trim'|'chip-trim'|'chip-move', ...}
 
 panel.addEventListener('pointerdown', (e) => {
+  // The gutter is chrome, not timeline. Without this guard a pointerdown on a
+  // track icon fell through to the scrub branch below, which both yanked the
+  // needle to 0 (the gutter is left of t=0, so it computes a negative time) and
+  // called setPointerCapture on the panel — retargeting the following click and
+  // swallowing it, so a real click on the A1/A2 disclosure never fired while a
+  // programmatic .click() did.
+  if (e.target.closest('.track-label') || e.target.closest('button')) return;
+
   const handle = e.target.closest('.handle');
   const clip = e.target.closest('.clip');
   const chip = e.target.closest('.chip.insert');
@@ -1612,6 +1846,17 @@ function toast(msg, ms) {
 document.querySelectorAll('.tl-chip[data-icon]').forEach((c) => {
   c.innerHTML = ICON[c.dataset.icon] || '';
 });
+
+// A1/A2 accordion, folded into the audio track
+$('jcutToggle').addEventListener('click', () => {
+  if (!(S.jcut && S.jcut.length)) return;
+  S.jcutOpen = !S.jcutOpen;
+  localStorage.setItem('edvid.jcutOpen', S.jcutOpen ? '1' : '0');
+  renderJcutAudio();
+  updateScrollRange();
+  positionNeedle();
+});
+
 poll();
 rafLoop();
 // the headline fit is MEASURED, so it is wrong until Poppins is actually

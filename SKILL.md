@@ -19,7 +19,7 @@ description: Edvid — edit any video by conversation, in phases. Two tracks —
 ## Hard Rules (production correctness — non-negotiable)
 
 1. **The phase gate is real.** No Phase-2 work before the cut is approved.
-2. **Per-segment extract → lossless `-c copy` concat**, never a single-pass filtergraph.
+2. **Per-segment extract → lossless `-c copy` concat**, never a single-pass filtergraph. (Under the default J-cut the picture and the sound of a take are extracted as separate ranges and the audio tracks are summed — that is the one sanctioned mix, and the video path is still per-segment + lossless concat.)
 3. **30ms audio fades at every segment boundary** (encoded in render.py).
 4. **Never cut inside a word** — snap to word boundaries from the transcript.
 5. **Pad every cut edge** (30–200ms window; trail slightly longer than lead). Cut on silence whenever possible.
@@ -85,7 +85,8 @@ Phase 1:
 - **`pack_transcripts.py --edit-dir <dir>`** — transcripts → `takes_packed.md` (phrase-level, breaks on ≥0.5s silence). **The** reading view: 1/10 the tokens of raw JSON.
 - **`speech_regions.py <video>`** — acoustic speech intervals via silencedetect. The source of truth for cut EDGES (Whisper times drift/stretch). Answers *where* speech is — never *how loud* it is.
 - **`voice_levels.py <video> [--edit-dir <dir>] [--edl edl.json] [--drop-db 5]`** — the source of truth for speech LEVEL. Learns the noise floor (Ridler-Calvard intermeans, not a percentile) and the speaker's own median from the recording itself, then flags every phrase, sub-phrase run, and EDL range sitting ≥5 dB under that median and sizes a `gain_db` for each. Catches the failure nothing else sees: a whispered aside or a trailing-off sentence where every word is present, the transcript is perfect, `speech_regions` says "speech", `verify_cut` finds no pop and no dead air — and the viewer still hits a passage they cannot hear. **Run it in Phase 1 before writing the EDL.**
-- **`render.py <edl.json> -o cut.mp4 --no-subtitles [--voice-master] [--keep-resolution] [--jobs N]`** — per-segment extract (grade + fades, **parallel**) → lossless concat → optional voice master → loudnorm. Short-form fps is automatic: **30fps for 30fps+ sources, else 24** (longform keeps source fps via `--keep-resolution`). Set `edit-data.json` `fps` to match the resulting `cut.mp4`.
+- **`detect_color.py <video> [--json]`** — resolves NORMAL vs LOG from the file instead of asking. Tier 1 metadata (HLG/PQ declare themselves; Apple Log's signature is ProRes 10-bit 4:2:2 + BT.2020 primaries + EMPTY transfer; vendor tags when present), Tier 2 image statistics when the metadata is silent — which is common, since a Sony shooting S-Log3 to H.264 often declares plain bt709 and any transcode drops the tags. Returns the profile, a **confidence**, the evidence, and the `grade` to apply (measured from the footage for non-Apple LOG). Only `confidence: low` should send you back to the user.
+- **`render.py <edl.json> -o cut.mp4 --no-subtitles [--voice-master] [--keep-resolution] [--jobs N] [--no-jcut] [--jcut-lead N] [--jcut-tail-trim N]`** — per-segment extract (grade + fades, **parallel**) → **J-cut overlap assembly (default)** or lossless concat → optional voice master → loudnorm. Writes `jcut_timeline` into the EDL: the real output positions, which is what everything downstream must index off. Short-form fps is automatic: **30fps for 30fps+ sources, else 24** (longform keeps source fps via `--keep-resolution`). Set `edit-data.json` `fps` to match the resulting `cut.mp4`.
 - **`verify_cut.py <edl.json> <cut.mp4> [--min-silence 1.2]`** — numeric self-eval: duration, per-junction pop/clipped-word probes, dead air, black frames, clipping, **and range level balance** (each range's RMS vs the median range; `LOW-LEVEL` under −4 dB). ~350 tokens of text instead of N images. The range-balance line is the convergence test for a `gain_db` fix — unlike `voice_levels`' run detector it compares a range against its peers rather than against a threshold it was selected by, so a corrected take actually stops being flagged.
 - **`grade.py <in> -o <out>`** — grade presets/raw filters. **`--candidates "a=<filter>;b=<preset>;original=" --frame <t> -o cmp.png`** renders N looks on the SAME frame into one labeled montage.
 - **`timeline_view.py <video> <start> <end>`** — filmstrip+waveform PNG for ONE flagged spot, not a scan tool.
@@ -131,9 +132,32 @@ Every edit session gets the same interactive interface in the user's preview pan
 
 **Keep state.json fresh** — bump `phase` and `message` at each milestone (cut rendered, cut approved, Phase 2 rendered…). The UI polls and hot-reloads by itself; waveform + filmstrip regenerate automatically when cut.mp4 changes.
 
-The timeline shows one track per KIND: markers, captions, video, audio, **text**
-overlays (hook), **images** (inserts + any data-driven CustomGraphics windows),
-soundtrack. Anything you leave in code instead of data simply will not appear.
+The timeline shows one track per KIND: markers, captions, video, audio (the mix),
+**A1 / A2** (the J-cut takes), **text** overlays (hook), **images** (inserts + any
+data-driven CustomGraphics windows), soundtrack. Anything you leave in code instead
+of data simply will not appear.
+
+**A1 / A2 are folded inside the audio track**, opened by the caret on its chip —
+they answer "where is the J-cut", which is a question you ask once, so they do not
+sit on screen competing with the mix. They exist whenever the EDL carries a
+`jcut_timeline`; the caret only appears then. The open/closed choice is remembered
+across reloads (`localStorage`), so do not expect a fixed initial state.
+
+Takes alternate between the two lanes, exactly as two audio tracks read in an NLE
+— on a single lane an overlap is invisible, because two blocks sharing time just
+look like one long block. The hatched orange head on each block is the lead: how
+much voice arrives before that take's picture. Hover gives frames and tail trim.
+
+Two structural constraints, learned the hard way:
+- **Nothing in the ancestor chain of `.track-label` may have `overflow:hidden`** —
+  the gutter mask rides `position:sticky` there, and an overflow ancestor makes a
+  new scroll container and strands it. That rules out the usual max-height
+  accordion; the reveal animates the blocks instead.
+- **The panel's `pointerdown` must ignore the gutter.** It falls through to a
+  scrub branch that calls `setPointerCapture` on the panel, which retargets the
+  following click — a real click on a gutter control was swallowed entirely (while
+  a programmatic `.click()` worked, which is what makes it confusing to diagnose)
+  and the needle jumped to 0, since the gutter sits left of t=0.
 
 **What the user can do in the UI:** scrub, trim take edges, delete takes, drag
 insert/hook chips — and **mark correction ranges**: park the needle, press `M`
@@ -147,7 +171,16 @@ The cut is approved and nothing about the LOOK of Fase 2 is decided yet. **Do no
 ask the style questions in chat** — set `"awaitingStyle": true` in `state.json`
 and the UI opens its own tab, sitting between FASE 1 and FASE 2:
 
-- **Tipo de edição** — `split` ("Tela dividida") or `split2` ("Tela dividida 2").
+- **Tipo de edição** — `limpa` ("Limpa": no split inserts, full frame throughout —
+  **the default**, and the right pick for a talking-head cut or when the user will
+  place images by hand later), `split` ("Tela dividida"), `split2` ("Tela
+  dividida 2").
+- **Cor de destaque** — `accent`, a hex. Sits BEFORE the text styles, because it
+  is what they paint with. One spectral swatch (the OS picker) plus a hex field,
+  synced both ways — no preset row. Only `realce`/`misto` headlines and the
+  `stacked` caption paint an accent, so the save also carries **`accentUsed`**;
+  when it is `false` the picked styles have none and the colour is not an
+  instruction to invent a place for one.
 - **Estilo de headline** — `outline`, `card`, `realce`, `misto`. Always two
   lines, size fitted to the text (see the track reference).
 - **Estilo de legenda** — three animated (`karaoke`, `stacked`/"Empilhado",
@@ -201,22 +234,60 @@ Goal: best take of every beat, cut on silence, graded image, clean `cut.mp4` for
 1. **Inventory.** URL source? `ingest_url.py` first (`--section` when only a range of a longform video matters). `ffprobe` every source. `transcribe_batch.py` (or `transcribe.py`) → `pack_transcripts.py` → read `takes_packed.md`. Note dimensions/orientation and whether it looks flat/LOG. Material you can't picture from the transcript → `watch_video.py` for a one-Read visual survey.
 2. **Pre-scan** `takes_packed.md` for verbal slips, mis-speaks, and dead-air-stretched words (Whisper stretches a word's end across silence — verify long "phrases" against `speech_regions.py`/waveform before trusting them). **Then run `voice_levels.py` on every source** — the transcript is level-blind, so an inaudible passage reads exactly like a normal one. Anything it flags is a decision to make BEFORE the EDL: boost it with `gain_db`, or cut the take entirely.
 3. **Converse.** Describe what you see; ask questions shaped by the material (content type, target length/aspect, pacing, must-keep/must-cut). No fixed checklist.
-4. **Ask ONE question about the image: NORMAL or LOG?** — "Esse vídeo foi gravado
-   em perfil NORMAL ou em LOG?" Nothing else; do not ask which LOG.
-   - **NORMAL** → no grade. Clean cut only. `"grade": ""` in the EDL. A standard
-     profile already carries its look; "improving" it is how you lose the match
-     with the rest of the user's material.
-   - **LOG** → YOU identify the flavour from the file, then apply the grade that
-     belongs to it (see "LOG profiles" below). A LOG source is flat by design and
-     needs a real expansion; the wrong curve's grade looks wrong.
+4. **Detect the colour profile — do NOT ask.** Run `detect_color.py <source>`.
+   The answer is in the file; asking put a measurable question on the user.
+   - **`rec709` (normal)** → no grade. `"grade": ""`. A standard profile already
+     carries its look; "improving" it loses the match with the user's other material.
+   - **LOG / HLG / PQ** → apply the helper's `grade` field and say so in one line.
+     Apple Log uses its approved preset; any other LOG gets an expansion **measured
+     from that footage**, not a guessed vendor curve.
+   - **`confidence: low`** → the ONLY case that still asks. It means the statistics
+     are ambiguous — a bright, shadowless scene has the same lifted black floor as
+     a LOG curve. Show what was measured, then ask.
+   Still show the `--candidates` montage before committing a LOG grade: detection
+   picks the curve, the user picks the look.
 5. **Propose the cut strategy** (4–8 sentences: shape, takes, cut direction, grade direction, length estimate). **Wait for confirmation.**
-6. **Execute.** Produce `edl.json` (schema below; editor sub-agent brief for multi-take). Set cut edges from `speech_regions.py`, not raw Whisper times. Render: `render.py edl.json -o cut.mp4 --no-subtitles` (+`--voice-master` if wanted; longform: `--keep-resolution`).
+6. **Execute.** Produce `edl.json` (schema below; editor sub-agent brief for multi-take). Set cut edges from `speech_regions.py`, not raw Whisper times. Render: `render.py edl.json -o cut.mp4 --no-subtitles` (+`--voice-master` if wanted; longform: `--keep-resolution`). **The J-cut runs by default** — see below; you do not ask for it and you do not configure it per project.
 7. **Self-eval (numeric first).** `verify_cut.py edl.json cut.mp4` (longform: `--min-silence 1.2`). Clean → done. Flags → `timeline_view` ONLY the flagged junctions, fix, re-render. Cap 3 loops, then surface remaining flags to the user.
 8. **Show `cut.mp4` and wait for approval.** The phase gate.
 9. **Open the Estilo tab** — `"awaitingStyle": true` in `state.json`, and let the
    user pick the editing style, the caption style and the edit elements in the UI
    (see "The Estilo tab"). Do NOT ask this in chat. Only then read the track
    reference: **`references/shortform.md`** or **`references/longform.md`**.
+
+## J-cut — the default Phase-1 cleanup
+
+Takes are OVERLAPPED, not butted. The outgoing take's audio runs to its natural
+end; the incoming take's audio starts `lead` frames earlier **on its own track**
+and the two are summed; the incoming PICTURE starts where the outgoing audio ends,
+skipping `lead` frames of its own head. The voice arrives before the face.
+
+Why it is the default: a straight concat leaves a beat of silence at every
+junction — the outgoing take keeps its trailing pad and the incoming one starts
+with its own. Measured on a real 3-take edit: **130ms and 140ms**. Small on paper,
+a clear pause in the room. The J-cut removes it and the takes interlock.
+
+Defaults, in `render.py`: **lead 5 frames**, **tail trim up to 2 frames**.
+Override per project with `"jcut": {"lead_frames": N, "tail_trim_frames": N}`;
+turn it off with `"jcut": false` or `--no-jcut` (single-range EDLs skip it anyway).
+
+Three things that are not obvious:
+
+- **Tighten with the TAIL, not the lead.** A bigger lead also pushes the picture
+  deeper into the incoming take's speech, which reads as entering mid-word. The
+  tail trim tightens the seam and leaves the picture entry alone. Measured: 5f
+  lead alone gave 62/46ms of interlock; adding a 2f tail trim doubled it to
+  129/112ms with the picture still entering 140ms into the speech.
+- **The tail trim is measured, never blind.** `render.py` reads the silence
+  actually present at the end of each range and trims at most that (keeping 10ms).
+  A fixed 2 frames would eventually decapitate a word on a take that ends tight.
+- **Sync is by construction:** `video_in = audio_in + lead` and
+  `video_offset = audio_offset + lead`. Break that pairing and the take drifts.
+
+`render.py` writes a `jcut_timeline` block into the EDL — the real output
+positions. Everything downstream (preview timeline, `segments.json`, Phase-2
+overlays) must index off THAT, not off the sum of the ranges: the J-cut output is
+shorter than `Σ(end−start)`, so summing places every take after the first too late.
 
 ## Color grade
 
@@ -225,11 +296,19 @@ Reason about the image, don't preset-blind. Mental model ASC CDL: per channel `o
 - **Iterate on ONE frame via a candidates montage, and let the user choose:**
   `grade.py <src> --candidates "punch=eq=contrast=1.15:saturation=1.25;suave=…;original=" --frame <t> -o edit/verify/grades.png` — one image, all looks labeled, side by side. Only render the full cut once the grade is locked.
 - **Build from spaceless filters** so the string survives the EDL: `eq=…`, `colorbalance=…`, `colorlevels=…`. No `curves` with spaces (breaks filtergraph parsing).
+- **The grade always runs at 8-bit.** `render.py` prepends `format=yuv420p` to the
+  grade segment of the vf chain, because ffmpeg's `colorlevels` is broken on 9–14
+  bit RGB — on a 10-bit source it collapses the frame to a constant TV black
+  (measured `YAVG=64/1023`, `YBITDEPTH=1` on an iPhone Apple Log ProRes) while
+  behaving correctly at 8- and 16-bit. `curves`, `colorbalance`, `hue` and `eq` are
+  bit-depth-safe. Keep that guard in front of any new grade caller.
 - **Standard/Rec.709** → light corrective or none. A user `.cube` goes first as `lut3d=`.
 
-### LOG profiles — identify, then apply
+### LOG profiles — what `detect_color.py` is deciding
 
-The user only says "LOG". Read the file and decide:
+`detect_color.py` resolves this automatically; the table below is what it encodes
+and what you need when reading its evidence or extending it. Probe by hand only
+when the helper reports `low` confidence:
 
 ```bash
 ffprobe -v error -select_streams v:0 \
@@ -257,6 +336,11 @@ Two things about it that are not obvious:
   converts it to Rec.709 before the grade — the preset assumes that already ran.
 - `hue=h=-9` is load-bearing: expanding Apple Log pushes skin yellow-green, and
   the negative rotation brings it back. Rotating positive makes it worse.
+- Its `colorlevels` **must** be fed 8-bit (see the 8-bit bullet above). LOG sources
+  are the 10-bit ones, so this preset is exactly where the bug bites — and it bites
+  silently: the `--candidates` montage grades an 8-bit frame and looks right, so
+  only the rendered cut goes black. `verify_cut.py` catches it on the "black
+  frames" line; don't dismiss that line as a false positive on a LOG source.
 
 Still show the candidates montage and get a pick — a preset is a starting point,
 not permission to skip the approval.
@@ -327,6 +411,7 @@ For a single long source (longform), the main context can pick cuts directly fro
   "sources": {"C0103": "/abs/path/C0103.MP4"},
   "grade": "eq=contrast=1.06:saturation=1.05",
   "voice_master": true,
+  "jcut": {"lead_frames": 5, "tail_trim_frames": 2},
   "ranges": [
     {"source": "C0103", "start": 2.42, "end": 6.85, "beat": "HOOK",
      "quote": "…", "reason": "…", "gain_db": 0,
@@ -336,7 +421,13 @@ For a single long source (longform), the main context can pick cuts directly fro
 }
 ```
 
-`grade`: preset name, raw filter, or `"auto"`. `chapter` fields feed `chapters.py` (longform).
+`grade`: preset name, raw filter, or `"auto"` — normally whatever `detect_color.py`
+returned. `chapter` fields feed `chapters.py` (longform).
+
+`jcut`: optional. **Omit it and the J-cut runs with the defaults** (lead 5f, tail
+trim up to 2f); `false` butt-joins instead. After a render, `render.py` adds a
+`jcut_timeline` array — the real per-take video/audio offsets in the output. That
+block, not `Σ(end−start)`, is the timeline Phase 2 and the preview must use.
 
 `gain_db`: per-range level correction in dB, sized by `voice_levels.py`. Applied at
 extraction, before the edge fades, with a limiter on any boost so a loud syllable
@@ -380,6 +471,10 @@ On startup, read it if it exists and summarize the last session in one sentence 
 - Treating an unchecked element as "não pediu". It is an explicit NO: the user
   looked at "Movimento de tracking" and left it off. `watch_edits.py` prints the
   `fora:` line for exactly this reason.
+- Hardcoding `#ff5200` (or any accent) in the template. The Estilo tab lets the
+  user pick it, so a literal makes the preview show their colour and the render
+  show orange — worse than not offering the choice. Feed `accent` into
+  `hook.accent` + `captions.accent`.
 - Changing a caption's look in the template without changing its preview in
   `app.js` (`buildKaraokeDemo` / `buildStackedDemo`). The gate's previews render
   the real faces, sizes and motion, scaled from 1080-wide — that is the whole
@@ -410,7 +505,13 @@ On startup, read it if it exists and summarize the last session in one sentence 
 - Delivering Phase 2 with Remotion's own audio track — it drifts progressively against the source (+0.66s by 78s on a 95s edit). Re-mux `cut.mp4`'s audio and mix the soundtrack in ffmpeg (recipe in the track reference).
 - Judging A/V sync with short correlation windows — speech is quasi-periodic and a 2–3s window happily locks onto the wrong syllable, inventing a drift. Use 15s+ windows, and remember a PARTIAL render cannot show drift that accumulates over the full timeline.
 - Burning captions/overlays with ffmpeg/PIL — Phase 2 is Remotion-only.
-- Assuming the color profile — ask about LOG explicitly.
+- Asking "NORMAL ou LOG?" — that is `detect_color.py`'s job now. Ask only on `confidence: low`.
+- Butt-joining the takes. The J-cut is the default; `--no-jcut` is a deliberate exception, not a shortcut.
+- Tightening a J-cut seam by raising the lead. That buys tightness by shoving the picture deeper into the incoming take's speech. Trim the outgoing TAIL instead.
+- A fixed tail trim. It must be bounded by the silence actually measured at that range's end, or it eventually cuts a word off.
+- `adelay` in milliseconds when placing overlapped audio, or `-shortest` on the mux. `adelay`'s integer-ms rounding leaves the mix a fraction short of the video and `-shortest` then amputates whole FRAMES of picture — and whether it bites depends on which way the numbers round, so it passes by luck until it doesn't. Delay in samples (`=NS`), and pin the length with `-t`.
+- Indexing Phase 2 off `Σ(end−start)` when a `jcut_timeline` exists — the J-cut output is shorter, so everything after the first take lands late.
+- Assuming the color profile without running the detector.
 - Re-transcribing cached sources; re-rendering Phase 1 when only Phase 2 changed.
 - Launching the preview without arming `watch_edits.py` in the same turn. This
   is the one failure mode where the user reasonably believes they handed you a

@@ -258,8 +258,15 @@ def extract_segment(
     draft: bool = False,
     keep_resolution: bool = False,
     gain_db: float = 0.0,
+    streams: str = "av",
 ) -> None:
     """Extract a cut range as its own MP4 with grade + 30ms audio fades baked in.
+
+    `streams` selects what lands in the file: "av" (default), "v" (video only) or
+    "a" (audio only, PCM when the path ends in .wav). The split exists for the
+    J-cut assembly, where a take's picture and its sound come from DIFFERENT
+    ranges — trimming an already-extracted segment instead would leave the 30ms
+    fade stranded mid-audio and turn the new end into a hard chop.
 
     `-ss` before `-i` for fast accurate seeking. Scale to 1080p from 4K.
     Portrait sources (height > width) are scaled by height to preserve orientation.
@@ -291,6 +298,15 @@ def extract_segment(
     if scale:
         vf_parts.append(scale)
     if grade_filter:
+        # Force 8-bit BEFORE the grade. `colorlevels` — the backbone of the LOG
+        # presets — is broken on 9–14 bit RGB: on a 10-bit source it collapses the
+        # whole frame to a constant TV black (measured YAVG=64/1023, YBITDEPTH=1 on
+        # an iPhone Apple Log ProRes). It is correct at 8-bit and at 16-bit, so a
+        # 10-bit source silently renders black while an 8-bit one renders fine.
+        # The output is `-pix_fmt yuv420p` regardless, so this costs nothing, and it
+        # makes the render match the 8-bit frame the user approved in the
+        # `grade.py --candidates` montage.
+        vf_parts.append("format=yuv420p")
         vf_parts.append(grade_filter)
     vf = ",".join(vf_parts)
 
@@ -318,28 +334,41 @@ def extract_segment(
 
     cmd = [
         "ffmpeg", "-y",
-        "-ss", f"{seg_start:.3f}",
+        "-ss", f"{seg_start:.6f}",
         "-i", str(source),
-        "-t", f"{duration:.3f}",
+        "-t", f"{duration:.6f}",
     ]
-    if vf:
-        cmd += ["-vf", vf]
-    cmd += ["-af", af, "-c:v", "libx264", "-preset", preset, "-crf", crf, "-pix_fmt", "yuv420p"]
-    # Every path above lands on Rec.709 (tonemap for HDR, wide_gamut_chain for
-    # BT.2020 SDR, passthrough for the rest), so tag it explicitly. Without this
-    # the segments can inherit the source's tags and downstream decoders
-    # (Chrome/Remotion in Phase 2) silently re-interpret the graded image.
-    cmd += ["-colorspace", "bt709", "-color_primaries", "bt709",
-            "-color_trc", "bt709", "-color_range", "tv"]
-    if not keep_resolution:
-        # short-form fps: 30 if the source is 30fps+ (natural motion, matches
-        # IG/TikTok/Shorts capture), else the 24 standard; longform keeps source.
-        cmd += ["-r", shortform_target_fps(source)]
-    cmd += [
-        "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
-        "-movflags", "+faststart",
-        str(out_path),
-    ]
+    if streams != "a":
+        if vf:
+            cmd += ["-vf", vf]
+        cmd += ["-c:v", "libx264", "-preset", preset, "-crf", crf, "-pix_fmt", "yuv420p"]
+        # Every path above lands on Rec.709 (tonemap for HDR, wide_gamut_chain for
+        # BT.2020 SDR, passthrough for the rest), so tag it explicitly. Without this
+        # the segments can inherit the source's tags and downstream decoders
+        # (Chrome/Remotion in Phase 2) silently re-interpret the graded image.
+        cmd += ["-colorspace", "bt709", "-color_primaries", "bt709",
+                "-color_trc", "bt709", "-color_range", "tv"]
+        if not keep_resolution:
+            # short-form fps: 30 if the source is 30fps+ (natural motion, matches
+            # IG/TikTok/Shorts capture), else the 24 standard; longform keeps source.
+            cmd += ["-r", shortform_target_fps(source)]
+    else:
+        cmd += ["-vn"]
+
+    if streams != "v":
+        cmd += ["-af", af]
+        if out_path.suffix.lower() == ".wav":
+            # PCM for the J-cut mix — the segments get summed, so no point
+            # compounding AAC generations before the single final encode.
+            cmd += ["-c:a", "pcm_s16le", "-ar", "48000", "-ac", "2"]
+        else:
+            cmd += ["-c:a", "aac", "-b:a", "192k", "-ar", "48000"]
+    else:
+        cmd += ["-an"]
+
+    if out_path.suffix.lower() in (".mp4", ".mov"):
+        cmd += ["-movflags", "+faststart"]
+    cmd += [str(out_path)]
     subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
 
 
@@ -360,9 +389,15 @@ def snap_ranges_to_frames(edl: dict, fps: int) -> int:
     changed = 0
     for r in edl.get("ranges", []):
         dur = r["end"] - r["start"]
-        frames = math.ceil(dur * fps - 1e-9)
+        # Round the frame count to 4 decimals BEFORE ceiling. `end` is persisted to
+        # 6 decimals, so a duration that is already a whole number of frames comes
+        # back as e.g. 1.866667 → 1.866667*30 = 56.00001, which a bare ceil() turns
+        # into 57. That made the snap non-idempotent: every re-render of the same
+        # EDL grew the affected ranges by one more frame, and since this function
+        # rewrites edl.json the drift persisted.
+        frames = math.ceil(round(dur * fps, 4))
         snapped = r["start"] + frames / fps
-        if abs(snapped - r["end"]) > 1e-9:
+        if abs(snapped - r["end"]) > 1e-6:
             r["end"] = round(snapped, 6)
             changed += 1
     return changed
@@ -455,6 +490,219 @@ def concat_segments(segment_paths: list[Path], out_path: Path, edit_dir: Path) -
     print(f"concat → {out_path.name}")
     subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     concat_list.unlink(missing_ok=True)
+
+
+# -------- J-cut assembly (Phase-1 default cleanup) ---------------------------
+#
+# A straight concat leaves a beat of silence at every junction: the outgoing take
+# keeps its trailing pad and the incoming one starts with its own. Measured on a
+# real 3-take edit that was 130ms and 140ms — small on paper, clearly a pause in
+# the room.
+#
+# The J-cut removes it by OVERLAPPING instead of butting: the outgoing take's audio
+# runs to its natural end while the incoming take's audio starts `lead` frames
+# earlier, on its own track, and the two are summed. The incoming take's PICTURE
+# starts where the outgoing audio ends, skipping `lead` frames of its own head —
+# so the voice arrives before the face. Sync inside each take is preserved by
+# construction:  video_in = audio_in + lead  and  video_offset = audio_offset + lead.
+#
+# Getting the seam tighter is done by trimming the OUTGOING take's tail, not by
+# raising the lead: a bigger lead also pushes the picture deeper into the incoming
+# take's speech, which reads as entering mid-word.
+#
+# The tail trim is MEASURED, never blind. Cutting a fixed 2 frames off every take
+# would eventually decapitate a word on footage whose take ends tight — so the trim
+# is capped by the silence actually present at the end of that range, keeping 10ms.
+
+JCUT_LEAD_FRAMES = 5
+JCUT_TAIL_TRIM_FRAMES = 2
+
+
+def jcut_settings(edl: dict, fps: int) -> dict | None:
+    """Resolve J-cut config. On by default; `"jcut": false` in the EDL disables it.
+
+    Returns None when there is nothing to overlap (single range) or when disabled.
+    """
+    cfg = edl.get("jcut", True)
+    if cfg is False or cfg == "off" or cfg == "none":
+        return None
+    if len(edl.get("ranges", [])) < 2:
+        return None
+    if not isinstance(cfg, dict):
+        cfg = {}
+    return {
+        "lead_frames": max(0, int(cfg.get("lead_frames", JCUT_LEAD_FRAMES))),
+        "tail_trim_frames": max(0, int(cfg.get("tail_trim_frames", JCUT_TAIL_TRIM_FRAMES))),
+        "fps": fps,
+    }
+
+
+def trailing_silence(source: Path, start: float, end: float,
+                     noise_db: int = -35) -> float:
+    """Seconds of silence at the END of a source range. 0.0 if it ends in speech.
+
+    This is what bounds the tail trim: we only ever remove what is already silent.
+    """
+    dur = end - start
+    r = subprocess.run(
+        ["ffmpeg", "-hide_banner", "-nostats", "-ss", f"{start:.6f}",
+         "-t", f"{dur:.6f}", "-i", str(source), "-vn",
+         "-af", f"silencedetect=noise={noise_db}dB:d=0.02", "-f", "null", "-"],
+        capture_output=True, text=True)
+    starts: list[float] = []
+    ends: list[float] = []
+    for line in r.stderr.splitlines():
+        if "silence_start:" in line:
+            try:
+                starts.append(float(line.rsplit("silence_start:", 1)[1].split()[0]))
+            except (ValueError, IndexError):
+                pass
+        elif "silence_end:" in line:
+            try:
+                ends.append(float(line.rsplit("silence_end:", 1)[1].split()[0]))
+            except (ValueError, IndexError):
+                pass
+    if not starts:
+        return 0.0
+    last = starts[-1]
+    # the range ends in silence only if no speech resumed after `last`
+    if any(e > last + 1e-6 and e < dur - 0.02 for e in ends):
+        return 0.0
+    return max(0.0, dur - last)
+
+
+def plan_jcut(edl: dict, edit_dir: Path, cfg: dict) -> list[dict]:
+    """Work out each take's video range, audio range and output offsets."""
+    fps = cfg["fps"]
+    lead = cfg["lead_frames"] / fps
+    ranges = edl["ranges"]
+    sources = edl["sources"]
+    n = len(ranges)
+
+    plan: list[dict] = []
+    a_off = v_off = 0.0
+    for i, r in enumerate(ranges):
+        src = resolve_path(sources[r["source"]], edit_dir)
+        start, end = float(r["start"]), float(r["end"])
+
+        tail = 0.0
+        avail = trailing_silence(src, start, end) if i < n - 1 else None
+        if avail is not None and cfg["tail_trim_frames"]:
+            budget = max(0.0, avail - 0.010)          # keep 10ms of room tone
+            usable_frames = min(cfg["tail_trim_frames"], int(budget * fps))
+            tail = usable_frames / fps
+
+        a_in, a_out = start, end - tail
+        v_in = start + (lead if i > 0 else 0.0)
+        v_out = a_out
+        plan.append({
+            "i": i, "src": src, "range": r,
+            "a_in": a_in, "a_out": a_out, "a_off": a_off,
+            "v_in": v_in, "v_out": v_out, "v_off": v_off,
+            "tail_frames": round(tail * fps),
+            "silence_avail_ms": round(avail * 1000) if avail is not None else None,
+        })
+        v_off += v_out - v_in
+        a_off += (a_out - a_in) - lead
+    return plan
+
+
+def assemble_jcut(plan: list[dict], out_path: Path, edit_dir: Path) -> None:
+    """Concat the video track, sum the offset audio tracks, mux them together."""
+    work = edit_dir / "clips_graded"
+    vlist = edit_dir / "_concat_jcut.txt"
+    vlist.write_text("".join(f"file '{p['video_path'].resolve()}'\n" for p in plan))
+
+    video_only = work / "_jcut_video.mp4"
+    run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(vlist),
+         "-c", "copy", str(video_only)], quiet=True)
+    vlist.unlink(missing_ok=True)
+
+    inputs: list[str] = []
+    labels = ""
+    refs = ""
+    for k, p in enumerate(plan):
+        inputs += ["-i", str(p["audio_path"])]
+        # delay in SAMPLES: adelay's integer-millisecond form leaves the mix a
+        # fraction short of the video, and a downstream -shortest then amputates
+        # whole frames of picture.
+        smp = int(round(p["a_off"] * 48000))
+        labels += f"[{k}:a]adelay={smp}S|{smp}S[d{k}];"
+        refs += f"[d{k}]"
+
+    audio_only = work / "_jcut_audio.wav"
+    run(["ffmpeg", "-y", *inputs, "-filter_complex",
+         f"{labels}{refs}amix=inputs={len(plan)}:normalize=0:duration=longest,"
+         f"alimiter=limit=0.95[a]", "-map", "[a]", "-c:a", "pcm_s16le",
+         str(audio_only)], quiet=True)
+
+    total = sum(p["v_out"] - p["v_in"] for p in plan)
+    # NO -shortest here: a sub-millisecond audio shortfall would truncate video.
+    run(["ffmpeg", "-y", "-i", str(video_only), "-i", str(audio_only),
+         "-map", "0:v", "-map", "1:a", "-c:v", "copy",
+         "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
+         "-t", f"{total:.6f}", "-movflags", "+faststart", str(out_path)], quiet=True)
+    video_only.unlink(missing_ok=True)
+    audio_only.unlink(missing_ok=True)
+
+
+def extract_and_assemble_jcut(
+    edl: dict, edit_dir: Path, cfg: dict, preview: bool, draft: bool,
+    keep_resolution: bool, jobs: int, base_path: Path,
+) -> list[dict]:
+    """Extract every take's picture and sound separately, then overlap-assemble."""
+    resolved = resolve_grade_filter(edl.get("grade"))
+    is_auto = resolved == "__AUTO__"
+    clips_dir = edit_dir / (
+        "clips_draft" if draft else ("clips_preview" if preview else "clips_graded"))
+    clips_dir.mkdir(parents=True, exist_ok=True)
+
+    plan = plan_jcut(edl, edit_dir, cfg)
+    if jobs <= 0:
+        jobs = max(1, min(4, (os.cpu_count() or 4) // 3))
+
+    lead_ms = round(cfg["lead_frames"] / cfg["fps"] * 1000)
+    print(f"J-cut: áudio entra {cfg['lead_frames']}f ({lead_ms}ms) antes da imagem"
+          f"  ({len(plan)} takes, {jobs} paralelos)")
+
+    def work(p: dict) -> dict:
+        i, r = p["i"], p["range"]
+        seg_filter = (auto_grade_for_clip(p["src"], start=p["v_in"],
+                                          duration=p["v_out"] - p["v_in"],
+                                          verbose=False)[0]
+                      if is_auto else resolved)
+        gain_db = float(r.get("gain_db", 0.0) or 0.0)
+        vpath = clips_dir / f"seg_{i:02d}_{r['source']}_v.mp4"
+        apath = clips_dir / f"seg_{i:02d}_{r['source']}_a.wav"
+        extract_segment(p["src"], p["v_in"], p["v_out"] - p["v_in"], seg_filter,
+                        vpath, preview=preview, draft=draft,
+                        keep_resolution=keep_resolution, streams="v")
+        extract_segment(p["src"], p["a_in"], p["a_out"] - p["a_in"], "",
+                        apath, preview=preview, draft=draft,
+                        keep_resolution=keep_resolution, gain_db=gain_db,
+                        streams="a")
+        p["video_path"], p["audio_path"] = vpath, apath
+
+        tail_note = ""
+        if p["tail_frames"]:
+            tail_note = (f"  cauda -{p['tail_frames']}f"
+                         f" (de {p['silence_avail_ms']}ms de silêncio)")
+        elif p["silence_avail_ms"] is not None:
+            tail_note = f"  cauda 0f (só {p['silence_avail_ms']}ms de silêncio)"
+        gain_note = f"  gain: {gain_db:+.1f}dB" if abs(gain_db) > 0.05 else ""
+        print(f"  [{i:02d}] {r['source']}  v {p['v_in']:7.2f}-{p['v_out']:7.2f}"
+              f"  a {p['a_in']:7.2f}-{p['a_out']:7.2f}"
+              f"  {r.get('beat') or ''}{tail_note}{gain_note}", flush=True)
+        return p
+
+    if jobs == 1 or len(plan) == 1:
+        plan = [work(p) for p in plan]
+    else:
+        with ThreadPoolExecutor(max_workers=jobs) as ex:
+            plan = list(ex.map(work, plan))
+
+    assemble_jcut(plan, base_path, edit_dir)
+    return plan
 
 
 # -------- Master SRT (Rule 5) ------------------------------------------------
@@ -843,6 +1091,27 @@ def main() -> None:
         default=0,
         help="Parallel segment extractions (0 = auto ≈ cores/3, capped at 4).",
     )
+    ap.add_argument(
+        "--no-jcut",
+        action="store_true",
+        help="Butt-join the takes instead of overlapping them. The J-cut is the "
+             "default Phase-1 cleanup: the next take's audio starts a few frames "
+             "before its picture, which removes the pause at every junction. Also "
+             'disabled by EDL field "jcut": false.',
+    )
+    ap.add_argument(
+        "--jcut-lead",
+        type=int,
+        default=None,
+        help=f"Frames the audio leads the picture (default {JCUT_LEAD_FRAMES}).",
+    )
+    ap.add_argument(
+        "--jcut-tail-trim",
+        type=int,
+        default=None,
+        help=f"Max frames trimmed off each outgoing take's tail (default "
+             f"{JCUT_TAIL_TRIM_FRAMES}). Capped by the silence actually there.",
+    )
     args = ap.parse_args()
 
     edl_path = args.edl.resolve()
@@ -864,13 +1133,6 @@ def main() -> None:
         edl_path.write_text(json.dumps(edl, ensure_ascii=False, indent=2))
         print(f"  frame-aligned {snapped} range(s) to {target_fps}fps → edl.json updated")
 
-    # 1. Extract per-segment (auto-grade per range if EDL grade is "auto")
-    segment_paths = extract_all_segments(
-        edl, edit_dir, preview=args.preview, draft=args.draft,
-        keep_resolution=args.keep_resolution, jobs=args.jobs,
-    )
-
-    # 2. Concat → base
     if args.draft:
         base_name = "base_draft.mp4"
     elif args.preview:
@@ -878,7 +1140,53 @@ def main() -> None:
     else:
         base_name = "base.mp4"
     base_path = edit_dir / base_name
-    concat_segments(segment_paths, base_path, edit_dir)
+
+    jcut = None if args.no_jcut else jcut_settings(edl, target_fps)
+    if jcut:
+        if args.jcut_lead is not None:
+            jcut["lead_frames"] = max(0, args.jcut_lead)
+        if args.jcut_tail_trim is not None:
+            jcut["tail_trim_frames"] = max(0, args.jcut_tail_trim)
+
+    if jcut:
+        # 1+2. Picture and sound extracted from different ranges, then overlapped.
+        plan = extract_and_assemble_jcut(
+            edl, edit_dir, jcut, preview=args.preview, draft=args.draft,
+            keep_resolution=args.keep_resolution, jobs=args.jobs,
+            base_path=base_path,
+        )
+        # Persist the real output timeline: everything downstream (preview
+        # timeline, segments.json, Phase-2 overlays) indexes off these, and the
+        # J-cut timeline is SHORTER than the sum of the ranges.
+        edl["jcut_timeline"] = [
+            {"beat": p["range"].get("beat"), "source": p["range"]["source"],
+             "video_start_in_output": round(p["v_off"], 6),
+             "video_duration": round(p["v_out"] - p["v_in"], 6),
+             "audio_start_in_output": round(p["a_off"], 6),
+             "audio_duration": round(p["a_out"] - p["a_in"], 6),
+             "tail_trim_frames": p["tail_frames"]}
+            for p in plan
+        ]
+        edl["total_duration_s"] = round(
+            sum(p["v_out"] - p["v_in"] for p in plan), 3)
+        edl_path.write_text(json.dumps(edl, ensure_ascii=False, indent=2))
+        print(f"  timeline J-cut: {edl['total_duration_s']}s → edl.json atualizado")
+    else:
+        # 1. Extract per-segment (auto-grade per range if EDL grade is "auto")
+        segment_paths = extract_all_segments(
+            edl, edit_dir, preview=args.preview, draft=args.draft,
+            keep_resolution=args.keep_resolution, jobs=args.jobs,
+        )
+        # 2. Concat → base
+        concat_segments(segment_paths, base_path, edit_dir)
+        # Drop any J-cut timeline from a PREVIOUS render — and persist that, or the
+        # stale block outlives the render it described and everything downstream
+        # (verify_cut, the preview lanes, Phase-2 offsets) keeps trusting it.
+        if edl.pop("jcut_timeline", None) is not None:
+            edl["total_duration_s"] = round(
+                sum(r["end"] - r["start"] for r in edl["ranges"]), 3)
+            edl_path.write_text(json.dumps(edl, ensure_ascii=False, indent=2))
+            print("  J-cut desligado → jcut_timeline removido do edl.json")
 
     # 3. Subtitles: build if requested, resolve final path
     subs_path: Path | None = None

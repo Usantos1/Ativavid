@@ -76,8 +76,19 @@ def style_digest(p: Path) -> str:
         f'  · tipo de edição: {d.get("editName") or d.get("edit")}',
         f'  · headline: {d.get("headlineName") or d.get("headline")}',
         f'  · legenda: {d.get("captionsName") or d.get("captions")}',
-        f'  · elementos: {", ".join(els) if els else "nenhum"}',
     ]
+    # Only worth reporting when the chosen styles actually paint an accent —
+    # naming a colour that nothing uses reads as an instruction to go find a
+    # place for it.
+    accent = d.get("accent")
+    if accent:
+        if d.get("accentUsed"):
+            name = d.get("accentName") or accent
+            label = f"{name} ({accent})" if name.lower() != str(accent).lower() else accent
+            out.append(f"  · cor de destaque: {label}")
+        else:
+            out.append("  · cor de destaque: não se aplica (os estilos escolhidos não usam destaque)")
+    out.append(f'  · elementos: {", ".join(els) if els else "nenhum"}')
     # everything NOT chosen is an instruction too — it is what must stay out
     off = [k for k, v in (d.get("elements") or {}).items() if not v]
     if off:

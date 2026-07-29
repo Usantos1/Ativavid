@@ -45,7 +45,13 @@ PRESETS: dict[str, str] = {
     # cool, contrasty, skin held rosy. `render.py` already converts the source's
     # BT.2020 primaries to Rec.709 BEFORE the grade, so this expands an already
     # Rec.709 signal — do not add another conversion in front of it.
-    #   colorlevels  expand the flat LOG range (blacks up off 0, whites pulled in)
+    #   colorlevels  expand the flat LOG range (blacks up off 0, whites pulled in).
+    #                MUST run at 8-bit: on 9–14 bit RGB ffmpeg's colorlevels
+    #                collapses the frame to a constant TV black (measured
+    #                YAVG=64/1023 on a 10-bit Apple Log ProRes). It is fine at 8-
+    #                and 16-bit, so it fails silently only on LOG sources — exactly
+    #                where this preset is used. render.py and apply_grade() both
+    #                prepend `format=yuv420p`; keep that guard on any new caller.
     #   eq           the actual punch: contrast 1.42, saturation 1.26, gamma 0.94
     #   hue -9       Apple Log skin goes yellow-green on expansion; this pulls it
     #                back to rosy. Positive hue makes it worse — do not "correct"
@@ -301,9 +307,12 @@ def apply_grade(input_path: Path, output_path: Path, filter_string: str) -> None
             "-c", "copy", str(output_path),
         ]
     else:
+        # `format=yuv420p` first: `colorlevels` is broken on 9–14 bit RGB and turns
+        # a 10-bit source into a constant black frame. Same guard as render.py's
+        # extract_segment — see the note on the LOG presets above.
         cmd = [
             "ffmpeg", "-y", "-i", str(input_path),
-            "-vf", filter_string,
+            "-vf", f"format=yuv420p,{filter_string}",
             "-c:v", "libx264", "-preset", "fast", "-crf", "18",
             "-pix_fmt", "yuv420p",
             "-c:a", "copy",
@@ -346,9 +355,12 @@ def render_candidates(video: Path, out_png: Path, spec: str, at: float | None) -
 
     with tempfile.TemporaryDirectory() as tmp:
         base = Path(tmp) / "base.png"
+        # `-pix_fmt rgb24` pins the montage to 8 bits. Without it a 10-bit source
+        # writes a 16-bit PNG and the candidates get graded at a depth the render
+        # never uses — the montage the user approves would not be what ships.
         subprocess.run(
             ["ffmpeg", "-y", "-v", "error", "-ss", f"{t:.3f}", "-i", str(video),
-             "-frames:v", "1", str(base)],
+             "-frames:v", "1", "-pix_fmt", "rgb24", str(base)],
             check=True,
         )
         tiles: list[tuple[str, "Image.Image"]] = []

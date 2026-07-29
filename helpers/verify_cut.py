@@ -142,15 +142,31 @@ def main() -> None:
 
     edl = json.loads(args.edl.read_text())
     ranges = edl["ranges"]
-    durs = [float(r["end"]) - float(r["start"]) for r in ranges]
-    expected = sum(durs)
 
-    # junction times on the output timeline (between consecutive ranges)
-    junctions: list[float] = []
-    t = 0.0
-    for d in durs[:-1]:
-        t += d
-        junctions.append(t)
+    # Under a J-cut the output is SHORTER than the sum of the ranges and the picture
+    # cuts do not fall on the cumulative range boundaries. Reading the timeline off
+    # the ranges then probes the wrong instants — mid-word, several frames past the
+    # real cut — and reports the loud syllable it finds there as a pop.
+    jt = edl.get("jcut_timeline") or []
+    jcut = len(jt) == len(ranges) and len(jt) > 0
+    if jcut:
+        out_spans = [(j["video_start_in_output"], j["video_duration"]) for j in jt]
+        expected = sum(j["video_duration"] for j in jt)
+        junctions = [j["video_start_in_output"] for j in jt[1:]]
+        # audio seams: where the incoming take's sound actually starts
+        aud_seams = [(j["audio_start_in_output"], jt[i]["audio_start_in_output"]
+                      + jt[i]["audio_duration"]) for i, j in enumerate(jt[1:])]
+    else:
+        durs = [float(r["end"]) - float(r["start"]) for r in ranges]
+        expected = sum(durs)
+        junctions = []
+        out_spans = []
+        t = 0.0
+        for d in durs:
+            out_spans.append((t, d))
+            t += d
+        junctions = [s for s, _ in out_spans[1:]]
+        aud_seams = []
 
     actual = probe_duration(args.video)
 
@@ -161,11 +177,6 @@ def main() -> None:
         sil_f = ex.submit(audio_scan, args.video, args.min_silence)
         blk_f = ex.submit(black_scan, args.video)
         # Each range's level ON THE OUTPUT TIMELINE, so gains already applied.
-        out_spans = []
-        _t = 0.0
-        for d in durs:
-            out_spans.append((_t, d))
-            _t += d
         rms_f = [ex.submit(rms_db, args.video, s, d) for s, d in out_spans]
         pres = [f.result() for f in pre_f]
         jcts = [f.result() for f in jct_f]
@@ -178,14 +189,27 @@ def main() -> None:
     rows = []
     for i, j in enumerate(junctions):
         verdicts = []
-        if jcts[i] > POP_DB:
-            verdicts.append("POP?")
-        if pres[i] > HOT_DB:
-            verdicts.append("HOT-TAIL")
-        if posts[i] > HOT_DB:
-            verdicts.append("HOT-HEAD")
+        if jcut:
+            # There is no audio cut at a J-cut junction — the takes overlap and the
+            # sound runs straight through. Pop/hot probes would just be measuring
+            # whatever syllable happens to sit there, so the meaningful test is
+            # whether the seam is genuinely continuous: the incoming take's audio
+            # must start BEFORE the outgoing take's audio ends.
+            a_in, prev_end = aud_seams[i]
+            lap = prev_end - a_in
+            if lap <= 0:
+                verdicts.append(f"GAP-{abs(lap) * 1000:.0f}ms")
+            else:
+                verdicts.append(f"encavalado {lap * 1000:.0f}ms")
+        else:
+            if jcts[i] > POP_DB:
+                verdicts.append("POP?")
+            if pres[i] > HOT_DB:
+                verdicts.append("HOT-TAIL")
+            if posts[i] > HOT_DB:
+                verdicts.append("HOT-HEAD")
         v = " ".join(verdicts) if verdicts else "ok"
-        if verdicts:
+        if verdicts and any(x.startswith(("POP", "HOT", "GAP")) for x in verdicts):
             flags += 1
         rows.append((i + 1, j, pres[i], jcts[i], posts[i], v))
 
@@ -247,10 +271,16 @@ def main() -> None:
           f"{'ok' if dur_ok else 'CHECK'}")
     print(f"audio: peak {peak:.1f} dBFS, flat_factor {flat:.2f} "
           f"{'CHECK-CLIPPING' if clip_bad else 'ok'}")
-    print(f"junctions (dBFS peaks — pre[-130..-50ms] jct[±15ms] post[+50..+130ms]; "
-          f"pop > {POP_DB:.0f}, hot > {HOT_DB:.0f}):")
-    for n, j, p, c, q, v in rows:
-        print(f"  #{n:<3} {j:7.2f}s   pre {p:6.1f}   jct {c:6.1f}   post {q:6.1f}   {v}")
+    if jcut:
+        print("junções J-cut (o áudio não corta aqui — o teste é a continuidade "
+              "do encavalamento; GAP = respiro reaberto):")
+        for n, j, p, c, q, v in rows:
+            print(f"  #{n:<3} corte de imagem {j:7.3f}s   {v}")
+    else:
+        print(f"junctions (dBFS peaks — pre[-130..-50ms] jct[±15ms] post[+50..+130ms]; "
+              f"pop > {POP_DB:.0f}, hot > {HOT_DB:.0f}):")
+        for n, j, p, c, q, v in rows:
+            print(f"  #{n:<3} {j:7.2f}s   pre {p:6.1f}   jct {c:6.1f}   post {q:6.1f}   {v}")
     if sil_rows:
         print(f"silences ≥ {args.min_silence:.2f}s:")
         for s, e, n in sil_rows:
