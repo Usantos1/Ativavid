@@ -72,8 +72,22 @@ An unchecked box is an explicit NO, not a silence. Copy the picks into
      `caption_style.py --transcript transcripts/cut.json -o public/caption-cues.json`
      plus `captions.style:"stacked"` (see the "Caption style" section).
    - `face_track.py cut.mp4 -o public/track.json` — **only when
-     `elements.tracking` is on.** Off, the frame stays put and `track.json` is
-     not generated at all.
+     `elements.tracking` is on.** Off, the frame stays put — but the file must
+     still EXIST: the template imports it statically and the bundle fails to
+     build without it ("track.json doesn't exist" out of webpack, not a runtime
+     warning). Write a neutral one instead: every point pinned to the camera
+     target, so the follow has nothing to correct.
+     ```bash
+     python - <<'EOF'
+     import json, pathlib
+     ed = json.loads(pathlib.Path('public/edit-data.json').read_text())
+     n = round(ed['durationSec'] * ed['fps'])
+     tx, ty = ed['camera']['targetX'], ed['camera']['targetY']
+     pathlib.Path('public/track.json').write_text(json.dumps(
+         {"fps": ed['fps'], "width": ed['width'], "height": ed['height'],
+          "count": n, "points": [[tx, ty]] * n, "neutral": True}))
+     EOF
+     ```
    - `public/segments.json` — cumulative cut boundaries **measured from the
      encoded segments' frame counts, never summed from the EDL's seconds**.
      **Regenerate it after EVERY Phase-1 re-render.** A stale segments.json is
@@ -86,13 +100,28 @@ An unchecked box is an explicit NO, not a silence. Copy the picks into
      error ACCUMULATES. Anything that must land on a cut then sits visibly early.
      ```bash
      python - <<'EOF'
-     import subprocess, glob, json
+     import subprocess, glob, json, pathlib, sys
+     # TWO assertions, because globbing a directory is only as good as the
+     # directory. `_v.mp4` first: the J-cut writes video-only segments and a bare
+     # glob also matches butt-join leftovers. Then check the COUNT against the EDL
+     # and the SUM against cut.mp4 — a re-render with fewer ranges leaves the old
+     # higher-numbered segments behind, and that gave segments.json 9.23s for a
+     # 7.57s video. It renders clean and every overlay lands wrong.
+     segs = sorted(glob.glob("clips_graded/seg_*_v.mp4")) or sorted(glob.glob("clips_graded/seg_*.mp4"))
+     nranges = len(json.loads(pathlib.Path("edl.json").read_text())["ranges"])
+     if len(segs) != nranges:
+         sys.exit(f"{len(segs)} segments for {nranges} ranges — clips_graded is dirty")
      cum, t = [0], 0
-     for f in sorted(glob.glob("clips_graded/seg_*.mp4")):
+     for f in segs:
          n = int(subprocess.run(["ffprobe","-v","error","-select_streams","v:0",
              "-count_frames","-show_entries","stream=nb_read_frames",
              "-of","default=nw=1:nk=1",f], capture_output=True, text=True).stdout)
          t += n; cum.append(t)
+     real = int(subprocess.run(["ffprobe","-v","error","-select_streams","v:0",
+         "-count_frames","-show_entries","stream=nb_read_frames",
+         "-of","default=nw=1:nk=1","cut.mp4"], capture_output=True, text=True).stdout)
+     if t != real:
+         sys.exit(f"segments sum {t}f != cut.mp4 {real}f — do not ship this file")
      fps = 30  # match cut.mp4
      json.dump({"segments": [{"start": round(cum[i]/fps,4),
                               "dur": round((cum[i+1]-cum[i])/fps,4)}
@@ -424,17 +453,48 @@ unnoticeable at the start and obvious by the end. Its audio track also comes out
 ~0.7s longer than its video. So never re-encode Remotion's audio; re-mux the
 approved master instead and mix the soundtrack here:
 
+**Remotion's picture is FULL-RANGE and mis-tagged — never `-c:v copy` it.** Its
+output is `yuvj420p`, `color_range=pc`, `color_primaries=bt470bg` (PAL!), transfer
+unknown. Measured: luma 0–255 where `cut.mp4` sits at 16–235. Copying the stream
+carries all of that into the delivery, so a compliant player shifts the hue off the
+PAL primaries and a player that ignores the range tag crushes the blacks — the
+Phase-1 grade the user approved drifts at the very last step. Convert the range and
+stamp the tags. `setparams` is what makes them stick: the bare `-color_primaries` /
+`-color_trc` output flags silently leave both `unknown` here.
+
 ```bash
 VD=$(ffprobe -v error -select_streams v:0 -show_entries stream=duration -of default=nw=1:nk=1 out/render.mp4)
 FADE=$(python3 -c "print(f'{$VD-1.5:.3f}')")
 ffmpeg -y -i out/render.mp4 -i ../cut.mp4 -i public/trilha.mp3 \
-  -filter_complex "[1:a]adelay=33:all=1[v];\
+  -filter_complex "[0:v]scale=in_range=full:out_range=limited,format=yuv420p,\
+setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv[vid];\
+                   [1:a]adelay=33:all=1[v];\
                    [2:a]volume=0.10,afade=t=in:st=0:d=0.4,afade=t=out:st=$FADE:d=1.5[m];\
                    [v][m]amix=inputs=2:duration=first:normalize=0[mix];\
                    [mix]loudnorm=I=-14:TP=-1:LRA=11[out]" \
-  -map 0:v -map "[out]" -c:v copy -c:a aac -b:a 192k -ar 48000 -t "$VD" \
-  -movflags +faststart ../final.mp4
+  -map "[vid]" -map "[out]" -c:v libx264 -preset slow -crf 17 -pix_fmt yuv420p \
+  -colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range tv \
+  -c:a aac -b:a 192k -ar 48000 -t "$VD" -movflags +faststart ../final.mp4
 ```
+
+**Verify the delivery carries the same tags as the cut** — `bt709 / bt709 / bt709 /
+tv`, exactly what left Phase 1:
+```bash
+ffprobe -v error -select_streams v:0 \
+  -show_entries stream=color_space,color_primaries,color_transfer,color_range \
+  -of default=nw=1 ../final.mp4
+```
+
+**Keeping Remotion's audio is sometimes the right call — measure, don't assume.**
+The re-mux above exists because Remotion's audio drifts, and on a 95s edit it does
+(+660ms by 78s). But the `stacked` caption bakes a click on nearly every word plus
+the flash clicks, and the re-mux throws all of that away — reconstructing ~20 SFX
+by hand from the cue file is guesswork. Correlate first (15s+ windows, or the whole
+clip when it is short): if the offset is CONSTANT across start/middle/end there is
+no drift, and Remotion's own audio keeps the SFX with the sync intact. Measured on
+a 7.6s edit: +42.7ms at the head, the tail and the whole — constant, and only ~10ms
+from the picture's own +33ms lag. There, `-map 0:a` through the same loudnorm beats
+the re-mux. Say which one you used and why.
 
 `adelay=33` is one frame at 30fps: OffthreadVideo draws the source frame one
 composition frame late (the same VIDEO_LAG the overlays compensate for), so the
