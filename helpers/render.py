@@ -432,6 +432,10 @@ def extract_all_segments(
     ranges = edl["ranges"]
     sources = edl["sources"]
 
+    # mirror of the J-cut path — see the note there on why ALL of them go
+    for stale in list(clips_dir.glob("seg_*.mp4")) + list(clips_dir.glob("seg_*.wav")):
+        stale.unlink(missing_ok=True)
+
     if jobs <= 0:
         jobs = max(1, min(4, (os.cpu_count() or 4) // 3))
     print(f"extracting {len(ranges)} segment(s) → {clips_dir.name}/  ({jobs} parallel)")
@@ -656,6 +660,16 @@ def extract_and_assemble_jcut(
     clips_dir = edit_dir / (
         "clips_draft" if draft else ("clips_preview" if preview else "clips_graded"))
     clips_dir.mkdir(parents=True, exist_ok=True)
+
+    # Clear EVERY old segment, not just the other mode's. Two ways this folder goes
+    # stale and both are invisible downstream, because segments.json is built by
+    # globbing it: the butt-join mode writes seg_NN_*.mp4 next to the J-cut's
+    # seg_NN_*_v.mp4 (a bare glob sums both), and a re-render with FEWER ranges
+    # leaves the higher-numbered segments of the previous cut behind. Measured: a
+    # 3-range EDL over a stale 4th segment gave segments.json 9.23s for a 7.57s
+    # video — it renders without error and every overlay lands wrong.
+    for stale in list(clips_dir.glob("seg_*.mp4")) + list(clips_dir.glob("seg_*.wav")):
+        stale.unlink(missing_ok=True)
 
     plan = plan_jcut(edl, edit_dir, cfg)
     if jobs <= 0:
