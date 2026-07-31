@@ -854,8 +854,25 @@ function buildInsertsDraft() {
       start: +it.start, end: +it.end, ref: i,
     });
   });
+  // split-layout VIDEO bands — same seam and geometry as splitInserts, but the
+  // band plays a clip (generated b-roll, screen capture). Its own array because
+  // the renderer mounts it with a different component; on the timeline it is an
+  // image-track element like any other.
+  (d.splitVideos || []).forEach((it, i) => {
+    list.push({
+      kind: 'splitvideo',
+      label: it.label || (it.src || '').split('/').pop(),
+      start: +it.start, end: +it.end, ref: i,
+    });
+  });
   (d.behind || []).forEach((b, i) => {
     list.push({ kind: 'behind', label: `BEHIND ${b.kind === 'words' ? (b.words || []).map((w) => w.t).join(' ') : (b.src || '').split('/').pop()}`, start: +b.start, end: +b.start + +b.dur, ref: i });
+  });
+  // held single words in the caption's own visual language (a keyword the viewer
+  // must type, an emphasis beat) — text, so they ride the text track next to the
+  // hook rather than the image track
+  (d.wordAccents || []).forEach((w, i) => {
+    list.push({ kind: 'word', label: w.text, start: +w.start, end: +w.end, ref: i });
   });
   S.insertsDraft = list.map((c) => ({ ...c, orig: { start: c.start, end: c.end } }));
 }
@@ -1375,7 +1392,7 @@ function renderChips() {
 
   // TEXT and IMAGE get their own tracks — a headline and a photo are different
   // kinds of edit, and mixing them on one lane hid the images entirely.
-  const isText = (c) => c.kind === 'hook';
+  const isText = (c) => c.kind === 'hook' || c.kind === 'word';
   const groups = [
     { icon: 'text', cls: 'teal', items: S.insertsDraft.map((c, i) => ({ c, i })).filter(({ c }) => isText(c)) },
     { icon: 'inserts', cls: 'orange', items: S.insertsDraft.map((c, i) => ({ c, i })).filter(({ c }) => !isText(c)) },
@@ -1402,7 +1419,7 @@ function renderChips() {
       lanes.push(el('div', 'lane', trk));
     }
     for (const { c, i } of g.items) {
-      const chip = el('div', `chip insert ${c.kind === 'hook' ? 'hook' : ''}`, lanes[assign.get(i) ?? 0]);
+      const chip = el('div', `chip insert ${isText(c) ? 'hook' : ''}`, lanes[assign.get(i) ?? 0]);
       chip.style.left = `${c.start * S.pps}px`;
       chip.style.width = `${Math.max((c.end - c.start) * S.pps, 10)}px`;
       chip.textContent = c.label;
@@ -1781,8 +1798,10 @@ $('btnSave').addEventListener('click', async () => {
     payload.editData = {
       inserts: S.insertsDraft.filter((c) => c.kind === 'insert').map((c) => ({ ref: c.ref, start: +c.start.toFixed(3), end: +c.end.toFixed(3) })),
       splitInserts: S.insertsDraft.filter((c) => c.kind === 'split').map((c) => ({ ref: c.ref, label: c.label, start: +c.start.toFixed(3), end: +c.end.toFixed(3) })),
+      splitVideos: S.insertsDraft.filter((c) => c.kind === 'splitvideo').map((c) => ({ ref: c.ref, label: c.label, start: +c.start.toFixed(3), end: +c.end.toFixed(3) })),
       hook: S.insertsDraft.filter((c) => c.kind === 'hook').map((c) => ({ endSec: +c.end.toFixed(3) }))[0] || null,
       behind: S.insertsDraft.filter((c) => c.kind === 'behind').map((c) => ({ ref: c.ref, start: +c.start.toFixed(3), dur: +(c.end - c.start).toFixed(3) })),
+      wordAccents: S.insertsDraft.filter((c) => c.kind === 'word').map((c) => ({ ref: c.ref, text: c.label, start: +c.start.toFixed(3), end: +c.end.toFixed(3) })),
     };
   }
   if (S.notes.length) {
