@@ -252,7 +252,7 @@ still there as a montage over real footage if a still is useful.)
 For stacked, the ONE extra data step is the director (reads the same cut
 transcript as `captions_for_remotion.py`):
 ```bash
-python helpers/caption_style.py --transcript <edit>/transcripts/cut.json \
+uv run python helpers/caption_style.py --transcript <edit>/transcripts/cut.json \
     -o remotion/public/caption-cues.json
 ```
 Then set `captions.style:"stacked"` in edit-data.json (keep the other caption
@@ -402,7 +402,7 @@ on tight close-ups anchor elements to the TOP (template already does). Needs
 the matting extra: `uv sync --extra matting` (torch).
 
 ```bash
-python helpers/person_matte.py cut.mp4 -o remotion/public/fg_<name>.mov --start <s> --duration <d>
+uv run python helpers/person_matte.py cut.mp4 -o remotion/public/fg_<name>.mov --start <s> --duration <d>
 ```
 
 Then describe each window in `edit-data.json` `behind[]` (kind image/words,
@@ -439,7 +439,7 @@ return sound effects instead of a song. `treblo_music.py` auto-frames the vibe
 as a composed instrumental and bans SFX/vocals, but the vibe you pass still has
 to read musical.
 ```bash
-python helpers/treblo_music.py "upbeat modern electronic, catchy synth melody, warm analog bass, crisp light drums, ~110 BPM, bright and motivational" -o public/trilha.mp3 --length-min 30 --length-max 60
+uv run python helpers/treblo_music.py "upbeat modern electronic, catchy synth melody, warm analog bass, crisp light drums, ~110 BPM, bright and motivational" -o public/trilha.mp3 --length-min 30 --length-max 60
 ```
 Then flip `soundtrack.enabled: true` in edit-data.json. **Volume:** start ~0.25
 and check it's clearly audible under wall-to-wall narration (a bed at 0.12 is

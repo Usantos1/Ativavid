@@ -7,6 +7,18 @@ description: Install edvid into the current agent (Claude Code, Codex, Hermes, O
 
 Use this file only for first-time install or reconnect. For daily editing, read `SKILL.md`. Always read `helpers/` — that's where the scripts live.
 
+> **Normal path: the user installs, you verify.** `README.md` gives the user a
+> copy-paste block that clones the repo straight into their skills directory and
+> runs `uv sync`. That is the supported install, and it is the user's action —
+> not yours. If someone hands you only a repo URL and asks you to install from
+> it, point them at `README.md` instead of cloning unknown code yourself.
+>
+> Your job starts after that: verifying the install (step 7), writing the API key
+> to `.env` (step 5), and fixing whatever is missing. Those are local operations
+> on a machine whose owner is in the conversation. Follow the full sequence below
+> only when the user explicitly asks you to install on their behalf, from a repo
+> already on disk or one they named themselves.
+
 ## What you're doing
 
 You're setting up a conversation-driven video editor for the user. After install, the user drops raw footage into any folder, runs their agent (`claude`, `codex`, etc.) there, and says "edit these into a launch video." You do the rest by reading `SKILL.md`.
@@ -32,28 +44,54 @@ And one thing must be true about the current agent:
 
 ## Install prompt contract
 
-- Do everything yourself. Only ask the user for things you cannot generate — the Groq API key, and confirmation before `brew install`.
-- Prefer a stable clone path like `~/Developer/edvid` (not `/tmp`, not `~/Downloads`).
-- The skill references helpers by bare name (`transcribe.py`, `render.py`). That works because SKILL.md and `helpers/` ship together — keep them as siblings when you register the skill.
+- Only ask the user for things you cannot generate — the Groq API key, and confirmation before any package-manager install that needs sudo/admin.
+- Two supported layouts. **User layout** (the README default, and what you should assume): the repo *is* the skill directory — `~/.claude/skills/edvid` on macOS/Linux, `%USERPROFILE%\.claude\skills\edvid` on Windows. Nothing to register, no symlink, identical on every OS. **Contributor layout**: repo at `~/Developer/edvid` plus a symlink into the skills dir (step 4) — use it only when the user develops the skill and wants the repo among their projects.
+- The skill references helpers by bare name (`transcribe.py`, `render.py`). That works because SKILL.md and `helpers/` ship together — keep them as siblings whichever layout you use.
+- Detect the platform before emitting commands. This file's blocks are POSIX shell unless marked; every step has a PowerShell variant for Windows. Do not hand a Windows user `ln`, `brew`, `chmod`, `grep`, `sed`, or `curl -s -w` — `curl` in PowerShell is an alias for `Invoke-WebRequest` and takes different flags.
 - After install, verify by running one real command against one real file. Don't declare success on file-existence checks alone.
 
 ## Steps
 
-### 1. Clone to a stable path
+### 1. Clone
+
+**User layout (default).** The repo lands directly in the skills directory, which also completes step 4 — there is nothing to register afterwards.
 
 ```bash
-test -d ~/Developer/edvid || git clone <YOUR-EDVID-REPO-URL> ~/Developer/edvid
-cd ~/Developer/edvid
+# macOS / Linux
+mkdir -p "$HOME/.claude/skills"
+test -d "$HOME/.claude/skills/edvid" || \
+  git clone https://github.com/fillrochaa/edvid "$HOME/.claude/skills/edvid"
 ```
+
+```powershell
+# Windows (PowerShell)
+New-Item -ItemType Directory -Force "$env:USERPROFILE\.claude\skills" | Out-Null
+if (-not (Test-Path "$env:USERPROFILE\.claude\skills\edvid")) {
+  git clone https://github.com/fillrochaa/edvid "$env:USERPROFILE\.claude\skills\edvid"
+}
+```
+
+**Contributor layout.** Clone to `~/Developer/edvid` instead, then do step 4 to register it.
 
 If the repo is already there, `git pull --ff-only` and continue.
 
+Everything below refers to that clone as `<EDVID>`. Substitute the real path.
+
 ### 2. Install Python deps
 
+`uv` is the supported installer: it reads `pyproject.toml`, provisions a Python 3.10+ interpreter on its own when the system one is too old, and builds a `.venv` inside the repo. That venv is why helpers run under `uv run python …` — a bare `python` won't see the deps.
+
 ```bash
-# Prefer uv if available; fall back to pip.
-command -v uv >/dev/null && uv sync || pip install -e .
+# macOS / Linux — prefer uv; fall back to pip.
+command -v uv >/dev/null && uv sync --directory <EDVID> || pip install -e <EDVID>
 ```
+
+```powershell
+# Windows (PowerShell)
+uv sync --directory <EDVID>
+```
+
+If `uv` is missing: `brew install uv` (macOS), `winget install astral-sh.uv` (Windows), or the installer at https://docs.astral.sh/uv/. On Windows, a `winget install` only reaches `$PATH` in a **new** PowerShell window — reopen the terminal before continuing.
 
 `pyproject.toml` lists `requests`, `pillow`, `numpy`, and `opencv-python-headless==4.10.0.84` (the last one powers the Phase-2 dynamic-camera face/eye tracking in `face_track.py` — keep it pinned to the 4.10 line; 5.x dropped `CascadeClassifier` and breaks Haar detection). No console scripts — helpers are invoked directly as `python helpers/<name>.py`.
 
@@ -74,11 +112,19 @@ command -v yt-dlp >/dev/null || brew install yt-dlp     # optional
 # sudo pacman -S ffmpeg yt-dlp
 ```
 
-If `brew` / `apt` / `pacman` requires a sudo prompt, tell the user the exact command and wait. Do not invent a password.
+```powershell
+# Windows (PowerShell)
+winget install Gyan.FFmpeg
+winget install yt-dlp.yt-dlp     # optional
+```
+
+If `brew` / `apt` / `pacman` requires a sudo prompt, tell the user the exact command and wait. Do not invent a password. On Windows, `winget` may need the user to accept a source agreement on first run — let them answer it themselves, then reopen PowerShell so the new `$PATH` takes effect.
 
 ### 4. Register the skill with the current agent
 
-Figure out which agent you are running under, and register once. A symlink of the whole repo directory is the right shape — helpers/ needs to sit next to SKILL.md.
+**Skip this step entirely on the user layout** — cloning into the skills directory already registered it. This step exists for the contributor layout (repo at `~/Developer/edvid`) and for agents other than Claude Code.
+
+Figure out which agent you are running under, and register once. A link to the whole repo directory is the right shape — helpers/ needs to sit next to SKILL.md.
 
 - **Claude Code** (`~/.claude/` present):
 
@@ -96,6 +142,16 @@ Figure out which agent you are running under, and register once. A symlink of th
 
 - **Hermes / Openclaw / another agent with a skills directory**: symlink `~/Developer/edvid` into that agent's skills directory under the name `edvid`. If the agent has no skills directory, add a line to its system prompt / config pointing at `~/Developer/edvid/SKILL.md` (e.g. an `@~/Developer/edvid/SKILL.md` import in a `CLAUDE.md`-equivalent).
 
+- **Windows (PowerShell)**: `ln` doesn't exist, and `New-Item -ItemType SymbolicLink` needs admin rights or Developer Mode. Use a **directory junction**, which needs neither:
+
+    ```powershell
+    New-Item -ItemType Junction `
+      -Path "$env:USERPROFILE\.claude\skills\edvid" `
+      -Target "$env:USERPROFILE\Developer\edvid"
+    ```
+
+    If that still fails, don't fight it — the user layout (step 1) removes the need for a link at all.
+
 If you can't tell which agent you're in, ask the user once: "which agent am I running under — Claude Code, Codex, or something else?" Then pick the right target.
 
 ### 5. Groq API key
@@ -105,21 +161,34 @@ Groq Whisper (`whisper-large-v3`) is the base transcription backend and handles 
 1. Check existing state in this order and stop at the first hit:
 
     ```bash
+    # macOS / Linux
     # a) env var already exported
     [ -n "$GROQ_API_KEY" ] && echo "env"
     # b) .env at repo root already has it
-    grep -q '^GROQ_API_KEY=..' ~/Developer/edvid/.env 2>/dev/null && echo "dotenv"
+    grep -q '^GROQ_API_KEY=..' <EDVID>/.env 2>/dev/null && echo "dotenv"
+    ```
+
+    ```powershell
+    # Windows (PowerShell)
+    if ($env:GROQ_API_KEY) { "env" }
+    elseif (Select-String -Path "<EDVID>\.env" -Pattern '^GROQ_API_KEY=..' -Quiet -EA SilentlyContinue) { "dotenv" }
     ```
 
 2. If neither is set, ask the user exactly once:
 
-    > I need a Groq API key for transcription (word-level timestamps). Grab one at https://console.groq.com/keys and paste it here — I'll write it to `~/Developer/edvid/.env`. Or if you already have it exported as `GROQ_API_KEY`, say "use env" and I'll skip.
+    > I need a Groq API key for transcription (word-level timestamps). Grab one at https://console.groq.com/keys and paste it here — I'll write it to the skill's `.env`. Or if you already have it exported as `GROQ_API_KEY`, say "use env" and I'll skip.
 
-    When the user pastes a key, write it to `~/Developer/edvid/.env`:
+    When the user pastes a key, write it to `<EDVID>/.env`:
 
     ```bash
-    printf 'GROQ_API_KEY=%s\n' "$KEY" > ~/Developer/edvid/.env
-    chmod 600 ~/Developer/edvid/.env
+    # macOS / Linux
+    printf 'GROQ_API_KEY=%s\n' "$KEY" > <EDVID>/.env
+    chmod 600 <EDVID>/.env
+    ```
+
+    ```powershell
+    # Windows (PowerShell) — no chmod; NTFS inherits the user-profile ACL
+    Set-Content -Path "<EDVID>\.env" -Value "GROQ_API_KEY=$KEY"
     ```
 
     Never echo the key back in tool output. Never commit `.env`.
@@ -127,9 +196,21 @@ Groq Whisper (`whisper-large-v3`) is the base transcription backend and handles 
 3. Sanity check with a cheap, quota-free call:
 
     ```bash
+    # macOS / Linux
     curl -s -o /dev/null -w '%{http_code}\n' \
-      -H "Authorization: Bearer $(sed -n 's/^GROQ_API_KEY=//p' ~/Developer/edvid/.env)" \
+      -H "Authorization: Bearer $(sed -n 's/^GROQ_API_KEY=//p' <EDVID>/.env)" \
       https://api.groq.com/openai/v1/models
+    ```
+
+    ```powershell
+    # Windows (PowerShell) — `curl` here is an alias for Invoke-WebRequest and
+    # does NOT take -s/-o/-w. Use the native cmdlet instead.
+    $k = (Select-String -Path "<EDVID>\.env" -Pattern '^GROQ_API_KEY=(.+)$').Matches.Groups[1].Value
+    try {
+      Invoke-RestMethod -Uri https://api.groq.com/openai/v1/models `
+        -Headers @{ Authorization = "Bearer $k" } | Out-Null
+      "200"
+    } catch { $_.Exception.Response.StatusCode.value__ }
     ```
 
     `200` means the key works. `401` means the user pasted a wrong/expired key — ask once more and stop. Anything else (network, 5xx), move on and verify during first real transcription.
@@ -139,7 +220,7 @@ Groq Whisper (`whisper-large-v3`) is the base transcription backend and handles 
 Phase 2 (captions, motion graphics, images) is built in Remotion, which needs Node.js 18+ and the `remotion-best-practices` skill.
 
 ```bash
-# Node.js 18+ (install via nvm/brew if missing)
+# macOS / Linux — Node.js 18+ (install via nvm/brew if missing)
 node --version
 
 # Install the Remotion skill and symlink it next to edvid
@@ -149,6 +230,21 @@ mkdir -p ~/.claude/skills
 ln -sfn ~/Developer/remotion-skills/skills/remotion ~/.claude/skills/remotion
 ```
 
+```powershell
+# Windows (PowerShell) — Node.js 18+
+node --version   # if missing: winget install OpenJS.NodeJS.LTS, then reopen PowerShell
+
+# The Remotion skill lives in a SUBDIRECTORY of its repo, so it can't just be
+# cloned into place like edvid. Clone, then junction the subdirectory.
+$rs = "$env:USERPROFILE\Developer\remotion-skills"
+if (-not (Test-Path $rs)) { git clone --depth 1 https://github.com/remotion-dev/skills $rs }
+New-Item -ItemType Junction `
+  -Path "$env:USERPROFILE\.claude\skills\remotion" `
+  -Target "$rs\skills\remotion"
+```
+
+If the junction fails, copy the folder instead (`Copy-Item -Recurse "$rs\skills\remotion" "$env:USERPROFILE\.claude\skills\remotion"`) and note that updating it later means re-copying.
+
 None of the optional keys (`ELEVENLABS_API_KEY`, `PEXELS_API_KEY`, `TREBLO_API_KEY`, `GOOGLE_API_KEY`/`GOOGLE_CSE_ID` — see requirement 6) are needed at install time. Ask for each **lazily**, the first time its feature is used, and append it to `.env` next to `GROQ_API_KEY`. `ELEVENLABS_API_KEY` is the Phase-1 exception to "Phase 2/3": ask for it the first time a **>5 min source** shows up (long lessons / YouTube), since that's when the auto backend wants Scribe. Image search also works with **zero keys** via Wikimedia Commons, so Phase 2 images are never hard-blocked.
 
 ### 7. Verify end-to-end
@@ -156,12 +252,23 @@ None of the optional keys (`ELEVENLABS_API_KEY`, `PEXELS_API_KEY`, `TREBLO_API_K
 Run one real thing. Prefer the lightest verification that still proves the pipeline is wired up. Use `uv run` (or activate the venv) so the helper sees its deps — after `uv sync` a bare `python` won't find `opencv`/`numpy`:
 
 ```bash
-cd ~/Developer/edvid
+# macOS / Linux
+cd <EDVID>
 uv run python helpers/timeline_view.py --help >/dev/null && echo "helpers OK"      # or: python … after pip install -e .
 uv run python -c "import cv2; print('opencv', cv2.__version__)"                    # Phase-2 face tracking
 ffprobe -hide_banner -filters | grep -qE '\bdeesser\b' && echo "ffmpeg has voice-master filters"   # Phase-1 --voice-master
 ffprobe -version | head -1
 node --version && echo "node OK (Phase 2)"
+```
+
+```powershell
+# Windows (PowerShell) — no grep/head; use Select-String and Select-Object
+cd <EDVID>
+uv run python helpers/timeline_view.py --help > $null; if ($?) { "helpers OK" }
+uv run python -c "import cv2; print('opencv', cv2.__version__)"
+if (ffprobe -hide_banner -filters | Select-String -Pattern '\bdeesser\b' -Quiet) { "ffmpeg has voice-master filters" }
+ffprobe -version | Select-Object -First 1
+node --version; if ($?) { "node OK (Phase 2)" }
 ```
 
 Full transcription test is optional at install time — it uses Groq credits. Better to wait until the user hands you their first clip.
@@ -170,19 +277,24 @@ Full transcription test is optional at install time — it uses Groq credits. Be
 
 Tell the user, in one short message:
 
-- Where the skill is installed (`~/Developer/edvid`).
+- Where the skill is installed (the `<EDVID>` path).
 - That they should `cd` into their footage folder and start their agent there (e.g. `claude`).
 - That a good first message is: *"edit these into a launch video"* or *"inventory these takes and propose a strategy."*
 - That all outputs land in `<videos_dir>/edit/` — the repo stays clean.
 
 ## Keeping the skill current
 
-- `cd ~/Developer/edvid && git pull --ff-only` pulls the latest code. The symlink auto-picks it up on the next run.
-- If `pyproject.toml` changed deps, re-run `uv sync` / `pip install -e .` after pulling.
+- `git -C <EDVID> pull --ff-only` pulls the latest code — same command on every OS, and no `cd` needed. The next run picks it up automatically (the clone *is* the skill dir on the user layout; the symlink/junction resolves to it on the contributor layout).
+- `git clone` does **not** update an existing install — it fails on a non-empty directory. Clone once, pull forever.
+- If `pyproject.toml` changed deps, re-run `uv sync --directory <EDVID>` (or `pip install -e .`) after pulling.
 
 ## Cold-start reminders
 
-- Symlink the **whole directory**, not just `SKILL.md`. The helpers need to sit next to it.
+- Link the **whole directory**, not just `SKILL.md`. The helpers need to sit next to it. Better still: on the user layout there's no link at all.
+- On Windows, prefer a **junction** over a symlink (no admin/Developer Mode needed) — and prefer the user layout over both.
+- Detect the shell before emitting commands. PowerShell has no `ln`, `chmod`, `grep`, `sed`, or `head`, and its `curl` is `Invoke-WebRequest` with incompatible flags. Use `Select-String`, `Select-Object -First`, `Set-Content`, `Invoke-RestMethod`.
+- After any `winget install`, `$PATH` only refreshes in a **new** PowerShell window. A "command not found" right after a successful install is almost always this.
+- Helpers run under `uv run python helpers/<name>.py`. A bare `python` won't see the `.venv` that `uv sync` builds — this is the most common post-install failure.
 - If `.env` exists but the key is empty, treat it the same as missing — don't assume existence means validity.
 - `ffmpeg` from static builds works fine. Any modern (≥ 4.x) build is enough.
 - `yt-dlp` is optional. Don't block install on it; install lazily the first time a user asks to pull from a URL.

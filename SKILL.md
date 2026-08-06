@@ -70,11 +70,11 @@ First-time install lives in `install.md`. On cold start just verify:
 
 - `GROQ_API_KEY` resolves (env or `.env` at the edvid repo root). Groq Whisper `whisper-large-v3`; no diarization (every word is `speaker_0`).
 - `ELEVENLABS_API_KEY` (optional) — used for LONG sources (>5 min, e.g. YouTube/course lessons) via ElevenLabs Scribe `scribe_v1`, since Groq's free tier chokes on long uploads. `backend=auto` (default) picks Scribe over 5 min when the key exists, else Groq; short clips stay on Groq. No key → long sources fall back to Groq. Ask for it lazily the first time a >5 min source shows up, write to `.env`.
-- `ffmpeg` + `ffprobe` on PATH; Python deps (`uv sync`); Node 18+ for Phase 2. `yt-dlp` only for URL sources (`ingest_url.py`) — install lazily (`brew install yt-dlp`) the first time a link shows up.
+- `ffmpeg` + `ffprobe` on PATH; Python deps (`uv sync`); Node 18+ for Phase 2. `yt-dlp` only for URL sources (`ingest_url.py`) — install lazily the first time a link shows up (`brew install yt-dlp` / `winget install yt-dlp.yt-dlp`).
 - The `remotion-best-practices` skill for Phase-2 domain knowledge (install from https://github.com/remotion-dev/skills if missing).
 - Lazy keys, ask on first use, write to `.env` (never to `<videos_dir>`): `PEXELS_API_KEY` (images), `GOOGLE_API_KEY`+`GOOGLE_CSE_ID` (brand/people images fallback), `TREBLO_API_KEY` (AI music).
 
-Helpers live in `helpers/`, resolved relative to this SKILL.md (symlinked at `~/.claude/skills/edvid/`).
+Helpers live in `helpers/`, resolved relative to this SKILL.md (usually `~/.claude/skills/edvid/`, or a symlink/junction pointing there). Run them as `uv run python helpers/<name>.py` — a bare `python` misses the `.venv` that `uv sync` builds.
 
 ## Helpers
 
