@@ -72,10 +72,10 @@ def main() -> None:
         "--backend",
         type=str,
         default="auto",
-        choices=["auto", "groq", "elevenlabs"],
+        choices=["auto", "groq", "elevenlabs", "whispercpp"],
         help=f"Transcription backend per file. 'auto' (default) uses ElevenLabs Scribe "
              f"for sources longer than {LONG_SOURCE_SECONDS}s when ELEVENLABS_API_KEY is "
-             "set, else Groq. Force with 'groq' or 'elevenlabs'.",
+             "set, else Groq. Force with 'groq', 'elevenlabs', or 'whispercpp' (local).",
     )
     args = ap.parse_args()
 
@@ -98,8 +98,16 @@ def main() -> None:
         print("nothing to do")
         return
 
-    api_key = load_api_key()
+    # Local transcription must not require a cloud key.
+    api_key = "" if args.backend == "whispercpp" else load_api_key()
     elevenlabs_key = load_elevenlabs_key()
+
+    # The cloud backends are I/O-bound, so parallel workers are free throughput.
+    # whisper.cpp already saturates every core and the GPU on one file — running
+    # several at once only makes them contend and finish later.
+    if args.backend == "whispercpp" and args.workers != 1:
+        print("whisper.cpp runs one file at a time (local inference already uses every core)")
+        args.workers = 1
 
     print(f"transcribing {len(pending)} files with {args.workers} parallel workers")
     t0 = time.time()

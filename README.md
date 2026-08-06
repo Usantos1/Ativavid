@@ -35,6 +35,16 @@ winget install Git.Git astral-sh.uv Gyan.FFmpeg OpenJS.NodeJS.LTS
 **2. Feche e reabra o PowerShell.** Isso não é opcional: o Windows só enxerga os
 programas recém-instalados numa janela nova.
 
+**Confira antes de seguir.** Este comando tem que responder as quatro versões:
+
+```powershell
+git --version; uv --version; ffmpeg -version | Select-Object -First 1; node --version
+```
+
+Se algum dos quatro disser *"não é reconhecido"*, o passo 1 não terminou ou você
+não reabriu a janela. Resolva antes de continuar — os passos seguintes vão
+falhar de um jeito bem menos claro.
+
 **3. Baixe a skill:**
 
 ```powershell
@@ -62,6 +72,14 @@ Abra o **Terminal** (Aplicativos → Utilitários).
 ```bash
 brew install git uv ffmpeg node
 ```
+
+**Confira antes de seguir.** Este comando tem que responder as quatro versões:
+
+```bash
+git --version; uv --version; ffmpeg -version | head -1; node --version
+```
+
+Se algum disser *"command not found"*, resolva antes de continuar.
 
 **3. Baixe a skill:**
 
@@ -129,6 +147,62 @@ chave.
 
 ---
 
+## Skill do Remotion (necessária só na Fase 2)
+
+A Fase 1 — corte, cor, áudio — funciona sem isso. Para legendas, gráficos e
+imagens (Fase 2) a edvid precisa de uma segunda skill, a do Remotion.
+
+Ela mora numa subpasta do repositório dela, então não dá pra clonar direto como
+a edvid. Como o repo inteiro tem ~400 KB, o caminho mais simples é copiar — e
+rodar o mesmo comando de novo é como se atualiza:
+
+**Windows (PowerShell):**
+
+```powershell
+$t="$env:TEMP\rmskills"; Remove-Item -Recurse -Force $t,"$env:USERPROFILE\.claude\skills\remotion-best-practices" -EA SilentlyContinue; git clone -q --depth 1 https://github.com/remotion-dev/skills $t; Copy-Item -Recurse "$t\skills\remotion" "$env:USERPROFILE\.claude\skills\remotion-best-practices"; Remove-Item -Recurse -Force $t
+```
+
+**macOS / Linux:**
+
+```bash
+git clone -q --depth 1 https://github.com/remotion-dev/skills /tmp/rmskills && rm -rf "$HOME/.claude/skills/remotion-best-practices" && cp -R /tmp/rmskills/skills/remotion "$HOME/.claude/skills/remotion-best-practices" && rm -rf /tmp/rmskills
+```
+
+Na primeira vez que a Fase 2 rodar, ela ainda vai baixar as dependências do
+Remotion (uns minutos). Nos vídeos seguintes é bem mais rápido, porque fica em
+cache.
+
+---
+
+## Transcrição local, sem chave de API (opcional)
+
+Por padrão a transcrição usa a API do Groq. Quem preferir rodar tudo na própria
+máquina — sem chave, sem internet, sem cota — pode usar o
+[whisper.cpp](https://github.com/ggml-org/whisper.cpp):
+
+```bash
+git clone https://github.com/ggml-org/whisper.cpp ~/whisper.cpp
+cd ~/whisper.cpp && cmake -B build && cmake --build build -j --config Release
+bash ./models/download-ggml-model.sh large-v3
+```
+
+Use o **large-v3** — os modelos menores erram muito em português. São ~3,1 GB, e
+o download não avisa se for interrompido, então confira o tamanho no fim.
+
+Depois é só pedir esse backend:
+
+```bash
+uv run python helpers/transcribe.py video.mp4 --backend whispercpp
+```
+
+A edvid acha o binário e o modelo sozinha em `~/whisper.cpp`. Se você instalou
+em outro lugar, aponte com `WHISPERCPP_BIN` e `WHISPERCPP_MODEL` no `.env`.
+
+Instalar o whisper.cpp **não muda nada** por si só: o Groq continua o padrão até
+você pedir `--backend whispercpp` explicitamente.
+
+---
+
 ## Primeiro uso
 
 1. Coloque seus vídeos brutos numa pasta.
@@ -167,9 +241,22 @@ Se o anúncio da versão disser que houve mudança de dependências, rode o
 
 ## Problemas comuns
 
-**`git` não é reconhecido como comando (Windows)** — você não reabriu o
-PowerShell depois do `winget install`. Feche a janela, abra outra e tente de
-novo.
+**`uv` (ou `git`, ou `ffmpeg`) não é reconhecido como comando (Windows)** — são
+as duas causas mais comuns, nessa ordem:
+
+1. **Você pulou o passo 1.** Rode o `winget install` da instalação, reabra o
+   PowerShell e tente de novo. Não precisa refazer o `git clone` se ele já
+   funcionou.
+2. **Você não reabriu o PowerShell** depois do `winget install`. O Windows só
+   enxerga programas recém-instalados numa janela nova — feche essa e abra
+   outra.
+
+Se o `winget` não existir na sua máquina (Windows 10 mais antigo), instale o
+`uv` pelo instalador oficial:
+
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
 
 **Uma janela pedindo para instalar as Ferramentas de Linha de Comando (macOS)**
 — normal na primeira vez, o Mac não vem com `git` de fábrica. Aceite, espere

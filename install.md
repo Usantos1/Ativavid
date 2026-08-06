@@ -219,31 +219,30 @@ Groq Whisper (`whisper-large-v3`) is the base transcription backend and handles 
 
 Phase 2 (captions, motion graphics, images) is built in Remotion, which needs Node.js 18+ and the `remotion-best-practices` skill.
 
+That skill lives in a **subdirectory** of its repo (`skills/remotion`), so unlike edvid it can't be cloned into place — the repo root has no SKILL.md and nothing would be discovered. The whole repo is ~400 KB, which makes copying the cheapest answer: no symlink, no junction, no admin rights, and re-running the command IS the update.
+
+Name the destination `remotion-best-practices` — that's the `name:` its own SKILL.md declares, and a folder called `remotion` leaves the two disagreeing.
+
 ```bash
-# macOS / Linux — Node.js 18+ (install via nvm/brew if missing)
+# macOS / Linux — Node.js 18+ first (install via nvm/brew if missing)
 node --version
 
-# Install the Remotion skill and symlink it next to edvid
-test -d ~/Developer/remotion-skills || \
-  git clone --depth 1 https://github.com/remotion-dev/skills ~/Developer/remotion-skills
-mkdir -p ~/.claude/skills
-ln -sfn ~/Developer/remotion-skills/skills/remotion ~/.claude/skills/remotion
+git clone -q --depth 1 https://github.com/remotion-dev/skills /tmp/rmskills \
+  && rm -rf "$HOME/.claude/skills/remotion-best-practices" \
+  && cp -R /tmp/rmskills/skills/remotion "$HOME/.claude/skills/remotion-best-practices" \
+  && rm -rf /tmp/rmskills
 ```
 
 ```powershell
-# Windows (PowerShell) — Node.js 18+
+# Windows (PowerShell) — Node.js 18+ first
 node --version   # if missing: winget install OpenJS.NodeJS.LTS, then reopen PowerShell
 
-# The Remotion skill lives in a SUBDIRECTORY of its repo, so it can't just be
-# cloned into place like edvid. Clone, then junction the subdirectory.
-$rs = "$env:USERPROFILE\Developer\remotion-skills"
-if (-not (Test-Path $rs)) { git clone --depth 1 https://github.com/remotion-dev/skills $rs }
-New-Item -ItemType Junction `
-  -Path "$env:USERPROFILE\.claude\skills\remotion" `
-  -Target "$rs\skills\remotion"
+$t="$env:TEMP\rmskills"
+Remove-Item -Recurse -Force $t,"$env:USERPROFILE\.claude\skills\remotion-best-practices" -EA SilentlyContinue
+git clone -q --depth 1 https://github.com/remotion-dev/skills $t
+Copy-Item -Recurse "$t\skills\remotion" "$env:USERPROFILE\.claude\skills\remotion-best-practices"
+Remove-Item -Recurse -Force $t
 ```
-
-If the junction fails, copy the folder instead (`Copy-Item -Recurse "$rs\skills\remotion" "$env:USERPROFILE\.claude\skills\remotion"`) and note that updating it later means re-copying.
 
 None of the optional keys (`ELEVENLABS_API_KEY`, `PEXELS_API_KEY`, `TREBLO_API_KEY`, `GOOGLE_API_KEY`/`GOOGLE_CSE_ID` — see requirement 6) are needed at install time. Ask for each **lazily**, the first time its feature is used, and append it to `.env` next to `GROQ_API_KEY`. `ELEVENLABS_API_KEY` is the Phase-1 exception to "Phase 2/3": ask for it the first time a **>5 min source** shows up (long lessons / YouTube), since that's when the auto backend wants Scribe. Image search also works with **zero keys** via Wikimedia Commons, so Phase 2 images are never hard-blocked.
 
@@ -299,6 +298,6 @@ Tell the user, in one short message:
 - `ffmpeg` from static builds works fine. Any modern (≥ 4.x) build is enough.
 - `yt-dlp` is optional. Don't block install on it; install lazily the first time a user asks to pull from a URL.
 - Node.js 18+ and the `remotion-best-practices` skill are required for Phase 2 (captions, motion graphics, images). Phase 1 (cut + grade) works without them, so a user who only wants a clean cut can start immediately — but set up step 6 so Phase 2 is ready when the cut is approved.
-- Remotion projects are scaffolded per-video with `npx create-video@latest` inside `<videos_dir>/edit/remotion/` when Phase 2 starts — nothing to install globally.
+- Remotion projects are scaffolded per-video by copying the skill's own template (`assets/shortform/` or `assets/longform/`) into `<videos_dir>/edit/remotion/` and running `npm install` there — see the references. Nothing is installed globally, and `create-video` is not used: the template carries the compositions the skill knows how to fill, with the Remotion version pinned so an upstream release can't break a render.
 - Never run transcription as part of install verification unless the user explicitly asks — Groq usage draws on the user's quota.
 - If the user is on Linux without a package manager Claude recognizes, print the manual `ffmpeg` install URL and wait rather than guessing.

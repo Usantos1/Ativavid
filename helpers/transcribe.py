@@ -1,4 +1,4 @@
-"""Transcribe a video with Groq Whisper or ElevenLabs Scribe.
+"""Transcribe a video with Groq Whisper, ElevenLabs Scribe, or local whisper.cpp.
 
 Extracts mono 16kHz audio via ffmpeg, uploads it to a speech-to-text
 endpoint with word-level timestamps, and writes the result — normalized to
@@ -14,6 +14,19 @@ Two backends, chosen automatically by source length (backend="auto"):
     natively. If no ElevenLabs key is configured, long sources fall back to
     Groq (with chunking) so nothing breaks.
 Pass backend="groq" or backend="elevenlabs" to force one regardless of length.
+
+A third backend, whisper.cpp, runs entirely on this machine — no API key, no
+upload cap, no network. It is OPT-IN ONLY (backend="whispercpp"); "auto" never
+selects it, so installing whisper.cpp changes nothing until asked for. It needs
+the binary built and a ggml model downloaded:
+
+    cd ~/whisper.cpp && cmake -B build && cmake --build build -j --config Release
+    bash ./models/download-ggml-model.sh large-v3
+
+Both paths are auto-detected under ~/whisper.cpp; override with WHISPERCPP_BIN
+and WHISPERCPP_MODEL in .env. Word timestamps come from `-ml 1 -sow`, aligned
+against the audio with `-dtw` when the model has matching alignment heads.
+Use large-v3 for Portuguese — smaller models degrade badly.
 
 Audio is uploaded as constant-bitrate mono 16kHz 64kbps MP3 (~0.5 MB/min),
 so file size is predictable from duration. When the file exceeds the
@@ -61,6 +74,29 @@ DEFAULT_MODEL = "whisper-large-v3"
 
 ELEVENLABS_URL = "https://api.elevenlabs.io/v1/speech-to-text"
 ELEVENLABS_MODEL = "scribe_v1"
+
+# whisper.cpp — fully local, no API key, no upload cap. Opt-in only: pass
+# backend="whispercpp". Never chosen by "auto", so a machine with the binary
+# installed keeps behaving exactly as before unless the user asks for it.
+WHISPERCPP_DEFAULT_ROOT = Path.home() / "whisper.cpp"
+# Maps a ggml model filename to the --dtw alignment preset. DTW gives real
+# audio-aligned token times instead of the decoder's heuristic ones, which is
+# what karaoke captions need. Longest keys first — "large-v3-turbo" must win
+# over "large-v3".
+WHISPERCPP_DTW_PRESETS = [
+    ("large-v3-turbo", "large.v3.turbo"),
+    ("large-v3", "large.v3"),
+    ("large-v2", "large.v2"),
+    ("large-v1", "large.v1"),
+    ("medium.en", "medium.en"),
+    ("medium", "medium"),
+    ("small.en", "small.en"),
+    ("small", "small"),
+    ("base.en", "base.en"),
+    ("base", "base"),
+    ("tiny.en", "tiny.en"),
+    ("tiny", "tiny"),
+]
 
 # Sources longer than this (seconds) transcribe via ElevenLabs Scribe when a
 # key is available — Groq's free tier struggles with long/large uploads.
@@ -123,6 +159,176 @@ def load_elevenlabs_key() -> str:
                     if val:
                         return val
     return os.environ.get("ELEVENLABS_API_KEY", "")
+
+
+class ModelLoadError(RuntimeError):
+    """whisper.cpp could not load the ggml model — usually a partial download."""
+
+
+def _env_value(name: str) -> str:
+    """Read one setting from .env (repo root or cwd) or the environment."""
+    for candidate in [Path(__file__).resolve().parent.parent / ".env", Path(".env")]:
+        if candidate.exists():
+            for line in candidate.read_text().splitlines():
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, val = line.split("=", 1)
+                if k.strip() == name:
+                    val = val.strip().strip('"').strip("'")
+                    if val:
+                        return val
+    return os.environ.get(name, "")
+
+
+def resolve_whispercpp() -> tuple[Path, Path]:
+    """Locate the whisper-cli binary and a usable ggml model.
+
+    Override either with WHISPERCPP_BIN / WHISPERCPP_MODEL in .env. Otherwise
+    looks in a standard clone at ~/whisper.cpp and on PATH. Exits with the
+    exact fix when something is missing — a wrong path here is the single most
+    likely failure of this backend, so it should never surface as a traceback.
+    """
+    override_bin = _env_value("WHISPERCPP_BIN")
+    if override_bin:
+        binary = Path(override_bin).expanduser()
+    else:
+        candidates = [
+            WHISPERCPP_DEFAULT_ROOT / "build" / "bin" / "whisper-cli",
+            WHISPERCPP_DEFAULT_ROOT / "build" / "bin" / "main",
+        ]
+        found = next((c for c in candidates if c.exists()), None)
+        which = shutil.which("whisper-cli")
+        binary = found or (Path(which) if which else candidates[0])
+    if not binary.exists():
+        sys.exit(
+            f"whisper.cpp binary not found at {binary}\n"
+            "Build it:  cd ~/whisper.cpp && cmake -B build && cmake --build build -j --config Release\n"
+            "Or set WHISPERCPP_BIN=/path/to/whisper-cli in .env"
+        )
+
+    override_model = _env_value("WHISPERCPP_MODEL")
+    if override_model:
+        model = Path(override_model).expanduser()
+        if not model.exists():
+            sys.exit(f"WHISPERCPP_MODEL points at a missing file: {model}")
+        return binary, model
+
+    models_dir = WHISPERCPP_DEFAULT_ROOT / "models"
+    # for-tests-* are the repo's tiny fixtures (~500 KB), not usable models.
+    real = [p for p in sorted(models_dir.glob("ggml-*.bin"))
+            if not p.name.startswith("for-tests-") and p.stat().st_size > 10 * 1024 * 1024]
+    if not real:
+        sys.exit(
+            f"no whisper.cpp model found in {models_dir}\n"
+            "Download one:  cd ~/whisper.cpp && bash ./models/download-ggml-model.sh large-v3\n"
+            "large-v3 is the one to use for Portuguese — smaller models degrade badly.\n"
+            "Or set WHISPERCPP_MODEL=/path/to/ggml-model.bin in .env"
+        )
+    # Prefer the most accurate available, then turbo, then whatever is there.
+    for want in ("large-v3.bin", "large-v3-turbo", "large-v3", "large"):
+        for p in real:
+            if want in p.name:
+                return binary, p
+    return binary, real[0]
+
+
+def _dtw_preset(model_path: Path) -> str:
+    """Pick the --dtw alignment preset matching a ggml model file, or ""."""
+    name = model_path.name.removeprefix("ggml-")
+    for key, preset in WHISPERCPP_DTW_PRESETS:
+        if name.startswith(key):
+            return preset
+    return ""
+
+
+def call_whispercpp(
+    audio_path: Path,
+    binary: Path,
+    model: Path,
+    language: str | None = None,
+    verbose: bool = False,
+) -> dict:
+    """Transcribe locally with whisper.cpp. Returns a dict in Groq's shape.
+
+    -ml 1 -sow is whisper.cpp's documented way to get word-level timestamps
+    (one word per segment, split on word rather than mid-token). The JSON is
+    then reshaped to Groq's {"words": [{word, start, end}]} so the existing
+    _to_scribe_words conversion is reused unchanged.
+    """
+    dtw = _dtw_preset(model)
+
+    def run(use_dtw: bool) -> subprocess.CompletedProcess:
+        with tempfile.TemporaryDirectory() as tmp:
+            stem = Path(tmp) / "out"
+            cmd = [
+                str(binary),
+                "-m", str(model),
+                "-f", str(audio_path),
+                "-ml", "1",           # one word per segment
+                "-sow",               # split on word, not mid-token
+                "-oj",                # JSON output
+                "-of", str(stem),
+                "-np",                # no per-segment spam on stdout
+                # whisper-cli defaults to English. Without this, Portuguese
+                # audio comes back translated/garbled — the single most
+                # damaging default in this backend.
+                "-l", language or "auto",
+                "-t", str(min(8, os.cpu_count() or 4)),
+            ]
+            if use_dtw and dtw:
+                cmd += ["-dtw", dtw]
+            if verbose:
+                cmd.append("-pp")     # progress, so long files aren't silent
+            # stderr is always captured: on failure whisper.cpp prints one
+            # useful 'error:' line and then a long C++ backtrace, and the
+            # backtrace is what a naive tail would show.
+            proc = subprocess.run(cmd, stdout=None if verbose else subprocess.PIPE,
+                                  stderr=subprocess.PIPE, text=True)
+            out_json = stem.with_suffix(".json")
+            if proc.returncode == 0 and out_json.exists():
+                return json.loads(out_json.read_text())
+            err = proc.stderr or ""
+            if "failed to initialize whisper context" in err:
+                raise ModelLoadError(
+                    f"whisper.cpp could not load the model: {model}\n"
+                    f"    size on disk: {model.stat().st_size / 1e9:.2f} GB — a full large-v3 is ~3.1 GB.\n"
+                    "    A partial or interrupted download is the usual cause. Re-download:\n"
+                    "      cd ~/whisper.cpp && bash ./models/download-ggml-model.sh large-v3"
+                )
+            first = next((ln for ln in err.splitlines() if ln.startswith("error:")), "")
+            raise RuntimeError(first or err.strip()[:300] or f"exit {proc.returncode}")
+
+    try:
+        raw = run(use_dtw=True)
+    except ModelLoadError:
+        raise                       # retrying without -dtw won't fix a bad model
+    except RuntimeError as e:
+        if not dtw:
+            raise RuntimeError(f"whisper.cpp failed: {e}") from e
+        # A model without matching alignment heads aborts on -dtw. Timestamps
+        # get coarser without it, but a working transcript beats no transcript.
+        if verbose:
+            print(f"    -dtw {dtw} rejected, retrying without alignment", flush=True)
+        raw = run(use_dtw=False)
+
+    words: list[dict] = []
+    text_parts: list[str] = []
+    for seg in raw.get("transcription", []):
+        text = (seg.get("text") or "").strip()
+        if not text:
+            continue
+        offsets = seg.get("offsets") or {}
+        start, end = offsets.get("from"), offsets.get("to")
+        if start is None or end is None:
+            continue
+        # whisper.cpp reports offsets in milliseconds; the rest of the skill
+        # works in seconds.
+        words.append({"word": text, "start": float(start) / 1000.0, "end": float(end) / 1000.0})
+        text_parts.append(text)
+
+    detected = (raw.get("result") or {}).get("language") or language or ""
+    return {"words": words, "text": " ".join(text_parts).strip(), "language": detected}
 
 
 def extract_audio(video_path: Path, dest: Path) -> None:
@@ -324,6 +530,7 @@ def _transcribe_audio(
     cache_dir: Path | None = None,
     chunk_seconds: float | None = None,
     backend: str = "groq",
+    wcpp: tuple[Path, Path] | None = None,
 ) -> dict:
     """Transcribe one prepared audio file (chunking if large). Returns a
     payload dict in ElevenLabs Scribe shape.
@@ -347,7 +554,9 @@ def _transcribe_audio(
     eff_chunk = duration
     if backend == "groq" and size > MAX_UPLOAD_BYTES and duration > 0:
         eff_chunk = duration / math.ceil(size / MAX_UPLOAD_BYTES)
-    if chunk_seconds:
+    # whisper.cpp reads the file off disk — no upload, no cap, nothing to
+    # split. Chunking it would only cost accuracy at the seams.
+    if chunk_seconds and backend != "whispercpp":
         eff_chunk = min(eff_chunk, chunk_seconds)
 
     with tempfile.TemporaryDirectory() as seg_tmp:
@@ -371,6 +580,8 @@ def _transcribe_audio(
                 print(f"    chunk {i + 1}/{len(chunks)}", flush=True)
             if backend == "elevenlabs":
                 payload = call_elevenlabs(chunk, api_key, language=language)
+            elif backend == "whispercpp":
+                payload = call_whispercpp(chunk, wcpp[0], wcpp[1], language=language, verbose=verbose)
             else:
                 payload = call_groq(chunk, api_key, model=model, language=language)
             if cache:
@@ -400,9 +611,12 @@ def _transcribe_audio(
         if not detected_lang:
             detected_lang = payload.get("language") or payload.get("language_code") or ""
 
-    backend_tag = (
-        f"elevenlabs/{ELEVENLABS_MODEL}" if backend == "elevenlabs" else f"groq/{model}"
-    )
+    if backend == "elevenlabs":
+        backend_tag = f"elevenlabs/{ELEVENLABS_MODEL}"
+    elif backend == "whispercpp":
+        backend_tag = f"whispercpp/{wcpp[1].name}" if wcpp else "whispercpp"
+    else:
+        backend_tag = f"groq/{model}"
     return {
         "language_code": detected_lang,
         "language": detected_lang,
@@ -448,11 +662,20 @@ def transcribe_one(
     duration = _probe_duration(video)
     resolved = backend
     if resolved == "auto":
+        # "auto" never picks whispercpp: local transcription is a deliberate
+        # choice (build + model download + minutes of CPU), never a surprise.
         resolved = "elevenlabs" if (duration > LONG_SOURCE_SECONDS and elevenlabs_key) else "groq"
     elif resolved == "elevenlabs" and not elevenlabs_key:
         resolved = "groq"
 
-    if resolved == "elevenlabs":
+    wcpp: tuple[Path, Path] | None = None
+    if resolved == "whispercpp":
+        wcpp = resolve_whispercpp()
+        active_key = ""
+        active_model = wcpp[1].name
+        active_chunk = None
+        backend_label = f"whisper.cpp ({wcpp[1].name})"
+    elif resolved == "elevenlabs":
         active_key = elevenlabs_key or ""
         active_model = ELEVENLABS_MODEL
         # don't chunk normal-length lectures; Scribe takes one long upload
@@ -484,7 +707,7 @@ def transcribe_one(
             print(f"  transcribing {video.stem}.mp3 ({size_mb:.1f} MB) via {backend_label}", flush=True)
         payload = _transcribe_audio(audio, active_key, active_model, language, verbose,
                                     cache_dir=chunk_cache, chunk_seconds=active_chunk,
-                                    backend=resolved)
+                                    backend=resolved, wcpp=wcpp)
 
     out_path.write_text(json.dumps(payload, indent=2))
     # only THIS video's chunk dir — siblings may belong to parallel batch workers
@@ -539,10 +762,12 @@ def main() -> None:
         "--backend",
         type=str,
         default="auto",
-        choices=["auto", "groq", "elevenlabs"],
+        choices=["auto", "groq", "elevenlabs", "whispercpp"],
         help=f"Transcription backend. 'auto' (default) uses ElevenLabs Scribe for "
              f"sources longer than {LONG_SOURCE_SECONDS}s when ELEVENLABS_API_KEY is set, "
-             "else Groq. Force with 'groq' or 'elevenlabs'.",
+             "else Groq. Force with 'groq', 'elevenlabs', or 'whispercpp' (fully "
+             "local, no API key, no upload cap — needs whisper.cpp built and a "
+             "ggml model downloaded).",
     )
     args = ap.parse_args()
 
@@ -551,7 +776,8 @@ def main() -> None:
         sys.exit(f"video not found: {video}")
 
     edit_dir = (args.edit_dir or (video.parent / "edit")).resolve()
-    api_key = load_api_key()
+    # Local transcription must not require a cloud key — that's the whole point.
+    api_key = "" if args.backend == "whispercpp" else load_api_key()
     elevenlabs_key = load_elevenlabs_key()
 
     transcribe_one(
