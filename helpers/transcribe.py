@@ -24,9 +24,19 @@ the binary built and a ggml model downloaded:
     bash ./models/download-ggml-model.sh large-v3
 
 Both paths are auto-detected under ~/whisper.cpp; override with WHISPERCPP_BIN
-and WHISPERCPP_MODEL in .env. Word timestamps come from `-ml 1 -sow`, aligned
-against the audio with `-dtw` when the model has matching alignment heads.
+and WHISPERCPP_MODEL in .env. Word timestamps come from `-ml 1 -sow`.
 Use large-v3 for Portuguese — smaller models degrade badly.
+
+ACCURACY, measured on a 16s Portuguese clip against speech_regions.py (the
+acoustic ground truth):
+  - TEXT is equivalent: 28 of 29 words identical to Groq, the one difference
+    being a legitimate ambiguity ("Esse"/"Este").
+  - TIMESTAMPS are markedly worse: 66% of words land inside a real speech
+    region vs Groq's 97%. Median start deviation 240ms, worst case 2.5s; the
+    first word was placed 1.67s early, inside silence.
+So: fine for PHASE 1, whose cut edges come from speech_regions.py anyway, and
+for anyone without a Groq key. Not recommended for PHASE 2 karaoke captions,
+which read word times directly and will visibly drift.
 
 Audio is uploaded as constant-bitrate mono 16kHz 64kbps MP3 (~0.5 MB/min),
 so file size is predictable from duration. When the file exceeds the
@@ -276,15 +286,22 @@ def call_whispercpp(
                 "-l", language or "auto",
                 "-t", str(min(8, os.cpu_count() or 4)),
             ]
+            # -dtw asks for audio-aligned token timestamps. MEASURED: on a
+            # stock cmake build it is accepted but computes nothing — every
+            # t_dtw comes back -1 — so it currently buys no accuracy. Kept
+            # because it costs nothing and starts working if the build gains
+            # DTW support; do NOT treat it as a fix for the timing gap below.
             if use_dtw and dtw:
                 cmd += ["-dtw", dtw]
-            if verbose:
-                cmd.append("-pp")     # progress, so long files aren't silent
-            # stderr is always captured: on failure whisper.cpp prints one
-            # useful 'error:' line and then a long C++ backtrace, and the
-            # backtrace is what a naive tail would show.
-            proc = subprocess.run(cmd, stdout=None if verbose else subprocess.PIPE,
-                                  stderr=subprocess.PIPE, text=True)
+            # Both streams are always captured. stdout: -np means "print
+            # nothing but the results", so whisper.cpp still echoes every
+            # segment — at -ml 1 that is one line per word, and a 10-minute
+            # source would dump thousands of lines into the caller's terminal
+            # (and an agent's context). stderr: on failure whisper.cpp prints
+            # one useful 'error:' line followed by a long C++ backtrace, and
+            # the backtrace is what a naive tail would show, so it has to be
+            # read rather than streamed.
+            proc = subprocess.run(cmd, capture_output=True, text=True)
             out_json = stem.with_suffix(".json")
             if proc.returncode == 0 and out_json.exists():
                 return json.loads(out_json.read_text())

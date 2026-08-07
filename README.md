@@ -201,6 +201,20 @@ em outro lugar, aponte com `WHISPERCPP_BIN` e `WHISPERCPP_MODEL` no `.env`.
 Instalar o whisper.cpp **não muda nada** por si só: o Groq continua o padrão até
 você pedir `--backend whispercpp` explicitamente.
 
+**O que esperar.** Medido num clipe de 16s em português, contra a detecção
+acústica de fala da própria skill:
+
+| | Groq | whisper.cpp |
+|---|---|---|
+| Texto | referência | 28 de 29 palavras idênticas |
+| Palavras no tempo certo | 97% | 66% |
+| Desvio típico | — | 240 ms (pior caso 2,5 s) |
+
+Ou seja: **o texto é equivalente, os tempos não.** Para a Fase 1 isso não
+atrapalha, porque o corte usa a detecção acústica para definir as bordas, não os
+tempos do Whisper. Para as legendas karaokê da Fase 2, que leem o tempo de cada
+palavra, o desvio aparece na tela — nesse caso prefira o Groq.
+
 ---
 
 ## Primeiro uso
