@@ -129,6 +129,48 @@
 .pn-tag.bad { color: var(--rose-fg); border-color: rgba(255, 84, 112, 0.5); background: rgba(255, 84, 112, 0.12); }
 .pn-tag.warn { color: var(--pill-orange-fg); border-color: rgba(255, 119, 19, 0.45); background: rgba(255, 119, 19, 0.12); }
 .pn-tag.info { color: var(--pill-teal-fg); border-color: rgba(9, 181, 183, 0.45); background: rgba(9, 181, 183, 0.1); }
+/* something is attached to this project RIGHT NOW — purple, the one colour
+   not already spoken for by a severity level, so "live" never reads as
+   "broken" or "warning" */
+.pn-tag.live {
+  color: #c9a2ff;
+  border-color: rgba(168, 85, 247, 0.5);
+  background: rgba(168, 85, 247, 0.14);
+}
+.pn-tag.live::before {
+  content: '';
+  display: inline-block;
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: #a855f7;
+  margin-right: 6px;
+  vertical-align: 1px;
+}
+.pn-tag.live.watch { color: #ffb4c6; border-color: rgba(255, 84, 112, 0.5); background: rgba(255, 84, 112, 0.14); }
+.pn-tag.live.watch::before { background: #ff5470; animation: pn-pulse 1.6s ease-in-out infinite; }
+@keyframes pn-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+@media (prefers-reduced-motion: reduce) { .pn-tag.live.watch::before { animation: none; } }
+
+/* the pending request, quoted inline */
+.pn-pending {
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: rgba(255, 119, 19, 0.09);
+  border: 1px solid rgba(255, 119, 19, 0.3);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.pn-pending-head { display: flex; align-items: baseline; gap: 8px; }
+.pn-pending-kind {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 1.1px;
+  color: var(--pill-orange-fg);
+  flex: 1 1 auto;
+}
+.pn-pending-when { font-size: 9.5px; color: var(--muted); flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+.pn-pending-body { font-size: 11.5px; line-height: 1.4; color: var(--text); opacity: 0.9; }
 
 /* margin-top:auto pins the footer to the card's bottom, so the path+button row
    lines up across a row of cards whose bodies differ in height (a 2-line

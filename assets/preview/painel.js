@@ -43,6 +43,7 @@ function render(data) {
   const broken = list.filter((p) => p.delivery && p.delivery.broken);
   const stale = list.filter((p) => p.delivery && p.delivery.stalePointer);
   const pending = list.filter((p) => p.pendingEdits || p.pendingStyle);
+  const watched = list.filter((p) => p.watchers);
   const box = $('alerts');
   box.innerHTML = '';
   const add = (kind, html) => { el('div', `pn-alert ${kind}`, box).innerHTML = html; };
@@ -58,7 +59,15 @@ function render(data) {
     add('warn', `<b>${stale.length}</b> projeto(s) com <code>finalVideo</code> apontando pra arquivo inexistente ` +
       `(o servidor resolve sozinho, mas a contabilidade está errada)`);
   }
-  if (!broken.length && !pending.length && !stale.length && list.length) {
+  // A watcher on a project with nothing pending is the shape of the accident
+  // that happened here: it stays armed after the work is done, and the next
+  // save anyone makes gets applied by whichever session is still listening.
+  const idleWatched = watched.filter((p) => !p.pendingEdits && !p.pendingStyle);
+  if (idleWatched.length) {
+    add('warn', `<b>${idleWatched.length}</b> projeto(s) com watcher armado sem nada pendente — ` +
+      `qualquer save ali dispara trabalho automático: ${idleWatched.map((p) => p.folder).join(', ')}`);
+  }
+  if (!broken.length && !pending.length && !stale.length && !idleWatched.length && list.length) {
     add('good', 'Nada pendente — todas as entregas abrem e nenhum pedido está esperando.');
   }
 
@@ -102,9 +111,23 @@ function render(data) {
       row('entrega', 'ainda não entregue', 'dim');
     }
 
+    // what the pending request actually asks for — "algo pendente" with no way
+    // to see what it is just moves the question somewhere else
+    if (p.pendingDetail) {
+      const pend = el('div', 'pn-pending', card);
+      const head = el('div', 'pn-pending-head', pend);
+      el('span', 'pn-pending-kind', head,
+         p.pendingDetail.kind === 'style' ? 'PEDIDO — TROCA DE ESTILO' : 'PEDIDO — AJUSTES NA TIMELINE');
+      if (p.pendingDetail.savedAt) el('span', 'pn-pending-when', head, p.pendingDetail.savedAt);
+      el('div', 'pn-pending-body', pend, p.pendingDetail.summary);
+    }
+
     const tags = el('div', 'pn-tags', card);
-    if (p.pendingEdits) el('span', 'pn-tag warn', tags, 'marcações salvas');
-    if (p.pendingStyle) el('span', 'pn-tag warn', tags, 'troca de estilo salva');
+    // a live server/watcher means someone (or some session) is attached to
+    // this project right now — the thing nobody could see when a leftover
+    // watcher applied a style change on its own
+    if (p.servers) el('span', 'pn-tag live', tags, `preview aberto${p.servers > 1 ? ` ×${p.servers}` : ''}`);
+    if (p.watchers) el('span', 'pn-tag live watch', tags, `watcher armado${p.watchers > 1 ? ` ×${p.watchers}` : ''}`);
     if (p.awaitingStyle) el('span', 'pn-tag info', tags, 'aguardando escolha de estilo');
     if (p.delivery && p.delivery.stalePointer) {
       const t = el('span', 'pn-tag bad', tags, 'ponteiro errado');

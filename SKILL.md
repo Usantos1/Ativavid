@@ -187,7 +187,12 @@ and **clicking a caption chip** retypes that line (`captionFixes`).
 
 **`/painel`** (linked from the header) lists every sibling project — phase,
 delivery, whether that delivery still opens, and which projects have a saved
-request waiting. It auto-refreshes every 8s, because a dashboard reporting
+request waiting (**quoted inline**, so "something is pending" does not mean
+opening a file to find out what). It also shows which projects have a **live
+preview server or an armed watcher** right now, and warns about a watcher
+still armed on a project with nothing pending — that combination is what let a
+leftover watcher apply a style change nobody expected, and it was invisible
+until this existed. It auto-refreshes every 8s, because a dashboard reporting
 stale numbers is worse than no dashboard. Each row offers **assistir** (open
 the delivery in the player), **pasta**, **copiar**, and — only where the
 pointer is provably wrong — **corrigir ponteiro**, which rewrites just

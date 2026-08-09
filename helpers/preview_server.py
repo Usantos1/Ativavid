@@ -223,6 +223,84 @@ def probe_duration_cached(p: Path) -> float | None:
     return _dur_cache[key]
 
 
+_proc_cache: dict[str, object] = {"at": 0.0, "lines": []}
+
+
+def running_ativavid_processes() -> list[str]:
+    """Command lines of every live preview_server / watch_edits process.
+
+    The dashboard uses this to say which projects currently have something
+    attached to them. That question caused real damage: a watcher left armed
+    on a finished project applied a style change nobody was expecting, and
+    nothing on screen had said the project was still being watched.
+
+    Cached for a few seconds — the WMI query costs ~300ms and a scan asks once
+    for every project. Any failure degrades to "unknown", never to a wrong
+    claim that a project is idle.
+    """
+    now = time.time()
+    if now - float(_proc_cache["at"]) < 5.0:
+        return list(_proc_cache["lines"])  # type: ignore[arg-type]
+    lines: list[str] = []
+    try:
+        out = subprocess.run(
+            ["powershell", "-NoProfile", "-Command",
+             "Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | "
+             "Where-Object { $_.CommandLine -match 'preview_server|watch_edits' } | "
+             "ForEach-Object { $_.CommandLine }"],
+            capture_output=True, text=True, timeout=8,
+        )
+        if out.returncode == 0:
+            lines = [ln.strip() for ln in out.stdout.splitlines() if ln.strip()]
+    except (OSError, subprocess.SubprocessError):
+        lines = []
+    _proc_cache["at"] = now
+    _proc_cache["lines"] = lines
+    return list(lines)
+
+
+def describe_pending(edit: Path) -> dict | None:
+    """One-line summary of whatever request is sitting unapplied in a project.
+
+    The dashboard used to say only THAT something was pending, which still
+    meant opening the file to learn anything. The interesting part is cheap to
+    extract and is exactly what decides whether it matters.
+    """
+    style_p, edits_p = edit / "preview_style.json", edit / "preview_edits.json"
+    for p, kind in ((style_p, "style"), (edits_p, "edits")):
+        if not p.exists():
+            continue
+        try:
+            d = json.loads(p.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return {"kind": kind, "savedAt": None, "summary": "arquivo ilegível"}
+        saved = d.get("savedAt")
+        if kind == "style":
+            bits = [d.get("editName") or d.get("edit"),
+                    f"headline {d.get('headlineName') or d.get('headline')}",
+                    f"legenda {d.get('captionsName') or d.get('captions')}"]
+            if d.get("note"):
+                bits.append(f"obs: {d['note']}")
+            return {"kind": "style", "savedAt": saved,
+                    "summary": " · ".join(b for b in bits if b)}
+        parts = []
+        if d.get("notes"):
+            parts.append(f"{len(d['notes'])} marcação(ões)")
+        if d.get("edl"):
+            e = d["edl"]
+            if e.get("removed"):
+                parts.append(f"{len(e['removed'])} take(s) removido(s)")
+            if e.get("changes"):
+                parts.append(f"{len(e['changes'])} corte(s) ajustado(s)")
+        if d.get("captionFixes"):
+            parts.append(f"{len(d['captionFixes'])} legenda(s) corrigida(s)")
+        if d.get("editData", {}).get("newInserts"):
+            parts.append(f"{len(d['editData']['newInserts'])} imagem(ns) nova(s)")
+        return {"kind": "edits", "savedAt": saved,
+                "summary": " · ".join(parts) or "ajustes salvos"}
+    return None
+
+
 class Handler(BaseHTTPRequestHandler):
     root: Path  # set on the class by main()
     projects_roots: list[Path] = []
@@ -589,6 +667,7 @@ class Handler(BaseHTTPRequestHandler):
         """
         rows = []
         seen: set[Path] = set()
+        procs = running_ativavid_processes()
         for proot in self.projects_roots:
             if not proot.exists():
                 continue
@@ -617,7 +696,31 @@ class Handler(BaseHTTPRequestHandler):
                         "declared": declared,
                     }
                 cut = edit / (state.get("video") or "cut.mp4")
+                # Match the FULL edit path, not the folder name: "kevin" is a
+                # substring of "kevin contar capinas", so a name match reported
+                # one project's server as belonging to the other. Separators
+                # differ between launches (--root uses \, the watcher was armed
+                # with /), so normalise both sides before comparing.
+                needle = str(edit).replace("\\", "/").lower()
+                mine = [c for c in procs if needle in c.replace("\\", "/").lower()]
+                # Dedupe on the ARGUMENTS, not the whole command line: the
+                # venv's python.exe spawns the base interpreter as a child, so
+                # one logical server appears twice with different exe paths and
+                # identical arguments. Keying from the script name onward
+                # collapses that pair while keeping two real servers apart
+                # (they differ by --port).
+                def _args_key(c: str) -> str:
+                    low = c.replace("\\", "/").lower()
+                    for script in ("preview_server.py", "watch_edits.py"):
+                        i = low.find(script)
+                        if i != -1:
+                            return low[i:]
+                    return low
+                mine = list({_args_key(c): c for c in mine}.values())
                 rows.append({
+                    "servers": sum(1 for c in mine if "preview_server" in c),
+                    "watchers": sum(1 for c in mine if "watch_edits" in c),
+                    "pendingDetail": describe_pending(edit),
                     "project": state.get("project") or edit.parent.name,
                     "folder": edit.parent.name,
                     "path": str(edit),
