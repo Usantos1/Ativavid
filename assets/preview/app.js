@@ -71,6 +71,8 @@ const ICON = {
   // "cut here, keep both sides", the same visual shorthand every NLE uses
   razor: '<svg viewBox="0 0 16 16"><path d="M8 1v9.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M8 10.4 4.6 15h2.1L8 13.2 9.3 15h2.1z" fill="currentColor"/><circle cx="8" cy="1.6" r="1.1" fill="currentColor"/></svg>',
   imgSearch: '<svg viewBox="0 0 16 16"><rect x="1.2" y="2.6" width="13.6" height="10.8" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="5.4" cy="6.2" r="1.2"/><path d="M2.4 12.2l3.2-3.1a1 1 0 011.35-.05l1.9 1.62 1.5-1.25a1 1 0 011.3.02l2 1.75" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  // a frame with a corner folded down — "this single frame", not "a photo"
+  cover: '<svg viewBox="0 0 16 16"><path d="M2.6 1.6h6.6l4.2 4.2v8.6a.6.6 0 0 1-.6.6H2.6a.6.6 0 0 1-.6-.6V2.2a.6.6 0 0 1 .6-.6z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M9.2 1.6v4.2h4.2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><circle cx="5.6" cy="9.2" r="1.15"/><path d="M3.2 13l2.5-2.4a.9.9 0 0 1 1.2 0l1.5 1.3 1.2-1a.9.9 0 0 1 1.15.02l1.5 1.3" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 };
 
 // the "Nenhuma" card's mark — a plain slash-circle, not a rendered look (there
@@ -828,6 +830,30 @@ function nudgeTakeEdge(i, side, dir) {
   const frames = Math.round(d * (S.fps || 30));
   toast(`${side === 'l' ? 'IN' : 'OUT'} ${fmt(side === 'l' ? r.start : r.end)}  ` +
         `(${frames >= 0 ? '+' : ''}${frames}f)`, 1100);
+}
+
+/* ---------- capa: freeze the current frame as the post's cover ----------
+ * The frame comes straight out of the delivered render, so whatever headline
+ * and accent are burned into it ARE the cover's — no second implementation of
+ * the look to drift from the template. The server also writes the 1:1 centre
+ * crop, because that is what the Instagram grid shows and a cover can read
+ * fine at 9:16 while losing its headline in the square.
+ */
+async function saveCover() {
+  if (S.tab !== 2) { toast('A capa sai da aba Final (o render com headline)', 2200); return; }
+  const t = video.currentTime;
+  try {
+    const r = await fetch('/api/cover', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ timeSec: t }),
+    });
+    const d = await r.json();
+    if (!d.ok) { toast(d.error || 'Não consegui salvar a capa', 3500); return; }
+    toast(`✓ Capa salva em ${d.cover}${d.feed ? ` (+ ${d.feed}, corte 1:1 do feed)` : ''}`, 4500);
+  } catch (e) {
+    toast('Não consegui salvar a capa — servidor fora do ar?', 3500);
+  }
 }
 
 // ---------- razor: split the selected take at the playhead ----------
@@ -2364,6 +2390,9 @@ document.addEventListener('keydown', (e) => {
   } else if ((e.key === 's' || e.key === 'S') && !e.ctrlKey && !e.metaKey) {
     e.preventDefault();
     splitAtPlayhead();
+  } else if ((e.key === 'c' || e.key === 'C') && !e.ctrlKey && !e.metaKey) {
+    e.preventDefault();
+    saveCover();
   } else if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
     e.preventDefault();
     undo();
@@ -2394,6 +2423,8 @@ $('btnUndo').addEventListener('click', undo);
 $('btnRedo').addEventListener('click', redo);
 $('btnSplit').innerHTML = ICON.razor;
 $('btnSplit').addEventListener('click', splitAtPlayhead);
+$('btnCover').innerHTML = ICON.cover;
+$('btnCover').addEventListener('click', saveCover);
 
 // ---------- image picker ----------
 // Search is server-side (the key never reaches the browser) and nothing is

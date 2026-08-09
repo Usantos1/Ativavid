@@ -414,6 +414,9 @@ class Handler(BaseHTTPRequestHandler):
         if route == "/api/project/action":
             self._project_action()
             return
+        if route == "/api/cover":
+            self._make_cover()
+            return
         if route == "/api/default-style":
             self._save_default_style()
             return
@@ -576,6 +579,73 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         self._json({"ok": False, "error": f"ação desconhecida: {action}"}, 400)
+
+    def _make_cover(self) -> None:
+        """Freeze one frame of the DELIVERED render as the post's cover image.
+
+        Taken from final.mp4 on purpose, not composed here: that frame already
+        carries the real headline, the real font and the real accent, burned in
+        by Remotion. Redrawing the text server-side (PIL) would be a second
+        implementation of the same look, and it would drift from the template
+        the first time a style changes.
+
+        Also writes capa_feed.jpg — the 1:1 centre crop, which is what the
+        Instagram grid shows. A cover that reads fine at 9:16 and loses the
+        headline in the square is the failure worth catching before posting.
+        """
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            body = json.loads(self.rfile.read(length) or b"{}")
+        except (ValueError, json.JSONDecodeError):
+            self._json({"ok": False, "error": "invalid JSON"}, 400)
+            return
+        try:
+            t = max(0.0, float(body.get("timeSec", 0)))
+        except (TypeError, ValueError):
+            self._json({"ok": False, "error": "timeSec inválido"}, 400)
+            return
+
+        state: dict = {}
+        sp = self.root / "state.json"
+        if sp.exists():
+            try:
+                state = json.loads(sp.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                pass
+        rel = self._resolve_final_video(state) or state.get("video") or "cut.mp4"
+        src = self._safe(self.root, rel)
+        if not src or not src.exists():
+            self._json({"ok": False, "error": "sem vídeo para tirar a capa"}, 404)
+            return
+
+        out = self.root / "capa.jpg"
+        feed = self.root / "capa_feed.jpg"
+        # -ss before -i seeks by keyframe and is fast, but lands on the wrong
+        # frame; the cover has to be the frame the user is actually looking at,
+        # so seek after -i (accurate) and accept the extra decode.
+        r = subprocess.run(
+            ["ffmpeg", "-y", "-v", "error", "-i", str(src), "-ss", f"{t:.3f}",
+             "-frames:v", "1", "-q:v", "2", str(out)],
+            capture_output=True, text=True,
+        )
+        if r.returncode != 0 or not out.exists():
+            self._json({"ok": False, "error": (r.stderr or "ffmpeg falhou")[:200]}, 500)
+            return
+        # Top-aligned square, not centred. The template puts the headline high
+        # in the frame (HL_STYLES top ≈ 300 of 1920), so a centred 1:1 crop
+        # starts below it and reliably beheads the first line — measured on a
+        # real cover, "Girou na roleta / e caiu na pior" lost its first line
+        # entirely. Anchoring at y=0 keeps the headline plus the subject's
+        # upper body, which is also what a person drags to by hand in the app.
+        subprocess.run(
+            ["ffmpeg", "-y", "-v", "error", "-i", str(out),
+             "-vf", "crop=w='min(iw,ih)':h='min(iw,ih)':x='(iw-ow)/2':y=0",
+             "-q:v", "2", str(feed)],
+            capture_output=True, text=True,
+        )
+        self._json({"ok": True, "cover": out.name,
+                    "feed": feed.name if feed.exists() else None,
+                    "timeSec": round(t, 3)})
 
     def _save_default_style(self) -> None:
         """The "house style" — every NEW project's Estilo tab starts here.

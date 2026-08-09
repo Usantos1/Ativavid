@@ -95,7 +95,7 @@ Phase 1:
 - **`watch_video.py <video> [--mode scene|keyframe|uniform] [--times t1 t2 …] [--start/--end] [--max-frames 24]`** — "what is IN this footage?" when you *don't* know where to look: scene-change detection (auto-fallback to uniform sampling on static/talking-head sources) + perceptual dedup (near-identical frames collapse — a held take becomes a handful of tiles) → labeled contact sheets in `edit/verify/watch_<stem>/`, one Read per sheet. Use for visual inventory of unknown material, eyeballing takes across sources, and surveying `cut.mp4` beyond verify_cut's numbers. `--times` pins transcript-cue frames: deictic moments from `takes_packed.md` ("olha isso", "como você pode ver") are LOW visual change and invisible to scene detection — pin them to decide B-roll/callout/zoom placement in Phase 2.
 
 Phase 2/3 (see the track references for usage):
-- **`captions_for_remotion.py`** (karaoke JSON) · **`face_track.py`** (eye-track JSON) · **`person_matte.py`** (RVM alpha matte; `uv sync --extra matting`) · **`pexels_search.py`** · **`wikimedia_images.py`** (no key, brands/people first choice) · **`google_images.py`** (fallback, mind rights) · **`captions_srt.py`** (longform .srt) · **`chapters.py`** (YouTube chapters) · **`elevenlabs_music.py`** (AI soundtrack, ElevenLabs Music v2 — reuses `ELEVENLABS_API_KEY`, needs a paid plan; pass a context-driven MUSICAL vibe: genre + instruments + tempo + mood, not SFX-y phrasing; auto-framed as a composed instrumental).
+- **`captions_for_remotion.py`** (karaoke JSON) · **`face_track.py`** (eye-track JSON) · **`person_matte.py`** (RVM alpha matte; `uv sync --extra matting`) · **`pexels_search.py`** · **`wikimedia_images.py`** (no key, brands/people first choice) · **`google_images.py`** (fallback, mind rights) · **`captions_srt.py`** (longform .srt) · **`chapters.py`** (YouTube chapters) · **`elevenlabs_music.py`** (AI soundtrack, ElevenLabs Music v2 — reuses `ELEVENLABS_API_KEY`, needs a paid plan; pass a context-driven MUSICAL vibe: genre + instruments + tempo + mood, not SFX-y phrasing; auto-framed as a composed instrumental) · **`post_brief.py`** (`--edit-dir <edit>` → `post_brief.md`: hook, beats with their quotes, spoken text and style, gathered for writing the post's caption + hashtags. It does NOT write the caption — wording is a judgement call about a specific brand and a specific joke, and a template yields exactly the generic "Confira! 🔥 #viral" that makes a feed read as automated. Write it from the brief.).
 - **`check_template_integrity.py <edit>/remotion [--track shortform|longform] [--fix]`** — hashes `remotion/src/*` (everything except `CustomGraphics.tsx`) against the shipped `assets/<track>/src/` template. Run before every `npx remotion render`; a non-zero exit means Hard Rule 11 got broken (a template file was hand-edited) — `--fix` restores it verbatim, never touches `CustomGraphics.tsx`.
 
 Interface:
@@ -184,6 +184,16 @@ the frame-accurate version of dragging a handle. `Ctrl+Z`/`Ctrl+Shift+Z` undo an
 redo everything above, up to the last save. On the Final tab the **image button**
 searches Pexels and drops the pick onto the insert track (`editData.newInserts`),
 and **clicking a caption chip** retypes that line (`captionFixes`).
+
+**Capa do post** — on the Final tab, `C` (or the frame button) freezes the
+current frame of the DELIVERED render as `capa.jpg`, plus `capa_feed.jpg`, the
+1:1 crop the Instagram grid shows. The frame is taken from `final.mp4` rather
+than composed server-side on purpose: it already carries the real headline,
+font and accent, so there is no second implementation of the look to drift from
+the template. The square is anchored to the TOP, not centred — the template
+puts the headline around y≈300 of 1920, so a centred crop starts below it and
+beheads the first line (measured: a two-line headline lost its first line
+entirely before this was changed).
 
 **`/painel`** (linked from the header) lists every sibling project — phase,
 delivery, whether that delivery still opens, and which projects have a saved
