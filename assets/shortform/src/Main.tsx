@@ -61,7 +61,9 @@ export type EditData = {
     // "card": Poppins Black on a dark rounded card, UPPERCASE, optional logo row.
     // "realce": each line on its own solid orange marker block.
     // "misto": line 1 light white, line 2 heavy orange.
-    style?: 'outline' | 'card' | 'realce' | 'misto';
+    // "sombra": white text with a hard un-blurred offset in the accent.
+    // "sublinhado": white text over a thick accent bar under each line.
+    style?: 'outline' | 'card' | 'realce' | 'misto' | 'sombra' | 'sublinhado';
     accent?: string;        // realce/misto marker + text colour (default #ff5200)
     fontSizePx?: number;   // auto-fit CEILING (alias of maxFontPx, kept for compat)
     maxFontPx?: number;    // auto-fit ceiling (per-style default)
@@ -541,6 +543,12 @@ const HL_STYLES: Record<string, HlStyle> = {
   card: {weights: [900, 900], cap: 82, safeW: 820, lh: 1.06, top: 120},
   realce: {weights: [900, 900], cap: 86, safeW: 830, lh: 1.04, top: 300},
   misto: {weights: [400, 900], cap: 98, safeW: 900, lh: 0.98, top: 300},
+  // safeW is tighter than outline's: the hard offset adds real width to the
+  // right of the glyphs, so fitting to the full 900 would push it off-frame.
+  sombra: {weights: [900, 900], cap: 92, safeW: 860, lh: 1.02, top: 310},
+  // gap between lines is generous (the bar lives in it), so the cap is lower
+  // to keep two lines + two bars inside the same band as the other styles.
+  sublinhado: {weights: [900, 900], cap: 84, safeW: 850, lh: 1.0, top: 305},
 };
 
 const hlWidth = (text: string, size: number, weight: number) =>
@@ -663,6 +671,76 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
           <div style={{background: '#232326', borderRadius: 24, padding: '28px 46px', textAlign: 'center', fontFamily, fontWeight: 900, fontSize: size, color: '#fff', lineHeight: lh, letterSpacing: -1, textShadow: '0 4px 20px rgba(0,0,0,0.55)', boxShadow: '0 18px 50px rgba(0,0,0,0.45)'}}>
             {lines.filter(Boolean).map((l, i) => (<div key={i}>{l}</div>))}
           </div>
+        </div>
+      </AbsoluteFill>
+    );
+  }
+
+  // "sombra": white text with a hard, un-blurred offset in the accent. Reads as
+  // a sticker/pop print rather than a lit object — the opposite of `outline`'s
+  // stroke, which sits tight to the glyph. Offset scales with the type so it
+  // holds at any fitted size instead of vanishing on small headlines.
+  if (styleId === 'sombra') {
+    const off = Math.max(4, Math.round(size * 0.07));
+    return (
+      <AbsoluteFill style={{justifyContent: 'flex-start', alignItems: 'center', paddingTop: top}}>
+        <Sfx src="whoosh.mp3" volume={0.1} />
+        <div
+          style={{
+            ...shell,
+            fontWeight: 900,
+            fontSize: size,
+            color: '#fff',
+            padding: '0 60px',
+            // two shadows: the accent offset, then a soft black to lift the
+            // whole thing off busy footage (a shelf wall eats flat white)
+            textShadow: `${off}px ${off}px 0 ${H.accent ?? '#ff5200'}, 0 6px 18px rgba(0,0,0,0.5)`,
+          }}
+        >
+          {lines.filter(Boolean).map((l, i) => (<div key={i}>{l}</div>))}
+        </div>
+      </AbsoluteFill>
+    );
+  }
+
+  // "sublinhado": text stays white and readable; the accent is a thick bar
+  // UNDER each line. The marker sits behind the descenders on purpose — a bar
+  // clear of them reads as a separate rule rather than a highlight.
+  if (styleId === 'sublinhado') {
+    // 0.13 rendered as a hairline rule that competed with busy footage instead
+    // of anchoring the text; 0.19 reads as a marker stroke at the sizes the
+    // headline actually fits to.
+    const barH = Math.max(8, Math.round(size * 0.19));
+    return (
+      <AbsoluteFill style={{justifyContent: 'flex-start', alignItems: 'center', paddingTop: top}}>
+        <Sfx src="whoosh.mp3" volume={0.1} />
+        <div style={{...shell, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: Math.round(size * 0.16)}}>
+          {lines.filter(Boolean).map((l, i) => (
+            <div key={i} style={{position: 'relative', display: 'inline-block'}}>
+              <div
+                style={{
+                  position: 'absolute',
+                  left: '-0.06em',
+                  right: '-0.06em',
+                  bottom: Math.round(size * 0.06),
+                  height: barH,
+                  borderRadius: barH / 2,
+                  background: H.accent ?? '#ff5200',
+                }}
+              />
+              <div
+                style={{
+                  position: 'relative',
+                  fontWeight: 900,
+                  fontSize: size,
+                  color: '#fff',
+                  textShadow: '0 4px 16px rgba(0,0,0,0.55)',
+                }}
+              >
+                {l}
+              </div>
+            </div>
+          ))}
         </div>
       </AbsoluteFill>
     );

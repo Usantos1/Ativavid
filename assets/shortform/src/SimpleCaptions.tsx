@@ -41,6 +41,11 @@ type Variant = {
   tracking: number;
   bottom: number;
   maxW: number;
+  // "bloco": each line sits on a solid slab instead of floating over the
+  // footage. For THIS variant the picked caption colour paints the SLAB and
+  // the text is always white — coloured text over a shop wall full of
+  // coloured product is the case a text-shadow cannot rescue.
+  block?: boolean;
 };
 
 const C = (editData as any).captions ?? {};
@@ -81,7 +86,37 @@ export const SIMPLE_VARIANTS: Record<string, Variant> = {
     bottom: 430, // same height as the other two — low on frame it read as an afterthought
     maxW: 840,
   },
+  bloco: {
+    family: POPPINS,
+    weight: 800,
+    size: 76,
+    maxWords: 3,
+    lines: 1,
+    squeeze: 1,
+    squeezeY: 1,
+    tracking: -2,
+    bottom: 430,
+    // narrower than the others: the slab adds padding on both sides, so
+    // fitting to their 860 would run the block past the safe area
+    maxW: 760,
+    block: true,
+  },
 };
+
+/* Text colour for the "bloco" slab, decided from the slab's own brightness.
+ * Hardcoding white text broke the moment the picked caption colour was light:
+ * this project picks #FFFFFF, which rendered a white slab with white text —
+ * invisible. Relative luminance (sRGB coefficients) is the cheap correct test;
+ * the 0.6 threshold sits above mid-grey because white text on a mid tone reads
+ * worse than black does. */
+function inkOn(bg: string): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(bg.trim());
+  if (!m) return '#fff';
+  const n = parseInt(m[1], 16);
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => v / 255);
+  const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return lum > 0.6 ? '#111214' : '#fff';
+}
 
 const clean = (t: string) => t.replace(/[.,!?…]+$/, '');
 const isBreak = (t: string) => /[.,!?…]$/.test(t);
@@ -161,6 +196,39 @@ export const SimpleCaptions: React.FC<{variant: string}> = ({variant}) => {
   if (frame >= end) return null;
 
   const lines = splitTwo(cues[idx], V);
+
+  if (V.block) {
+    const pad = Math.round(V.size * 0.16);
+    const slab = C.accent ?? '#111214';
+    const ink = inkOn(slab);
+    return (
+      <AbsoluteFill style={{justifyContent: 'flex-end', alignItems: 'center', paddingBottom: V.bottom}}>
+        <div style={{display: 'flex', flexDirection: 'column', alignItems: 'center', gap: Math.round(V.size * 0.14)}}>
+          {lines.map((ln, i) => (
+            <div
+              key={i}
+              style={{
+                fontFamily: V.family,
+                fontWeight: V.weight,
+                fontSize: V.size,
+                letterSpacing: V.tracking,
+                lineHeight: 1.06,
+                color: ink,
+                whiteSpace: 'pre',
+                background: slab,
+                padding: `${Math.round(pad * 0.55)}px ${pad}px ${Math.round(pad * 0.75)}px`,
+                borderRadius: Math.round(V.size * 0.16),
+                boxShadow: '0 12px 30px rgba(0,0,0,0.45)',
+              }}
+            >
+              {ln.map((w) => clean(w.text)).join(' ')}
+            </div>
+          ))}
+        </div>
+      </AbsoluteFill>
+    );
+  }
+
   return (
     <AbsoluteFill style={{justifyContent: 'flex-end', alignItems: 'center', paddingBottom: V.bottom}}>
       <div

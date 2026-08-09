@@ -154,6 +154,8 @@ const STYLE_CATALOG = {
     // defaultStyle() doesn't have to mean "first card" — see the captions
     // catalog below for the same split.
     {id: 'misto', name: 'Misto', hl: 'misto', default: true},
+    {id: 'sombra', name: 'Sombra dura', hl: 'sombra'},
+    {id: 'sublinhado', name: 'Sublinhado', hl: 'sublinhado'},
     // opts out of the hook entirely (hook.enabled:false in edit-data.json) — a
     // real final look (talking-head cut, images placed by hand later), not a
     // placeholder, so it earns its own card and label like the mockups do.
@@ -166,6 +168,7 @@ const STYLE_CATALOG = {
     {id: 'simples', name: 'Simples', stat: 'simples'},
     {id: 'serifada', name: 'Serifada', stat: 'serifada'},
     {id: 'classica', name: 'Clássica', stat: 'classica'},
+    {id: 'bloco', name: 'Bloco', stat: 'bloco'},
     // opts out of burned captions (captions.enabled:false) — same reasoning.
     {id: 'nenhuma', name: 'Nenhuma', none: true},
   ],
@@ -358,6 +361,8 @@ const HL_STYLES = {
   card: { weights: [900, 900], cap: 82, safeW: 820, lh: 1.06 },
   realce: { weights: [900, 900], cap: 86, safeW: 830, lh: 1.04 },
   misto: { weights: [400, 900], cap: 98, safeW: 900, lh: 0.98 },
+  sombra: { weights: [900, 900], cap: 92, safeW: 860, lh: 1.02 },
+  sublinhado: { weights: [900, 900], cap: 84, safeW: 850, lh: 1.0 },
 };
 
 // Measured in RENDER units (1080-wide), scaled to the box only at the end — the
@@ -428,12 +433,33 @@ function buildHeadlineDemo(host, styleId) {
     }
     return;
   }
+  if (styleId === 'sublinhado') {
+    box.style.gap = `${Math.round(size * 0.16)}px`;
+    for (const l of lines) {
+      if (!l) continue;
+      const holder = el('div', 'hl-under', box);
+      const bar = el('div', 'hl-under-bar', holder);
+      const barH = Math.max(8 * s, size * 0.19);
+      bar.style.height = `${barH}px`;
+      bar.style.borderRadius = `${barH / 2}px`;
+      bar.style.bottom = `${size * 0.06}px`;
+      const t = el('div', 'hl-under-text', holder);
+      t.style.fontSize = `${size}px`;
+      t.textContent = l;
+    }
+    return;
+  }
   if (styleId === 'card') {
     box.style.borderRadius = `${24 * s}px`;
     box.style.padding = `${28 * s}px ${46 * s}px`;
   }
   if (styleId === 'outline') {
     box.style.webkitTextStroke = `${12 * s}px #000`;
+  }
+  if (styleId === 'sombra') {
+    // same offset formula as the template, scaled to the card
+    const off = Math.max(4 * s, size * 0.07);
+    box.style.textShadow = `${off}px ${off}px 0 var(--hl-accent), 0 ${6 * s}px ${18 * s}px rgba(0,0,0,0.5)`;
   }
   lines.forEach((l, i) => {
     if (!l) return;
@@ -525,8 +551,21 @@ const STATIC_VARIANTS = {
   simples: {family: "'Poppins',sans-serif", weight: 600, size: 82, maxWords: 3, lines: 1, sx: 0.9, sy: 0.9, tracking: -3, maxW: 860},
   serifada: {family: "'Libre Baskerville',serif", weight: 700, size: 84, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: -1, maxW: 860},
   classica: {family: "'Inter',sans-serif", weight: 500, size: 52, maxWords: 14, lines: 2, sx: 1, sy: 1, tracking: 0, maxW: 840},
+  bloco: {family: "'Poppins',sans-serif", weight: 800, size: 76, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: -2, maxW: 760, block: true},
 };
 const ORPHAN_PT = /^(o|a|os|as|e|é|de|do|da|em|no|na|um|uma|que|se|ao|à|por|com)$/i;
+
+// Ink for the "bloco" slab, from the slab's own brightness. Must stay in step
+// with inkOn() in SimpleCaptions.tsx — a preview that lies about legibility is
+// worse than no preview, and this exact case (white slab, white text) shipped
+// invisible until it was looked at on screen.
+function inkOn(bg) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(bg || '').trim());
+  if (!m) return '#fff';
+  const n = parseInt(m[1], 16);
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => v / 255);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.6 ? '#111214' : '#fff';
+}
 
 function buildStaticDemo(host, id) {
   const V = STATIC_VARIANTS[id];
@@ -560,12 +599,29 @@ function buildStaticDemo(host, id) {
       }
       lines = [cue.slice(0, best), cue.slice(best)];
     }
-    const box = el('div', 'stat-demo', wrap);
+    const box = el('div', `stat-demo${V.block ? ' stat-block' : ''}`, wrap);
     box.style.fontFamily = V.family;
     box.style.fontWeight = String(V.weight);
     box.style.fontSize = `${V.size * s}px`;
     box.style.letterSpacing = `${V.tracking * s}px`;
     box.style.transform = V.sx === 1 && V.sy === 1 ? '' : `scale(${V.sx}, ${V.sy})`;
+    if (V.block) {
+      // mirrors SimpleCaptions' block branch: the slab carries the picked
+      // caption colour, and the INK comes from the slab's luminance. This
+      // project picks #FFFFFF, which produced a white slab with white text
+      // until inkOn existed — see the same function in SimpleCaptions.tsx.
+      const pad = V.size * 0.16 * s;
+      const slab = S.style.captionAccent || '#111214';
+      box.style.gap = `${V.size * 0.14 * s}px`;
+      for (const ln of lines) {
+        const b = el('div', 'stat-block-line', box);
+        b.style.padding = `${pad * 0.55}px ${pad}px ${pad * 0.75}px`;
+        b.style.borderRadius = `${V.size * 0.16 * s}px`;
+        b.style.color = inkOn(slab);
+        b.textContent = ln.join(' ');
+      }
+      return box;
+    }
     for (const ln of lines) el('div', '', box).textContent = ln.join(' ');
     return box;
   });
@@ -1464,7 +1520,10 @@ const normHex = (v) => {
  * honest UI note depends on it: with `outline` picked, nothing on screen uses
  * the colour, and saying so beats letting the user wonder why the preview did
  * not move. Mirrors the template — update both together. */
-const HL_ACCENT_USERS = ['realce', 'misto'];
+// sombra paints its offset with the accent, sublinhado paints the bar — both
+// genuinely consume the pick, so leaving them out would have the Estilo tab
+// report "este estilo não usa destaque" while the render plainly used it
+const HL_ACCENT_USERS = ['realce', 'misto', 'sombra', 'sublinhado'];
 const ACCENT_DEFAULT = '#FF0000';
 
 /* Three independent caption colour channels, each painting a different set of
@@ -1485,7 +1544,10 @@ const ACCENT_DEFAULT = '#FF0000';
  * defaultStyle() — because each has its own natural per-style default colour
  * that a forced value would stomp on. */
 const capAccentUsed = () => S.style.captions !== 'nenhuma';
-const CAP_BASE_STYLES = ['karaoke', 'simples', 'serifada', 'classica'];
+// "bloco" consumes the caption colour too, but paints the SLAB with it rather
+// than the text (see SimpleCaptions.tsx) — still a real use of the pick, so it
+// belongs here; the note in the Estilo tab is what explains where it lands.
+const CAP_BASE_STYLES = ['karaoke', 'simples', 'serifada', 'classica', 'bloco'];
 const CAP_EMPH_STYLES = ['stacked', 'scatter'];
 const CAP_CIRCLE_STYLES = ['stacked'];
 const legendaAccentUsed = () => capAccentUsed() && CAP_BASE_STYLES.includes(S.style.captions);

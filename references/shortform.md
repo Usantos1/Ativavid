@@ -48,9 +48,9 @@ the Estilo tab at the end of Fase 1; every key maps to something here:
 |---|---|
 | `edit: "limpa"` | **the default** — NO split inserts, full frame throughout. See the "Limpa" section |
 | `edit: "split" \| "split2"` | the split-screen variant below — every image insert uses it |
-| `headline: "outline" \| "card" \| "realce" \| "misto"` | `hook.style` in edit-data.json |
+| `headline: "outline" \| "card" \| "realce" \| "misto" \| "sombra" \| "sublinhado"` | `hook.style` in edit-data.json |
 | `headline: "nenhuma"` | `hook.enabled: false` — skip the hook entirely, no `lines`/`logo`/`sign` needed |
-| `captions: "karaoke" \| "stacked" \| "scatter" \| "simples" \| "serifada" \| "classica"` | `captions.style` in edit-data.json (+ the director step for stacked) |
+| `captions: "karaoke" \| "stacked" \| "scatter" \| "simples" \| "serifada" \| "classica" \| "bloco"` | `captions.style` in edit-data.json (+ the director step for stacked) |
 | `captions: "nenhuma"` | `captions.enabled: false` — no burned captions rendered, but still run `captions_for_remotion.py` (see the caption-style section: `captions.json` is a static import the bundle needs regardless) |
 | `accent` (hex) | `hook.accent`. Only `realce`/`misto` paint it; `accentUsed:false` means the picked headline style has none |
 | `captionAccent` (hex or `null`) | `captions.accent`. BASE text colour: karaoke's whole line, and the three static styles (simples/serifada/classica). `null` means "no pick, keep each style's own default colour", not white. `captionAccentUsed:false` means captions are off, or the picked style is stacked/scatter (no base text — see `emphasisAccent`) |
@@ -63,6 +63,14 @@ the Estilo tab at the end of Fase 1; every key maps to something here:
 | `elements.musicAI` | Phase 3 via `elevenlabs_music.py`; OFF → deliver with voice only |
 | `elements.endCard` | `endCard` in edit-data.json — brand sign-off over the last ~2.5s. ASK for the handle/CTA copy, do not invent it |
 | `note` | free text — read it, it overrides the defaults above |
+
+**Estilos acrescentados depois:** headline `sombra` (texto branco com
+deslocamento duro no accent) e `sublinhado` (barra grossa do accent sob cada
+linha); legenda `bloco` (cada linha numa laje sólida). Os três existem para
+material visualmente carregado, onde sombra de texto não resolve. No `bloco` a
+cor escolhida pinta a LAJE e não o texto, e a tinta vem da luminância da laje
+(`inkOn` em SimpleCaptions.tsx) — uma escolha clara como `#FFFFFF` rendia laje
+branca com texto branco, invisível, até isso existir.
 
 An unchecked box is an explicit NO, not a silence. Copy the picks into
 `state.json` as `style`, clear `awaitingStyle`, delete `preview_style.json`.
