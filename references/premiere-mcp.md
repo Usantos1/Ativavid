@@ -39,7 +39,7 @@ If the user asks to START a short-form edit in Premiere (no sequence yet), creat
 the sequence with these defaults:
 
 - **Resolution 1080×1920** (vertical 9:16).
-- **Frame rate 30 fps** when the source is ≥30 fps (else 24) — mirrors the Edvid
+- **Frame rate 30 fps** when the source is ≥30 fps (else 24) — mirrors the ATIVAVID
   short-form fps rule.
 - **Maximum Bit Depth: ON** and **Maximum Render Quality: ON** — always check both
   in the sequence settings (`set_sequence_settings` / at creation).

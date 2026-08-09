@@ -4,6 +4,14 @@
 *.pem
 *.key
 
+# Runtime state, not source: the preview server rewrites this on every
+# "Salvar como padrão" click in the Estilo tab, so tracking it would turn one
+# machine's house style into a diff on every other machine.
+assets/preview/default-style.json
+
+# Per-project launcher, hardcoded to one editing folder
+preview-larissa.cmd
+
 # Python
 __pycache__/
 *.py[cod]

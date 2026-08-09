@@ -17,6 +17,40 @@ resolution-markers = [
 ]
 
 [[package]]
+name = "ativa-vid"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "opencv-python-headless" },
+    { name = "pillow" },
+    { name = "requests" },
+]
+
+[package.optional-dependencies]
+animations = [
+    { name = "manim", version = "0.19.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "manim", version = "0.20.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+]
+matting = [
+    { name = "torch" },
+    { name = "torchvision" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "manim", marker = "extra == 'animations'" },
+    { name = "numpy" },
+    { name = "opencv-python-headless", specifier = "==4.10.0.84" },
+    { name = "pillow" },
+    { name = "requests" },
+    { name = "torch", marker = "extra == 'matting'" },
+    { name = "torchvision", marker = "extra == 'matting'" },
+]
+provides-extras = ["animations", "matting"]
+
+[[package]]
 name = "audioop-lts"
 version = "0.2.2"
 source = { registry = "https://pypi.org/simple" }
@@ -406,40 +440,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/60/8b/32f9823da46cde7df
 wheels = [
     { url = "https://files.pythonhosted.org/packages/05/7f/798705f5296a58ca505d600456748d1be48078eac8a7050d8a98bc9edb89/decorator-5.3.1-py3-none-any.whl", hash = "sha256:f47fe6fdbd2edd623ecfe36875d37aba411624e2670dd395dddae1358689bb3c", size = 10365, upload-time = "2026-05-18T06:03:26.517Z" },
 ]
-
-[[package]]
-name = "edvid"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-    { name = "opencv-python-headless" },
-    { name = "pillow" },
-    { name = "requests" },
-]
-
-[package.optional-dependencies]
-animations = [
-    { name = "manim", version = "0.19.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "manim", version = "0.20.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-]
-matting = [
-    { name = "torch" },
-    { name = "torchvision" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "manim", marker = "extra == 'animations'" },
-    { name = "numpy" },
-    { name = "opencv-python-headless", specifier = "==4.10.0.84" },
-    { name = "pillow" },
-    { name = "requests" },
-    { name = "torch", marker = "extra == 'matting'" },
-    { name = "torchvision", marker = "extra == 'matting'" },
-]
-provides-extras = ["animations", "matting"]
 
 [[package]]
 name = "filelock"

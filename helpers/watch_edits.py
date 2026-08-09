@@ -15,10 +15,81 @@ Each stdout line is one notification. Stays quiet while nothing changes.
 """
 from __future__ import annotations
 
+import atexit
 import json
+import os
+import signal
 import sys
 import time
 from pathlib import Path
+
+PIDFILE_NAME = ".watch_edits.pid"
+
+
+def _pid_alive(pid: int) -> bool:
+    """True if a process with this PID is currently running (Windows + POSIX)."""
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        import ctypes
+
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        handle = ctypes.windll.kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        if not handle:
+            return False
+        ctypes.windll.kernel32.CloseHandle(handle)
+        return True
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # exists, just not ours to signal
+    return True
+
+
+def acquire_singleton(root: Path) -> Path | None:
+    """Claim `<root>/.watch_edits.pid` for this process.
+
+    Returns the pidfile Path on success, or None if a live watcher already
+    owns this edit dir (caller should print a message and exit 0 — a second
+    watcher racing the first one is silent-and-broken, not an error worth a
+    nonzero exit). A stale pidfile (dead PID, or crashed without cleanup) is
+    reclaimed automatically.
+    """
+    pidfile = root / PIDFILE_NAME
+    if pidfile.exists():
+        try:
+            old_pid = int(pidfile.read_text().strip())
+        except (OSError, ValueError):
+            old_pid = None
+        if old_pid and old_pid != os.getpid() and _pid_alive(old_pid):
+            return None
+    pidfile.write_text(str(os.getpid()))
+
+    def _release() -> None:
+        try:
+            if pidfile.exists() and pidfile.read_text().strip() == str(os.getpid()):
+                pidfile.unlink()
+        except OSError:
+            pass
+
+    atexit.register(_release)
+    # Monitor typically stops this process with SIGTERM (POSIX) or a Windows
+    # equivalent kill; make sure the pidfile is released either way instead of
+    # only on a clean return from main().
+    if hasattr(signal, "SIGTERM"):
+        prev = signal.getsignal(signal.SIGTERM)
+
+        def _on_term(signum, frame):
+            _release()
+            if callable(prev):
+                prev(signum, frame)
+            else:
+                raise SystemExit(0)
+
+        signal.signal(signal.SIGTERM, _on_term)
+    return pidfile
 
 
 def digest(p: Path) -> str:
@@ -87,7 +158,45 @@ def style_digest(p: Path) -> str:
             label = f"{name} ({accent})" if name.lower() != str(accent).lower() else accent
             out.append(f"  · cor de destaque: {label}")
         else:
-            out.append("  · cor de destaque: não se aplica (os estilos escolhidos não usam destaque)")
+            out.append("  · cor de destaque: não se aplica (o estilo de headline escolhido não usa destaque)")
+    # Three independent picks from here on — captionAccent (BASE legenda text:
+    # karaoke line, static styles), emphasisAccent (the one accented element:
+    # stacked serif line, scatter highlighted word) and circleAccent (stacked's
+    # pencil-circle stroke only). Each *Used flag already accounts for BOTH
+    # "legenda desligada" and "this style doesn't have that element" — the
+    # preview computes it from the actual style pick, so trust it rather than
+    # re-deriving here. null/absent means the user left it on "Padrão do
+    # estilo": do not write the corresponding edit-data field at all.
+    cap_accent = d.get("captionAccent")
+    if cap_accent:
+        if d.get("captionAccentUsed"):
+            name = d.get("captionAccentName") or cap_accent
+            label = f"{name} ({cap_accent})" if name.lower() != str(cap_accent).lower() else cap_accent
+            out.append(f"  · cor da legenda: {label}")
+        else:
+            out.append("  · cor da legenda: não se aplica (legenda desligada, ou o estilo escolhido não tem texto-base — veja cor de ênfase)")
+    else:
+        out.append("  · cor da legenda: padrão do estilo (não escrever captions.accent)")
+    emph_accent = d.get("emphasisAccent")
+    if emph_accent:
+        if d.get("emphasisAccentUsed"):
+            name = d.get("emphasisAccentName") or emph_accent
+            label = f"{name} ({emph_accent})" if name.lower() != str(emph_accent).lower() else emph_accent
+            out.append(f"  · cor de ênfase (legenda): {label}")
+        else:
+            out.append("  · cor de ênfase (legenda): não se aplica (legenda desligada, ou o estilo escolhido não tem palavra de ênfase)")
+    else:
+        out.append("  · cor de ênfase (legenda): padrão do estilo (não escrever captions.emphasisAccent)")
+    circle_accent = d.get("circleAccent")
+    if circle_accent:
+        if d.get("circleAccentUsed"):
+            name = d.get("circleAccentName") or circle_accent
+            label = f"{name} ({circle_accent})" if name.lower() != str(circle_accent).lower() else circle_accent
+            out.append(f"  · cor do círculo riscado: {label}")
+        else:
+            out.append("  · cor do círculo riscado: não se aplica (só o estilo Empilhado tem círculo riscado)")
+    else:
+        out.append("  · cor do círculo riscado: padrão do estilo (não escrever captions.circleAccent)")
     out.append(f'  · elementos: {", ".join(els) if els else "nenhum"}')
     # everything NOT chosen is an instruction too — it is what must stay out
     off = [k for k, v in (d.get("elements") or {}).items() if not v]
@@ -105,6 +214,17 @@ def fmt(t: float) -> str:
 
 def main() -> int:
     root = Path(sys.argv[1] if len(sys.argv) > 1 else ".").expanduser().resolve()
+
+    if acquire_singleton(root) is None:
+        print(
+            f"watch_edits.py já está rodando para {root} (pidfile {PIDFILE_NAME} "
+            "aponta para um processo vivo) — não iniciando um segundo watcher. "
+            "Se isso for um engano (processo morto sem limpar o pidfile), apague "
+            f"{root / PIDFILE_NAME} e rode de novo.",
+            flush=True,
+        )
+        return 0
+
     watched = {
         root / "preview_edits.json": digest,
         root / "preview_style.json": style_digest,

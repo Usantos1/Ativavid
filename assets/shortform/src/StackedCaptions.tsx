@@ -4,8 +4,11 @@
  *
  * Look: words stacked vertically, tight, mixing per line — Poppins bold-italic
  * with a white→light-gray gradient, Poppins regular (smaller), Playfair serif
- * bold-italic in ORANGE #ff5200, Poppins bold. Emphasis words appear solo; some
- * get a hand-drawn green "pencil" ellipse. Words rise in one by one.
+ * bold-italic in ORANGE #ff5200 by default (captions.emphasisAccent), Poppins
+ * bold. Emphasis words appear solo; some get a hand-drawn "pencil" ellipse,
+ * green #39E508 by default (captions.circleAccent) — a THIRD, independent
+ * pick from the serif line's, since a project can want a red serif word and a
+ * green circle, or vice versa. Words rise in one by one.
  *
  * Baked SFX (no Premiere): a click on every solo word, a scratch when a word is
  * circled — from public/sfx/caption-click.mp3 + caption-scratch.mp3.
@@ -37,7 +40,17 @@ const playfair = loadPlayfair('italic', {weights: ['700', '900']});
 loadPlayfair('normal', {weights: ['700', '900']});
 const PLAYFAIR = playfair.fontFamily;
 
-const ORANGE = '#ff5200';
+type SfxCfg = {enabled?: boolean; clickVolume?: number; scratchVolume?: number};
+type CapCfg = {
+  emphasisAccent?: string;
+  circleAccent?: string;
+  stackedOffsetY?: number;
+  fontScale?: number;
+  sfx?: SfxCfg;
+};
+const CAP = ((editData as {captions?: CapCfg}).captions ?? {}) as CapCfg;
+const ORANGE = CAP.emphasisAccent ?? '#ff5200';
+const CIRCLE_ACCENT = CAP.circleAccent; // undefined → PencilOutline's own #39E508 default
 const WHITE_GRAD: React.CSSProperties = {
   backgroundImage: 'linear-gradient(180deg, #ffffff 0%, #ffffff 46%, #cfcfcf 100%)',
   WebkitBackgroundClip: 'text',
@@ -65,9 +78,6 @@ const fitFont = (text: string, base: number, avail = 900, factor = 0.59): number
 };
 
 // -------- config (optional overrides in edit-data.json → captions) --------
-type SfxCfg = {enabled?: boolean; clickVolume?: number; scratchVolume?: number};
-type CapCfg = {stackedOffsetY?: number; fontScale?: number; sfx?: SfxCfg};
-const CAP = ((editData as {captions?: CapCfg}).captions ?? {}) as CapCfg;
 const OFFSET_Y = CAP.stackedOffsetY ?? 0.156; // fraction of height, below center
 const FONT_SCALE = CAP.fontScale ?? 1;
 const SFX = CAP.sfx ?? {};
@@ -226,7 +236,7 @@ const Cue: React.FC<{cue: CueData; cueDurationFrames: number}> = ({cue, cueDurat
     });
     inner = (
       <div style={{position: 'relative', display: 'inline-block'}}>
-        <PencilOutline progress={outlineProg} />
+        <PencilOutline progress={outlineProg} color={CIRCLE_ACCENT} />
         <span
           style={{
             ...WHITE_GRAD,

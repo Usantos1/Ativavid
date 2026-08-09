@@ -1,9 +1,9 @@
 ---
-name: edvid
-description: Edvid — edit any video by conversation, in phases. Two tracks — SHORT-FORM (vertical 9:16 for Reels/TikTok/Shorts) and LONGFORM (horizontal 16:9 for YouTube: talking-head+B-roll, tutorials/screen-record, vlogs). PHASE 1 — clean cut + color grade + optional voice EQ/mastering (transcribe, select best takes, cut on silence for short-form or retention arc + cold open for longform, grade; ask if shot in LOG; master the voice), then show the user for approval. PHASE 2 (after the cut is approved) — Remotion visuals from a data-driven template: short-form gets karaoke captions, a static hook, a dynamic camera and behind-the-subject; longform gets B-roll cutaways, lower-thirds, chapter cards, callouts, plus YouTube chapters and .srt captions. PHASE 3 — soundtrack (AI via Treblo or a local file). Illustrative images/video via Pexels + Wikimedia/Google. Ask questions, confirm, execute, iterate, persist.
+name: ativa-vid
+description: ATIVAVID — edit any video by conversation, in phases. Two tracks — SHORT-FORM (vertical 9:16 for Reels/TikTok/Shorts) and LONGFORM (horizontal 16:9 for YouTube: talking-head+B-roll, tutorials/screen-record, vlogs). PHASE 1 — clean cut + color grade + optional voice EQ/mastering (transcribe, select best takes, cut on silence for short-form or retention arc + cold open for longform, grade; ask if shot in LOG; master the voice), then show the user for approval. PHASE 2 (after the cut is approved) — Remotion visuals from a data-driven template: short-form gets karaoke captions, a static hook, a dynamic camera and behind-the-subject; longform gets B-roll cutaways, lower-thirds, chapter cards, callouts, plus YouTube chapters and .srt captions. PHASE 3 — soundtrack (AI via ElevenLabs Music or a local file). Illustrative images/video via Pexels + Wikimedia/Google. Ask questions, confirm, execute, iterate, persist.
 ---
 
-# Edvid
+# ATIVAVID
 
 ## Principle
 
@@ -26,9 +26,9 @@ description: Edvid — edit any video by conversation, in phases. Two tracks —
 6. **Cache transcripts per source.** Never re-transcribe unless the source changed.
 7. **Color grade per-segment during extraction**, never post-concat.
 8. **Strategy confirmation before execution.**
-9. **All session outputs in `<videos_dir>/edit/`** — never inside the edvid repo.
+9. **All session outputs in `<videos_dir>/edit/`** — never inside the ativa-vid repo.
 10. **PHASE 2 is Remotion-only** — no ffmpeg/PIL burned text or overlays.
-11. **PHASE 2 is data-driven.** Scaffold by copying the track template; describe the video in `public/edit-data.json`. **Never read or edit the template TSX** (`src/Main.tsx` etc.) — the only editable code file is `src/CustomGraphics.tsx`, only for bespoke graphics.
+11. **PHASE 2 is data-driven.** Scaffold by copying the track template; describe the video in `public/edit-data.json`. **Never read or edit the template TSX** (`src/Main.tsx` etc.) — the only editable code file is `src/CustomGraphics.tsx`, only for bespoke graphics. Run `helpers/check_template_integrity.py <edit>/remotion` before every `npx remotion render` — it hashes `src/` against the shipped template and catches a violation of this rule before the render, instead of after.
 12. **Verify numerically first.** Run `verify_cut.py` on every rendered cut; open images only for flagged junctions. Batch any multi-frame look into one `contact_sheet.py` / `grade.py --candidates` montage.
 13. **Never Read machine data into context**: `transcripts/*.json` (raw), `captions.json`, `track.json`, `segments.json`, matte/track binaries. Read `takes_packed.md` and helper stdout instead.
 
@@ -68,14 +68,14 @@ are identical and cached — reuse an approved `edl.json`; skip `cut.mp4`/previe
 
 First-time install lives in `install.md`. On cold start just verify:
 
-- `GROQ_API_KEY` resolves (env or `.env` at the edvid repo root). Groq Whisper `whisper-large-v3`; no diarization (every word is `speaker_0`).
+- `GROQ_API_KEY` resolves (env or `.env` at the ativa-vid repo root). Groq Whisper `whisper-large-v3`; no diarization (every word is `speaker_0`).
 - `ELEVENLABS_API_KEY` (optional) — used for LONG sources (>5 min, e.g. YouTube/course lessons) via ElevenLabs Scribe `scribe_v1`, since Groq's free tier chokes on long uploads. `backend=auto` (default) picks Scribe over 5 min when the key exists, else Groq; short clips stay on Groq. No key → long sources fall back to Groq. Ask for it lazily the first time a >5 min source shows up, write to `.env`.
 - `whispercpp` (optional) — fully local transcription, no key, no upload cap, no network. Opt-in only: `auto` never picks it. Needs whisper.cpp built with a ggml model (auto-detected in `~/whisper.cpp`, or `WHISPERCPP_BIN`/`WHISPERCPP_MODEL` in `.env`). Offer it when the user has no Groq key or hits quota. **Text matches Groq; word TIMES don't** (measured: 66% of words inside a real speech region vs Groq's 97%, median drift 240ms). Phase 1 is unaffected — cut edges come from `speech_regions.py`. For Phase-2 karaoke captions, prefer Groq and say why.
 - `ffmpeg` + `ffprobe` on PATH; Python deps (`uv sync`); Node 18+ for Phase 2. `yt-dlp` only for URL sources (`ingest_url.py`) — install lazily the first time a link shows up (`brew install yt-dlp` / `winget install yt-dlp.yt-dlp`).
 - The `remotion-best-practices` skill for Phase-2 domain knowledge (install from https://github.com/remotion-dev/skills if missing).
-- Lazy keys, ask on first use, write to `.env` (never to `<videos_dir>`): `PEXELS_API_KEY` (images), `GOOGLE_API_KEY`+`GOOGLE_CSE_ID` (brand/people images fallback), `TREBLO_API_KEY` (AI music).
+- Lazy keys, ask on first use, write to `.env` (never to `<videos_dir>`): `PEXELS_API_KEY` (images), `GOOGLE_API_KEY`+`GOOGLE_CSE_ID` (brand/people images fallback). Phase-3 AI music reuses `ELEVENLABS_API_KEY` (see above) — no separate key, but it needs a **paid** ElevenLabs plan (Music is not on the free tier).
 
-Helpers live in `helpers/`, resolved relative to this SKILL.md (usually `~/.claude/skills/edvid/`, or a symlink/junction pointing there). Run them as `uv run python helpers/<name>.py` — a bare `python` misses the `.venv` that `uv sync` builds.
+Helpers live in `helpers/`, resolved relative to this SKILL.md (usually `~/.claude/skills/ativa-vid/`, or a symlink/junction pointing there). Run them as `uv run python helpers/<name>.py` — a bare `python` misses the `.venv` that `uv sync` builds.
 
 ## Helpers
 
@@ -95,14 +95,15 @@ Phase 1:
 - **`watch_video.py <video> [--mode scene|keyframe|uniform] [--times t1 t2 …] [--start/--end] [--max-frames 24]`** — "what is IN this footage?" when you *don't* know where to look: scene-change detection (auto-fallback to uniform sampling on static/talking-head sources) + perceptual dedup (near-identical frames collapse — a held take becomes a handful of tiles) → labeled contact sheets in `edit/verify/watch_<stem>/`, one Read per sheet. Use for visual inventory of unknown material, eyeballing takes across sources, and surveying `cut.mp4` beyond verify_cut's numbers. `--times` pins transcript-cue frames: deictic moments from `takes_packed.md` ("olha isso", "como você pode ver") are LOW visual change and invisible to scene detection — pin them to decide B-roll/callout/zoom placement in Phase 2.
 
 Phase 2/3 (see the track references for usage):
-- **`captions_for_remotion.py`** (karaoke JSON) · **`face_track.py`** (eye-track JSON) · **`person_matte.py`** (RVM alpha matte; `uv sync --extra matting`) · **`pexels_search.py`** · **`wikimedia_images.py`** (no key, brands/people first choice) · **`google_images.py`** (fallback, mind rights) · **`captions_srt.py`** (longform .srt) · **`chapters.py`** (YouTube chapters) · **`treblo_music.py`** (AI soundtrack — pass a context-driven MUSICAL vibe: genre + instruments + tempo + mood, not SFX-y phrasing; auto-framed as a composed instrumental).
+- **`captions_for_remotion.py`** (karaoke JSON) · **`face_track.py`** (eye-track JSON) · **`person_matte.py`** (RVM alpha matte; `uv sync --extra matting`) · **`pexels_search.py`** · **`wikimedia_images.py`** (no key, brands/people first choice) · **`google_images.py`** (fallback, mind rights) · **`captions_srt.py`** (longform .srt) · **`chapters.py`** (YouTube chapters) · **`elevenlabs_music.py`** (AI soundtrack, ElevenLabs Music v2 — reuses `ELEVENLABS_API_KEY`, needs a paid plan; pass a context-driven MUSICAL vibe: genre + instruments + tempo + mood, not SFX-y phrasing; auto-framed as a composed instrumental).
+- **`check_template_integrity.py <edit>/remotion [--track shortform|longform] [--fix]`** — hashes `remotion/src/*` (everything except `CustomGraphics.tsx`) against the shipped `assets/<track>/src/` template. Run before every `npx remotion render`; a non-zero exit means Hard Rule 11 got broken (a template file was hand-edited) — `--fix` restores it verbatim, never touches `CustomGraphics.tsx`.
 
 Interface:
 - **`preview_server.py --root <edit> [--port 4820]`** — serves the standard preview interface (see the Preview interface section). App code lives at `assets/preview/` and is IMMUTABLE.
 
 ## Preview interface (standard — launch it at the start of every edit)
 
-Every edit session gets the same interactive interface in the user's preview panel: a video-editor timeline (video track with filmstrip + audio track with waveform), a live playhead that scrubs the render in real time, per-take trim handles and take removal, and — from Phase 2 — caption and insert tracks. The layout follows the source aspect on its own: **vertical** sources put a tall player on the right with the transport + timeline on the left; **horizontal** sources keep the player stacked above the timeline. Dark glass, Edvid brand. **Never build a UI per session and never edit `assets/preview/`** — it is data-driven, like the Remotion templates.
+Every edit session gets the same interactive interface in the user's preview panel: a video-editor timeline (video track with filmstrip + audio track with waveform), a live playhead that scrubs the render in real time, per-take trim handles and take removal, and — from Phase 2 — caption and insert tracks. The layout follows the source aspect on its own: **vertical** sources put a tall player on the right with the transport + timeline on the left; **horizontal** sources keep the player stacked above the timeline. Dark glass, ATIVAVID brand. **Never build a UI per session and never edit `assets/preview/`** — it is data-driven, like the Remotion templates.
 
 **Launch (do this when a session starts, even before the first render — the UI shows a waiting state):**
 1. Write `<edit>/state.json`:
@@ -116,11 +117,19 @@ Every edit session gets the same interactive interface in the user's preview pan
               "elements": {"tracking": false, "zoomAuto": true, "zoomCuts": true, "musicAI": true}}}
    ```
    (`captions`/`editData`/`finalVideo` only when they exist; the Fase-2 tab plays `finalVideo` — the render WITH captions/inserts — while Fase 1 plays the clean cut; `sourceDurations` lets the UI clamp take extensions; `awaitingStyle`/`style` drive the Estilo tab below.)
+
+   **If you export the delivery under a friendlier name, update `finalVideo` to
+   match in the same step.** Writing `"final.mp4"` and then delivering
+   `"Cabo magnetico.mp4"` leaves the pointer naming a file that does not exist —
+   measured at 10 of 32 projects on this machine. `preview_server.py` covers for
+   it (it resolves a missing `finalVideo` to the newest non-working `.mp4`, so
+   the Final tab and the folder button still land right), but that is a safety
+   net, not permission to leave the bookkeeping wrong.
 2. Ensure `.claude/launch.json` has the config (adjust `--root` per session). The
    server takes the port by flag only, so pass the harness-assigned `$PORT` and
    set `autoPort` — port 4820 is often held by another session:
-   `{"name": "edvid-preview", "runtimeExecutable": "sh", "runtimeArgs": ["-c", "exec python3 <skill>/helpers/preview_server.py --root '<edit>' --port \"$PORT\""], "autoPort": true, "port": 4820}`
-3. `preview_start` with name `edvid-preview`.
+   `{"name": "ativa-vid-preview", "runtimeExecutable": "sh", "runtimeArgs": ["-c", "exec python3 <skill>/helpers/preview_server.py --root '<edit>' --port \"$PORT\""], "autoPort": true, "port": 4820}`
+3. `preview_start` with name `ativa-vid-preview`.
 4. **Arm the watcher IN THE SAME TURN as `preview_start`** — never later, never
    "when the user starts editing":
    `Monitor(command="python3 <skill>/helpers/watch_edits.py '<edit>'", description="escolhas e marcações salvas no preview", persistent=true)`
@@ -166,6 +175,28 @@ insert/hook chips — and **mark correction ranges**: park the needle, press `M`
 opens centred over the timeline — then type what should change. Many ranges per pass. Zoom: the slider is anchored on the needle, trackpad pinch
 on the pointer. Shortcuts live behind the **?** button at the bottom right.
 
+They can also **cut** without you: `S` (or the razor button) splits the selected
+take at the needle, and **dragging inside a clip** selects a range and deletes
+just that piece (the two surviving sides close the gap). Both arrive as a longer
+`edl.ranges` list — see the save section below. **`alt`+`←`/`→` nudges the
+selected take's OUT edge one frame at a time** (add `shift` for the IN edge) —
+the frame-accurate version of dragging a handle. `Ctrl+Z`/`Ctrl+Shift+Z` undo and
+redo everything above, up to the last save. On the Final tab the **image button**
+searches Pexels and drops the pick onto the insert track (`editData.newInserts`),
+and **clicking a caption chip** retypes that line (`captionFixes`).
+
+**`/painel`** (linked from the header) lists every sibling project — phase,
+delivery, whether that delivery still opens, and which projects have a saved
+request waiting. It auto-refreshes every 8s, because a dashboard reporting
+stale numbers is worse than no dashboard. Each row offers **assistir** (open
+the delivery in the player), **pasta**, **copiar**, and — only where the
+pointer is provably wrong — **corrigir ponteiro**, which rewrites just
+`state.json`'s `finalVideo` to the file that is actually there. Those are the
+only writes the dashboard can do, they happen only on a click, and the route
+refuses any path that is not an `<edit>` dir inside a `--projects-root`
+(traversal included). Point it at more folders with repeated `--projects-root`
+flags on `preview_server.py` (defaults to the dir two levels above `--root`).
+
 ### The Estilo tab (between Fase 1 and Fase 2)
 
 The cut is approved and nothing about the LOOK of Fase 2 is decided yet. **Do not
@@ -176,16 +207,44 @@ and the UI opens its own tab, sitting between FASE 1 and FASE 2:
   **the default**, and the right pick for a talking-head cut or when the user will
   place images by hand later), `split` ("Tela dividida"), `split2` ("Tela
   dividida 2").
-- **Cor de destaque** — `accent`, a hex. Sits BEFORE the text styles, because it
-  is what they paint with. One spectral swatch (the OS picker) plus a hex field,
-  synced both ways — no preset row. Only `realce`/`misto` headlines and the
-  `stacked` caption paint an accent, so the save also carries **`accentUsed`**;
-  when it is `false` the picked styles have none and the colour is not an
+- **Cor de destaque** — `accent`, a hex, feeds `hook.accent`. Sits BEFORE the
+  headline styles, because it is what they paint with. One spectral swatch (the
+  OS picker) plus a hex field, synced both ways — no preset row. Only
+  `realce`/`misto` headlines paint it, so the save also carries **`accentUsed`**;
+  when it is `false` the picked headline style has none and the colour is not an
   instruction to invent a place for one.
-- **Estilo de headline** — `outline`, `card`, `realce`, `misto`. Always two
-  lines, size fitted to the text (see the track reference).
+- **Estilo de headline** — `outline`, `card`, `realce`, `misto`, or `nenhuma`
+  ("Nenhuma" — no hook at all, `hook.enabled:false`). Always two lines, size
+  fitted to the text (see the track reference).
 - **Estilo de legenda** — three animated (`karaoke`, `stacked`/"Empilhado",
-  `scatter`/"Disperso") and three static (`simples`, `serifada`, `classica`).
+  `scatter`/"Disperso"), three static (`simples`, `serifada`, `classica`), or
+  `nenhuma` ("Nenhuma" — no burned captions at all, `captions.enabled:false`).
+  Both `nenhuma` picks (headline and caption) are real final looks — a clean
+  talking-head cut, or captions the user will add elsewhere — not a
+  placeholder for "decide later".
+- **Cor da legenda / Cor de ênfase / Cor do círculo riscado** — three
+  independent hex-or-`null` picks, all sitting AFTER the caption styles and all
+  independent from `accent` above (a project can want a red headline marker,
+  white legenda text, a green emphasis word, and a red circle, all at once).
+  Each has the same fourth "Padrão" chip: click it to send `null`, meaning
+  "leave that element's own built-in default colour alone" — not the same as
+  picking white.
+  - **Cor da legenda** → `captionAccent` → `captions.accent`. The BASE text:
+    karaoke's whole line, and the three static styles (`simples`/`serifada`/
+    `classica`). `captionAccentUsed` is `true` only when a colour was picked
+    AND the caption style is one of those four — stacked/scatter's ordinary
+    words are deliberately NOT tied to this pick (see below), so it reads
+    `false` for them even though the legenda is on.
+  - **Cor de ênfase** → `emphasisAccent` → `captions.emphasisAccent`. The ONE
+    accented element per style: stacked's serif line, scatter's highlighted
+    word (default `#ff5200`, same as `accent`'s default). `karaoke`/static
+    styles have no such element, so `emphasisAccentUsed` is `false` for them.
+  - **Cor do círculo riscado** → `circleAccent` → `captions.circleAccent`.
+    Stacked-only: the hand-drawn pencil-circle stroke around a solo emphasis
+    word (default green `#39E508`, PencilOutline's own). Independent from
+    `emphasisAccent` — the serif line and the circle can be two different
+    colours. `circleAccentUsed` is `true` only when the caption style is
+    `stacked`.
 - **Elementos da edição** — checkboxes: `tracking` (movimento de tracking),
   `zoomAuto` (automação de zoom in), `zoomCuts` (zoom in/out nos cortes),
   `flashCut` (flash na transição), `musicAI` (trilha sonora com IA), plus a
@@ -223,6 +282,23 @@ entries exist here.
   `speech_regions.py` (warn if an edge clips a word — the user's intent wins, but
   say so), update `edl.json`, re-render, `verify_cut.py`.
 - `editData` — insert/hook/behind timings → edit-data.json → re-render Phase 2.
+- `captionFixes[]` — caption lines the user retyped in the timeline, each with
+  `from`, `to`, and `renderedStart`/`renderedEnd` to locate the line in the
+  current render. **Re-run the caption pipeline** (`captions_for_remotion.py`,
+  then `caption_style.py` for the stacked style) with the corrected words —
+  do NOT hand-edit word timings into `captions.json`, they are derived. The
+  usual cause is a transcription slip, so fixing the transcript entry and
+  regenerating is both the correct and the cheaper path.
+- `editData.newInserts[]` — images the user picked from the preview's own search
+  (already downloaded to `remotion/public/pexels/`). Each carries `src` (a ref
+  relative to `public/`), `start`/`end`, and `credit`. APPEND them to
+  `edit-data.json`'s `inserts` — they have no `ref` index because they are not in
+  that array yet. Keep the credit with the project's attribution notes.
+- `edl.ranges` — the FULL take list, already including any the user split with
+  the razor or range-deleted (one original range arriving as two or three
+  consecutive ranges on the same source is exactly that). Take it as given
+  rather than diffing it against the old one; `edl.changes`/`edl.removed` still
+  describe trims/removals on takes that already existed.
 
 Then delete `preview_edits.json` and update `state.json`.
 
@@ -472,10 +548,15 @@ On startup, read it if it exists and summarize the last session in one sentence 
 - Treating an unchecked element as "não pediu". It is an explicit NO: the user
   looked at "Movimento de tracking" and left it off. `watch_edits.py` prints the
   `fora:` line for exactly this reason.
-- Hardcoding `#ff5200` (or any accent) in the template. The Estilo tab lets the
-  user pick it, so a literal makes the preview show their colour and the render
-  show orange — worse than not offering the choice. Feed `accent` into
-  `hook.accent` + `captions.accent`.
+- Hardcoding `#ff5200` (or `#39E508`, or any accent) in the template. The Estilo
+  tab lets the user pick each one, so a literal makes the preview show their
+  colour and the render show something else — worse than not offering the
+  choice. Feed the Estilo tab's four independent picks into their own fields:
+  `accent` → `hook.accent` (headline), `captionAccent` → `captions.accent`
+  (legenda base text), `emphasisAccent` → `captions.emphasisAccent` (stacked's
+  serif line / scatter's highlighted word), `circleAccent` →
+  `captions.circleAccent` (stacked's pencil-circle stroke only) — never force
+  any of the four equal to another.
 - Changing a caption's look in the template without changing its preview in
   `app.js` (`buildKaraokeDemo` / `buildStackedDemo`). The gate's previews render
   the real faces, sizes and motion, scaled from 1080-wide — that is the whole

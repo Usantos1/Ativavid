@@ -76,7 +76,10 @@ the four layers — graphics **punctuate, they don't saturate**:
 
 Reuse short-form extras sparingly if a moment calls for it (dynamic camera,
 behind-the-subject, SFX) — longform ≠ Reel density. Verify with ONE
-`contact_sheet.py` over the graphic moments, render
-`npx remotion render Longform out/render.mp4`, loudnorm → `edit/final.mp4`.
+`contact_sheet.py` over the graphic moments, then before rendering run
+`python <skill>/helpers/check_template_integrity.py <edit>/remotion` (catches
+a hand-edited template file before it wastes a render — `--fix` restores it
+verbatim), render `npx remotion render Longform out/render.mp4`, loudnorm →
+`edit/final.mp4`.
 
 Never edit `src/Main.tsx` — it's data-driven; the JSON is the edit.

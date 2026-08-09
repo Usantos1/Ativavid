@@ -17,10 +17,12 @@ approved. Everything here rides on the **data-driven template** at
   reveals an edge). `zoomCuts` is what makes a talking head feel edited — if the
   user turns everything off, say what they lose and build it anyway.
 - **Visual hook (first ~4s):** static copywriting headline, **always two lines**
-  with the size fitted to them (see "Headline styles"). Always on.
+  with the size fitted to them (see "Headline styles"). On by default; the user
+  can turn it off entirely on the Estilo tab (`headline: "nenhuma"`).
 - **Captions:** six styles — three animated (**karaoke**, **stacked**, **scatter**)
-  and three static (**simples**, **serifada**, **classica**). The user already
-  picked one on the Estilo tab; see the "Caption style" section.
+  and three static (**simples**, **serifada**, **classica**) — or off entirely
+  (`captions: "nenhuma"`). The user already picked one on the Estilo tab; see
+  the "Caption style" section.
   Karaoke: one line ≤3 words, words rise from below, Poppins Black, lower third,
   `measureText` fit into **SAFE_WIDTH 720** (~180px each side — clears
   Instagram/TikTok's right action rail; verified on a real screenshot). Never
@@ -47,13 +49,18 @@ the Estilo tab at the end of Fase 1; every key maps to something here:
 | `edit: "limpa"` | **the default** — NO split inserts, full frame throughout. See the "Limpa" section |
 | `edit: "split" \| "split2"` | the split-screen variant below — every image insert uses it |
 | `headline: "outline" \| "card" \| "realce" \| "misto"` | `hook.style` in edit-data.json |
+| `headline: "nenhuma"` | `hook.enabled: false` — skip the hook entirely, no `lines`/`logo`/`sign` needed |
 | `captions: "karaoke" \| "stacked" \| "scatter" \| "simples" \| "serifada" \| "classica"` | `captions.style` in edit-data.json (+ the director step for stacked) |
-| `accent` (hex) | `hook.accent` + `captions.accent`. Only `realce`/`misto`/`stacked` paint it; `accentUsed:false` means the picked styles have none |
+| `captions: "nenhuma"` | `captions.enabled: false` — no burned captions rendered, but still run `captions_for_remotion.py` (see the caption-style section: `captions.json` is a static import the bundle needs regardless) |
+| `accent` (hex) | `hook.accent`. Only `realce`/`misto` paint it; `accentUsed:false` means the picked headline style has none |
+| `captionAccent` (hex or `null`) | `captions.accent`. BASE text colour: karaoke's whole line, and the three static styles (simples/serifada/classica). `null` means "no pick, keep each style's own default colour", not white. `captionAccentUsed:false` means captions are off, or the picked style is stacked/scatter (no base text — see `emphasisAccent`) |
+| `emphasisAccent` (hex or `null`) | `captions.emphasisAccent`. The ONE accented element per style: stacked's serif line, scatter's highlighted word. Independent from `captionAccent` above. `emphasisAccentUsed:false` means captions are off, or the picked style has no emphasis concept (karaoke, or any static style) |
+| `circleAccent` (hex or `null`) | `captions.circleAccent`. Stacked-only: the hand-drawn pencil-circle stroke around the solo emphasis word. Independent from `emphasisAccent`. `circleAccentUsed:false` means the picked style isn't stacked |
 | `elements.tracking` | `face_track.py` + `track.json`; OFF → skip it, fixed frame |
 | `elements.zoomAuto` | the slow push-in inside each segment (`+0.04/segment`) |
 | `elements.zoomCuts` | the hard zoom change ON each cut (~1.10–1.22, cycles) |
 | `elements.flashCut` | `transitions[]` in edit-data.json — see "Flash na transição" |
-| `elements.musicAI` | Phase 3 via `treblo_music.py`; OFF → deliver with voice only |
+| `elements.musicAI` | Phase 3 via `elevenlabs_music.py`; OFF → deliver with voice only |
 | `note` | free text — read it, it overrides the defaults above |
 
 An unchecked box is an explicit NO, not a silence. Copy the picks into
@@ -149,7 +156,12 @@ An unchecked box is an explicit NO, not a silence. Copy the picks into
 4. **Verify with stills, batched:** `npx remotion still Reels --frame=<n> f.png`
    for the hook still (user approval), then ONE contact sheet for spot checks:
    `contact_sheet.py <render> --times t1 t2 t3 -o sheet.png` — one image, not N.
-5. **Render:** `npx remotion render Reels out/render.mp4`, then loudnorm →
+5. **Render:** first `python <skill>/helpers/check_template_integrity.py
+   <edit>/remotion` — confirms nothing under `src/` drifted from the shipped
+   template before spending render time on it (a non-zero exit means a template
+   file got hand-edited; move that change into `edit-data.json`/
+   `CustomGraphics.tsx` and re-run, or `--fix` to restore the template
+   verbatim). Then `npx remotion render Reels out/render.mp4`, loudnorm →
    `edit/final.mp4` (see Phase 3).
 
 Never edit `src/Main.tsx`. Bespoke graphics go in `src/CustomGraphics.tsx`
@@ -160,20 +172,47 @@ Never edit `src/Main.tsx`. Bespoke graphics go in `src/CustomGraphics.tsx`
 Four looks via `hook.style`, picked by the user on the Estilo tab: **`outline`**
 (default, white + thick black stroke), **`card`** (dark rounded card, UPPERCASE,
 optional logo row), **`realce`** (each line on a solid accent marker block),
-**`misto`** (line 1 light white, line 2 heavy accent).
+**`misto`** (line 1 light white, line 2 heavy accent). A fifth pick, **`nenhuma`**,
+is not a style — it turns the hook off (`hook.enabled: false`); skip this whole
+section for that job, there is no `hook.lines`/`logo`/`sign` to write.
 
-### The accent colour (`accent` in preview_style.json)
+### The accent colours (`accent` + `captionAccent` + `emphasisAccent` +
+### `circleAccent` in preview_style.json)
 
-`realce`, `misto` and the `stacked` caption are the only things that paint an
-accent; the default is `#ff5200`. The user picks it on the Estilo tab and it
-arrives as a hex — set it on **`hook.accent`** and **`captions.accent`** in
-edit-data.json so headline and caption stay the same colour. `preview_style.json`
-also carries `accentUsed`: when it is `false`, the picked styles have no accent
-and the colour is not a request to find somewhere to put one.
+Four independent picks, not one shared colour:
 
-Hardcoding `#ff5200` anywhere in the template re-breaks this — the preview will
-show the user's colour and the render will show orange, which is worse than not
-offering the choice.
+- **`accent`** → **`hook.accent`**. Only `realce`/`misto` paint it; default
+  `#ff5200`. `preview_style.json` carries `accentUsed`: when it is `false`, the
+  picked headline style has no accent and the colour is not a request to find
+  somewhere to put one.
+- **`captionAccent`** → **`captions.accent`**. The BASE text colour: karaoke's
+  whole line, and the flat text colour on `simples`/`serifada`/`classica`
+  (replacing off-white `#f4f1e9`). Stacked and scatter do **not** read this —
+  they have their own accented element, see `emphasisAccent` below. Arrives as
+  a hex **or `null`** — `null` means the user left it on "Padrão do estilo": do
+  not write `captions.accent` at all in that case, let the style keep its own
+  built-in default. `captionAccentUsed:false` covers two different reasons
+  (captions off, or the picked style is stacked/scatter) — either way, don't
+  write the field.
+- **`emphasisAccent`** → **`captions.emphasisAccent`**. The ONE accented
+  element per style: stacked's Playfair serif line (replacing its own
+  `#ff5200` default), scatter's ONE highlighted word (replacing its ink
+  gradient). Karaoke and the static styles have no separate emphasis concept
+  and ignore this field — `emphasisAccentUsed:false` in that case. Same
+  `null`-means-"don't write the field" rule as `captionAccent`.
+- **`circleAccent`** → **`captions.circleAccent`**. Stacked-only: the
+  hand-drawn pencil-circle stroke around the solo emphasis word (replacing
+  `PencilOutline`'s own green `#39E508` default). `circleAccentUsed:false` for
+  every other style. Same `null` rule.
+
+A project is free to want a red headline marker, plain white karaoke text, a
+red stacked serif line and a green circle — do not force any of these four
+fields to equal each other, they are picked on separate swatches on purpose.
+
+Hardcoding `#ff5200` (or `#39E508`, or any fixed colour) anywhere in the
+template re-breaks this — the preview will show the user's colour and the
+render will show the hardcoded one, which is worse than not offering the
+choice.
 
 **Author `hook.text` as one plain sentence.** Whatever you write — `text`, or a
 hand-broken `lines[]` — is joined and re-broken into exactly TWO lines balanced by
@@ -192,12 +231,20 @@ the type and costs the glance the headline exists to win.
 - In a split layout, `paddingTop` still has to follow the seam — see the split
   section.
 
-## Caption style — six of them
+## Caption style — six of them, plus off
 
 Three are animated (karaoke, stacked, scatter) and three are STATIC
 (`simples`, `serifada`, `classica`) — no animation at all, a cue just replaces
 the previous one. All three static ones live in `SimpleCaptions.tsx`, read
 `captions.json` alone, and share one rule that is the whole point:
+
+A seventh pick, **`nenhuma`**, is not a caption look — it turns burned captions
+off entirely (`captions.enabled: false`, nothing renders). **Still run
+`captions_for_remotion.py`** though: `Main.tsx`/`SimpleCaptions.tsx`/
+`ScatterCaptions.tsx` all `import captions from '../public/captions.json'`
+statically, the same way the template imports `track.json` — the bundle fails
+to build without the file even when its content goes unused. Only the
+`stacked`-only `caption_style.py` step (→ `caption-cues.json`) is safe to skip.
 
 **Lines group by MEASURED WIDTH, capped at `maxWords` — never by word count.**
 "inteligência" and "de" cannot obey the same rule: the long word takes the line
@@ -245,9 +292,17 @@ still there as a montage over real footage if a still is useful.)
     blur on the highlighted word only reads because everything else is still.
 - **`"stacked"`**: words stacked tight, mixing per line — Poppins bold-italic
   (white→gray gradient) / Poppins regular (smaller) / Playfair serif bold-italic
-  in ORANGE `#ff5200` / Poppins bold. Emphasis words appear solo; key ones get a
-  hand-drawn green pencil ellipse. **Baked SFX** (no extra step, no Premiere): a
-  **click** on every solo word, a **scratch** when a word is circled.
+  in ORANGE `#ff5200` by default / Poppins bold. Emphasis words appear solo; key
+  ones get a hand-drawn pencil ellipse, green `#39E508` by default. **Baked SFX**
+  (no extra step, no Premiere): a **click** on every solo word, a **scratch**
+  when a word is circled.
+
+Each element reads its OWN accent field — see "The accent colours" above, do
+not conflate them: karaoke's line and the three static styles below read
+`captions.accent`; scatter's highlighted word and stacked's serif line read
+`captions.emphasisAccent`; stacked's pencil circle alone reads
+`captions.circleAccent`. `#ff5200`/`#39E508` and the other per-style defaults
+mentioned here only apply when the corresponding field is absent.
 
 For stacked, the ONE extra data step is the director (reads the same cut
 transcript as `captions_for_remotion.py`):
@@ -273,7 +328,7 @@ this often. After generating cues, sanity-check the plan (it prints a summary):
 every non-`STACK_MIXED` cue should span ≥0.34s, and the word list across all
 cues must match the transcript exactly, in order.
 
-## Visual hook — static headline, first ~4s (always on)
+## Visual hook — static headline, first ~4s (on unless `headline: "nenhuma"`)
 
 The first 1–2 seconds decide the swipe. Write `hook.lines` like a
 social-media/copywriting/virality specialist, not a summarizer: read the cut
@@ -425,21 +480,24 @@ licensing to the user for logos/celebrities). Keep photographer credits.
 
 ## Phase 3 — soundtrack (short-form)
 
-Ask: **AI-generated** (Treblo) or **local file** (copy to `public/trilha.mp3`).
+Ask: **AI-generated** (ElevenLabs Music) or **local file** (copy to
+`public/trilha.mp3`). AI generation needs a **paid** ElevenLabs plan (Music is
+not on the free tier) — it reuses the same `ELEVENLABS_API_KEY` already
+configured for transcription, no second key/service to set up.
 
-**Writing the Treblo prompt — derive it from the video's context, and ask for
-MUSIC, not a texture.** Read the cut transcript: what's the topic, energy and
+**Writing the prompt — derive it from the video's context, and ask for MUSIC,
+not a texture.** Read the cut transcript: what's the topic, energy and
 emotional arc? Then describe a real **composed instrumental piece** — name a
 **genre + key instruments + tempo/BPM + mood**, and (optionally) a reference
 artist/style. Match the content: a hype tech/AI reel wants upbeat modern
 electronic with a catchy synth melody; a calm tutorial wants warm lo-fi keys; a
 luxury/story piece wants cinematic strings. **Avoid SFX-y phrasing** ("bed",
-bare "beat", "sound design", "drones", "risers") — that's what makes Treblo
-return sound effects instead of a song. `treblo_music.py` auto-frames the vibe
-as a composed instrumental and bans SFX/vocals, but the vibe you pass still has
-to read musical.
+bare "beat", "sound design", "drones", "risers") — that's what makes a
+text-to-music model return sound effects instead of a song. `elevenlabs_music.py`
+auto-frames the vibe as a composed instrumental and sets `force_instrumental`,
+but the vibe you pass still has to read musical.
 ```bash
-uv run python helpers/treblo_music.py "upbeat modern electronic, catchy synth melody, warm analog bass, crisp light drums, ~110 BPM, bright and motivational" -o public/trilha.mp3 --length-min 30 --length-max 60
+uv run python helpers/elevenlabs_music.py "upbeat modern electronic, catchy synth melody, warm analog bass, crisp light drums, ~110 BPM, bright and motivational" -o public/trilha.mp3 --length-sec 45
 ```
 Then flip `soundtrack.enabled: true` in edit-data.json. **Volume:** start ~0.25
 and check it's clearly audible under wall-to-wall narration (a bed at 0.12 is
@@ -476,6 +534,18 @@ setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv[vid];\
   -colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range tv \
   -c:a aac -b:a 192k -ar 48000 -t "$VD" -movflags +faststart ../final.mp4
 ```
+
+**`alimiter` needs `level=disabled`.** When a single loudnorm pass leaves the
+true peak hot (AAC's inter-sample peaks routinely push a −1 dBTP target to
+−0.3), the reflex is to add `alimiter=limit=0.87` after it. Do NOT use it bare:
+`alimiter`'s `level` option defaults to ON, which applies auto **makeup gain**
+and renormalises the output back up. The tell is that the numbers move the
+wrong way — measured on a real delivery, LOWERING the ceiling made it LOUDER
+(limit 0.87 → −13.5 LUFS, 0.80 → −12.9, 0.74 → −12.4, all still 0.0 dBTP).
+With `alimiter=limit=0.85:level=disabled` the same chain behaves: −14.7 LUFS /
+−1.0 dBTP, and the ceiling now does what it says. Since the limiter then costs
+real loudness, aim loudnorm a few tenths hot to land on target (`I=-13.5` +
+`limit=0.85` measured −14.4 LUFS / −1.1 dBTP).
 
 **Verify the delivery carries the same tags as the cut** — `bt709 / bt709 / bt709 /
 tv`, exactly what left Phase 1:

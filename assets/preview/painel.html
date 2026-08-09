@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ATIVAVID — Painel</title>
+<link rel="icon" href="/assets/ativa-vid-logo.png">
+<script>
+  (function () {
+    var t = localStorage.getItem('ativavid-theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/app.css">
+<link rel="stylesheet" href="/assets/painel.css">
+</head>
+<body class="painel-body">
+
+<header class="glass">
+  <div class="logo-chip"><img src="/assets/ativa-vid-logo.png" alt="ATIVAVID"></div>
+  <div class="head-info">
+    <div class="project-name">Painel</div>
+    <div id="rootsLine" class="state-message"></div>
+  </div>
+  <div class="head-actions">
+    <span id="counts" class="pn-counts"></span>
+    <button id="btnReload" class="btn ghost">Atualizar</button>
+    <button id="btnTheme" class="btn ghost icon" title="Alternar tema claro/escuro"></button>
+  </div>
+</header>
+
+<main class="pn-main">
+  <div id="alerts" class="pn-alerts"></div>
+  <div id="grid" class="pn-grid">
+    <div class="pn-empty">carregando…</div>
+  </div>
+</main>
+
+<div id="toast" class="toast hidden"></div>
+<script src="/assets/painel.js"></script>
+</body>
+</html>

@@ -1,12 +1,25 @@
-/* Edvid preview — dark glassmorphism, brand: #ff7713 / #09b5b7 / #738b03 */
+/* ATIVAVID preview — glassmorphism, brand: #ff7713 / #09b5b7 / #738b03.
+   Theme: light/dark toggle (app.js sets data-theme on <html>, persisted in
+   localStorage). Scope is deliberate — chrome (header, tabs, cards, setup UI)
+   themes; the "work surface" does not: the timeline panel, its lanes/clips/
+   waveform/ruler, and the caption/headline mockup previews stay on the dark
+   palette in BOTH themes, same as every pro NLE keeps its video canvas dark
+   regardless of UI theme — a stark white timeline is bad practice for judging
+   footage. --panel-bg is intentionally absent from the light override below. */
 :root {
   --orange: #ff7713;
   --teal: #09b5b7;
   --olive: #738b03;
-  /* Accent painted by the text styles that carry one (realce/misto headlines,
-     stacked captions). NOT --orange: that is app chrome, and the two drifting
-     apart is the point — the user picks this one, the UI keeps its own. JS
-     overrides it on #styleSetup from the pick. */
+  /* Accent painted by the headline styles that carry one (realce/misto). NOT
+     --orange: that is app chrome, and the two drifting apart is the point — the
+     user picks this one, the UI keeps its own. JS overrides it on #styleSetup
+     from the pick. --cap-accent is the caption's own, independent colour — it
+     has NO root default here (see applyCaptionAccent in app.js): unset, each
+     caption style keeps its natural default via the var()'s per-rule fallback.
+     --emph-accent is a THIRD, independent pick: the one accented element per
+     caption style (stacked's serif line, scatter's highlighted word) as
+     opposed to --cap-accent's BASE text (karaoke's line, the static styles).
+     Also no root default, same reasoning. */
   --hl-accent: #ff5200;
   --bg0: #08090c;
   --bg1: #10141b;
@@ -17,8 +30,63 @@
   --dim: #8b94a3;
   --radius: 16px;
   /* the timeline panel is a SOLID surface so the gutter mask can use the exact
-     same colour and become invisible — see .track-label::before */
+     same colour and become invisible — see .track-label::before. Same value
+     in both themes on purpose (see banner comment above). */
   --panel-bg: #0f1218;
+
+  /* ---- chrome-only tokens: every "soft white on dark" chip/border/well below
+     is really "soft foreground on the glass surface" — these flip in light
+     mode below so the same rules keep working without per-rule overrides. */
+  --muted: rgba(255, 255, 255, 0.42);
+  --hair: rgba(255, 255, 255, 0.22);
+  --hair-soft: rgba(255, 255, 255, 0.1);
+  --fg-soft: rgba(255, 255, 255, 0.74);
+  --fg-softer: rgba(255, 255, 255, 0.35);
+  --well-bg: rgba(0, 0, 0, 0.32);
+  --chip-empty-bg: rgba(0, 0, 0, 0.35);
+  --active-tint: rgba(255, 255, 255, 0.11);
+  --scrollbar-thumb: rgba(255, 255, 255, 0.14);
+  --scrollbar-thumb-track: rgba(255, 255, 255, 0.16);
+  /* floating overlays (tooltip/toast/help/note editor) — solid-ish, always
+     legible against whatever is behind them, so they get their own surface
+     instead of inheriting --glass */
+  --overlay-bg: rgba(12, 16, 22, 0.97);
+  --overlay-bg-soft: rgba(10, 12, 16, 0.92);
+  /* pastel accent text that was tuned for a dark chrome background — on white
+     these need to go the other way (darker, not lighter) to stay legible */
+  --pill-orange-fg: #ffb377;
+  --pill-teal-fg: #6fe3e4;
+  --rose-fg: #ff8098;
+  --footer-grad-a: rgba(13, 16, 22, 0.82);
+  --footer-grad-b: rgba(11, 13, 18, 0.96);
+}
+
+:root[data-theme="light"] {
+  --bg0: #eef0f4;
+  --bg1: #fbfbfa;
+  --glass: rgba(20, 22, 30, 0.04);
+  --glass-strong: rgba(20, 22, 30, 0.065);
+  --stroke: rgba(20, 22, 30, 0.13);
+  --text: #1b1e24;
+  --dim: #666e7a;
+
+  --muted: rgba(20, 22, 30, 0.4);
+  --hair: rgba(20, 22, 30, 0.18);
+  --hair-soft: rgba(20, 22, 30, 0.1);
+  --fg-soft: rgba(20, 22, 30, 0.72);
+  --fg-softer: rgba(20, 22, 30, 0.4);
+  --well-bg: rgba(20, 22, 30, 0.05);
+  --chip-empty-bg: rgba(20, 22, 30, 0.06);
+  --active-tint: rgba(20, 22, 30, 0.07);
+  --scrollbar-thumb: rgba(20, 22, 30, 0.18);
+  --scrollbar-thumb-track: rgba(20, 22, 30, 0.22);
+  --overlay-bg: rgba(255, 255, 255, 0.97);
+  --overlay-bg-soft: rgba(255, 255, 255, 0.94);
+  --pill-orange-fg: #b8560f;
+  --pill-teal-fg: #0a7d7f;
+  --rose-fg: #d81b60;
+  --footer-grad-a: rgba(255, 255, 255, 0.82);
+  --footer-grad-b: rgba(255, 255, 255, 0.96);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -39,6 +107,20 @@ body {
   user-select: none;
 }
 
+/* A soft signature glow around the whole window edge — same idea as the
+   orange ring Chrome itself draws around a tab it's automating, which is
+   what this was asked to echo. Fixed + pointer-events:none so it sits on
+   top of literally everything (even the help modal) as a pure frame, never
+   intercepting a click. */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 1px rgba(255, 119, 19, 0.35), inset 0 0 44px rgba(255, 119, 19, 0.14);
+}
+
 .glass {
   background: var(--glass);
   backdrop-filter: blur(18px) saturate(1.2);
@@ -55,18 +137,63 @@ body {
 header {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
   margin: 12px 14px 0;
-  padding: 10px 14px;
+  padding: 12px 18px;
   flex: 0 0 auto;
+  position: relative;
+  overflow: hidden;
 }
 
-.logo-chip { display: flex; align-items: center; }
-.logo-chip img { height: 26px; display: block; }
+/* Neutral spotlight behind the mark — white fading to grey, the way a pro
+   NLE (Resolve, Premiere) lights its own logo: a highlight, not a colour
+   wash. The brand's colour lives in the signature strip below instead. */
+header::before {
+  content: '';
+  position: absolute;
+  left: -60px;
+  top: 50%;
+  width: 240px;
+  height: 240px;
+  transform: translateY(-50%);
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.10), rgba(200, 205, 214, 0.03) 55%, transparent 75%);
+  pointer-events: none;
+}
 
-.head-info { min-width: 0; }
-.project-name { font-weight: 900; font-size: 16px; letter-spacing: 0.2px; }
-.state-message { font-size: 12px; color: var(--dim); }
+/* Signature strip — every accent this app owns (the logo's purple, plus the
+   app's own orange/teal/olive) on one hairline. Nobody else's toolbar has
+   this exact gradient; it is the "ours and unique" mark instead of the logo
+   fighting the chrome for colour. Clipped to the header's own rounded
+   corners by the overflow:hidden above. */
+header::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #a855f7, var(--orange), var(--teal), var(--olive));
+}
+
+.logo-chip { display: flex; align-items: center; position: relative; z-index: 1; }
+.logo-chip img {
+  height: 50px;
+  display: block;
+  filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.5));
+}
+
+/* A hairline instead of raw flex gap pulls the name in against the (now
+   bigger) mark and gives the pairing a defined edge, rather than the two
+   just floating in open space. */
+.head-info {
+  min-width: 0;
+  padding-left: 14px;
+  border-left: 1px solid var(--stroke);
+  position: relative;
+  z-index: 1;
+}
+.project-name { font-weight: 900; font-size: 17px; letter-spacing: 0.2px; }
+.state-message { font-size: 12px; color: var(--dim); margin-top: 3px; }
 
 .head-actions { margin-left: auto; display: flex; align-items: center; gap: 10px; }
 
@@ -76,12 +203,12 @@ header {
   border-radius: 999px;
   background: rgba(255, 119, 19, 0.14);
   border: 1px solid rgba(255, 119, 19, 0.45);
-  color: #ffb377;
+  color: var(--pill-orange-fg);
 }
 .pill.saved {
   background: rgba(9, 181, 183, 0.14);
   border-color: rgba(9, 181, 183, 0.45);
-  color: #6fe3e4;
+  color: var(--pill-teal-fg);
 }
 
 .btn {
@@ -97,6 +224,11 @@ header {
   transition: filter 0.15s, transform 0.05s;
 }
 .btn:hover { filter: brightness(1.25); }
+.btn:disabled { opacity: 0.35; cursor: not-allowed; filter: none; }
+.btn:disabled:hover { filter: none; }
+/* the Painel entry is a real <a> (it navigates) — anchors bring their own
+   colour, underline and inline layout, none of which .btn overrides */
+a.btn { text-decoration: none; color: var(--text); display: inline-flex; align-items: center; }
 .btn:active { transform: scale(0.97); }
 .btn.primary {
   background: linear-gradient(135deg, var(--orange), #ff9440);
@@ -108,31 +240,66 @@ header {
 .btn.icon svg { width: 13px; height: 13px; display: block; fill: currentColor; }
 .btn.small { padding: 5px 10px; font-size: 11px; }
 
-/* ---------- tabs ---------- */
-.tabs { display: flex; gap: 8px; margin: 10px 14px 0; flex: 0 0 auto; }
+#btnOpenFolder { display: flex; align-items: center; gap: 7px; }
+#openFolderIcon { display: flex; width: 13px; height: 13px; flex: 0 0 auto; }
+#openFolderIcon svg { width: 13px; height: 13px; display: block; fill: currentColor; }
+#btnTheme svg { width: 14px; height: 14px; }
 
+/* ---------- tabs ---------- */
+.tabs { display: flex; gap: 6px; margin: 14px 14px 0; flex: 0 0 auto; }
+
+/* Two-line stack (a small caps eyebrow over the real name) instead of
+   "FASE 1"/"FASE 2" inline before the word — those were the only two tabs
+   with a prefix at all, and the prefix was the phase system leaking into
+   the label instead of naming what's actually on the tab. All three tabs
+   read the same way now. Uniform size across active/inactive (no more
+   active tab growing a couple px) — the underline bar below carries the
+   "you are here" signal on its own, cleaner than the old skeuomorphic
+   folder-tab pop-up. */
 .tab {
   font-family: inherit;
-  font-weight: 700;
-  font-size: 12.5px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  font-size: 15px;
+  font-weight: 800;
   color: var(--dim);
   background: var(--glass);
   backdrop-filter: blur(18px);
   border: 1px solid var(--stroke);
-  border-radius: 12px 12px 0 0;
   border-bottom: none;
-  padding: 9px 20px 11px;
+  border-radius: 14px 14px 0 0;
+  padding: 10px 22px 13px;
   cursor: pointer;
-  align-self: flex-end;
+  position: relative;
+  transition: color 0.15s, background 0.15s;
 }
-.tab .tab-num { font-size: 10px; font-weight: 900; letter-spacing: 1.5px; color: var(--dim); margin-right: 8px; }
+.tab:hover:not(:disabled):not(.active) { color: var(--fg-soft); background: var(--glass-strong); }
+.tab .tab-num {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 1.8px;
+  text-transform: uppercase;
+  color: var(--dim);
+  opacity: 0.85;
+}
 .tab.active {
   color: var(--text);
-  background: rgba(255, 255, 255, 0.11);
-  font-size: 14px;
-  padding: 11px 24px 13px;
+  background: var(--active-tint);
 }
-.tab.active .tab-num { color: var(--orange); }
+.tab.active .tab-num { color: var(--orange); opacity: 1; }
+/* the "you are here" mark — a plain solid accent, not another gradient */
+.tab.active::after {
+  content: '';
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--orange);
+}
 .tab:disabled { opacity: 0.35; cursor: not-allowed; }
 
 /* ---------- main ---------- */
@@ -165,12 +332,18 @@ body.portrait .player-frame video { height: 100%; width: auto; max-height: none;
 body.portrait .editor-col { order: 1; }
 body.portrait .editor-col .transport { align-self: stretch; width: auto; }
 
+/* The program monitor — plain hairline (from .glass), on purpose: a hard
+   gradient outline read as a loud coloured square next to the footage, the
+   opposite of clean. The soft, faint colour wash behind it is the only
+   "premium" touch that survives — barely-there depth, not a frame. */
 .player-frame {
   padding: 8px;
   border-radius: 18px;
   max-height: 42vh;
   display: flex;
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  box-shadow:
+    0 18px 50px rgba(0, 0, 0, 0.45),
+    0 0 40px rgba(168, 85, 247, 0.05);
 }
 .player-frame video {
   max-height: calc(42vh - 16px);
@@ -187,8 +360,30 @@ body.portrait .editor-col .transport { align-self: stretch; width: auto; }
   padding: 6px 12px;
   border-radius: 12px;
   width: min(860px, 96%);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
 }
 .transport .spacer { flex: 1; }
+/* separates "play the thing" + "mark a correction" from "look at the
+   timeline differently" — two different kinds of control that a flat row of
+   buttons blurred together */
+.transport-divider { width: 1px; align-self: stretch; margin: 5px 0; background: var(--stroke); flex: 0 0 auto; }
+
+/* the hero control — every other transport button is flat glass; play is the
+   one thing you press one, five, fifty times a session, so it gets the same
+   filled-and-lifted treatment as the primary action button elsewhere, not
+   another grey square fighting for attention with mute/mark/fit. */
+#btnPlay {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--orange), #ff9440);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(255, 119, 19, 0.4);
+}
+#btnPlay svg { width: 13px; height: 13px; }
+#btnPlay:hover { filter: brightness(1.12); }
 .time {
   font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
   font-variant-numeric: tabular-nums;
@@ -214,6 +409,13 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 /* ---------- timeline ---------- */
+/* Same signature gradient as the header's bottom edge and the setup-footer's
+   top edge, now on the timeline's top edge too — the thread that ties every
+   major surface in the app back to one identity instead of three unrelated
+   dark boxes. A real border (not a scrolling child), so it survives the
+   panel's own scroll untouched — see the header-bookend comments elsewhere
+   for why this one deliberately does NOT theme with light/dark: the panel
+   underneath it is the dark work surface in both themes. */
 .timeline-panel {
   flex: 1 1 0;
   min-height: 190px;
@@ -347,6 +549,21 @@ canvas { display: block; }
 .clip.selected { box-shadow: 0 0 0 2px var(--orange); z-index: 4; }
 .clip.dirty { border: 1.5px dashed var(--orange); }
 .clip.removed { opacity: 0.28; filter: grayscale(1); }
+
+/* live preview while dragging a delete-range inside a clip — same rose the
+ * app already uses for corrections/removal (.btn.mark, .note-chip), so a
+ * user reads "destructive selection" without a new colour to learn */
+.clip-range-sel {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  background: repeating-linear-gradient(45deg, rgba(255, 84, 112, 0.3) 0 6px, rgba(255, 84, 112, 0.48) 6px 12px);
+  border: 1.5px dashed rgba(255, 84, 112, 0.9);
+  border-radius: 5px;
+  z-index: 6;
+  pointer-events: none;
+}
+.clip-range-sel.hidden { display: none; }
 .clip.removed::after {
   content: 'REMOVIDO';
   position: absolute; inset: 0;
@@ -412,6 +629,52 @@ canvas { display: block; }
   color: #8ceeef;
   pointer-events: none;
 }
+/* a caption line the user retyped — dashed like every other "edited, not yet
+   saved" state in the timeline (.clip.dirty, .chip.insert.dirty) */
+.chip.caption { cursor: text; pointer-events: auto; }
+.chip.caption:hover { border-color: rgba(9, 181, 183, 0.9); }
+.chip.caption.fixed {
+  border-style: dashed;
+  border-color: var(--orange);
+  background: rgba(255, 119, 19, 0.16);
+  color: #ffc08a;
+}
+
+.cap-editor {
+  position: fixed;
+  z-index: 125;
+  width: 320px;
+  padding: 11px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--overlay-bg);
+  border: 1px solid rgba(9, 181, 183, 0.45);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(14px);
+}
+.cap-orig {
+  font-size: 10.5px;
+  color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cap-input {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--well-bg);
+  border: 1px solid var(--stroke);
+  border-radius: 9px;
+  padding: 8px 10px;
+  outline: none;
+}
+.cap-input:focus { border-color: rgba(9, 181, 183, 0.6); }
+.cap-actions { display: flex; align-items: center; gap: 8px; }
+.cap-actions .spacer { flex: 1; }
+
 .chip.insert {
   background: rgba(255, 119, 19, 0.16);
   border: 1px solid rgba(255, 119, 19, 0.55);
@@ -432,20 +695,27 @@ canvas { display: block; }
 .chip .handle.r { right: 0; }
 
 /* needle */
+/* A thin lit line instead of a flat one, and a plain glowing dot for the
+   head instead of the old flag-shaped clip-path — a pentagon read as busy
+   at this size; a circle reads instantly and stays clean at any zoom. */
 .needle {
   position: absolute;
   top: 0; bottom: 0;
   width: 0;
-  border-left: 2px solid var(--orange);
+  border-left: 1.5px solid var(--orange);
+  box-shadow: 0 0 5px rgba(255, 119, 19, 0.55);
   z-index: 10;
   pointer-events: none;
 }
 .needle-head {
   position: absolute;
-  top: 0; left: -7px;
-  width: 12px; height: 14px;
+  top: -4px;
+  left: -5px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
   background: var(--orange);
-  clip-path: polygon(0 0, 100% 0, 100% 55%, 50% 100%, 0 55%);
+  box-shadow: 0 0 0 3px rgba(255, 119, 19, 0.2), 0 2px 6px rgba(0, 0, 0, 0.45);
 }
 
 /* ---------- footer / tooltip / toast ---------- */
@@ -462,7 +732,7 @@ kbd {
 .tooltip {
   position: fixed;
   z-index: 100;
-  background: rgba(10, 12, 16, 0.92);
+  background: var(--overlay-bg-soft);
   border: 1px solid rgba(255, 119, 19, 0.5);
   border-radius: 8px;
   padding: 6px 10px;
@@ -479,7 +749,7 @@ kbd {
   bottom: 22px; left: 50%;
   transform: translateX(-50%);
   z-index: 100;
-  background: rgba(10, 14, 18, 0.94);
+  background: var(--overlay-bg);
   border: 1px solid rgba(9, 181, 183, 0.55);
   border-radius: 12px;
   padding: 12px 20px;
@@ -501,7 +771,7 @@ kbd {
   margin-left: 4px;
   border-color: rgba(255, 84, 112, 0.35);
   background: rgba(255, 84, 112, 0.1);
-  color: #ff8098;
+  color: var(--rose-fg);
 }
 .btn.mark svg { width: 13px; height: 13px; fill: currentColor; display: block; }
 /* an IN is open — the button now closes the range */
@@ -561,19 +831,19 @@ kbd {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  background: rgba(12, 16, 22, 0.97);
+  background: var(--overlay-bg);
   border: 1px solid rgba(255, 84, 112, 0.4);
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(14px);
 }
 .note-head { display: flex; align-items: center; justify-content: space-between; }
-.note-range { font-size: 12px; font-weight: 900; letter-spacing: 0.8px; color: #ff8098; }
+.note-range { font-size: 12px; font-weight: 900; letter-spacing: 0.8px; color: var(--rose-fg); }
 .note-editor textarea {
   font-family: inherit;
   font-size: 13px;
   line-height: 1.5;
   color: var(--text);
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--well-bg);
   border: 1px solid var(--stroke);
   border-radius: 10px;
   padding: 10px 12px;
@@ -592,34 +862,94 @@ kbd {
   min-height: 0;
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+  scrollbar-color: var(--scrollbar-thumb-track) transparent;
 }
 .setup::-webkit-scrollbar { width: 9px; }
 .setup::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.14);
+  background: var(--scrollbar-thumb);
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
+/* Two columns whenever there's room for them — narrow groups (a single
+   swatch, three edit-type cards) were burning a full row each and leaving
+   the whole right half of the pane empty. auto-fit + a minmax floor means it
+   collapses to one column on its own once the pane gets too narrow to fit
+   two, instead of a fixed breakpoint that can still overshoot. Groups whose
+   content genuinely wants the width (the headline/caption card rows,
+   elements) opt out via --wide and always take the full row. */
 .setup-inner {
   width: min(1200px, 100%);
   margin: 0 auto;
   padding: 2px 4px 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  display: grid;
+  /* 340px let 3 cramped columns "fit" by the math while their titles/notes
+     wrapped in practice; 400px fixed the wrapping but a 3-column row needs
+     ≤389px each to stay under the panel's 1200px cap, so it never got a 3rd
+     column back — 2 with a slab of empty space on wide screens instead.
+     370px clears 3 columns at (370×3 + 24px gaps = 1134px, under the cap)
+     — the notes were also cut down to 1-2 words each, which was the actual
+     source of the wrap, so this doesn't reopen that problem. */
+  grid-template-columns: repeat(auto-fit, minmax(370px, 1fr));
+  align-items: start;
+  gap: 12px;
+}
+.setup-head,
+.setup-footer,
+.setup-group--wide {
+  grid-column: 1 / -1;
 }
 
+/* Ênfase belongs directly under destaque (both are "the one accented thing"
+   for a style), círculo under legenda (both are stacked-only) — a plain
+   swatch card is short enough that pairing two per column reads as one
+   related unit instead of the row just trailing off into empty space. A
+   plain grid item like any other .setup-group — auto-fit already collapses
+   it to the full row on its own once the pane is too narrow for 2 columns,
+   no breakpoint needed, and its two cards just stay stacked either way. */
+.setup-col {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.setup-head { padding: 0 2px; }
 .setup-head h2 { font-size: 16px; font-weight: 900; letter-spacing: 0.2px; }
 
-.setup-group { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+/* Each group is its own widget — a bordered card, not just a label sitting in
+   open flow. Before this, "where does headline end and captions begin" was
+   answered by reading the all-caps label; now it's answered by the edge of
+   the card, the way any dashboard separates its panels. */
+.setup-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 13px 15px 15px;
+  border-radius: 14px;
+  background: var(--glass);
+  border: 1px solid var(--stroke);
+}
 .group-head { display: flex; align-items: baseline; gap: 10px; }
 .group-title { font-size: 11px; font-weight: 600; letter-spacing: 1.4px; text-transform: uppercase; }
+/* the accent dot ties each widget's header to the same "chip" language the
+   rest of the app uses (tl-chip, pills) instead of a bare text label */
+.group-title::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--orange);
+  margin-right: 8px;
+  vertical-align: 1px;
+}
 
 .opt-grid { display: flex; flex-wrap: wrap; gap: 10px; }
 .check-row { display: flex; flex-wrap: wrap; gap: 8px; }
 /* says where the accent actually lands — or that the picked styles use none */
-.group-note { font-size: 11px; color: var(--muted, rgba(255, 255, 255, 0.42)); }
+.group-note { font-size: 11px; color: var(--muted); }
 
 /* ---- accent picker: one spectral swatch + a hex field ----
    No preset row. A grid of canned colours competes with the style cards for
@@ -630,7 +960,7 @@ kbd {
   width: 32px;
   height: 32px;
   padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.22);
+  border: 1px solid var(--hair);
   border-radius: 9px;
   cursor: pointer;
   transition: transform 0.14s;
@@ -662,6 +992,24 @@ kbd {
   padding: 0;
 }
 
+/* "Padrão do estilo" — clears a caption colour pick back to null so each style
+   goes back to its own default look. Dashed, like the "Nenhuma" style cards, so
+   it reads as "off" next to the filled spectral swatch beside it. */
+.swatch.none {
+  display: grid;
+  place-items: center;
+  background: var(--glass);
+  border-style: dashed;
+  border-color: var(--hair);
+  color: var(--muted);
+}
+.swatch.none svg { width: 16px; height: 16px; }
+.swatch.none.on {
+  border-color: var(--fg-soft);
+  background: var(--glass-strong);
+  color: var(--fg-soft);
+}
+
 .hex-field {
   display: flex;
   align-items: center;
@@ -675,7 +1023,7 @@ kbd {
 }
 .hex-field:focus-within { border-color: rgba(255, 119, 19, 0.5); }
 .hex-field.bad { border-color: rgba(255, 84, 112, 0.6); }
-.hex-hash { font-size: 12px; color: rgba(255, 255, 255, 0.35); }
+.hex-hash { font-size: 12px; color: var(--fg-softer); }
 .hex-input {
   width: 6.2em;
   background: none;
@@ -702,7 +1050,7 @@ kbd {
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s;
 }
-.opt:hover { border-color: rgba(255, 255, 255, 0.22); }
+.opt:hover { border-color: var(--hair); }
 .opt.on { border-color: var(--orange); background: rgba(255, 119, 19, 0.07); }
 /* only shown where the catalog has a SINGLE option — it explains the lone card */
 .opt.ghost {
@@ -728,13 +1076,13 @@ kbd {
   letter-spacing: 0.2px;
   line-height: 1.2;
   text-align: center;
-  color: rgba(255, 255, 255, 0.74);
+  color: var(--fg-soft);
   min-height: 2.4em;
   display: flex;
   align-items: center;
   justify-content: center;
 }
-.opt.on .opt-name { color: rgba(255, 255, 255, 0.95); }
+.opt.on .opt-name { color: var(--text); }
 
 /* the tick — a ring that fills, no glow */
 .opt-mark {
@@ -742,8 +1090,8 @@ kbd {
   top: 15px; right: 15px;
   width: 15px; height: 15px;
   border-radius: 50%;
-  border: 1.5px solid rgba(255, 255, 255, 0.3);
-  background: rgba(0, 0, 0, 0.35);
+  border: 1.5px solid var(--hair);
+  background: var(--chip-empty-bg);
 }
 .opt.on .opt-mark { border-color: var(--orange); background: var(--orange); }
 .opt.on .opt-mark::after {
@@ -778,12 +1126,16 @@ kbd {
 /* caption demos: a crop of the caption band, at the real proportions */
 .opt-preview.cap { height: 64px; width: 182px; }
 .opt-preview.hlbox { height: 64px; }
+/* "Nenhuma" — no look to render, so the box says so instead: dashed like the
+   lone-option ghost, muted, just the slash-circle mark centered. */
+.opt-preview-none { border-style: dashed; border-color: rgba(255, 255, 255, 0.14); background: rgba(255, 255, 255, 0.02); }
 
 /* Short panes (the preview often lives in a half-height pane): shrink the
    previews instead of scrolling. The demos are rebuilt on resize, so their
    internal scale follows the box — see renderSetup on the resize handler. */
 @media (max-height: 760px) {
   .setup-inner { gap: 10px; }
+  .setup-group { padding: 12px 14px 14px; gap: 8px; }
   .setup-head h2 { font-size: 16px; }
   .setup-head p { display: none; }
   .opt-grid { --mock-h: 108px; }
@@ -816,7 +1168,7 @@ kbd {
   white-space: nowrap;
   font-family: 'Poppins', sans-serif;
   font-weight: 900;
-  color: #fff;
+  color: var(--cap-accent, #fff);
   line-height: 1;
   letter-spacing: -1px;
   text-shadow: 0 4px 20px rgba(0, 0, 0, 0.55);
@@ -842,7 +1194,7 @@ kbd {
 }
 .stk-line .s0 { font-family: 'Poppins', sans-serif; font-weight: 900; font-style: italic; }
 .stk-line .s1 { font-family: 'Poppins', sans-serif; font-weight: 400; }
-.stk-line .s2 { font-family: 'Playfair Display', serif; font-weight: 900; font-style: italic; color: var(--hl-accent); }
+.stk-line .s2 { font-family: 'Playfair Display', serif; font-weight: 900; font-style: italic; color: var(--emph-accent, #ff5200); }
 .stk-line .s3 { font-family: 'Poppins', sans-serif; font-weight: 800; }
 
 /* scatter ("disperso") — Lora, lowercase, off-white with the same baseline
@@ -860,13 +1212,25 @@ kbd {
   color: transparent;
   will-change: opacity, filter;
 }
-.scat-line span.hi { font-weight: 600; font-style: italic; }
+/* solid override for the ONE highlighted word, on top of the base rule's
+   gradient fill above — reads --emph-accent (the same "one accented element"
+   channel as the stacked serif line above), NOT --cap-accent (the base text
+   colour, which this style never applies to its ordinary ink-gradient words).
+   Unset, the var() fallback is `transparent`, which changes nothing: the
+   gradient still shows through exactly as it did before a caption colour
+   existed. */
+.scat-line span.hi {
+  font-weight: 600;
+  font-style: italic;
+  color: var(--emph-accent, transparent);
+  -webkit-text-fill-color: var(--emph-accent, transparent);
+}
 
 /* the three static styles — flat off-white, no animation, nothing to drive */
 .stat-demo {
   position: absolute;
   text-align: center;
-  color: #f4f1e9;
+  color: var(--cap-accent, #f4f1e9);
   line-height: 1.18;
   white-space: pre;
   text-shadow: 0 1px 5px rgba(0, 0, 0, 0.55);
@@ -915,14 +1279,14 @@ kbd {
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s;
 }
-.chk:hover { border-color: rgba(255, 255, 255, 0.22); }
+.chk:hover { border-color: var(--hair); }
 .chk.on { border-color: rgba(9, 181, 183, 0.5); background: rgba(9, 181, 183, 0.06); }
 .chk-box {
   position: relative;
   flex: 0 0 auto;
   width: 16px; height: 16px;
   border-radius: 5px;
-  border: 1.5px solid rgba(255, 255, 255, 0.25);
+  border: 1.5px solid var(--hair);
 }
 .chk.on .chk-box { border-color: var(--teal); background: var(--teal); }
 .chk.on .chk-box::after {
@@ -947,7 +1311,7 @@ kbd {
   font-weight: 400;
   line-height: 1.4;
   color: var(--text);
-  background: rgba(0, 0, 0, 0.32);
+  background: var(--well-bg);
   border: 1px solid var(--stroke);
   border-radius: 11px;
   padding: 9px 12px;
@@ -956,9 +1320,34 @@ kbd {
 }
 #setupNote:focus { border-color: rgba(255, 119, 19, 0.5); }
 
+/* The panel's own footer bar — sticky so the note + confirm action (and what
+   it is about to confirm) stay reachable while the groups above scroll, the
+   way a real NLE keeps its apply/render bar pinned instead of burying it at
+   the bottom of a long settings list. Plain border, no colour line — a
+   gradient hairline here read as loud sitting right against the last
+   widget's own edge; the background contrast + gap already say "new
+   surface" on their own. */
+.setup-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, var(--footer-grad-a), var(--footer-grad-b));
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--stroke);
+}
+
 .setup-actions { display: flex; align-items: center; gap: 12px; }
 .setup-actions .btn { flex: 0 0 auto; }
-.setup-summary { font-size: 11px; font-weight: 400; color: var(--dim); }
+.setup-summary-row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.setup-summary-row .group-title { flex: 0 0 auto; }
+.setup-summary { font-size: 12px; font-weight: 500; color: var(--text); opacity: 0.8; line-height: 1.5; }
 
 /* ---------- help (was the footer hint strip) ---------- */
 .help-fab {
@@ -977,12 +1366,12 @@ kbd {
   color: var(--dim);
   /* opaque: in the portrait split it sits over the player, and a translucent
      chip disappears against the footage */
-  background: rgba(14, 18, 24, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: var(--overlay-bg-soft);
+  border: 1px solid var(--hair);
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s;
 }
-.help-fab:hover { color: var(--text); border-color: rgba(255, 255, 255, 0.3); }
+.help-fab:hover { color: var(--text); border-color: var(--fg-soft); }
 
 .help-backdrop {
   position: fixed;
@@ -997,12 +1386,75 @@ kbd {
   bottom: 44px;
   width: min(420px, calc(100vw - 32px));
   padding: 14px 16px 16px;
-  background: rgba(12, 16, 22, 0.97);
+  background: var(--overlay-bg);
   backdrop-filter: blur(14px);
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.6);
 }
 .help-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 .help-title { font-size: 12px; font-weight: 600; letter-spacing: 0.6px; color: var(--text); }
+
+/* ---------- image picker ---------- */
+.img-modal {
+  position: fixed;
+  z-index: 131;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(720px, calc(100vw - 40px));
+  padding: 14px 16px 16px;
+  background: var(--overlay-bg);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.6);
+}
+.img-search-row { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+#imgQuery {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--well-bg);
+  border: 1px solid var(--stroke);
+  border-radius: 10px;
+  padding: 9px 12px;
+  outline: none;
+}
+#imgQuery:focus { border-color: rgba(255, 119, 19, 0.5); }
+.img-results {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 8px;
+  max-height: 46vh;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.img-card {
+  position: relative;
+  aspect-ratio: 9 / 16;
+  border-radius: 9px;
+  overflow: hidden;
+  border: 1px solid var(--stroke);
+  cursor: pointer;
+  background: var(--glass);
+  padding: 0;
+}
+.img-card img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.img-card:hover { border-color: var(--orange); }
+.img-card .img-credit {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  font-size: 8.5px;
+  line-height: 1.3;
+  padding: 3px 5px;
+  color: #fff;
+  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.85));
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.img-hint { display: block; margin-top: 10px; font-size: 11px; color: var(--dim); }
+.img-empty { grid-column: 1 / -1; font-size: 12px; color: var(--dim); padding: 18px 4px; text-align: center; }
 .help-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
 .help-list li {
   display: grid;
@@ -1013,7 +1465,7 @@ kbd {
   font-weight: 400;
   color: var(--dim);
 }
-.help-list li > span:first-child { text-align: right; color: rgba(255, 255, 255, 0.55); }
+.help-list li > span:first-child { text-align: right; color: var(--fg-soft); }
 .help-list b { color: var(--text); font-weight: 600; }
 .help-list kbd {
   font-family: inherit;

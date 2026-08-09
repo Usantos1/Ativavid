@@ -62,6 +62,7 @@ export type EditData = {
     // "realce": each line on its own solid orange marker block.
     // "misto": line 1 light white, line 2 heavy orange.
     style?: 'outline' | 'card' | 'realce' | 'misto';
+    accent?: string;        // realce/misto marker + text colour (default #ff5200)
     fontSizePx?: number;   // auto-fit CEILING (alias of maxFontPx, kept for compat)
     maxFontPx?: number;    // auto-fit ceiling (per-style default)
     safeWidth?: number;    // auto-fit width budget (per-style default)
@@ -75,6 +76,23 @@ export type EditData = {
     maxWords: number;
     safeWidth: number;
     paddingBottom: number;
+    // "Legenda" colour — the BASE text: karaoke's whole line, and the three
+    // static styles (simples/serifada/classica). Stacked's white lines and
+    // scatter's ink-gradient words are deliberately NOT tied to this — they
+    // have their own separate accent below, since those two styles draw a
+    // distinction between ordinary text and an emphasised word/line.
+    accent?: string;
+    // "Ênfase/destaque" colour — the ONE accented element per style: stacked's
+    // serif line, scatter's highlighted word. Independent from `accent` above
+    // (a project can want white body text and a red emphasis) and from
+    // hook.accent (headline). Defaults to #ff5200 when unset, same as accent's
+    // default, but the two are picked separately.
+    emphasisAccent?: string;
+    // Stacked-only: the hand-drawn pencil-circle stroke around a solo emphasis
+    // word (see StackedCaptions.tsx / PencilOutline.tsx). Independent from
+    // emphasisAccent — a project can circle in green while the serif line
+    // reads red. Defaults to PencilOutline's own #39E508 when unset.
+    circleAccent?: string;
     // ranges (seconds) where the caption sits somewhere else — used by the
     // "tela dividida" style to park it on the seam between image and video
     windows?: {start: number; end: number; paddingBottom: number}[];
@@ -328,7 +346,7 @@ const Karaoke: React.FC = () => {
                   fontFamily,
                   fontWeight: 900,
                   fontSize: C.fontSize,
-                  color: 'white',
+                  color: C.accent ?? 'white',
                   lineHeight: 1,
                   letterSpacing: -1,
                   whiteSpace: 'nowrap',
@@ -389,7 +407,7 @@ const Inserts: React.FC = () => {
   );
 };
 
-// ============ SOUNDTRACK (Treblo AI track or a local file) — background bed ====
+// ============ SOUNDTRACK (ElevenLabs AI track or a local file) — background bed ====
 const Soundtrack: React.FC = () => {
   const {durationInFrames} = useVideoConfig();
   const S = D.soundtrack;
@@ -512,7 +530,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
             <div
               key={i}
               style={{
-                background: '#ff5200',
+                background: H.accent ?? '#ff5200',
                 color: '#fff',
                 fontWeight: 900,
                 fontSize: size,
@@ -535,7 +553,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
         <Sfx src="whoosh.mp3" volume={0.1} />
         <div style={{...shell, filter: 'drop-shadow(0 6px 16px rgba(0,0,0,0.55))'}}>
           <div style={{fontWeight: 400, fontSize: size, color: '#fff'}}>{lines[0]}</div>
-          <div style={{fontWeight: 900, fontSize: size, color: '#ff5200'}}>{lines[1]}</div>
+          <div style={{fontWeight: 900, fontSize: size, color: H.accent ?? '#ff5200'}}>{lines[1]}</div>
         </div>
       </AbsoluteFill>
     );

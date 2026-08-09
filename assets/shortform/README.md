@@ -41,25 +41,53 @@ Then copy `cut.mp4` into `public/` and generate the data files below.
     "zooms": [1.14, 1.2, 1.12, 1.22, 1.16, 1.1, 1.18],  // per cut segment, cycles
     "pushIn": 0.04, "targetX": 0.5, "targetY": 0.4
   },
-  "hook": {                          // static headline, first ~4s (always on)
+  "hook": {                          // static headline, first ~4s
+    // "enabled": false turns the hook off entirely (Estilo tab "Nenhuma") —
+    // drop endSec/style/lines/logo/sign, there is nothing else to write.
     "enabled": true, "endSec": 4.0,
-    "style": "card",                 // "card" (default) | "outline"
+    "style": "card",                 // "card" (default) | "outline" | "realce" | "misto"
     "lines": ["A IA MAIS", "PERIGOSA DO MUNDO", "ACABOU DE SER LIBERADA"],
     "logo": "brand/logo.webp",       // card only: public/ path or null
-    "sign": "brand/warning.webp"     // card only: transparent symbol or null
+    "sign": "brand/warning.webp",    // card only: transparent symbol or null
+    // "accent": "#ff5200"           // realce/misto only: marker/heavy-line colour,
+                                      // defaults to #ff5200. Independent from captions.accent.
     // "outline" style — white text + thick black stroke, no card, sentence-case,
     // sits lower (may overlap top of head). Write lines[] in sentence case, drop
     // logo/sign, and tune: "fontSizePx": 68, "strokePx": 12, "paddingTop": 330,
     // "lineHeight": 1.06
   },
   "captions": {                      // karaoke, ≤3 words, Poppins Black
+    // "enabled": false turns burned captions off entirely (Estilo tab
+    // "Nenhuma") — but still run captions_for_remotion.py and keep this block
+    // otherwise normal: captions.json is a static import (Main.tsx,
+    // SimpleCaptions.tsx, ScatterCaptions.tsx) that the bundle needs to exist
+    // regardless of "enabled", same as track.json when tracking is off.
     "enabled": true, "fontSize": 76, "maxWords": 3,
     "safeWidth": 720,                // clears the platform action rail — keep 720
     "paddingBottom": 420,
     // optional: ranges where the caption sits elsewhere (split screen parks it
     // on the seam). Resolved per FRAME, so a line crossing the boundary moves.
     "windows": [{"start": 11.64, "end": 14.73, "paddingBottom": 1074}],
-    "style": "karaoke"               // "karaoke" (default) | "stacked" (see below)
+    "style": "karaoke",               // "karaoke" (default) | "stacked" (see below)
+    // Three INDEPENDENT colour fields, each defaulting to its own element's
+    // built-in colour when omitted — never force two of these equal.
+    // "accent": "#ff5200"             // BASE text colour. karaoke: the whole
+                                        // line. simples/serifada/classica: the
+                                        // text. stacked/scatter do NOT read this
+                                        // (see emphasisAccent below). Independent
+                                        // from hook.accent.
+    // "emphasisAccent": "#ff5200"     // the ONE accented element per style:
+                                        // stacked's serif line, scatter's
+                                        // highlighted word. karaoke and the
+                                        // static styles have no separate
+                                        // emphasis concept and ignore this.
+    // "circleAccent": "#39E508"       // stacked-only: the hand-drawn pencil
+                                        // circle stroke around the solo emphasis
+                                        // word. Defaults to PencilOutline's own
+                                        // green #39E508 when unset. Independent
+                                        // from emphasisAccent — a project can
+                                        // circle in green while the serif line
+                                        // reads red.
     // when "stacked": run caption_style.py → public/caption-cues.json, then the
     // stacked style renders (multi-font stack + pencil outline + click/scratch).
     // optional stacked overrides: "stackedOffsetY": 0.156, "fontScale": 1,

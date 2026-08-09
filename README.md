@@ -1,4 +1,4 @@
-# edvid
+# ATIVAVID
 
 Editor de vídeo por conversa. Você joga o material bruto numa pasta, abre seu
 agente ali dentro e diz *"edita isso num vídeo de lançamento"*. Ele transcreve,
@@ -48,13 +48,13 @@ falhar de um jeito bem menos claro.
 **3. Baixe a skill:**
 
 ```powershell
-git clone https://github.com/fillrochaa/edvid "$env:USERPROFILE\.claude\skills\edvid"
+git clone https://github.com/fillrochaa/edvid "$env:USERPROFILE\.claude\skills\ativa-vid"
 ```
 
 **4. Instale as dependências Python:**
 
 ```powershell
-uv sync --directory "$env:USERPROFILE\.claude\skills\edvid"
+uv sync --directory "$env:USERPROFILE\.claude\skills\ativa-vid"
 ```
 
 Cole os comandos exatamente como estão. O `$env:USERPROFILE` é uma variável que
@@ -84,13 +84,13 @@ Se algum disser *"command not found"*, resolva antes de continuar.
 **3. Baixe a skill:**
 
 ```bash
-git clone https://github.com/fillrochaa/edvid "$HOME/.claude/skills/edvid"
+git clone https://github.com/fillrochaa/edvid "$HOME/.claude/skills/ativa-vid"
 ```
 
 **4. Instale as dependências Python:**
 
 ```bash
-uv sync --directory "$HOME/.claude/skills/edvid"
+uv sync --directory "$HOME/.claude/skills/ativa-vid"
 ```
 
 Cole os comandos exatamente como estão — o `$HOME` é uma variável que o Terminal
@@ -116,18 +116,18 @@ Pegue uma chave gratuita em
 **Windows (PowerShell):**
 
 ```powershell
-Set-Content -Path "$env:USERPROFILE\.claude\skills\edvid\.env" -Value "GROQ_API_KEY=cole_sua_chave_aqui"
+Set-Content -Path "$env:USERPROFILE\.claude\skills\ativa-vid\.env" -Value "GROQ_API_KEY=cole_sua_chave_aqui"
 ```
 
 **macOS / Linux:**
 
 ```bash
-echo "GROQ_API_KEY=cole_sua_chave_aqui" > "$HOME/.claude/skills/edvid/.env"
+echo "GROQ_API_KEY=cole_sua_chave_aqui" > "$HOME/.claude/skills/ativa-vid/.env"
 ```
 
 Substitua `cole_sua_chave_aqui` pela chave de verdade — essa parte sim você
 edita. Se preferir, abra o Claude Code e peça: *"coloca minha chave do Groq no
-.env da edvid"*.
+.env da ATIVAVID"*.
 
 ### Chaves opcionais
 
@@ -136,9 +136,8 @@ recurso for usado, e você decide na hora:
 
 | Chave | Para quê |
 |---|---|
-| `ELEVENLABS_API_KEY` | transcrever fontes longas (>5 min) com mais precisão |
+| `ELEVENLABS_API_KEY` | transcrever fontes longas (>5 min) com mais precisão; e trilha sonora gerada por IA na Fase 3 (precisa de plano pago) |
 | `PEXELS_API_KEY` | imagens e vídeos ilustrativos na Fase 2 |
-| `TREBLO_API_KEY` | trilha sonora gerada por IA na Fase 3 |
 | `GOOGLE_API_KEY` + `GOOGLE_CSE_ID` | imagens de marcas/pessoas específicas |
 
 Imagens funcionam sem chave nenhuma via Wikimedia Commons, e trilha funciona com
@@ -150,10 +149,10 @@ chave.
 ## Skill do Remotion (necessária só na Fase 2)
 
 A Fase 1 — corte, cor, áudio — funciona sem isso. Para legendas, gráficos e
-imagens (Fase 2) a edvid precisa de uma segunda skill, a do Remotion.
+imagens (Fase 2) a ATIVAVID precisa de uma segunda skill, a do Remotion.
 
 Ela mora numa subpasta do repositório dela, então não dá pra clonar direto como
-a edvid. Como o repo inteiro tem ~400 KB, o caminho mais simples é copiar — e
+a ATIVAVID. Como o repo inteiro tem ~400 KB, o caminho mais simples é copiar — e
 rodar o mesmo comando de novo é como se atualiza:
 
 **Windows (PowerShell):**
@@ -195,7 +194,7 @@ Depois é só pedir esse backend:
 uv run python helpers/transcribe.py video.mp4 --backend whispercpp
 ```
 
-A edvid acha o binário e o modelo sozinha em `~/whisper.cpp`. Se você instalou
+A ATIVAVID acha o binário e o modelo sozinha em `~/whisper.cpp`. Se você instalou
 em outro lugar, aponte com `WHISPERCPP_BIN` e `WHISPERCPP_MODEL` no `.env`.
 
 Instalar o whisper.cpp **não muda nada** por si só: o Groq continua o padrão até
@@ -236,13 +235,13 @@ Para trazer a versão mais nova:
 **Windows:**
 
 ```powershell
-git -C "$env:USERPROFILE\.claude\skills\edvid" pull --ff-only
+git -C "$env:USERPROFILE\.claude\skills\ativa-vid" pull --ff-only
 ```
 
 **macOS / Linux:**
 
 ```bash
-git -C "$HOME/.claude/skills/edvid" pull --ff-only
+git -C "$HOME/.claude/skills/ativa-vid" pull --ff-only
 ```
 
 `clone` baixa pela primeira vez; `pull` atualiza o que já existe. Rodar o
@@ -283,7 +282,7 @@ instalar.
 **`ModuleNotFoundError` ao usar a skill** — faltou o passo 4, o `uv sync`.
 
 **O Claude não encontra a skill** — confirme que a pasta está exatamente em
-`.claude/skills/edvid` dentro da sua pasta de usuário, e reinicie o Claude Code.
+`.claude/skills/ativa-vid` dentro da sua pasta de usuário, e reinicie o Claude Code.
 
 ---
 

@@ -1,4 +1,4 @@
-"""Edvid preview server — serves the standard editing interface + session media.
+"""ATIVAVID preview server — serves the standard editing interface + session media.
 
 The interface app (assets/preview/) is IMMUTABLE and lives in the skill repo;
 per-session it is fed by data only:
@@ -20,6 +20,20 @@ Routes:
   /api/state    GET     state.json + mtimes (UI polls this to hot-reload)
   /api/save     POST    body → <edit>/preview_edits.json (atomic), or
                         <edit>/preview_style.json when body.type=="style-setup"
+  /api/open-folder POST opens Explorer at finalVideo (falls back to the edit
+                        dir) — local machine only, mirrors "reveal in Finder"
+  /api/default-style POST body → <skill>/assets/preview/default-style.json —
+                        the ONE exception to "assets/preview is data-fed, not
+                        written": a shared "house style" data file, read by
+                        every project's defaultStyle(), not app.js itself
+  /api/images/search GET ?q= — Pexels results as JSON (thumb + id + credit),
+                        nothing downloaded yet; the UI shows these as a picker
+  /api/images/pick  POST {url, credit} → downloads into
+                        <edit>/remotion/public/pexels/ and returns the local
+                        path, so an insert can point at it
+  /painel           GET  cross-project dashboard (every sibling project's phase,
+                        delivery health and pending requests) — READ ONLY
+  /api/projects     GET  the data behind /painel
 
 Usage:
     uv run helpers/preview_server.py --root <videos_dir>/edit [--port 4820]
@@ -28,7 +42,9 @@ from __future__ import annotations
 
 import argparse
 import array
+import ctypes
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -36,6 +52,18 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
+
+# The image picker reuses pexels_search.py's own search/download/slugify
+# rather than reimplementing the API call — same helper the skill runs from
+# the CLI, so a fix there fixes both. Imported lazily-ish (module lives
+# beside this one) and tolerated missing: requests is a dependency of the
+# helper, not of serving a preview, so a bad install should degrade the
+# picker, not stop the whole server from booting.
+try:
+    import pexels_search
+except Exception:  # noqa: BLE001 — missing deps must not break the server
+    pexels_search = None
 
 APP_DIR = Path(__file__).resolve().parent.parent / "assets" / "preview"
 PEAKS_PER_SEC = 40
@@ -121,8 +149,83 @@ def gen_thumbs(video: Path, out_dir: Path) -> None:
     }))
 
 
+def _bring_window_to_front(want_title_start: str, timeout_s: float = 2.0) -> bool:
+    """Force the just-opened Explorer window to the foreground.
+
+    Spawning explorer.exe from this server DOES open the window — it just
+    opens BEHIND whatever the user is looking at (Claude Code, the browser),
+    because Windows blocks a background process from stealing focus; a plain
+    SetForegroundWindow from here is silently downgraded to a taskbar flash.
+    The documented workaround is AttachThreadInput: temporarily join the
+    input queue of whichever thread currently owns the foreground window, so
+    this process is treated as if IT were already in the foreground chain,
+    then the real SetForegroundWindow call is honoured instead of ignored.
+    Polls briefly since the window may not exist yet the instant explorer.exe
+    returns (it can still be handing off to the shell process).
+    """
+    user32 = ctypes.windll.user32
+    WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        found = []
+
+        def _cb(hwnd, _lparam):
+            if not user32.IsWindowVisible(hwnd):
+                return True
+            length = user32.GetWindowTextLengthW(hwnd)
+            if length == 0:
+                return True
+            buf = ctypes.create_unicode_buffer(length + 1)
+            user32.GetWindowTextW(hwnd, buf, length + 1)
+            if buf.value.startswith(want_title_start):
+                found.append(hwnd)
+                return False
+            return True
+
+        user32.EnumWindows(WNDENUMPROC(_cb), 0)
+        if found:
+            hwnd = found[0]
+            fg_hwnd = user32.GetForegroundWindow()
+            fg_thread = user32.GetWindowThreadProcessId(fg_hwnd, None)
+            target_thread = user32.GetWindowThreadProcessId(hwnd, None)
+            cur_thread = ctypes.windll.kernel32.GetCurrentThreadId()
+            user32.AttachThreadInput(cur_thread, fg_thread, True)
+            user32.AttachThreadInput(target_thread, fg_thread, True)
+            user32.ShowWindow(hwnd, 9)  # SW_RESTORE — undoes a minimized state
+            user32.BringWindowToTop(hwnd)
+            user32.SetForegroundWindow(hwnd)
+            user32.AttachThreadInput(cur_thread, fg_thread, False)
+            user32.AttachThreadInput(target_thread, fg_thread, False)
+            return True
+        time.sleep(0.1)
+    return False
+
+
+# ffprobe costs ~40ms per file and the dashboard probes every delivery on
+# every refresh — cache on (path, mtime, size) so a re-scan is instant and a
+# re-rendered file still gets re-probed.
+_dur_cache: dict[tuple[str, float, int], float | None] = {}
+
+
+def probe_duration_cached(p: Path) -> float | None:
+    try:
+        st = p.stat()
+    except OSError:
+        return None
+    key = (str(p), st.st_mtime, st.st_size)
+    if key not in _dur_cache:
+        d = probe_duration(p)
+        # probe_duration returns 0.0 both for "unreadable" and "empty"; for the
+        # dashboard the distinction matters (a truncated MP4 must read as
+        # BROKEN, not as a 0-second video), so collapse 0 to None.
+        _dur_cache[key] = d if d > 0 else None
+    return _dur_cache[key]
+
+
 class Handler(BaseHTTPRequestHandler):
     root: Path  # set on the class by main()
+    projects_roots: list[Path] = []
     protocol_version = "HTTP/1.1"
 
     # ---- helpers ----
@@ -197,7 +300,11 @@ class Handler(BaseHTTPRequestHandler):
     # ---- routes ----
     def do_GET(self) -> None:  # noqa: N802
         path = self.path.split("?", 1)[0]
-        if path in ("/", "/index.html"):
+        if path in ("/", "/index.html", "/fase1", "/estilo", "/fase2"):
+            # the last three are the SPA's own tab routes (app.js reads
+            # location.pathname) — a real path, not a query string or hash,
+            # so a direct load/refresh on /estilo has to be served the exact
+            # same index.html; app.js picks the tab client-side from the URL
             self._send_file(APP_DIR / "index.html")
         elif path.startswith("/assets/"):
             p = self._safe(APP_DIR, path[len("/assets/"):])
@@ -211,11 +318,31 @@ class Handler(BaseHTTPRequestHandler):
             self._thumbs(path[len("/gen/thumbs/"):])
         elif path == "/api/state":
             self._state()
+        elif path == "/painel":
+            self._send_file(APP_DIR / "painel.html")
+        elif path == "/api/projects":
+            self._scan_projects()
+        elif path == "/api/images/search":
+            q = parse_qs(urlparse(self.path).query).get("q", [""])[0].strip()
+            self._images_search(q)
         else:
             self._json({"error": "unknown route"}, 404)
 
     def do_POST(self) -> None:  # noqa: N802
-        if self.path.split("?", 1)[0] != "/api/save":
+        route = self.path.split("?", 1)[0]
+        if route == "/api/open-folder":
+            self._open_folder()
+            return
+        if route == "/api/project/action":
+            self._project_action()
+            return
+        if route == "/api/default-style":
+            self._save_default_style()
+            return
+        if route == "/api/images/pick":
+            self._images_pick()
+            return
+        if route != "/api/save":
             self._json({"error": "unknown route"}, 404)
             return
         try:
@@ -236,7 +363,308 @@ class Handler(BaseHTTPRequestHandler):
         tmp.replace(out)
         self._json({"ok": True, "file": str(out)})
 
+    def _open_folder(self) -> None:
+        """Reveal the exported file in Explorer — same idea as any NLE's
+        "show in folder" on export. finalVideo when it exists (selects the
+        file itself), else the edit dir (nothing delivered yet)."""
+        state_p = self.root / "state.json"
+        state: dict = {}
+        if state_p.exists():
+            try:
+                state = json.loads(state_p.read_text())
+            except json.JSONDecodeError:
+                pass
+        # same stale-pointer resolution the Final tab uses — see _resolve_final_video
+        rel = self._resolve_final_video(state)
+        target = self._safe(self.root, rel) if rel else None
+        if not target or not target.exists():
+            target = self.root
+        try:
+            if target.is_file():
+                # NOT a list: subprocess.list2cmdline would wrap the whole
+                # "/select,<path>" token in one pair of quotes when the path
+                # has a space (list2cmdline quotes an argv element as a
+                # whole, unaware /select, is a prefix explorer.exe expects
+                # OUTSIDE any quoting). Explorer then fails to recognize the
+                # switch and silently opens its default location instead —
+                # this is exactly what was firing on every click. A raw
+                # command-line string bypasses that: on Windows, shell=False
+                # with a str `args` is passed straight to CreateProcess with
+                # no rewriting, so the quotes land only around the path.
+                subprocess.run(f'explorer /select,"{target}"')
+            else:
+                subprocess.run(["explorer", str(target)])
+        except OSError as e:
+            self._json({"ok": False, "error": str(e)}, 500)
+            return
+        # Explorer titles a /select, window after the CONTAINING folder, not
+        # the selected file — same name either way this resolves.
+        want_title = target.parent.name if target.is_file() else target.name
+        _bring_window_to_front(want_title)
+        self._json({"ok": True, "path": str(target)})
+
+    def _project_edit_dir(self, raw: str) -> Path | None:
+        """Validate a path posted by /painel: it must be an <edit> dir that
+        actually sits under one of the configured --projects-root folders.
+
+        The dashboard hands back paths it got from the server, but the route is
+        still reachable by anything on localhost — so re-derive trust here
+        instead of trusting the round trip.
+        """
+        try:
+            p = Path(raw).resolve()
+        except (OSError, ValueError):
+            return None
+        if p.name != "edit" or not p.is_dir():
+            return None
+        for proot in self.projects_roots:
+            try:
+                p.relative_to(proot.resolve())
+                return p
+            except ValueError:
+                continue
+        return None
+
+    def _project_action(self) -> None:
+        """User-initiated actions from /painel. Every one of these is a click
+        the person made on a row they are looking at — the dashboard itself
+        still never acts on its own."""
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            body = json.loads(self.rfile.read(length) or b"{}")
+        except (ValueError, json.JSONDecodeError):
+            self._json({"ok": False, "error": "invalid JSON"}, 400)
+            return
+        edit = self._project_edit_dir(body.get("path") or "")
+        if not edit:
+            self._json({"ok": False, "error": "caminho fora das pastas configuradas"}, 400)
+            return
+
+        action = body.get("action")
+        state: dict = {}
+        sp = edit / "state.json"
+        if sp.exists():
+            try:
+                state = json.loads(sp.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                state = {}
+        resolved = self._resolve_final_video(state, edit)
+
+        if action == "folder":
+            target = (edit / resolved) if resolved else edit
+            try:
+                if target.is_file():
+                    subprocess.run(f'explorer /select,"{target}"')
+                else:
+                    subprocess.run(["explorer", str(target)])
+            except OSError as e:
+                self._json({"ok": False, "error": str(e)}, 500)
+                return
+            _bring_window_to_front(target.parent.name if target.is_file() else target.name)
+            self._json({"ok": True, "path": str(target)})
+            return
+
+        if action == "video":
+            if not resolved:
+                self._json({"ok": False, "error": "sem entrega ainda"}, 404)
+                return
+            target = edit / resolved
+            try:
+                os.startfile(str(target))  # noqa: S606 — default player, user asked
+            except OSError as e:
+                self._json({"ok": False, "error": str(e)}, 500)
+                return
+            self._json({"ok": True, "path": str(target)})
+            return
+
+        if action == "fixPointer":
+            # the ONLY write this route can do, and only to the one key that is
+            # provably wrong: finalVideo naming a file that is not on disk
+            if not resolved:
+                self._json({"ok": False, "error": "sem entrega para apontar"}, 404)
+                return
+            if not sp.exists():
+                self._json({"ok": False, "error": "projeto sem state.json"}, 404)
+                return
+            before = state.get("finalVideo")
+            if before == resolved:
+                self._json({"ok": True, "unchanged": True, "finalVideo": resolved})
+                return
+            state["finalVideo"] = resolved
+            tmp = sp.with_suffix(".tmp")
+            tmp.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+            tmp.replace(sp)
+            self._json({"ok": True, "from": before, "finalVideo": resolved})
+            return
+
+        self._json({"ok": False, "error": f"ação desconhecida: {action}"}, 400)
+
+    def _save_default_style(self) -> None:
+        """The "house style" — every NEW project's Estilo tab starts here.
+        Shared across every project's preview_server.py because it lives
+        under APP_DIR (the skill's own assets/preview/), not under --root.
+        A plain style object, same shape as state.json's own "style" key."""
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            body = json.loads(self.rfile.read(length) or b"{}")
+        except (ValueError, json.JSONDecodeError):
+            self._json({"error": "invalid JSON"}, 400)
+            return
+        out = APP_DIR / "default-style.json"
+        tmp = out.with_suffix(".tmp")
+        tmp.write_text(json.dumps(body, ensure_ascii=False, indent=2))
+        tmp.replace(out)
+        self._json({"ok": True})
+
+    # ---- image picker (search first, download only what's picked) ----
+    def _images_search(self, query: str) -> None:
+        if not query:
+            self._json({"ok": False, "error": "busca vazia"}, 400)
+            return
+        if pexels_search is None:
+            self._json({"ok": False, "error": "helper indisponível (requests instalado?)"}, 500)
+            return
+        try:
+            key = pexels_search.load_api_key()
+        except SystemExit as e:  # the helper sys.exit()s when the key is absent
+            self._json({"ok": False, "error": str(e)}, 400)
+            return
+        try:
+            # portrait: every short-form project is 9:16, and a landscape
+            # insert in a vertical frame is nearly always the wrong crop
+            photos = pexels_search.search(query, key, 12, "portrait")
+        except Exception as e:  # noqa: BLE001 — network/API errors are the UI's problem to show
+            self._json({"ok": False, "error": str(e)}, 502)
+            return
+        self._json({"ok": True, "results": [
+            {
+                "id": p.get("id"),
+                "thumb": (p.get("src") or {}).get("medium"),
+                "full": (p.get("src") or {}).get("large2x") or (p.get("src") or {}).get("large"),
+                "credit": p.get("photographer", "?"),
+                "creditUrl": p.get("url", ""),
+            }
+            for p in photos if (p.get("src") or {}).get("medium")
+        ]})
+
+    def _images_pick(self) -> None:
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            body = json.loads(self.rfile.read(length) or b"{}")
+        except (ValueError, json.JSONDecodeError):
+            self._json({"error": "invalid JSON"}, 400)
+            return
+        url = body.get("url") or ""
+        # only ever fetch a Pexels-hosted image: this endpoint takes a URL
+        # from the client, so without this it would be an open proxy that
+        # writes arbitrary remote content into the project folder
+        if not url.startswith("https://images.pexels.com/"):
+            self._json({"ok": False, "error": "url não permitida"}, 400)
+            return
+        if pexels_search is None:
+            self._json({"ok": False, "error": "helper indisponível"}, 500)
+            return
+        out_dir = self.root / "remotion" / "public" / "pexels"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        name = f"{pexels_search.slugify(body.get('query') or 'img')}-{body.get('id') or 'x'}.jpg"
+        dest = out_dir / name
+        try:
+            pexels_search.download(url, dest)
+        except Exception as e:  # noqa: BLE001
+            self._json({"ok": False, "error": str(e)}, 502)
+            return
+        # path relative to remotion/public/ — what edit-data.json refs look like
+        self._json({"ok": True, "ref": f"pexels/{name}", "credit": body.get("credit", "")})
+
     # ---- dynamic bits ----
+    # ---- /painel: every sibling project at a glance ----
+    def _scan_projects(self) -> None:
+        """One row per project, built from files only — never writes anything.
+
+        Exists because this machine runs many projects in parallel and the
+        things that go wrong are invisible per-project: a delivery that never
+        got re-opened and is silently truncated, a `finalVideo` naming a file
+        that is not there, a saved request nobody applied. Each of those is one
+        cheap check here, and none of them shows up in the single-project UI.
+        """
+        rows = []
+        seen: set[Path] = set()
+        for proot in self.projects_roots:
+            if not proot.exists():
+                continue
+            for edit in sorted(proot.glob("*/edit")):
+                if not edit.is_dir() or edit in seen:
+                    continue
+                seen.add(edit)
+                state: dict = {}
+                sp = edit / "state.json"
+                if sp.exists():
+                    try:
+                        state = json.loads(sp.read_text(encoding="utf-8"))
+                    except (json.JSONDecodeError, OSError):
+                        state = {}
+                declared = state.get("finalVideo")
+                resolved = self._resolve_final_video(state, edit)
+                delivery = None
+                if resolved:
+                    dp = edit / resolved
+                    dur = probe_duration_cached(dp)
+                    delivery = {
+                        "name": resolved,
+                        "durationSec": dur,
+                        "broken": dur is None,          # readable header, unreadable stream
+                        "stalePointer": bool(declared) and declared != resolved,
+                        "declared": declared,
+                    }
+                cut = edit / (state.get("video") or "cut.mp4")
+                rows.append({
+                    "project": state.get("project") or edit.parent.name,
+                    "folder": edit.parent.name,
+                    "path": str(edit),
+                    "phase": state.get("phase"),
+                    "message": state.get("message") or "",
+                    "awaitingStyle": bool(state.get("awaitingStyle")),
+                    "hasState": sp.exists(),
+                    "hasCut": cut.exists(),
+                    "cutDurationSec": probe_duration_cached(cut) if cut.exists() else None,
+                    "delivery": delivery,
+                    "pendingEdits": (edit / "preview_edits.json").exists(),
+                    "pendingStyle": (edit / "preview_style.json").exists(),
+                    "mtime": sp.stat().st_mtime if sp.exists() else 0,
+                })
+        rows.sort(key=lambda r: r["mtime"], reverse=True)
+        self._json({
+            "ok": True,
+            "roots": [str(p) for p in self.projects_roots],
+            "current": str(self.root),
+            "projects": rows,
+        })
+
+    def _resolve_final_video(self, state: dict, root: Path | None = None) -> str | None:
+        """state.json's `finalVideo` relative path, or the best stand-in.
+
+        The declared name goes stale constantly: the skill writes
+        `"finalVideo": "final.mp4"` while the actual delivery gets exported
+        under a human name ("Cabo magnetico.mp4"), and nothing updates the
+        pointer. Measured across this machine: 10 of 32 projects. Rather than
+        rewrite anyone's state.json, resolve it at read time — the newest
+        top-level .mp4 that isn't a working file is the delivery in every one
+        of those cases. Returns a path relative to root (what the UI and the
+        /media/ route expect), or None when nothing has been delivered yet.
+        """
+        base = root or self.root  # /painel resolves for OTHER projects, not just this server's
+        rel = state.get("finalVideo")
+        if rel:
+            p = self._safe(base, rel)
+            if p and p.exists():
+                return rel
+        skip = {"cut.mp4", "base.mp4"}
+        cands = [p for p in base.glob("*.mp4")
+                 if p.name not in skip and not p.name.endswith(".prenorm.mp4")]
+        if not cands:
+            return None
+        return max(cands, key=lambda p: p.stat().st_mtime).name
+
     def _state(self) -> None:
         state_p = self.root / "state.json"
         state: dict = {}
@@ -245,6 +673,14 @@ class Handler(BaseHTTPRequestHandler):
                 state = json.loads(state_p.read_text())
             except json.JSONDecodeError:
                 state = {"error": "state.json inválido"}
+        # Patch the RESPONSE only — never the file on disk. The UI then plays
+        # the real delivery on the Final tab instead of silently falling back
+        # to the Phase-1 cut, and the project's own bookkeeping is left alone.
+        resolved_final = self._resolve_final_video(state)
+        if resolved_final:
+            state["finalVideo"] = resolved_final
+        elif "finalVideo" in state:
+            state.pop("finalVideo")  # declared but nothing on disk → treat as absent
         # attach small data files + mtimes so the UI hot-reloads on change
         mtimes: dict[str, float] = {}
         for key in ("video", "finalVideo", "edl", "captions", "editData"):
@@ -313,9 +749,13 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Edvid preview interface server")
+    ap = argparse.ArgumentParser(description="ATIVAVID preview interface server")
     ap.add_argument("--root", type=Path, required=True, help="the session <edit> dir")
     ap.add_argument("--port", type=int, default=4820)
+    ap.add_argument("--projects-root", type=Path, action="append", default=None,
+                    help="folder holding sibling projects, for /painel. Repeatable. "
+                         "Defaults to the dir two levels above --root "
+                         "(<projects-root>/<project>/edit).")
     args = ap.parse_args()
 
     root = args.root.resolve()
@@ -325,8 +765,12 @@ def main() -> None:
         raise SystemExit(f"app not found at {APP_DIR}")
 
     Handler.root = root
+    # <projects-root>/<project>/edit is the layout every session already uses,
+    # so the sensible default is simply "the folder my siblings live in".
+    Handler.projects_roots = ([p.resolve() for p in args.projects_root]
+                              if args.projects_root else [root.parent.parent])
     srv = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
-    print(f"Edvid preview → http://127.0.0.1:{args.port}  (root: {root})", flush=True)
+    print(f"ATIVAVID preview → http://127.0.0.1:{args.port}  (root: {root})", flush=True)
     srv.serve_forever()
 
 

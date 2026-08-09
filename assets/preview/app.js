@@ -1,4 +1,4 @@
-/* Edvid preview — interactive editing timeline.
+/* ATIVAVID preview — interactive editing timeline.
  * IMMUTABLE app: everything per-session comes from /api/state (state.json,
  * edl.json) + /gen/* (waveform, thumbs) + /media/* (video, captions, edit-data).
  * User adjustments are POSTed to /api/save → <edit>/preview_edits.json and
@@ -62,10 +62,23 @@ const ICON = {
   text: '<svg viewBox="0 0 16 16"><path d="M2 2.6h12v2.5h-1.5V4.1H8.75v8.1h1.6v1.3H5.65v-1.3h1.6V4.1H3.5v1H2V2.6z"/></svg>',
   notes: '<svg viewBox="0 0 16 16"><rect x="1.9" y="1.4" width="1.6" height="13.2" rx=".8"/><path d="M5 2.7h7.6a.6.6 0 0 1 .47.97L11.36 6l1.71 2.33a.6.6 0 0 1-.47.97H5V2.7z"/></svg>',
   flag: '<svg viewBox="0 0 16 16"><rect x="1.9" y="1.4" width="1.6" height="13.2" rx=".8"/><path d="M5 2.7h7.6a.6.6 0 0 1 .47.97L11.36 6l1.71 2.33a.6.6 0 0 1-.47.97H5V2.7z"/></svg>',
+  folder: '<svg viewBox="0 0 16 16"><path d="M1.6 3.6c0-.66.54-1.2 1.2-1.2h3.1c.4 0 .78.2 1 .53l.6.87h5.9c.66 0 1.2.54 1.2 1.2v7.4c0 .66-.54 1.2-1.2 1.2H2.8c-.66 0-1.2-.54-1.2-1.2V3.6z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>',
+  sun: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="3.1" fill="none" stroke="currentColor" stroke-width="1.4"/><g stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M8 1.4v1.7M8 12.9v1.7M14.6 8h-1.7M3.1 8H1.4M12.6 3.4l-1.2 1.2M4.6 11.4l-1.2 1.2M12.6 12.6l-1.2-1.2M4.6 4.6L3.4 3.4"/></g></svg>',
+  moon: '<svg viewBox="0 0 16 16"><path d="M13.8 9.9A6 6 0 1 1 6.1 2.2a5 5 0 0 0 7.7 7.7z"/></svg>',
+  undo: '<svg viewBox="0 0 16 16"><path d="M4.2 4.6H10a4 4 0 1 1 0 8H6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M6.6 1.8 3.2 4.6l3.4 2.8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  redo: '<svg viewBox="0 0 16 16"><path d="M11.8 4.6H6a4 4 0 1 0 0 8h4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M9.4 1.8l3.4 2.8-3.4 2.8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  // a razor blade, not scissors — scissors implies "remove a piece"; this is
+  // "cut here, keep both sides", the same visual shorthand every NLE uses
+  razor: '<svg viewBox="0 0 16 16"><path d="M8 1v9.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M8 10.4 4.6 15h2.1L8 13.2 9.3 15h2.1z" fill="currentColor"/><circle cx="8" cy="1.6" r="1.1" fill="currentColor"/></svg>',
+  imgSearch: '<svg viewBox="0 0 16 16"><rect x="1.2" y="2.6" width="13.6" height="10.8" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="5.4" cy="6.2" r="1.2"/><path d="M2.4 12.2l3.2-3.1a1 1 0 011.35-.05l1.9 1.62 1.5-1.25a1 1 0 011.3.02l2 1.75" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 };
 
+// the "Nenhuma" card's mark — a plain slash-circle, not a rendered look (there
+// is nothing to render), so it has to read as "off" at a glance
+const NONE_ICON = '<svg viewBox="0 0 16 16" width="22" height="22"><circle cx="8" cy="8" r="6.4" fill="none" stroke="rgba(255,255,255,.32)" stroke-width="1.4"/><path d="M3.9 3.9l8.2 8.2" stroke="rgba(255,255,255,.32)" stroke-width="1.4" stroke-linecap="round"/></svg>';
+
 /* ---------- style catalog (the Fase 1 → Fase 2 gate) ----------
- * The one place that knows which looks Edvid can build. It is APP-level, not
+ * The one place that knows which looks ATIVAVID can build. It is APP-level, not
  * session-level: a new editing style or caption style is a new entry here plus
  * its implementation in the track reference — never a per-session UI.
  * The user's pick ships to <edit>/preview_style.json; the skill reads it once,
@@ -135,15 +148,24 @@ const STYLE_CATALOG = {
     {id: 'outline', name: 'Contorno', hl: 'outline'},
     {id: 'card', name: 'Cartão', hl: 'card'},
     {id: 'realce', name: 'Realce', hl: 'realce'},
-    {id: 'misto', name: 'Misto', hl: 'misto'},
+    // display order stays as designed; `default: true` is a separate flag so
+    // defaultStyle() doesn't have to mean "first card" — see the captions
+    // catalog below for the same split.
+    {id: 'misto', name: 'Misto', hl: 'misto', default: true},
+    // opts out of the hook entirely (hook.enabled:false in edit-data.json) — a
+    // real final look (talking-head cut, images placed by hand later), not a
+    // placeholder, so it earns its own card and label like the mockups do.
+    {id: 'nenhuma', name: 'Nenhuma', none: true},
   ],
   captions: [
     {id: 'karaoke', name: 'Karaokê', demo: 'karaoke'},
-    {id: 'stacked', name: 'Empilhado', demo: 'stacked'},
+    {id: 'stacked', name: 'Empilhado', demo: 'stacked', default: true},
     {id: 'scatter', name: 'Disperso', demo: 'scatter'},
     {id: 'simples', name: 'Simples', stat: 'simples'},
     {id: 'serifada', name: 'Serifada', stat: 'serifada'},
     {id: 'classica', name: 'Clássica', stat: 'classica'},
+    // opts out of burned captions (captions.enabled:false) — same reasoning.
+    {id: 'nenhuma', name: 'Nenhuma', none: true},
   ],
   elements: [
     {
@@ -167,7 +189,7 @@ const STYLE_CATALOG = {
     {
       id: 'flashCut',
       name: 'Flash na transição',
-      def: false,
+      def: true,
       icon: '<svg viewBox="0 0 16 16"><path d="M3 13.2L13 3.2" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" fill="none"/><path d="M6.6 14L9.4 11.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none" opacity=".55"/><path d="M6.6 4.8L3.8 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none" opacity=".55"/></svg>',
     },
     {
@@ -556,6 +578,18 @@ const LABEL_W = 48; // .track-label width (content x offset of lanes)
 const MIN_SEG = 0.2; // s
 const THUMB_EVERY = 2.0;
 
+// ---------- tab routing ----------
+// A real path per tab (/fase1, /estilo, /fase2), not a #hash — a link to a
+// specific tab lands there directly, refresh keeps you where you were, and
+// the address bar reads as an actual page instead of a fragment. Needs
+// preview_server.py to serve index.html for these three paths too (a hash
+// never leaves the browser; a path does) — see do_GET's route list.
+const TAB_TO_PATH = { 1: '/fase1', style: '/estilo', 2: '/fase2' };
+const PATH_TO_TAB = { '/fase1': 1, '/estilo': 'style', '/fase2': 2 };
+function tabFromPath() {
+  return PATH_TO_TAB[location.pathname] ?? 1;
+}
+
 // ---------- state ----------
 let S = {
   state: {}, // state.json
@@ -568,7 +602,7 @@ let S = {
   insertsDraft: [], // editable inserts [{kind,label,start,end,ref,orig}]
   wave: null,
   thumbCount: 0,
-  tab: 1,
+  tab: tabFromPath(),
   pps: 10, // px per second (zoom)
   minPps: 4,
   selected: -1, // selected clip index (draft)
@@ -582,19 +616,60 @@ let S = {
   // A1/A2 live folded inside the audio track. They answer "where is the J-cut",
   // which is a question you ask once — so the default is closed, and the choice
   // is remembered rather than re-made every reload.
-  jcutOpen: localStorage.getItem('edvid.jcutOpen') === '1',
+  // Opens by default now — A1/A2 answer "where's the J-cut", which used to be
+  // worth hiding behind a click, but people kept missing it entirely. Still
+  // remembers an explicit collapse (only '0' turns it off; unset/'1' both open).
+  jcutOpen: localStorage.getItem('ativa-vid.jcutOpen') !== '0',
+  history: [], // undo stack: snapshots of {draft, insertsDraft, notes} taken BEFORE each edit
+  future: [], // redo stack: snapshots popped off history by undo()
+  // caption text corrections, keyed by index into S.captions: {from, to}.
+  // The UI never rewrites captions.json — it records the intent and the skill
+  // re-runs the caption pipeline, which is what owns word timings.
+  captionFixes: {},
 };
+
+// The "house style" — every catalog default above is the FALLBACK, used
+// only until (and unless) default-style.json loads. That file is shared
+// across every project (it lives under the skill's own assets/preview/, not
+// any one project's --root — see preview_server.py), written by the "Salvar
+// como padrão" button in the Estilo footer. So the real default isn't a
+// code edit anymore: a user changes it from the UI and every project after
+// that opens on the new house look, this session included (no reload
+// needed — see the button's own handler).
+let SHARED_DEFAULT_STYLE = null;
+async function loadSharedDefaultStyle() {
+  try {
+    const r = await fetch('/assets/default-style.json', { cache: 'no-store' });
+    if (r.ok) SHARED_DEFAULT_STYLE = await r.json();
+  } catch (e) { /* no shared default saved yet, or server hiccup — catalog fallback stands */ }
+}
 
 function defaultStyle() {
   const elements = {};
   for (const e of STYLE_CATALOG.elements) elements[e.id] = !!e.def;
-  return {
+  const fallback = {
     edit: STYLE_CATALOG.edits[0].id,
-    headline: STYLE_CATALOG.headlines[0].id,
-    captions: STYLE_CATALOG.captions[0].id,
+    headline: (STYLE_CATALOG.headlines.find((h) => h.default) || STYLE_CATALOG.headlines[0]).id,
+    captions: (STYLE_CATALOG.captions.find((c) => c.default) || STYLE_CATALOG.captions[0]).id,
     accent: ACCENT_DEFAULT,
+    // legenda/ênfase used to start unpicked (null → the style's own natural
+    // colour) — now default to explicit picks so a new project opens on the
+    // house look instead of every style's own default clashing project to
+    // project. círculo stays null on purpose: its own default green already
+    // IS the house look, no override needed.
+    captionAccent: '#FFFFFF', // "legenda": base text (karaoke line, static styles)
+    emphasisAccent: '#FF0000', // "ênfase": stacked serif line, scatter highlighted word
+    circleAccent: null,    // "círculo riscado": stacked pencil-circle stroke only
     elements,
     note: '',
+  };
+  if (!SHARED_DEFAULT_STYLE) return fallback;
+  // merge, not replace — a saved default that predates a new catalog field
+  // (e.g. a future 4th caption colour) shouldn't leave that field undefined
+  return {
+    ...fallback,
+    ...SHARED_DEFAULT_STYLE,
+    elements: { ...fallback.elements, ...(SHARED_DEFAULT_STYLE.elements || {}) },
   };
 }
 
@@ -616,7 +691,20 @@ const el = (tag, cls, parent) => {
  * ahead of its picture; `tail` is what was trimmed off its end. Both are fixed
  * frame counts, so they survive the user trimming a take in the UI. */
 function jcutGeom(i) {
-  const j = S.jcut && S.jcut[i];
+  // S.jcut is per-ORIGINAL-take, written by render.py — it has no entry for
+  // a piece that only exists because the user just split or range-deleted
+  // inside the draft editor. Reading it by S.draft's CURRENT position (the
+  // old bug) meant one split anywhere shifted every later take's lookup to
+  // the wrong S.jcut entry — even an untouched take a bar rebuild wouldn't
+  // otherwise change appeared to move (seen live: its own displayed duration
+  // changed with no edit made to it). srcIdx is the fix: each draft entry
+  // remembers which S.jcut/S.rendered slot it actually IS, set once when
+  // S.draft is first built and carried through trims unchanged — a split
+  // piece gets srcIdx:null (below) since it has no real per-piece geometry
+  // yet, but every OTHER entry keeps its own correct lookup regardless of
+  // how the array reshuffles around it.
+  const srcIdx = S.draft[i]?.srcIdx;
+  const j = (srcIdx != null && S.jcut) ? S.jcut[srcIdx] : null;
   if (!j) return { lead: 0, tail: 0 };
   return {
     lead: Math.max(0, (j.video_start_in_output || 0) - (j.audio_start_in_output || 0)),
@@ -692,17 +780,219 @@ function renderedToDraft(t) {
   return t;
 }
 
+// draft-timeline seconds within take i's span → source-file seconds. Same
+// geometry draftLayout()/renderedToDraft() already use for playback: the
+// picture starts `lead` into the source and stops `tail` short of `r.end`,
+// so "where the playhead LOOKS like it is" and "what start/end means in the
+// EDL" are offset by that lead whenever a J-cut is active.
+function draftTimeToSource(i, draftT) {
+  const r = S.draft[i];
+  const item = draftLayout()[i];
+  const g = jcutGeom(i);
+  return r.start + g.lead + (draftT - item.out);
+}
+
+/* ---------- frame-accurate trim from the keyboard ----------
+ * Dragging a handle is fine for "roughly here" but cannot express "one frame
+ * later" — at fit-zoom a frame is a fraction of a pixel. Alt+←/→ moves the
+ * selected take's OUT edge by exactly 1/fps; add Shift for the IN edge.
+ *
+ * History coalescing: holding the key fires many keydowns, and one undo step
+ * per frame would make Ctrl+Z useless. Consecutive nudges of the SAME edge on
+ * the SAME take inside NUDGE_GROUP_MS collapse into the one snapshot taken
+ * when the run started — so undo rewinds the whole adjustment, like a drag.
+ */
+const NUDGE_GROUP_MS = 900;
+let _nudgeRun = null; // {i, side, until}
+
+function nudgeTakeEdge(i, side, dir) {
+  const r = S.draft[i];
+  if (!r || r.removed) return;
+  const step = dir / (S.fps || 30);
+  const now = Date.now();
+
+  const cont = _nudgeRun && _nudgeRun.i === i && _nudgeRun.side === side && now < _nudgeRun.until;
+  if (!cont) pushHistory();
+  _nudgeRun = { i, side, until: now + NUDGE_GROUP_MS };
+
+  if (side === 'l') {
+    r.start = Math.min(Math.max(0, r.start + step), r.end - MIN_SEG);
+  } else {
+    r.end = Math.max(r.end + step, r.start + MIN_SEG);
+    const srcDur = (S.state.sourceDurations || {})[r.source];
+    if (srcDur) r.end = Math.min(r.end, srcDur);
+  }
+  renderAll(); refreshHeader();
+
+  const d = side === 'l' ? r.start - r.orig.start : r.end - r.orig.end;
+  const frames = Math.round(d * (S.fps || 30));
+  toast(`${side === 'l' ? 'IN' : 'OUT'} ${fmt(side === 'l' ? r.start : r.end)}  ` +
+        `(${frames >= 0 ? '+' : ''}${frames}f)`, 1100);
+}
+
+// ---------- razor: split the selected take at the playhead ----------
+// A split is just "one range in edl.ranges becomes two, same source, back
+// to back" — that's already inside what the save payload can express (see
+// btnSave below: it sends the WHOLE current ranges list, not a diff), so
+// this needs no new save-schema and no server change.
+function splitAtPlayhead() {
+  if (S.tab !== 1) { toast('Corte só na aba Corte', 1600); return; }
+  if (S.selected < 0) { toast('Selecione um take pra cortar', 1600); return; }
+  const r = S.draft[S.selected];
+  if (!r || r.removed) { toast('Esse take está removido', 1600); return; }
+  const item = draftLayout()[S.selected];
+  const draftT = renderedToDraft(video.currentTime);
+  const margin = Math.max(MIN_SEG, 0.05);
+  if (draftT <= item.out + margin || draftT >= item.out + item.dur - margin) {
+    toast('Posicione a agulha dentro do take, longe das bordas', 2200);
+    return;
+  }
+  let sourceSplit = draftTimeToSource(S.selected, draftT);
+  sourceSplit = Math.min(Math.max(sourceSplit, r.start + MIN_SEG), r.end - MIN_SEG);
+
+  pushHistory();
+  // srcIdx:null on both halves — neither is the original take any more, so
+  // neither inherits its J-cut lead/tail (see jcutGeom)
+  const halfA = { source: r.source, start: r.start, end: sourceSplit, beat: r.beat, removed: false, srcIdx: null, orig: { start: r.start, end: r.end } };
+  const halfB = { source: r.source, start: sourceSplit, end: r.end, beat: r.beat, removed: false, srcIdx: null, orig: { start: r.start, end: r.end } };
+  S.draft.splice(S.selected, 1, halfA, halfB);
+  S.selected = -1;
+  renderAll(); refreshHeader();
+  toast('Cortado — agora são 2 takes', 1800);
+}
+
+// ---------- drag-select a range INSIDE a clip → ripple-delete just that
+// piece (same idea as split, twice, with the middle marked removed — reuses
+// draftLayout()'s existing "removed = zero output width" so the two
+// surviving pieces close the gap for free, no separate ripple logic) ----------
+function clipRangeFromPixels(i, xA, xB) {
+  const item = draftLayout()[i];
+  if (!item || item.removed) return null;
+  const rect = timelineEl.getBoundingClientRect();
+  let tA = (Math.min(xA, xB) - rect.left - LABEL_W) / S.pps;
+  let tB = (Math.max(xA, xB) - rect.left - LABEL_W) / S.pps;
+  tA = Math.max(item.out, tA);
+  tB = Math.min(item.out + item.dur, tB);
+  if (tB - tA < MIN_SEG) return null;
+  return { tA, tB };
+}
+function showClipRangeSelection(range) {
+  let sel = document.getElementById('clipRangeSel');
+  if (!sel) {
+    sel = document.createElement('div');
+    sel.id = 'clipRangeSel';
+    sel.className = 'clip-range-sel';
+    laneVideo.appendChild(sel);
+  }
+  if (!range) { sel.classList.add('hidden'); return; }
+  sel.style.left = `${range.tA * S.pps}px`;
+  sel.style.width = `${(range.tB - range.tA) * S.pps}px`;
+  sel.classList.remove('hidden');
+}
+function hideClipRangeSelection() { showClipRangeSelection(null); }
+
+function deleteClipRange(i, xA, xB) {
+  const r = S.draft[i];
+  const range = clipRangeFromPixels(i, xA, xB);
+  if (!r || r.removed || !range) { S.selected = i; renderClips(); return; } // too small a drag — treat as a click-select instead
+
+  let selStart = Math.max(r.start, draftTimeToSource(i, range.tA));
+  let selEnd = Math.min(r.end, draftTimeToSource(i, range.tB));
+  if (selEnd - selStart < MIN_SEG) { S.selected = i; renderClips(); return; }
+
+  pushHistory();
+  const pieces = [];
+  if (selStart - r.start >= MIN_SEG) {
+    pieces.push({ source: r.source, start: r.start, end: selStart, beat: r.beat, removed: false, srcIdx: null, orig: { start: r.start, end: r.end } });
+  }
+  pieces.push({ source: r.source, start: selStart, end: selEnd, beat: r.beat, removed: true, srcIdx: null, orig: { start: r.start, end: r.end } });
+  if (r.end - selEnd >= MIN_SEG) {
+    pieces.push({ source: r.source, start: selEnd, end: r.end, beat: r.beat, removed: false, srcIdx: null, orig: { start: r.start, end: r.end } });
+  }
+  S.draft.splice(i, 1, ...pieces);
+  S.selected = -1;
+  renderAll(); refreshHeader();
+  toast('Trecho apagado', 1800);
+}
+
+// ---------- undo / redo ----------
+// One shared history for both timelines (takes AND inserts) plus correction
+// notes — a user thinks of Ctrl+Z as "undo my last edit", not "undo my last
+// take edit, separately from my last insert edit". structuredClone is safe
+// here: draft/insertsDraft/notes are plain data (numbers, strings, booleans,
+// plain objects/arrays), never DOM nodes or functions.
+const MAX_HISTORY = 100;
+function snapshotState() {
+  // style included: a mis-click on a caption style is exactly as worth undoing
+  // as a mis-drag on a take, and the user thinks of Ctrl+Z as one history
+  return structuredClone({ draft: S.draft, insertsDraft: S.insertsDraft, notes: S.notes, style: S.style, captionFixes: S.captionFixes });
+}
+function refreshUndoRedoButtons() {
+  $('btnUndo').disabled = S.history.length === 0;
+  $('btnRedo').disabled = S.future.length === 0;
+}
+function pushHistory(snap) {
+  S.history.push(snap || snapshotState());
+  if (S.history.length > MAX_HISTORY) S.history.shift();
+  S.future = []; // a fresh edit invalidates whatever redo used to be possible
+  refreshUndoRedoButtons();
+}
+function restoreSnapshot(snap) {
+  // Keep the selection across an undo when it still means the same take, so
+  // "nudge, nudge, Ctrl+Z, nudge again" keeps working on the clip you were
+  // adjusting. Only drop it when the array length changed (a split or a
+  // range-delete undone): indices shift then, and holding the old one would
+  // silently select a different take.
+  const keepSel = snap.draft.length === S.draft.length ? S.selected : -1;
+  S.draft = snap.draft;
+  S.insertsDraft = snap.insertsDraft;
+  S.notes = snap.notes;
+  if (snap.style) S.style = snap.style;
+  S.captionFixes = snap.captionFixes || {};
+  closeCaptionEditor();
+  S.selected = keepSel;
+  S.editingNote = null;
+  $('noteEditor').classList.add('hidden');
+  renderAll(); refreshHeader(); renderNotes();
+  // the Estilo tab is built from S.style, so it has to be rebuilt too — and
+  // the accent CSS vars re-applied (these read S.style themselves), or the
+  // demos keep painting the colours from before the undo
+  if (S.style) {
+    applyAccent();
+    applyCaptionAccent();
+    applyEmphasisAccent();
+    renderSetup();
+  }
+}
+function undo() {
+  if (!S.history.length) { toast('Nada para desfazer', 1200); return; }
+  S.future.push(snapshotState());
+  restoreSnapshot(S.history.pop());
+  refreshUndoRedoButtons();
+  toast('Desfeito', 1000);
+}
+function redo() {
+  if (!S.future.length) { toast('Nada para refazer', 1200); return; }
+  S.history.push(snapshotState());
+  restoreSnapshot(S.future.pop());
+  refreshUndoRedoButtons();
+  toast('Refeito', 1000);
+}
+
 // ---------- dirty tracking ----------
 function edlDirty() {
   return S.draft.some((r) => r.removed || r.start !== r.orig.start || r.end !== r.orig.end);
 }
 function insertsDirty() {
-  return S.insertsDraft.some((c) => c.start !== c.orig.start || c.end !== c.orig.end);
+  // isNew: added from the image picker this session, so there is no orig to
+  // diff against — it is dirty by existing at all
+  return S.insertsDraft.some((c) => c.isNew || c.start !== c.orig.start || c.end !== c.orig.end);
 }
 function dirtyCount() {
   let n = S.draft.filter((r) => r.removed || r.start !== r.orig.start || r.end !== r.orig.end).length;
-  n += S.insertsDraft.filter((c) => c.start !== c.orig.start || c.end !== c.orig.end).length;
+  n += S.insertsDraft.filter((c) => c.isNew || c.start !== c.orig.start || c.end !== c.orig.end).length;
   n += S.notes.length; // each correction marker is an unsaved adjustment too
+  n += Object.keys(S.captionFixes).length; // and each caption text fix
   return n;
 }
 function refreshHeader() {
@@ -740,7 +1030,7 @@ async function applyState(data) {
   S.fps = S.state.fps || 24;
   S.savedPending = !!data.hasPendingEdits;
 
-  $('projectName').textContent = S.state.project || 'Edvid';
+  $('projectName').textContent = S.state.project || 'ATIVAVID';
   $('stateMessage').textContent = S.state.message || '';
 
   const ranges = (data.edl && data.edl.ranges) || [];
@@ -750,8 +1040,21 @@ async function applyState(data) {
   // filmstrip and the needle drift a little further at each junction.
   S.jcut = (data.edl && data.edl.jcut_timeline) || null;
   S.rendered = ranges.map((r) => ({ source: r.source, start: +r.start, end: +r.end, beat: r.beat || '' }));
-  S.draft = S.rendered.map((r) => ({ ...r, removed: false, orig: { start: r.start, end: r.end } }));
+  // srcIdx: this entry's position in S.rendered/S.jcut — jcutGeom() reads
+  // lead/tail through THIS, not the entry's current S.draft position, so a
+  // split earlier in the array can't shift an untouched later take's
+  // geometry out from under it. Split-off pieces get srcIdx:null (see
+  // splitAtPlayhead/deleteClipRange) — there's no real per-piece geometry
+  // for those until the skill re-renders and writes a fresh jcut_timeline.
+  S.draft = S.rendered.map((r, srcIdx) => ({ ...r, removed: false, srcIdx, orig: { start: r.start, end: r.end } }));
   S.selected = -1;
+  S.history = []; S.future = []; refreshUndoRedoButtons(); // fresh server data — old snapshots no longer apply
+  // Caption fixes are keyed by index into S.captions, so they only go stale if
+  // the caption LIST changed. applyState also runs for unrelated reasons (a new
+  // render's mtime, a duration re-probe) — dropping the fixes then would throw
+  // away typing the user had not saved yet, and close the box mid-edit.
+  // The actual comparison happens after S.captions is rebuilt, below.
+  S.captionsSigBefore = JSON.stringify((S.captions || []).map((c) => c.text));
 
   // style picks: the skill's copy wins, so applying a change (or reopening the
   // session) shows what is actually rendered — not a stale local selection
@@ -779,9 +1082,16 @@ async function applyState(data) {
   const tabS = document.querySelector('[data-tab="style"]');
   tabS.disabled = !S.state.awaitingStyle && !S.state.style;
   if (tabS.disabled && S.tab === 'style') S.tab = 1;
+  // a deep link to #fase2 before Fase 2 exists yet has nothing to show
+  if (tab2.disabled && S.tab === 2) S.tab = 1;
   document.querySelectorAll('.tab').forEach((x) => {
     x.classList.toggle('active', String(x.dataset.tab) === String(S.tab));
   });
+  // replaceState, not the click handler's real navigation: applyState reruns
+  // on every 2s poll, and pushing a history entry each time would make the
+  // back button useless (dozens of identical entries instead of one per tab)
+  const wantPath = TAB_TO_PATH[S.tab];
+  if (location.pathname !== wantPath) history.replaceState(null, '', wantPath);
   S.captions = [];
   S.editData = null;
   S.insertsDraft = [];
@@ -798,6 +1108,13 @@ async function applyState(data) {
         buildInsertsDraft();
       } catch (e) { /* absent yet */ }
     }
+  }
+
+  // see S.captionsSigBefore above: only discard pending caption fixes when the
+  // caption lines themselves actually changed under us
+  if (JSON.stringify(S.captions.map((c) => c.text)) !== S.captionsSigBefore) {
+    S.captionFixes = {};
+    closeCaptionEditor();
   }
 
   fitZoom();
@@ -834,6 +1151,70 @@ function groupCaptions(caps) {
     start: line[0].startMs / 1000,
     end: line[line.length - 1].endMs / 1000,
   }));
+}
+
+/* ---------- caption text correction ----------
+ * A transcript slip ("capinha" heard as "carpinha") used to cost a round trip
+ * through chat. This records the fix against the caption line the user is
+ * looking at and ships it in the save payload; the skill re-runs the caption
+ * pipeline, because word-level timings are derived and must not be hand-typed
+ * into captions.json. Scope is deliberately text-only: no timing handles.
+ */
+function openCaptionEditor(i, anchorEl) {
+  const c = S.captions[i];
+  if (!c) return;
+  closeCaptionEditor();
+  const cur = S.captionFixes[i] ? S.captionFixes[i].to : c.text;
+
+  const box = el('div', 'cap-editor glass', document.body);
+  box.id = 'capEditor';
+  const r = anchorEl.getBoundingClientRect();
+  box.style.left = `${Math.min(Math.max(8, r.left), window.innerWidth - 330)}px`;
+  box.style.top = `${Math.max(8, r.top - 84)}px`;
+
+  // NOTE: this file's el() is el(tag, cls, parent) — it takes no text argument
+  // (painel.js has its own 4-arg version). Set textContent explicitly.
+  el('div', 'cap-orig', box).textContent = `original: ${c.text}`;
+  const input = el('input', 'cap-input', box);
+  input.type = 'text';
+  input.value = cur;
+
+  const acts = el('div', 'cap-actions', box);
+  const reset = el('button', 'btn ghost small', acts);
+  reset.textContent = 'desfazer correção';
+  reset.style.visibility = S.captionFixes[i] ? 'visible' : 'hidden';
+  el('div', 'spacer', acts);
+  const ok = el('button', 'btn primary small', acts);
+  ok.textContent = 'aplicar';
+
+  const commit = () => {
+    const v = input.value.trim();
+    closeCaptionEditor();
+    if (!v || v === c.text) {                 // back to the original = drop the fix
+      if (S.captionFixes[i]) { pushHistory(); delete S.captionFixes[i]; }
+    } else if (!S.captionFixes[i] || S.captionFixes[i].to !== v) {
+      pushHistory();
+      S.captionFixes[i] = { from: c.text, to: v, start: c.start, end: c.end };
+    }
+    renderAll(); refreshHeader();
+  };
+  ok.addEventListener('click', commit);
+  reset.addEventListener('click', () => {
+    closeCaptionEditor();
+    if (S.captionFixes[i]) { pushHistory(); delete S.captionFixes[i]; renderAll(); refreshHeader(); }
+  });
+  input.addEventListener('keydown', (e) => {
+    e.stopPropagation();                       // the timeline owns S/space/arrows
+    if (e.key === 'Enter') commit();
+    if (e.key === 'Escape') closeCaptionEditor();
+  });
+  input.focus();
+  input.select();
+}
+
+function closeCaptionEditor() {
+  const old = document.getElementById('capEditor');
+  if (old) old.remove();
 }
 
 function buildInsertsDraft() {
@@ -1044,24 +1425,92 @@ const normHex = (v) => {
   return /^[0-9a-f]{6}$/i.test(s) ? `#${s.toLowerCase()}` : null;
 };
 
-/* Which styles actually paint the accent. Kept as data because the honest UI
- * note depends on it: with `karaoke` + `outline` picked, nothing on screen uses
- * the colour, and saying so beats letting the user wonder why the previews did
+/* Which headline styles actually paint the accent. Kept as data because the
+ * honest UI note depends on it: with `outline` picked, nothing on screen uses
+ * the colour, and saying so beats letting the user wonder why the preview did
  * not move. Mirrors the template — update both together. */
-const ACCENT_USERS = {headlines: ['realce', 'misto'], captions: ['stacked']};
-const ACCENT_DEFAULT = '#ff5200';
+const HL_ACCENT_USERS = ['realce', 'misto'];
+const ACCENT_DEFAULT = '#FF0000';
+
+/* Three independent caption colour channels, each painting a different set of
+ * styles — splitting these apart (instead of one shared captions.accent) is
+ * what lets a project have, say, white legenda text, a red emphasis word, and
+ * a green circle all at once:
+ *   - "legenda" (captionAccent): the BASE text — karaoke's whole line, the
+ *     three static styles (simples/serifada/classica). Stacked's white lines
+ *     and scatter's ink-gradient words are NOT this — those two styles keep
+ *     their ordinary words fixed and only accent the ONE emphasised element.
+ *   - "ênfase" (emphasisAccent): that one accented element — stacked's serif
+ *     line, scatter's highlighted word. Karaoke/static have no such element.
+ *   - "círculo riscado" (circleAccent): stacked-only, the pencil-circle stroke
+ *     around a solo emphasis word — independent from emphasisAccent, so the
+ *     serif line and the circle can be two different colours.
+ * `nenhuma` uses none of the three (nothing rendered to paint). All three
+ * start unpicked (null) rather than forced to ACCENT_DEFAULT — see
+ * defaultStyle() — because each has its own natural per-style default colour
+ * that a forced value would stomp on. */
+const capAccentUsed = () => S.style.captions !== 'nenhuma';
+const CAP_BASE_STYLES = ['karaoke', 'simples', 'serifada', 'classica'];
+const CAP_EMPH_STYLES = ['stacked', 'scatter'];
+const CAP_CIRCLE_STYLES = ['stacked'];
+const legendaAccentUsed = () => capAccentUsed() && CAP_BASE_STYLES.includes(S.style.captions);
+const emphasisAccentUsed = () => capAccentUsed() && CAP_EMPH_STYLES.includes(S.style.captions);
+const circleAccentUsed = () => capAccentUsed() && CAP_CIRCLE_STYLES.includes(S.style.captions);
 
 function applyAccent() {
   $('styleSetup').style.setProperty('--hl-accent', S.style.accent || ACCENT_DEFAULT);
 }
 
+// Unset (not just defaulted) when the user has not picked a caption colour —
+// var(--cap-accent, <per-style fallback>) in app.css then falls through to each
+// style's own natural colour instead of everything turning ACCENT_DEFAULT.
+function applyCaptionAccent() {
+  const v = normHex(S.style.captionAccent);
+  if (v) $('styleSetup').style.setProperty('--cap-accent', v);
+  else $('styleSetup').style.removeProperty('--cap-accent');
+}
+
+// Same pattern as applyCaptionAccent, its own CSS variable (--emph-accent).
+function applyEmphasisAccent() {
+  const v = normHex(S.style.emphasisAccent);
+  if (v) $('styleSetup').style.setProperty('--emph-accent', v);
+  else $('styleSetup').style.removeProperty('--emph-accent');
+}
+
+// No live preview for this one — the mockup's stacked demo does not draw the
+// pencil-circle SVG (that lives only in the real Remotion PencilOutline
+// component). Nothing to set on #styleSetup; the pick is still tracked in
+// S.style.circleAccent and reaches Fase 2 through the save payload like the
+// other two. Kept as a function (not skipped) so renderAccentPicker's
+// call-apply-on-every-commit contract stays uniform across all three pickers.
+function applyCircleAccent() {}
+
 /* One spectral swatch (the OS picker) plus a hex field — no preset row. A grid of
  * canned colours competes with the style cards for attention and still never has
- * the brand colour the user actually wants. */
-function renderAccents() {
-  const host = $('optAccent');
+ * the brand colour the user actually wants. Shared builder for both the headline
+ * accent and the caption accent — they are independent state, but the same
+ * picker widget either way. `allowNone` gives the caption picker a "Padrão" chip
+ * that clears back to null (each style's own colour); the headline picker has no
+ * such state — realce/misto always paint SOME colour, so there is nothing to
+ * clear back to. */
+function renderAccentPicker({host, label, get, set, apply, defaultHex, allowNone, onChange}) {
   host.innerHTML = '';
-  const cur = normHex(S.style.accent) || ACCENT_DEFAULT;
+  const raw = get();
+  const cur = normHex(raw) || defaultHex;
+
+  if (allowNone) {
+    const none = el('label', `swatch none${raw ? '' : ' on'}`, host);
+    none.title = 'Padrão do estilo';
+    none.innerHTML = NONE_ICON;
+    none.addEventListener('click', (e) => {
+      e.preventDefault();
+      set(null);
+      apply();
+      // rebuilds the whole widget (the custom swatch/hex field reset to the
+      // style's default preview colour too) — this one calls onChange() itself
+      renderAccentPicker({host, label, get, set, apply, defaultHex, allowNone, onChange});
+    });
+  }
 
   const custom = el('label', 'swatch custom', host);
   custom.title = 'Escolher cor';
@@ -1077,18 +1526,18 @@ function renderAccents() {
   hex.spellcheck = false;
   hex.maxLength = 7;
   hex.value = cur.slice(1).toUpperCase();
-  hex.setAttribute('aria-label', 'Cor de destaque em hexadecimal');
+  hex.setAttribute('aria-label', `${label} em hexadecimal`);
 
   const commit = (v, {fromHexField} = {}) => {
     const n = normHex(v);
     if (!n) return false;
-    S.style.accent = n;
+    set(n);
     custom.style.setProperty('--swatch-fill', n);
     inp.value = n;
     if (!fromHexField) hex.value = n.slice(1).toUpperCase();
-    applyAccent();   // live — no full rebuild, so dragging the picker stays smooth
-    updateAccentNote();
-    updateSummary();
+    apply();   // live — no full rebuild, so dragging the picker stays smooth
+    if (allowNone) host.querySelector('.swatch.none')?.classList.remove('on');
+    onChange();
     return true;
   };
 
@@ -1102,25 +1551,101 @@ function renderAccents() {
   // colour behind text that says something else
   hex.addEventListener('blur', () => {
     field.classList.remove('bad');
-    hex.value = (normHex(S.style.accent) || ACCENT_DEFAULT).slice(1).toUpperCase();
+    hex.value = (normHex(get()) || defaultHex).slice(1).toUpperCase();
   });
   hex.addEventListener('keydown', (e) => { if (e.key === 'Enter') hex.blur(); });
 
-  updateAccentNote();
+  onChange();
 }
 
-const accentUsed = () =>
-  ACCENT_USERS.headlines.includes(S.style.headline)
-  || ACCENT_USERS.captions.includes(S.style.captions);
+const renderAccents = () => renderAccentPicker({
+  host: $('optAccent'),
+  label: 'Cor da headline',
+  get: () => S.style.accent,
+  set: (v) => { S.style.accent = v || ACCENT_DEFAULT; }, // no "none" chip on this one
+  apply: applyAccent,
+  defaultHex: ACCENT_DEFAULT,
+  allowNone: false,
+  onChange: () => { updateAccentNote(); updateSummary(); },
+});
 
+const renderCaptionAccents = () => renderAccentPicker({
+  host: $('optCaptionAccent'),
+  label: 'Cor da legenda',
+  get: () => S.style.captionAccent,
+  set: (v) => { S.style.captionAccent = v; },
+  apply: applyCaptionAccent,
+  defaultHex: ACCENT_DEFAULT,
+  allowNone: true,
+  onChange: () => { updateCaptionAccentNote(); updateSummary(); },
+});
+
+const renderEmphasisAccents = () => renderAccentPicker({
+  host: $('optEmphasisAccent'),
+  label: 'Cor de ênfase',
+  get: () => S.style.emphasisAccent,
+  set: (v) => { S.style.emphasisAccent = v; },
+  apply: applyEmphasisAccent,
+  defaultHex: ACCENT_DEFAULT,
+  allowNone: true,
+  onChange: () => { updateEmphasisAccentNote(); updateSummary(); },
+});
+
+const renderCircleAccents = () => renderAccentPicker({
+  host: $('optCircleAccent'),
+  label: 'Cor do círculo riscado',
+  get: () => S.style.circleAccent,
+  set: (v) => { S.style.circleAccent = v; },
+  apply: applyCircleAccent,
+  defaultHex: '#39E508', // PencilOutline's own default — not ACCENT_DEFAULT
+  allowNone: true,
+  onChange: () => { updateCircleAccentNote(); updateSummary(); },
+});
+
+// Every note below was trimmed to the shortest phrase that still answers
+// "does my pick do anything" — these share a row with an all-caps title in a
+// card that can be as narrow as ~310px, so a long note was the #1 cause of
+// cards in the same row wrapping to different heights.
 function updateAccentNote() {
-  const where = [
-    ACCENT_USERS.headlines.includes(S.style.headline) && 'na headline',
-    ACCENT_USERS.captions.includes(S.style.captions) && 'na legenda',
-  ].filter(Boolean);
-  $('accentNote').textContent = where.length
-    ? `aplicada ${where.join(' e ')}`
-    : 'os estilos escolhidos não usam destaque';
+  $('accentNote').textContent = HL_ACCENT_USERS.includes(S.style.headline)
+    ? 'aplicada'
+    : 'não usada';
+}
+
+function updateCaptionAccentNote() {
+  if (!capAccentUsed()) {
+    $('captionAccentNote').textContent = 'legenda desligada';
+  } else if (!legendaAccentUsed()) {
+    $('captionAccentNote').textContent = 'ver ênfase';
+  } else if (S.style.captionAccent) {
+    $('captionAccentNote').textContent = 'aplicada';
+  } else {
+    $('captionAccentNote').textContent = 'padrão do estilo';
+  }
+}
+
+function updateEmphasisAccentNote() {
+  if (!capAccentUsed()) {
+    $('emphasisAccentNote').textContent = 'legenda desligada';
+  } else if (!emphasisAccentUsed()) {
+    $('emphasisAccentNote').textContent = 'não se aplica';
+  } else if (S.style.emphasisAccent) {
+    $('emphasisAccentNote').textContent = 'aplicada';
+  } else {
+    $('emphasisAccentNote').textContent = 'padrão do estilo';
+  }
+}
+
+function updateCircleAccentNote() {
+  if (!capAccentUsed()) {
+    $('circleAccentNote').textContent = 'legenda desligada';
+  } else if (!circleAccentUsed()) {
+    $('circleAccentNote').textContent = 'só no Empilhado';
+  } else if (S.style.circleAccent) {
+    $('circleAccentNote').textContent = 'aplicada';
+  } else {
+    $('circleAccentNote').textContent = 'verde padrão';
+  }
 }
 
 /* Separate from renderSetup so the live colour drag can refresh it without
@@ -1128,10 +1653,17 @@ function updateAccentNote() {
  * colour while the previews already showed the new one. */
 function updateSummary() {
   const on = STYLE_CATALOG.elements.filter((e) => S.style.elements[e.id]);
-  const accentBit = accentUsed() ? ` · destaque ${accentName(S.style.accent)}` : '';
+  const accentBit = HL_ACCENT_USERS.includes(S.style.headline)
+    ? ` · destaque ${accentName(S.style.accent)}` : '';
+  const capAccentBit = legendaAccentUsed() && S.style.captionAccent
+    ? ` (cor ${accentName(S.style.captionAccent)})` : '';
+  const emphAccentBit = emphasisAccentUsed() && S.style.emphasisAccent
+    ? ` (ênfase ${accentName(S.style.emphasisAccent)})` : '';
+  const circleAccentBit = circleAccentUsed() && S.style.circleAccent
+    ? ` (círculo ${accentName(S.style.circleAccent)})` : '';
   $('setupSummary').textContent =
     `${styleName('edits', S.style.edit)} · headline ${styleName('headlines', S.style.headline)}` +
-    ` · legenda ${styleName('captions', S.style.captions)}${accentBit} · ` +
+    ` · legenda ${styleName('captions', S.style.captions)}${capAccentBit}${emphAccentBit}${circleAccentBit}${accentBit} · ` +
     (on.length ? on.map((e) => e.name).join(', ') : 'sem elementos extras');
 }
 
@@ -1172,8 +1704,10 @@ function renderSetup() {
       card.dataset.group = group;
       card.dataset.id = o.id;
       // headline previews are two short lines — they do not need the caption
-      // box's height, and with four groups on one screen that height is scarce
-      const kind = o.mock ? 'frame' : o.hl ? 'cap hlbox' : 'cap';
+      // box's height, and with four groups on one screen that height is scarce.
+      // "Nenhuma" in the headlines group borrows that same box (hlbox) so it
+      // sits level with its siblings; in captions it uses the plain cap box.
+      const kind = o.mock ? 'frame' : (o.hl || (o.none && group === 'headlines')) ? 'cap hlbox' : 'cap';
       const prev = el('div', `opt-preview ${kind}`, card);
       if (o.demo) capAnims.push(CAP_BUILDERS[o.demo](prev));
       else if (o.hl) buildHeadlineDemo(prev, o.hl);
@@ -1181,23 +1715,35 @@ function renderSetup() {
         const step = buildStaticDemo(prev, o.stat);
         if (step) capAnims.push(step);
       }
+      else if (o.none) {
+        prev.classList.add('opt-preview-none');
+        prev.innerHTML = NONE_ICON;
+      }
       else prev.innerHTML = o.mock || '';
-      // Only the abstract mockups get a title. A card that renders the real
-      // caption or the real headline is already labelled — by itself.
-      if (o.mock) el('div', 'opt-name', card).textContent = o.name;
+      // Only the abstract mockups get a title — a card that renders the real
+      // caption or headline is already labelled by itself. "Nenhuma" renders
+      // nothing to read, so it needs the label just as much as a mockup does.
+      if (o.mock || o.none) el('div', 'opt-name', card).textContent = o.name;
       el('div', 'opt-mark', card);
     }
     // the ghost only earns its space where there is a single option to explain
     if (opts.length < 2) el('div', 'opt ghost', host).textContent = 'mais estilos em breve';
   };
-  // set BEFORE the demos are built: buildHeadlineDemo reads the accent through
-  // var(), so the variable has to be in place when the previews first paint
+  // set BEFORE the demos are built: buildHeadlineDemo/the caption demos read
+  // the accents through var(), so the variables have to be in place when the
+  // previews first paint
   applyAccent();
+  applyCaptionAccent();
+  applyEmphasisAccent();
+  applyCircleAccent();
 
   radios($('optEdit'), 'edits', S.style.edit);
   radios($('optHeadline'), 'headlines', S.style.headline);
   radios($('optCaptions'), 'captions', S.style.captions);
   renderAccents();
+  renderCaptionAccents();
+  renderEmphasisAccents();
+  renderCircleAccents();
 
   const host = $('optElements');
   host.innerHTML = '';
@@ -1216,16 +1762,24 @@ function renderSetup() {
 $('styleSetup').addEventListener('click', (e) => {
   // the accent controls manage themselves (live, no rebuild) — keep the card
   // handler off them, or a click in the hex field would count as a style pick
-  if (e.target.closest('#optAccent')) return;
+  if (
+    e.target.closest('#optAccent') ||
+    e.target.closest('#optCaptionAccent') ||
+    e.target.closest('#optEmphasisAccent') ||
+    e.target.closest('#optCircleAccent')
+  ) return;
   const opt = e.target.closest('.opt:not(.ghost)');
   if (opt) {
     const key = {edits: 'edit', headlines: 'headline', captions: 'captions'}[opt.dataset.group];
+    if (S.style[key] === opt.dataset.id) return; // re-clicking the active card isn't an edit
+    pushHistory();
     S.style[key] = opt.dataset.id;
     renderSetup();
     return;
   }
   const chk = e.target.closest('.chk');
   if (chk) {
+    pushHistory();
     S.style.elements[chk.dataset.id] = !S.style.elements[chk.dataset.id];
     renderSetup();
   }
@@ -1247,9 +1801,27 @@ $('setupGo').addEventListener('click', async () => {
     captionsName: styleName('captions', S.style.captions),
     accent: S.style.accent,
     accentName: accentName(S.style.accent),
-    // whether the picked styles actually paint it — so the skill does not go
-    // hunting for an accent in a look that has none
-    accentUsed: accentUsed(),
+    // whether the picked headline style actually paints it — so the skill does
+    // not go hunting for an accent in a look that has none
+    accentUsed: HL_ACCENT_USERS.includes(S.style.headline),
+    // independent from the headline accent above — null means "no pick, keep
+    // each caption style's own default colour" (see defaultStyle())
+    captionAccent: S.style.captionAccent,
+    captionAccentName: S.style.captionAccent ? accentName(S.style.captionAccent) : null,
+    captionAccentUsed: legendaAccentUsed() && !!S.style.captionAccent,
+    // "ênfase": the one accented element per style (stacked serif line, scatter
+    // highlighted word) — independent from captionAccent above (base legenda
+    // text) and from accent (headline). null means "keep the style's own
+    // default (#ff5200)", same semantics as captionAccent.
+    emphasisAccent: S.style.emphasisAccent,
+    emphasisAccentName: S.style.emphasisAccent ? accentName(S.style.emphasisAccent) : null,
+    emphasisAccentUsed: emphasisAccentUsed() && !!S.style.emphasisAccent,
+    // "círculo riscado": stacked-only pencil-circle stroke, independent from
+    // emphasisAccent too. null means "keep PencilOutline's own default (green
+    // #39E508)".
+    circleAccent: S.style.circleAccent,
+    circleAccentName: S.style.circleAccent ? accentName(S.style.circleAccent) : null,
+    circleAccentUsed: circleAccentUsed() && !!S.style.circleAccent,
     elements: { ...S.style.elements },
     elementNames: STYLE_CATALOG.elements
       .filter((e) => S.style.elements[e.id])
@@ -1268,6 +1840,36 @@ $('setupGo').addEventListener('click', async () => {
       : '✓ Estilo enviado — o Claude vai montar a Fase 2 com essas escolhas', 5000);
   } else {
     toast('Erro ao enviar — o servidor está de pé?', 4000);
+  }
+});
+
+// Saves the CURRENT picks as the house style — separate button from
+// "Confirmar", on purpose: one sends this project's choices to the skill,
+// the other changes what every FUTURE project starts on. Doing both in one
+// click would mean you can never pick something unusual for just this one
+// video without it becoming the new default. Only the core fields defaultStyle()
+// actually reads — no names/Used flags, those are preview_style.json's concern.
+$('setupSaveDefault').addEventListener('click', async () => {
+  const payload = {
+    edit: S.style.edit,
+    headline: S.style.headline,
+    captions: S.style.captions,
+    accent: S.style.accent,
+    captionAccent: S.style.captionAccent,
+    emphasisAccent: S.style.emphasisAccent,
+    circleAccent: S.style.circleAccent,
+    elements: { ...S.style.elements },
+  };
+  const res = await fetch('/api/default-style', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if ((await res.json()).ok) {
+    SHARED_DEFAULT_STYLE = payload; // takes effect this session too, no reload needed
+    toast('✓ Salvo como padrão — todo projeto novo abre assim', 3500);
+  } else {
+    toast('Erro ao salvar o padrão — o servidor está de pé?', 4000);
   }
 });
 
@@ -1380,15 +1982,19 @@ function renderChips() {
   if (!phase2) return;
 
   laneCaptions.innerHTML = '';
-  for (const c of S.captions) {
+  S.captions.forEach((c, i) => {
     const start = renderedToDraft(c.start);
     const end = renderedToDraft(c.end);
-    const chip = el('div', 'chip caption', laneCaptions);
+    const fix = S.captionFixes[i];
+    const chip = el('div', 'chip caption' + (fix ? ' fixed' : ''), laneCaptions);
     chip.style.left = `${start * S.pps}px`;
     chip.style.width = `${Math.max((end - start) * S.pps, 6)}px`;
-    chip.textContent = c.text;
-    chip.title = c.text;
-  }
+    chip.textContent = fix ? fix.to : c.text;
+    chip.title = fix
+      ? `“${c.text}” → “${fix.to}” (clique para editar)`
+      : `${c.text} — clique para corrigir o texto`;
+    chip.dataset.ci = String(i);
+  });
 
   // TEXT and IMAGE get their own tracks — a headline and a photo are different
   // kinds of edit, and mixing them on one lane hid the images entirely.
@@ -1580,23 +2186,42 @@ panel.addEventListener('pointerdown', (e) => {
   const clip = e.target.closest('.clip');
   const chip = e.target.closest('.chip.insert');
 
+  // caption chips are click-to-edit, not draggable — their timing belongs to
+  // the transcript, only the WORDS are the user's to correct here
+  const cap = e.target.closest('.chip.caption');
+  if (cap && S.tab === 2) {
+    openCaptionEditor(+cap.dataset.ci, cap);
+    e.preventDefault();
+    return;
+  }
+
   if (handle && clip && S.tab === 1) {
     const i = +handle.dataset.i;
-    drag = { type: 'trim', i, side: handle.classList.contains('l') ? 'l' : 'r', x0: e.clientX, r: { ...S.draft[i] } };
+    drag = { type: 'trim', i, side: handle.classList.contains('l') ? 'l' : 'r', x0: e.clientX, r: { ...S.draft[i] }, preSnapshot: snapshotState() };
     try { panel.setPointerCapture(e.pointerId); } catch (err) { /* synthetic/touch */ }
     e.preventDefault();
     return;
   }
   if (handle && chip && S.tab === 2) {
     const i = +handle.dataset.i;
-    drag = { type: 'chip-trim', i, side: handle.classList.contains('l') ? 'l' : 'r', x0: e.clientX, c: { ...S.insertsDraft[i] } };
+    drag = { type: 'chip-trim', i, side: handle.classList.contains('l') ? 'l' : 'r', x0: e.clientX, c: { ...S.insertsDraft[i] }, preSnapshot: snapshotState() };
     try { panel.setPointerCapture(e.pointerId); } catch (err) { /* synthetic/touch */ }
     e.preventDefault();
     return;
   }
   if (chip && S.tab === 2) {
     const i = +chip.dataset.i;
-    drag = { type: 'chip-move', i, x0: e.clientX, c: { ...S.insertsDraft[i] } };
+    drag = { type: 'chip-move', i, x0: e.clientX, c: { ...S.insertsDraft[i] }, preSnapshot: snapshotState() };
+    try { panel.setPointerCapture(e.pointerId); } catch (err) { /* synthetic/touch */ }
+    e.preventDefault();
+    return;
+  }
+  if (clip && S.tab === 1) {
+    // Undecided yet between "click to select" and "drag to select-and-delete
+    // a range" — pointermove below promotes this to the latter only past a
+    // few px of real movement, so a plain click keeps working exactly as
+    // before. See deleteClipRange().
+    drag = { type: 'clip-range', i: +clip.dataset.i, x0: e.clientX, x1: e.clientX, moved: false };
     try { panel.setPointerCapture(e.pointerId); } catch (err) { /* synthetic/touch */ }
     e.preventDefault();
     return;
@@ -1652,11 +2277,35 @@ panel.addEventListener('pointermove', (e) => {
     renderChips();
     refreshHeader();
     showTooltip(e, `${fmt(c.start)} → ${fmt(c.end)}`);
+  } else if (drag.type === 'clip-range') {
+    drag.x1 = e.clientX;
+    if (Math.abs(drag.x1 - drag.x0) > 4) drag.moved = true;
+    if (drag.moved) {
+      const range = clipRangeFromPixels(drag.i, drag.x0, drag.x1);
+      showClipRangeSelection(range);
+      if (range) showTooltip(e, `apagar ${fmt(range.tB - range.tA)}s <span class="delta">(solte pra confirmar)</span>`);
+    }
   }
 });
 
 ['pointerup', 'pointercancel'].forEach((ev) =>
-  panel.addEventListener(ev, () => { drag = null; hideTooltip(); })
+  panel.addEventListener(ev, () => {
+    // commit ONE history entry per drag gesture (not per pointermove tick),
+    // and only if the drag actually moved something — a click-and-release on
+    // a handle with no movement shouldn't cost the user an undo step later
+    if (drag && drag.preSnapshot) {
+      const moved = drag.type === 'trim'
+        ? (S.draft[drag.i].start !== drag.r.start || S.draft[drag.i].end !== drag.r.end)
+        : (S.insertsDraft[drag.i].start !== drag.c.start || S.insertsDraft[drag.i].end !== drag.c.end);
+      if (moved) pushHistory(drag.preSnapshot);
+    }
+    if (drag && drag.type === 'clip-range') {
+      if (drag.moved) deleteClipRange(drag.i, drag.x0, drag.x1);
+      else { S.selected = drag.i; renderClips(); }
+      hideClipRangeSelection();
+    }
+    drag = null; hideTooltip();
+  })
 );
 
 // double-click a clip = reset it
@@ -1664,6 +2313,8 @@ laneVideo.addEventListener('dblclick', (e) => {
   const clip = e.target.closest('.clip');
   if (!clip) return;
   const r = S.draft[+clip.dataset.i];
+  if (r.start === r.orig.start && r.end === r.orig.end && !r.removed) return; // nothing to undo-log
+  pushHistory();
   r.start = r.orig.start; r.end = r.orig.end; r.removed = false;
   renderAll(); refreshHeader();
 });
@@ -1694,13 +2345,31 @@ document.addEventListener('keydown', (e) => {
   if (e.code === 'Space') {
     e.preventDefault();
     video.paused ? video.play() : video.pause();
+  } else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && e.altKey && S.selected >= 0 && S.tab === 1) {
+    // Alt+arrows nudge the SELECTED take's edge instead of the playhead.
+    // A drag cannot land a single frame reliably at any useful zoom — this is
+    // the same edit, addressed in the unit the render actually works in.
+    // Which edge: Alt = the OUT (right) edge, Alt+Shift = the IN (left) edge,
+    // so the common case (tightening a trailing pause) is the shorter chord.
+    e.preventDefault();
+    nudgeTakeEdge(S.selected, e.shiftKey ? 'l' : 'r', e.key === 'ArrowRight' ? 1 : -1);
   } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
     const step = e.shiftKey ? 1 : 1 / S.fps;
     seekDraft(renderedToDraft(video.currentTime) + (e.key === 'ArrowRight' ? step : -step));
   } else if ((e.key === 'Delete' || e.key === 'Backspace') && S.selected >= 0 && S.tab === 1) {
+    pushHistory();
     const r = S.draft[S.selected];
     r.removed = !r.removed;
     renderAll(); refreshHeader();
+  } else if ((e.key === 's' || e.key === 'S') && !e.ctrlKey && !e.metaKey) {
+    e.preventDefault();
+    splitAtPlayhead();
+  } else if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
+    e.preventDefault();
+    undo();
+  } else if (((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey) && e.shiftKey) || ((e.key === 'y' || e.key === 'Y') && (e.ctrlKey || e.metaKey))) {
+    e.preventDefault();
+    redo();
   }
 });
 
@@ -1718,6 +2387,118 @@ $('btnMute').addEventListener('click', () => {
   $('btnMute').innerHTML = video.muted ? ICON.mute : ICON.vol;
 });
 $('zoom').addEventListener('input', (e) => setZoom(+e.target.value));
+
+$('btnUndo').innerHTML = ICON.undo;
+$('btnRedo').innerHTML = ICON.redo;
+$('btnUndo').addEventListener('click', undo);
+$('btnRedo').addEventListener('click', redo);
+$('btnSplit').innerHTML = ICON.razor;
+$('btnSplit').addEventListener('click', splitAtPlayhead);
+
+// ---------- image picker ----------
+// Search is server-side (the key never reaches the browser) and nothing is
+// downloaded until a pick — a search that returns 12 thumbs shouldn't write
+// 12 files into the project for the 11 the user didn't want.
+function toggleImgPicker(open) {
+  $('imgModal').classList.toggle('hidden', !open);
+  $('imgBackdrop').classList.toggle('hidden', !open);
+  if (open) $('imgQuery').focus();
+}
+$('btnImage').innerHTML = ICON.imgSearch;
+$('btnImage').addEventListener('click', () => {
+  if (S.tab !== 2) { toast('A busca de imagem é da aba Final (Visual)', 2200); return; }
+  toggleImgPicker(true);
+});
+$('imgClose').addEventListener('click', () => toggleImgPicker(false));
+$('imgBackdrop').addEventListener('click', () => toggleImgPicker(false));
+$('imgQuery').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); $('imgGo').click(); }
+  if (e.key === 'Escape') { e.stopPropagation(); toggleImgPicker(false); }
+});
+
+$('imgGo').addEventListener('click', async () => {
+  const q = $('imgQuery').value.trim();
+  if (!q) return;
+  const box = $('imgResults');
+  box.innerHTML = '<div class="img-empty">buscando…</div>';
+  let data;
+  try {
+    data = await (await fetch(`/api/images/search?q=${encodeURIComponent(q)}`)).json();
+  } catch (e) {
+    box.innerHTML = '<div class="img-empty">falha na busca — servidor de pé?</div>';
+    return;
+  }
+  if (!data.ok) {
+    box.innerHTML = `<div class="img-empty">${data.error || 'busca falhou'}</div>`;
+    return;
+  }
+  if (!data.results.length) {
+    box.innerHTML = '<div class="img-empty">nada encontrado — tente outros termos</div>';
+    return;
+  }
+  box.innerHTML = '';
+  data.results.forEach((r) => {
+    const card = el('button', 'img-card', box);
+    card.innerHTML = `<img src="${r.thumb}" alt=""><span class="img-credit">${r.credit}</span>`;
+    card.addEventListener('click', () => pickImage(q, r));
+  });
+});
+
+async function pickImage(query, r) {
+  toast('Baixando…', 1500);
+  let data;
+  try {
+    data = await (await fetch('/api/images/pick', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: r.full, id: r.id, query, credit: r.credit }),
+    })).json();
+  } catch (e) {
+    toast('Falha ao baixar a imagem', 3000);
+    return;
+  }
+  if (!data.ok) { toast(data.error || 'Falha ao baixar', 3000); return; }
+
+  pushHistory();
+  const start = Math.max(0, renderedToDraft(video.currentTime));
+  const end = start + 2.5; // a sane default beat; the user drags it after
+  S.insertsDraft.push({
+    kind: 'insert', label: data.ref.split('/').pop(),
+    start, end, orig: { start, end },
+    isNew: true, src: data.ref, credit: data.credit,
+  });
+  toggleImgPicker(false);
+  renderAll(); refreshHeader();
+  toast('✓ Imagem inserida — arraste pra ajustar, depois Salvar', 4000);
+}
+
+// header — reveal the exported file (or the edit dir, before anything is
+// delivered) in Explorer, the way any NLE lets you jump to its export
+$('openFolderIcon').innerHTML = ICON.folder;
+$('btnOpenFolder').addEventListener('click', async () => {
+  try {
+    const res = await fetch('/api/open-folder', { method: 'POST' });
+    const data = await res.json();
+    if (!data.ok) toast('Não consegui abrir a pasta', 3000);
+  } catch (e) { toast('Não consegui abrir a pasta — servidor fora do ar?', 3500); }
+});
+
+// header — light/dark theme toggle. index.html's inline head script already
+// applied the saved (or default) theme before first paint; this just wires
+// the click and keeps the icon in sync (icon shows the theme a click WOULD
+// switch to, same convention as most apps' sun/moon toggles).
+function applyThemeIcon() {
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  $('btnTheme').innerHTML = dark ? ICON.sun : ICON.moon;
+  $('btnTheme').title = dark ? 'Mudar para tema claro' : 'Mudar para tema escuro';
+}
+applyThemeIcon();
+$('btnTheme').addEventListener('click', () => {
+  const next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem('ativavid-theme', next);
+  applyThemeIcon();
+});
 
 // ---------- correction markers: button, chips, editor ----------
 $('markIcon').innerHTML = ICON.flag;
@@ -1765,18 +2546,27 @@ panel.addEventListener('scroll', () => requestAnimationFrame(() => { drawRuler()
 window.addEventListener('resize', () => { fitZoom(); renderAll(); renderSetup(); });
 
 // tabs
-document.querySelectorAll('.tab').forEach((tab) =>
-  tab.addEventListener('click', () => {
-    if (tab.disabled) return;
-    document.querySelectorAll('.tab').forEach((t) => t.classList.remove('active'));
-    tab.classList.add('active');
-    S.tab = tab.dataset.tab === 'style' ? 'style' : +tab.dataset.tab;
-    S.selected = -1;
-    updateVideoSrc(); // Fase 2 plays the Phase-2 render when available
-    renderAll();
-    renderSetup();
-  })
-);
+function goToTab(tab) {
+  if (tab.disabled) return;
+  document.querySelectorAll('.tab').forEach((t) => t.classList.remove('active'));
+  tab.classList.add('active');
+  S.tab = tab.dataset.tab === 'style' ? 'style' : +tab.dataset.tab;
+  S.selected = -1;
+  const path = TAB_TO_PATH[S.tab];
+  // a real nav here (not applyState's replaceState) — a click is a place the
+  // user meant to go, so back/forward should be able to return to it
+  if (location.pathname !== path) history.pushState(null, '', path);
+  updateVideoSrc(); // Fase 2 plays the Phase-2 render when available
+  renderAll();
+  renderSetup();
+}
+document.querySelectorAll('.tab').forEach((tab) => tab.addEventListener('click', () => goToTab(tab)));
+// back/forward, or a link straight to someone's /estilo
+window.addEventListener('popstate', () => {
+  const wantTab = tabFromPath();
+  const el = document.querySelector(`[data-tab="${wantTab}"]`);
+  if (el && !el.disabled) goToTab(el);
+});
 
 // ---------- save / discard ----------
 $('btnSave').addEventListener('click', async () => {
@@ -1796,7 +2586,13 @@ $('btnSave').addEventListener('click', async () => {
   }
   if (insertsDirty()) {
     payload.editData = {
-      inserts: S.insertsDraft.filter((c) => c.kind === 'insert').map((c) => ({ ref: c.ref, start: +c.start.toFixed(3), end: +c.end.toFixed(3) })),
+      inserts: S.insertsDraft.filter((c) => c.kind === 'insert' && !c.isNew).map((c) => ({ ref: c.ref, start: +c.start.toFixed(3), end: +c.end.toFixed(3) })),
+      // added from the image picker: no `ref` into the existing edit-data
+      // array yet (they aren't in it), so they carry their own src instead
+      // and the skill appends them
+      newInserts: S.insertsDraft.filter((c) => c.isNew).map((c) => ({
+        src: c.src, credit: c.credit || '', start: +c.start.toFixed(3), end: +c.end.toFixed(3),
+      })),
       splitInserts: S.insertsDraft.filter((c) => c.kind === 'split').map((c) => ({ ref: c.ref, label: c.label, start: +c.start.toFixed(3), end: +c.end.toFixed(3) })),
       splitVideos: S.insertsDraft.filter((c) => c.kind === 'splitvideo').map((c) => ({ ref: c.ref, label: c.label, start: +c.start.toFixed(3), end: +c.end.toFixed(3) })),
       hook: S.insertsDraft.filter((c) => c.kind === 'hook').map((c) => ({ endSec: +c.end.toFixed(3) }))[0] || null,
@@ -1816,15 +2612,30 @@ $('btnSave').addEventListener('click', async () => {
       text: n.text,
     }));
   }
+  const capFixes = Object.values(S.captionFixes);
+  if (capFixes.length) {
+    // text only — `from`/`start`/`end` are there so the skill can locate the
+    // line in captions.json; it re-runs the caption pipeline rather than
+    // patching word timings by hand
+    payload.captionFixes = capFixes.map((f) => ({
+      from: f.from,
+      to: f.to,
+      renderedStart: +f.start.toFixed(3),
+      renderedEnd: +f.end.toFixed(3),
+    }));
+  }
   const res = await fetch('/api/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
   if ((await res.json()).ok) {
     S.savedPending = true;
     S.notes = [];
+    S.captionFixes = {};
     S.pendingIn = null;
     S.draft.forEach((r) => { r.orig = { start: r.start, end: r.end }; if (r.removed) r.hardRemoved = true; });
     // keep visual state but clear dirty counters
     S.draft = S.draft.filter((r) => !r.removed);
     S.insertsDraft.forEach((c) => { c.orig = { start: c.start, end: c.end }; });
+    // undo/redo can't reach past a save — the server already has this state
+    S.history = []; S.future = []; refreshUndoRedoButtons();
     renderAll(); refreshHeader();
     toast('✓ Salvo — o Claude foi avisado e vai aplicar os ajustes', 5000);
   } else {
@@ -1833,13 +2644,22 @@ $('btnSave').addEventListener('click', async () => {
 });
 
 $('btnDiscard').addEventListener('click', () => {
-  S.draft = S.rendered.map((r) => ({ ...r, removed: false, orig: { start: r.start, end: r.end } }));
+  // srcIdx: this entry's position in S.rendered/S.jcut — jcutGeom() reads
+  // lead/tail through THIS, not the entry's current S.draft position, so a
+  // split earlier in the array can't shift an untouched later take's
+  // geometry out from under it. Split-off pieces get srcIdx:null (see
+  // splitAtPlayhead/deleteClipRange) — there's no real per-piece geometry
+  // for those until the skill re-renders and writes a fresh jcut_timeline.
+  S.draft = S.rendered.map((r, srcIdx) => ({ ...r, removed: false, srcIdx, orig: { start: r.start, end: r.end } }));
   buildInsertsDraft();
   S.notes = [];
+  S.captionFixes = {};
+  closeCaptionEditor();
   S.pendingIn = null;
   S.editingNote = null;
   $('noteEditor').classList.add('hidden');
   S.selected = -1;
+  S.history = []; S.future = []; refreshUndoRedoButtons();
   renderAll(); refreshHeader();
   toast('Ajustes descartados', 2000);
 });
@@ -1870,13 +2690,13 @@ document.querySelectorAll('.tl-chip[data-icon]').forEach((c) => {
 $('jcutToggle').addEventListener('click', () => {
   if (!(S.jcut && S.jcut.length)) return;
   S.jcutOpen = !S.jcutOpen;
-  localStorage.setItem('edvid.jcutOpen', S.jcutOpen ? '1' : '0');
+  localStorage.setItem('ativa-vid.jcutOpen', S.jcutOpen ? '1' : '0');
   renderJcutAudio();
   updateScrollRange();
   positionNeedle();
 });
 
-poll();
+loadSharedDefaultStyle().then(poll); // wait for it once — a flash of the wrong default is worse than a beat of delay
 rafLoop();
 // the headline fit is MEASURED, so it is wrong until Poppins is actually
 // loaded — rebuild once the fonts land

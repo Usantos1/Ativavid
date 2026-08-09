@@ -66,6 +66,14 @@ const INK: React.CSSProperties = {
   color: 'transparent',
 };
 
+// When set, the highlighted word (the one that resolves out of blur) goes solid
+// in this colour instead of the default ink gradient — ordinary words are always
+// INK regardless, the same contrast-only-where-it-matters rule the file already
+// follows for size/blur. Reads emphasisAccent, NOT accent — accent is the base
+// legenda colour (karaoke/static text); this word is the one accented element
+// of THIS style, same role as stacked's serif line.
+const HI_COLOR: string | undefined = C.emphasisAccent;
+
 const clean = (t: string) => t.replace(/[.,!?…]+$/, '').toLowerCase();
 const isBreak = (t: string) => /[.,!?…]$/.test(t);
 
@@ -204,7 +212,7 @@ const CueView: React.FC<{cue: Cue; endFrame: number}> = ({cue, endFrame}) => {
                 <span
                   key={wi}
                   style={{
-                    ...INK,
+                    ...(p.hi && HI_COLOR ? {color: HI_COLOR} : INK),
                     fontSize: p.size,
                     fontWeight: p.hi ? 600 : 400,
                     fontStyle: p.hi && hash(li * 7 + wi) > 0.65 ? 'italic' : 'normal',

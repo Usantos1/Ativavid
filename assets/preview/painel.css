@@ -1,0 +1,168 @@
+/* ATIVAVID — painel multi-projeto.
+   Rides app.css for the palette/theme tokens and the shared chrome (header,
+   .glass, .btn, toast), so a theme change there lands here for free. Only the
+   grid and the row states live in this file. */
+
+.painel-body { overflow: auto; }
+
+.pn-counts { font-size: 12px; color: var(--dim); margin-right: 4px; }
+
+.pn-main {
+  flex: 1 1 auto;
+  padding: 14px;
+  width: min(1400px, 100%);
+  margin: 0 auto;
+}
+
+/* the things that need action, hoisted out of the grid so they cannot be
+   scrolled past — this is the whole reason the dashboard exists */
+.pn-alerts { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.pn-alert {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border-radius: 12px;
+  font-size: 12.5px;
+  font-weight: 500;
+  border: 1px solid transparent;
+}
+.pn-alert b { font-weight: 800; }
+.pn-alert.bad {
+  background: rgba(255, 84, 112, 0.12);
+  border-color: rgba(255, 84, 112, 0.45);
+  color: var(--rose-fg);
+}
+.pn-alert.warn {
+  background: rgba(255, 119, 19, 0.12);
+  border-color: rgba(255, 119, 19, 0.42);
+  color: var(--pill-orange-fg);
+}
+.pn-alert.good {
+  background: rgba(9, 181, 183, 0.1);
+  border-color: rgba(9, 181, 183, 0.4);
+  color: var(--pill-teal-fg);
+}
+
+.pn-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+.pn-empty { grid-column: 1 / -1; color: var(--dim); font-size: 13px; padding: 30px; text-align: center; }
+
+.pn-card {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 14px 15px 15px;
+  border-radius: 14px;
+  background: var(--glass);
+  border: 1px solid var(--stroke);
+  min-width: 0;
+}
+/* the project this server is actually serving — one accent edge, no shouting */
+.pn-card.current { border-color: rgba(255, 119, 19, 0.55); }
+
+.pn-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.pn-name {
+  font-size: 13.5px;
+  font-weight: 800;
+  letter-spacing: 0.1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.pn-phase {
+  flex: 0 0 auto;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--glass-strong);
+  border: 1px solid var(--stroke);
+  color: var(--dim);
+}
+.pn-phase.p3 { color: var(--pill-teal-fg); border-color: rgba(9, 181, 183, 0.4); }
+
+.pn-msg {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--dim);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.pn-rows { display: flex; flex-direction: column; gap: 5px; }
+.pn-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 11.5px;
+  min-width: 0;
+}
+.pn-key { flex: 0 0 74px; color: var(--muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.8px; }
+.pn-val { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pn-val.dim { color: var(--dim); }
+.pn-val.bad { color: var(--rose-fg); font-weight: 700; }
+.pn-val.warn { color: var(--pill-orange-fg); }
+.pn-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
+
+.pn-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 1px; }
+.pn-tag {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--stroke);
+  background: var(--glass-strong);
+  color: var(--dim);
+}
+.pn-tag.bad { color: var(--rose-fg); border-color: rgba(255, 84, 112, 0.5); background: rgba(255, 84, 112, 0.12); }
+.pn-tag.warn { color: var(--pill-orange-fg); border-color: rgba(255, 119, 19, 0.45); background: rgba(255, 119, 19, 0.12); }
+.pn-tag.info { color: var(--pill-teal-fg); border-color: rgba(9, 181, 183, 0.45); background: rgba(9, 181, 183, 0.1); }
+
+/* margin-top:auto pins the footer to the card's bottom, so the path+button row
+   lines up across a row of cards whose bodies differ in height (a 2-line
+   message vs a 1-line one used to leave the buttons at random heights) */
+/* wrap, don't overflow: a card with all four actions is wider than a 330px
+   column, and without this the last button spilled over the neighbouring
+   card's text instead of dropping to a second line */
+.pn-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: auto;
+  padding-top: 9px;
+  border-top: 1px solid var(--stroke);
+}
+.pn-foot .btn { flex: 0 0 auto; white-space: nowrap; padding: 5px 9px; }
+.pn-foot .spacer { display: none; }  /* pushing right just forced the overflow */
+.pn-card { min-height: 100%; }
+
+/* the one action that writes — coloured like the problem it clears, so it
+   reads as "resolve this warning", not as a neutral extra button */
+.pn-fix {
+  border-color: rgba(255, 84, 112, 0.55);
+  background: rgba(255, 84, 112, 0.14);
+  color: var(--rose-fg);
+}
+.pn-path {
+  flex: 1 1 auto;
+  font-size: 10px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;      /* keep the tail (the project folder) visible, not the drive letter */
+  text-align: left;
+}

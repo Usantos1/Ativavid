@@ -171,7 +171,7 @@ export const SimpleCaptions: React.FC<{variant: string}> = ({variant}) => {
           fontSize: V.size,
           letterSpacing: V.tracking,
           lineHeight: 1.18,
-          color: OFFWHITE,
+          color: C.accent ?? OFFWHITE,
           whiteSpace: 'pre',
           // scaleY only squats the glyphs — the line grouping is measured on
           // WIDTH, so unlike the horizontal squeeze this changes no line breaks

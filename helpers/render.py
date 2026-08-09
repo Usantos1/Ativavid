@@ -22,6 +22,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import atexit
 import json
 import math
 import os
@@ -65,6 +66,68 @@ def run(cmd: list[str], quiet: bool = False) -> None:
     if not quiet:
         print(f"  $ {' '.join(str(c) for c in cmd[:6])}{' …' if len(cmd) > 6 else ''}")
     subprocess.run(cmd, check=True)
+
+
+# -------- Duplicate-invocation guard -----------------------------------------
+#
+# Two agent sessions (or one session retrying after what LOOKS like a hang, but
+# is actually just a slow render) can end up launching render.py on the SAME
+# EDL/output pair at once. Nothing downstream notices: both invocations extract
+# the same segments into the same clips_graded/ dir, both write the same
+# base.mp4, and whichever finishes last silently "wins" — burning CPU/IO for
+# the one that lost while looking to a human like the render is just slow.
+# A pidfile next to the requested output makes the second invocation bail
+# immediately with a clear reason instead of racing the first.
+
+
+def _pid_alive(pid: int) -> bool:
+    """True if a process with this PID is currently running (Windows + POSIX)."""
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        import ctypes
+
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        handle = ctypes.windll.kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        if not handle:
+            return False
+        ctypes.windll.kernel32.CloseHandle(handle)
+        return True
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # exists, just not ours to signal
+    return True
+
+
+def acquire_render_lock(out_path: Path) -> None:
+    """Claim `<out_path>.lock`, or exit with a clear message if another live
+    render.py already owns this output. A stale lock (dead PID) is reclaimed
+    automatically; the lock is released on interpreter exit either way."""
+    lock_path = out_path.with_name(out_path.name + ".lock")
+    if lock_path.exists():
+        try:
+            old_pid = int(lock_path.read_text().strip())
+        except (OSError, ValueError):
+            old_pid = None
+        if old_pid and old_pid != os.getpid() and _pid_alive(old_pid):
+            sys.exit(
+                f"render.py já está rodando para {out_path.name} (pid {old_pid}) — "
+                "recusando iniciar um segundo render duplicado. Se esse processo "
+                f"já morreu sem limpar o lock, apague {lock_path} e rode de novo."
+            )
+    lock_path.write_text(str(os.getpid()))
+
+    def _release() -> None:
+        try:
+            if lock_path.exists() and lock_path.read_text().strip() == str(os.getpid()):
+                lock_path.unlink()
+        except OSError:
+            pass
+
+    atexit.register(_release)
 
 
 def resolve_grade_filter(grade_field: str | None) -> str:
@@ -289,14 +352,23 @@ def extract_segment(
         scale = "scale=-2:1920" if portrait else "scale=1920:-2"
 
     vf_parts: list[str] = []
+    # Downscale FIRST, before any HDR tonemap / wide-gamut colour conversion.
+    # TONEMAP_CHAIN runs a full-precision float pipeline (zscale linear-light +
+    # gbrpf32le, i.e. 32-bit float, full chroma resolution, no subsampling) —
+    # on a 4K portrait HLG source that's ~4x the pixels a 1080p-equivalent
+    # output actually needs, and it dominates extraction time (measured: a
+    # single 56s 4K HLG take split into 3 ranges took 14+ minutes with
+    # tonemap-before-scale). Scaling in the source's native (gamma) domain
+    # first, then tonemapping the already-small frame, is the standard cheap
+    # trade-off — quality delta is invisible at short-form delivery res.
+    if scale:
+        vf_parts.append(scale)
     if is_hdr_source(source):
         vf_parts.append(TONEMAP_CHAIN)
     else:
         wide = wide_gamut_chain(source)
         if wide:
             vf_parts.append(wide)
-    if scale:
-        vf_parts.append(scale)
     if grade_filter:
         # Force 8-bit BEFORE the grade. `colorlevels` — the backbone of the LOG
         # presets — is broken on 9–14 bit RGB: on a 10-bit source it collapses the
@@ -1135,6 +1207,7 @@ def main() -> None:
     edl = json.loads(edl_path.read_text())
     edit_dir = edl_path.parent
     out_path = args.output.resolve()
+    acquire_render_lock(out_path)
 
     # Frame-align every range BEFORE extraction, and persist it: the EDL, the
     # preview timeline and segments.json must all describe the same cut as the

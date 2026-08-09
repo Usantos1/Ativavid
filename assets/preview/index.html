@@ -3,8 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Edvid — Preview</title>
-<link rel="icon" href="/assets/edvid-logo.png">
+<title>ATIVAVID — Preview</title>
+<!-- applied before app.css parses, so the right palette wins on first paint —
+     no dark→light flash on a saved light preference -->
+<script>
+  (function () {
+    var t = localStorage.getItem('ativavid-theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+<link rel="icon" href="/assets/ativa-vid-logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Poppins italic 900 + Playfair italic 900 are NOT decoration here: the caption
@@ -16,12 +24,17 @@
 <body>
 
 <header class="glass">
-  <div class="logo-chip"><img src="/assets/edvid-logo-white.png" alt="Edvid"></div>
+  <div class="logo-chip"><img src="/assets/ativa-vid-logo.png" alt="ATIVAVID"></div>
   <div class="head-info">
     <div id="projectName" class="project-name">—</div>
     <div id="stateMessage" class="state-message"></div>
   </div>
   <div class="head-actions">
+    <button id="btnOpenFolder" class="btn ghost" title="Abrir pasta do arquivo exportado">
+      <span id="openFolderIcon"></span> Abrir pasta
+    </button>
+    <a id="btnPainel" class="btn ghost" href="/painel" title="Ver todos os projetos">Painel</a>
+    <button id="btnTheme" class="btn ghost icon" title="Alternar tema claro/escuro"></button>
     <span id="dirtyPill" class="pill hidden"><b id="dirtyCount">0</b> ajuste(s) não salvo(s)</span>
     <span id="savedPill" class="pill saved hidden">✓ salvo — peça ao Claude para aplicar</span>
     <button id="btnDiscard" class="btn ghost hidden">Descartar</button>
@@ -30,11 +43,11 @@
 </header>
 
 <nav id="tabs" class="tabs">
-  <button class="tab active" data-tab="1"><span class="tab-num">FASE 1</span> Corte</button>
+  <button class="tab active" data-tab="1"><span class="tab-num">Início</span> Corte</button>
   <!-- the gate lives BETWEEN the phases and stays reachable: changing the style
        after Fase 2 exists is a normal thing to want, not a one-shot decision -->
-  <button class="tab" data-tab="style">Estilo</button>
-  <button class="tab" data-tab="2"><span class="tab-num">FASE 2</span> Visual</button>
+  <button class="tab" data-tab="style"><span class="tab-num">Estilo</span> Legenda</button>
+  <button class="tab" data-tab="2"><span class="tab-num">Final</span> Visual</button>
 </nav>
 
 <main>
@@ -59,36 +72,93 @@
         <div id="optEdit" class="opt-grid"></div>
       </div>
 
-      <!-- Ahead of the text styles: the accent is what they paint with, so it is
-           set first and both preview groups below react to it. -->
-      <div class="setup-group">
-        <div class="group-head">
-          <span class="group-title">Cor de destaque</span>
-          <span class="group-note" id="accentNote"></span>
+      <!-- Stacked in one column on purpose: ênfase is the headline accent's
+           sibling (both paint the "one marked thing" per style), so it sits
+           directly under Cor de destaque instead of floating in its own row
+           wherever the grid's auto-flow happened to land it. -->
+      <div class="setup-col">
+        <!-- Ahead of the headline styles: the accent is what they paint with,
+             so it is set first and the headline preview group below reacts
+             to it. -->
+        <div class="setup-group">
+          <div class="group-head">
+            <span class="group-title">Cor da headline</span>
+            <span class="group-note" id="accentNote"></span>
+          </div>
+          <div id="optAccent" class="swatches"></div>
         </div>
-        <div id="optAccent" class="swatches"></div>
+
+        <!-- The ONE accented element per style, distinct from the base legenda
+             colour in the column beside this one: stacked's serif line,
+             scatter's highlighted word. Karaoke and the static styles have no
+             separate emphasis concept, so this note says so instead of doing
+             nothing silently. -->
+        <div class="setup-group">
+          <div class="group-head">
+            <span class="group-title">Cor de ênfase</span>
+            <span class="group-note" id="emphasisAccentNote"></span>
+          </div>
+          <div id="optEmphasisAccent" class="swatches"></div>
+        </div>
       </div>
 
-      <div class="setup-group">
+      <!-- Same pairing logic: círculo is stacked-only, same as the legenda
+           colour beside it is the base text of the SAME styles. -->
+      <div class="setup-col">
+        <!-- Independent from the headline's accent above — a project can want
+             a red headline marker and white karaoke text, or the same colour
+             on both. This is the BASE text colour: karaoke's whole line, and
+             the three static styles. Stacked/scatter's body text is
+             deliberately not tied to this — see ênfase in the column beside
+             this one. -->
+        <div class="setup-group">
+          <div class="group-head">
+            <span class="group-title">Cor da legenda</span>
+            <span class="group-note" id="captionAccentNote"></span>
+          </div>
+          <div id="optCaptionAccent" class="swatches"></div>
+        </div>
+
+        <!-- Stacked-only: the hand-drawn pencil circle around a solo emphasis
+             word. A third, independent pick — a project can circle in green
+             while the serif line beside this reads red. No live demo here
+             (the mockup does not animate the SVG scratch); the pick still
+             saves and reaches Fase 2 like the other two. -->
+        <div class="setup-group">
+          <div class="group-head">
+            <span class="group-title">Cor do círculo riscado</span>
+            <span class="group-note" id="circleAccentNote"></span>
+          </div>
+          <div id="optCircleAccent" class="swatches"></div>
+        </div>
+      </div>
+
+      <div class="setup-group setup-group--wide">
         <div class="group-head"><span class="group-title">Estilo de headline</span></div>
         <div id="optHeadline" class="opt-grid"></div>
       </div>
 
-      <div class="setup-group">
+      <div class="setup-group setup-group--wide">
         <div class="group-head"><span class="group-title">Estilo de legenda</span></div>
         <div id="optCaptions" class="opt-grid"></div>
       </div>
 
-      <div class="setup-group">
+      <div class="setup-group setup-group--wide">
         <div class="group-head"><span class="group-title">Elementos da edição</span></div>
         <div id="optElements" class="check-row"></div>
       </div>
 
-      <div class="setup-actions">
-        <textarea id="setupNote" rows="1" placeholder="Observações para a Fase 2 (opcional)"></textarea>
-        <button id="setupGo" class="btn primary">Confirmar e iniciar a Fase 2</button>
+      <div class="setup-footer">
+        <div class="setup-actions">
+          <textarea id="setupNote" rows="1" placeholder="Observações para a Fase 2 (opcional)"></textarea>
+          <button id="setupSaveDefault" class="btn ghost" title="Todo projeto novo abre com essas escolhas — não muda o projeto atual, só o padrão">Salvar como padrão</button>
+          <button id="setupGo" class="btn primary">Confirmar e iniciar a Fase 2</button>
+        </div>
+        <div class="setup-summary-row">
+          <span class="group-title">Resumo</span>
+          <span id="setupSummary" class="setup-summary"></span>
+        </div>
       </div>
-      <span id="setupSummary" class="setup-summary"></span>
     </div>
   </section>
 
@@ -109,7 +179,12 @@
       <button id="btnMark" class="btn mark" title="Marcar IN / OUT (tecla M)">
         <span id="markIcon"></span><span id="markText">IN</span>
       </button>
+      <button id="btnUndo" class="btn icon" title="Desfazer (Ctrl+Z)" disabled></button>
+      <button id="btnRedo" class="btn icon" title="Refazer (Ctrl+Shift+Z)" disabled></button>
+      <button id="btnSplit" class="btn icon" title="Cortar o take selecionado na agulha (tecla S)"></button>
+      <button id="btnImage" class="btn icon" title="Buscar e inserir uma imagem na agulha"></button>
       <div class="spacer"></div>
+      <span class="transport-divider"></span>
       <span class="dim small">zoom</span>
       <input id="zoom" type="range" min="0" max="100" value="0" title="Zoom da timeline (centrado na agulha)">
       <button id="btnFit" class="btn ghost small" title="Ajustar à janela">fit</button>
@@ -177,6 +252,11 @@
     <li><span><kbd>←</kbd><kbd>→</kbd></span><span>frame a frame · com <kbd>shift</kbd>, 1 segundo</span></li>
     <li><span><kbd>M</kbd></span><span>marca <b>IN</b>, depois <b>OUT</b> — aí escreva o ajuste</span></li>
     <li><span><kbd>delete</kbd></span><span>remove o take selecionado</span></li>
+    <li><span><kbd>S</kbd></span><span>corta o take selecionado na agulha</span></li>
+    <li><span><kbd>alt</kbd><kbd>←</kbd><kbd>→</kbd></span><span>move a borda <b>final</b> do take selecionado, 1 frame por toque</span></li>
+    <li><span><kbd>alt</kbd><kbd>shift</kbd><kbd>←</kbd><kbd>→</kbd></span><span>o mesmo, na borda <b>inicial</b></span></li>
+    <li><span><kbd>ctrl</kbd><kbd>Z</kbd></span><span>desfazer</span></li>
+    <li><span><kbd>ctrl</kbd><kbd>shift</kbd><kbd>Z</kbd></span><span>refazer</span></li>
     <li><span>arrastar</span><span>as <b>bordas</b> de um take ajustam o corte</span></li>
     <li><span>duplo-clique</span><span>num take desfaz o ajuste dele</span></li>
     <li><span>pinça</span><span>zoom no trackpad, onde está o cursor</span></li>
@@ -195,6 +275,22 @@
     <div class="spacer"></div>
     <button id="noteOk" class="btn primary small">salvar marcação</button>
   </div>
+</div>
+
+<!-- Image picker: search Pexels and drop the pick straight onto the insert
+     track, instead of asking the Claude session to fetch it and re-render. -->
+<div id="imgBackdrop" class="help-backdrop hidden"></div>
+<div id="imgModal" class="img-modal glass hidden" role="dialog" aria-label="Buscar imagem">
+  <div class="help-head">
+    <span class="help-title">Buscar imagem</span>
+    <button id="imgClose" class="btn ghost small" title="Fechar">✕</button>
+  </div>
+  <div class="img-search-row">
+    <input id="imgQuery" type="text" placeholder="ex.: celular capinha, loja, mãos digitando">
+    <button id="imgGo" class="btn primary small">Buscar</button>
+  </div>
+  <div id="imgResults" class="img-results"></div>
+  <span id="imgHint" class="img-hint">A imagem escolhida entra na trilha de inserts, na posição da agulha.</span>
 </div>
 
 <div id="tooltip" class="tooltip hidden"></div>

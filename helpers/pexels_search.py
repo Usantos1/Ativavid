@@ -1,6 +1,6 @@
 """Search Pexels and download images into a Remotion project's public/ folder.
 
-PHASE 2 helper. Needs PEXELS_API_KEY (env or .env at the edvid repo root).
+PHASE 2 helper. Needs PEXELS_API_KEY (env or .env at the ativa-vid repo root).
 Get a free key at https://www.pexels.com/api/.
 
 Prints each downloaded file's local path and photographer credit (keep the

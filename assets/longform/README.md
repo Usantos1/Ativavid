@@ -26,7 +26,7 @@ Copy `cut.mp4` into `public/`, then write `public/edit-data.json`.
     {"kind": "video", "src": "broll/y.mp4", "start": 40, "dur": 6}
   ],
   "lowerThirds": [                     // name/title card, bottom-left
-    {"name": "Fill Rocha", "title": "Criador · Edvid", "start": 6, "dur": 4}
+    {"name": "Fill Rocha", "title": "Criador · ATIVAVID", "start": 6, "dur": 4}
   ],
   "chapters": [                        // title card at each chapter start
     {"title": "O que é isso", "start": 14, "dur": 2.4}

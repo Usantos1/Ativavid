@@ -1,5 +1,5 @@
 [project]
-name = "edvid"
+name = "ativa-vid"
 version = "0.1.0"
 description = "Conversation-driven video editor skill for Claude Code"
 license = { file = "LICENSE" }

@@ -1,6 +1,6 @@
 """Survey a video visually — scene-aware frames, deduped, tiled into contact sheets.
 
-Ports the /watch skill's frame-selection engine into edvid. contact_sheet.py
+Ports the /watch skill's frame-selection engine into ATIVAVID. contact_sheet.py
 answers "show me these N timestamps" (you must already know where to look);
 this answers "what is IN this footage?": ffmpeg scene-change detection picks
 the distinct moments, a perceptual dedup pass collapses near-identical frames
@@ -120,7 +120,7 @@ def extract_scene(video: Path, out_dir: Path, width: int,
           f"{_scale(width)},showinfo")
     cmd = ["ffmpeg", "-hide_banner", "-loglevel", "info", "-y",
            *_range_args(start, end),
-           "-i", str(video), "-vf", vf, "-vsync", "vfr", "-q:v", "4",
+           "-i", str(video), "-vf", vf, "-fps_mode", "vfr", "-q:v", "4",
            str(out_dir / "frame_%04d.jpg")]
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0:
@@ -134,7 +134,7 @@ def extract_keyframes(video: Path, out_dir: Path, width: int,
     cmd = ["ffmpeg", "-hide_banner", "-loglevel", "info", "-y",
            *_range_args(start, end),
            "-skip_frame", "nokey", "-i", str(video),
-           "-vf", f"{_scale(width)},showinfo", "-vsync", "vfr", "-q:v", "4",
+           "-vf", f"{_scale(width)},showinfo", "-fps_mode", "vfr", "-q:v", "4",
            str(out_dir / "frame_%04d.jpg")]
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0:
