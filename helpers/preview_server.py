@@ -589,9 +589,10 @@ class Handler(BaseHTTPRequestHandler):
         implementation of the same look, and it would drift from the template
         the first time a style changes.
 
-        Also writes capa_feed.jpg — the 1:1 centre crop, which is what the
-        Instagram grid shows. A cover that reads fine at 9:16 and loses the
-        headline in the square is the failure worth catching before posting.
+        One file, 9:16 (story format), and nothing else. Instagram takes a
+        single cover — the Reels tab and the profile grid show the same image,
+        with no separate feed cover to upload — so cropped variants were an
+        asset nobody could use.
         """
         try:
             length = int(self.headers.get("Content-Length", "0"))
@@ -618,8 +619,13 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"ok": False, "error": "sem vídeo para tirar a capa"}, 404)
             return
 
-        out = self.root / "capa.jpg"
-        feed = self.root / "capa_feed.jpg"
+        # everything you take to Instagram lands in ONE folder. The edit dir
+        # holds ~15 working artifacts (cut.mp4, clips_graded/, remotion/,
+        # transcripts/…) and hunting the two covers out of it at posting time
+        # is the kind of friction that gets a step skipped.
+        post = self.root / "post"
+        post.mkdir(exist_ok=True)
+        out = post / "capa.jpg"
         # -ss before -i seeks by keyframe and is fast, but lands on the wrong
         # frame; the cover has to be the frame the user is actually looking at,
         # so seek after -i (accurate) and accept the extra decode.
@@ -631,20 +637,7 @@ class Handler(BaseHTTPRequestHandler):
         if r.returncode != 0 or not out.exists():
             self._json({"ok": False, "error": (r.stderr or "ffmpeg falhou")[:200]}, 500)
             return
-        # Top-aligned square, not centred. The template puts the headline high
-        # in the frame (HL_STYLES top ≈ 300 of 1920), so a centred 1:1 crop
-        # starts below it and reliably beheads the first line — measured on a
-        # real cover, "Girou na roleta / e caiu na pior" lost its first line
-        # entirely. Anchoring at y=0 keeps the headline plus the subject's
-        # upper body, which is also what a person drags to by hand in the app.
-        subprocess.run(
-            ["ffmpeg", "-y", "-v", "error", "-i", str(out),
-             "-vf", "crop=w='min(iw,ih)':h='min(iw,ih)':x='(iw-ow)/2':y=0",
-             "-q:v", "2", str(feed)],
-            capture_output=True, text=True,
-        )
-        self._json({"ok": True, "cover": out.name,
-                    "feed": feed.name if feed.exists() else None,
+        self._json({"ok": True, "cover": f"post/{out.name}",
                     "timeSec": round(t, 3)})
 
     def _save_default_style(self) -> None:

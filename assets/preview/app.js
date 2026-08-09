@@ -897,6 +897,38 @@ function nudgeTakeEdge(i, side, dir) {
         `(${frames >= 0 ? '+' : ''}${frames}f)`, 1100);
 }
 
+/* ---------- the post's caption, shown next to the edit it belongs to -------
+ * Read-only here: the text is written to <edit>/post/legenda.txt (see
+ * post_brief.py) and this just surfaces it where the video is, so publishing
+ * does not mean going to hunt for a file. Placeholder text written by the
+ * helper counts as "not written yet" — otherwise the panel would proudly
+ * display its own stub.
+ */
+const LEGENDA_STUB = '(a legenda do post entra aqui';
+
+async function loadPostCaption() {
+  const panel = $('postPanel');
+  panel.classList.toggle('hidden', S.tab !== 2);
+  if (S.tab !== 2) return;
+  let txt = '';
+  try {
+    const r = await fetch(`/media/post/legenda.txt?v=${Date.now()}`, {cache: 'no-store'});
+    if (r.ok) txt = (await r.text()).trim();
+  } catch (e) { /* not written yet */ }
+
+  const box = $('postText');
+  const written = txt && !txt.startsWith(LEGENDA_STUB);
+  box.classList.toggle('empty', !written);
+  box.textContent = written
+    ? txt
+    : 'Ainda não escrita. Peça a legenda ao Claude — ela é salva em post/legenda.txt e aparece aqui.';
+  $('postCopy').disabled = !written;
+  const tags = written ? (txt.match(/#[\wÀ-ÿ]+/g) || []).length : 0;
+  $('postHint').textContent = written
+    ? `${txt.length} caracteres · ${tags} hashtag${tags === 1 ? '' : 's'}`
+    : '';
+}
+
 /* ---------- capa: freeze the current frame as the post's cover ----------
  * The frame comes straight out of the delivered render, so whatever headline
  * and accent are burned into it ARE the cover's — no second implementation of
@@ -915,7 +947,7 @@ async function saveCover() {
     });
     const d = await r.json();
     if (!d.ok) { toast(d.error || 'Não consegui salvar a capa', 3500); return; }
-    toast(`✓ Capa salva em ${d.cover}${d.feed ? ` (+ ${d.feed}, corte 1:1 do feed)` : ''}`, 4500);
+    toast(`✓ Capa salva em ${d.cover}`, 4000);
   } catch (e) {
     toast('Não consegui salvar a capa — servidor fora do ar?', 3500);
   }
@@ -1212,6 +1244,7 @@ async function applyState(data) {
   renderAll();
   renderSetup();
   refreshHeader();
+  loadPostCaption(); // picks up a caption written between polls
 }
 
 // Fase 1 plays the clean cut; Fase 2 plays the Phase-2 render (state.finalVideo)
@@ -2497,6 +2530,13 @@ $('btnSplit').addEventListener('click', splitAtPlayhead);
 $('btnCover').innerHTML = ICON.cover;
 $('btnCover').addEventListener('click', saveCover);
 
+$('postCopy').addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText($('postText').textContent);
+    toast('Legenda copiada — cole no Instagram');
+  } catch (e) { toast('Não consegui copiar'); }
+});
+
 // ---------- image picker ----------
 // Search is server-side (the key never reaches the browser) and nothing is
 // downloaded until a pick — a search that returns 12 thumbs shouldn't write
@@ -2661,6 +2701,7 @@ function goToTab(tab) {
   updateVideoSrc(); // Fase 2 plays the Phase-2 render when available
   renderAll();
   renderSetup();
+  loadPostCaption();
 }
 document.querySelectorAll('.tab').forEach((tab) => tab.addEventListener('click', () => goToTab(tab)));
 // back/forward, or a link straight to someone's /estilo

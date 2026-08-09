@@ -235,6 +235,21 @@
       <div id="needle" class="needle"><div class="needle-head"></div></div>
       </div>
     </section>
+
+    <!-- The post's caption, under the tracks: it belongs to the same delivery
+         as the cover, and having to open a text file to copy it was the step
+         that got skipped. Sits OUTSIDE the timeline panel on purpose — that
+         panel scrolls horizontally with the zoom, and text does not belong on
+         a scrolling ruler. -->
+    <section id="postPanel" class="post-panel glass hidden">
+      <div class="post-head">
+        <span class="group-title">Legenda do post</span>
+        <span id="postHint" class="post-hint"></span>
+        <div class="spacer"></div>
+        <button id="postCopy" class="btn ghost small">copiar</button>
+      </div>
+      <div id="postText" class="post-text"></div>
+    </section>
   </div>
   </div>
 

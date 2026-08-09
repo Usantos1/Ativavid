@@ -58,6 +58,11 @@ are identical and cached — reuse an approved `edl.json`; skip `cut.mp4`/previe
     ├── verify/                  ← montages / flagged-boundary views
     ├── captions.srt + chapters.txt   ← longform deliverables
     ├── final.mp4                ← delivered render (Phase 2 + 3, loudnorm'd)
+    ├── post/                    ← EVERYTHING the post needs, in one place
+    │   ├── capa.jpg             ← cover, 9:16 story format (tecla C na aba Final)
+    │   ├── post_brief.md        ← material for writing the caption (post_brief.py)
+    │   └── legenda.txt          ← the caption text — WRITE IT HERE; the Final
+    │                              tab shows it under the tracks with a copy button
     └── remotion/                ← Remotion project (Phase 2 + 3)
         ├── public/              ← cut.mp4, edit-data.json (THE edit), captions.json,
         │                          track.json, segments.json, pexels/ web/ brand/, sfx/, trilha.mp3
@@ -185,15 +190,28 @@ redo everything above, up to the last save. On the Final tab the **image button*
 searches Pexels and drops the pick onto the insert track (`editData.newInserts`),
 and **clicking a caption chip** retypes that line (`captionFixes`).
 
+**Tudo do post fica em `<edit>/post/`** — `capa.jpg`, `capa_feed.jpg`,
+`post_brief.md` e `legenda.txt`. Uma pasta so, porque o `<edit>` tem ~15
+artefatos de trabalho (cut.mp4, clips_graded/, remotion/, transcripts/) e
+cacar os arquivos do post no meio deles na hora de publicar e a friccao que
+faz um passo ser pulado. **Escreva a legenda final em `post/legenda.txt`** —
+`post_brief.py` cria o arquivo vazio justamente pra ela ter um lugar obvio;
+texto que so existe no chat nao esta onde alguem procura na hora de postar.
+
 **Capa do post** — on the Final tab, `C` (or the frame button) freezes the
-current frame of the DELIVERED render as `capa.jpg`, plus `capa_feed.jpg`, the
-1:1 crop the Instagram grid shows. The frame is taken from `final.mp4` rather
-than composed server-side on purpose: it already carries the real headline,
-font and accent, so there is no second implementation of the look to drift from
-the template. The square is anchored to the TOP, not centred — the template
-puts the headline around y≈300 of 1920, so a centred crop starts below it and
-beheads the first line (measured: a two-line headline lost its first line
-entirely before this was changed).
+current frame of the DELIVERED render as `post/capa.jpg` — 9:16, story
+format, and nothing else. Instagram takes ONE cover: the Reels tab and the
+profile grid show the same image, with no separate feed cover to upload, so
+cropped variants were an asset nobody could use. The frame is taken from
+`final.mp4` rather than composed server-side on purpose: it already carries the
+real headline, font and accent, so there is no second implementation of the look
+to drift from the template.
+
+**A legenda aparece no editor** — na aba Final, abaixo das faixas, com contagem
+de caracteres e de hashtags e um botão copiar. Ela é lida de
+`post/legenda.txt`: abrir um editor de texto só pra copiar era o passo que
+ficava pra trás, então ela fica ao lado do vídeo a que pertence. O painel é só
+leitura — quem escreve o texto é você, no arquivo.
 
 **`/painel`** (linked from the header) lists every sibling project — phase,
 delivery, whether that delivery still opens, and which projects have a saved

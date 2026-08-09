@@ -1375,6 +1375,42 @@ kbd {
 .setup-summary-row .group-title { flex: 0 0 auto; }
 .setup-summary { font-size: 12px; font-weight: 500; color: var(--text); opacity: 0.8; line-height: 1.5; }
 
+/* ---------- post caption panel (under the tracks) ---------- */
+/* Capped low on purpose: this sits under the tracks and every pixel it takes
+   comes straight out of the timeline. At 30vh it pushed A1/A2 out of view —
+   the caption scrolls inside itself instead. */
+.post-panel {
+  flex: 0 0 auto;
+  padding: 9px 14px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 19vh;
+  min-height: 0;
+}
+.post-head { display: flex; align-items: baseline; gap: 10px; }
+.post-head .spacer { flex: 1; }
+.post-hint { font-size: 10.5px; color: var(--muted); }
+.post-text {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text);
+  white-space: pre-wrap;   /* the caption's own line breaks ARE the formatting */
+  overflow-y: auto;
+  user-select: text;       /* the whole point is taking this text elsewhere */
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb-track) transparent;
+}
+.post-text.empty { color: var(--dim); font-style: italic; }
+.post-text::-webkit-scrollbar { width: 8px; }
+.post-text::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
 /* ---------- help (was the footer hint strip) ---------- */
 .help-fab {
   position: fixed;
