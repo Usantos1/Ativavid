@@ -61,6 +61,7 @@ the Estilo tab at the end of Fase 1; every key maps to something here:
 | `elements.zoomCuts` | the hard zoom change ON each cut (~1.10–1.22, cycles) |
 | `elements.flashCut` | `transitions[]` in edit-data.json — see "Flash na transição" |
 | `elements.musicAI` | Phase 3 via `elevenlabs_music.py`; OFF → deliver with voice only |
+| `elements.endCard` | `endCard` in edit-data.json — brand sign-off over the last ~2.5s. ASK for the handle/CTA copy, do not invent it |
 | `note` | free text — read it, it overrides the defaults above |
 
 An unchecked box is an explicit NO, not a silence. Copy the picks into

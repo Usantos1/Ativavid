@@ -200,6 +200,15 @@ const STYLE_CATALOG = {
       def: true,
       icon: '<svg viewBox="0 0 16 16"><path d="M12.6 1.6L6.9 3a.7.7 0 00-.55.68v5.6a2 2 0 101.35 1.9V5.9l4.4-1.05v2.9a2 2 0 101.35 1.9V2.3a.7.7 0 00-.85-.7z"/><path d="M2.4 2.2l.6 1.5 1.5.6-1.5.6-.6 1.5-.6-1.5-1.5-.6 1.5-.6z"/></svg>',
     },
+    {
+      // OFF by default: a sign-off is right for a brand's own feed and wrong
+      // for a one-off, so it should be a decision rather than something that
+      // quietly appears on every video.
+      id: 'endCard',
+      name: 'Card final da marca',
+      def: false,
+      icon: '<svg viewBox="0 0 16 16"><rect x="1.4" y="3" width="13.2" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="4.4" y="6.2" width="7.2" height="1.7" rx=".85"/><rect x="5.9" y="9.2" width="4.2" height="1.4" rx=".7" opacity=".6"/></svg>',
+    },
   ],
 };
 

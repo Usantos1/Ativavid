@@ -112,6 +112,22 @@ export type EditData = {
   inserts: Insert[];
   behind: Behind[];
   soundtrack: {enabled: boolean; file: string; volume: number};
+  // Brand sign-off over the last seconds. Optional: omit the key entirely and
+  // nothing renders, so every project that predates this keeps working.
+  endCard?: {
+    enabled: boolean;
+    // How long it holds, counted back from the END of the video. Expressed as
+    // a duration rather than a start time on purpose: the cut's length changes
+    // every time a take is trimmed, and a hardcoded startSec silently drifts
+    // off the end. Default 2.5s.
+    lastSec?: number;
+    lines?: string[];        // e.g. ["@primecamp", "link na bio"]
+    logo?: string | null;    // staticFile path, drawn above the lines
+    accent?: string;         // first line's colour (default: hook.accent)
+    // How much of the video shows through behind it. 1 = solid black card,
+    // 0 = text straight over the footage. Default 0.82.
+    dim?: number;
+  };
 };
 
 const D = editData as unknown as EditData;
@@ -424,6 +440,80 @@ const Soundtrack: React.FC = () => {
   );
 };
 
+// ============ END CARD (brand sign-off over the last seconds) =================
+// Anchored to the END of the composition, not to a start time: the cut's length
+// moves every time a take is trimmed, and a hardcoded start would drift off the
+// tail. It dims rather than cuts to black so the last frames of the video still
+// play underneath — a hard cut to a static card reads as "the video stopped",
+// which is exactly when people swipe.
+const EndCardInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
+  const frame = useCurrentFrame();
+  const {fps, width} = useVideoConfig();
+  const E = D.endCard!;
+  const lines = (E.lines || []).filter(Boolean);
+  const dim = E.dim ?? 0.82;
+  const accent = E.accent || D.hook.accent || '#ff5200';
+
+  const fadeF = Math.min(Math.round(0.35 * fps), Math.floor(totalFrames / 2));
+  const inK = clamp01(frame / Math.max(1, fadeF));
+  // no fade-out: the card is the last thing on screen, and fading it before
+  // the final frame just gives the viewer an empty beat to swipe on
+  const eased = Easing.out(Easing.cubic)(inK);
+  const rise = interpolate(eased, [0, 1], [26, 0]);
+
+  const size = Math.round(width * 0.072);
+
+  return (
+    <AbsoluteFill style={{justifyContent: 'center', alignItems: 'center'}}>
+      <AbsoluteFill style={{backgroundColor: '#000', opacity: dim * eased}} />
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: Math.round(size * 0.34),
+          opacity: eased,
+          transform: `translateY(${rise}px)`,
+        }}
+      >
+        {E.logo ? (
+          <Img
+            src={staticFile(E.logo)}
+            style={{width: Math.round(width * 0.44), objectFit: 'contain'}}
+          />
+        ) : null}
+        {lines.map((t, i) => (
+          <div
+            key={i}
+            style={{
+              fontFamily,
+              fontWeight: i === 0 ? 900 : 600,
+              fontSize: i === 0 ? size : Math.round(size * 0.62),
+              letterSpacing: '-1px',
+              color: i === 0 ? accent : '#fff',
+              textAlign: 'center',
+              textShadow: '0 4px 24px rgba(0,0,0,.6)',
+            }}
+          >
+            {t}
+          </div>
+        ))}
+      </div>
+    </AbsoluteFill>
+  );
+};
+
+const EndCard: React.FC = () => {
+  const {fps, durationInFrames} = useVideoConfig();
+  const hold = Math.round((D.endCard?.lastSec ?? 2.5) * fps);
+  const dur = clamp(hold, 1, durationInFrames);
+  return (
+    <Sequence from={durationInFrames - dur} durationInFrames={dur} layout="none">
+      <EndCardInner totalFrames={dur} />
+    </Sequence>
+  );
+};
+
 // ============ VISUAL HOOK (static headline in the first ~4s — always on) =======
 // Copy comes from edit-data.json `hook.lines` — written like a copywriting/
 // virality specialist from the cut transcript (curiosity gap · high stakes ·
@@ -629,6 +719,8 @@ export const Main: React.FC = () => {
               ? <SimpleCaptions variant={D.captions.style as string} />
               : <Karaoke />
         : null}
+      {/* last: the sign-off covers the captions too, not just the footage */}
+      {D.endCard?.enabled ? <EndCard /> : null}
     </AbsoluteFill>
   );
 };

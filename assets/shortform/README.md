@@ -104,10 +104,27 @@ Then copy `cut.mp4` into `public/` and generate the data files below.
   "splitInserts": [                  // STYLE "tela dividida" — see below
     {"src": "brand/logo.jpg", "start": 11.64, "end": 14.73, "fit": "cover", "bandH": 750}
   ],
-  "soundtrack": {"enabled": false, "file": "trilha.mp3", "volume": 0.12}
+  "soundtrack": {"enabled": false, "file": "trilha.mp3", "volume": 0.12},
   // Phase 3 flips soundtrack.enabled to true once trilha.mp3 exists
+
+  // OPTIONAL brand sign-off over the last seconds. Omit the whole key and
+  // nothing renders — every project made before this keeps working untouched.
+  "endCard": {
+    "enabled": true,
+    "lastSec": 2.5,            // held from the END of the video, not a start
+                               // time: the cut's length changes on every trim,
+                               // so a fixed start silently drifts off the tail
+    "lines": ["@primecamp", "capinha nova? chama no direct"],
+    "logo": null,              // staticFile path, drawn above the lines
+    "accent": "#ff0000",       // first line's colour (default: hook.accent)
+    "dim": 0.82                // how much video shows through; 1 = solid black
+  }
 }
 ```
+
+The end card **dims rather than cuts to black**, so the last frames still play
+underneath. A hard cut to a static card reads as "the video ended", which is
+precisely the moment people swipe away — the point of a sign-off is to be seen.
 
 ## The style (locked defaults encoded in src/)
 
