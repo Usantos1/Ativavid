@@ -463,7 +463,24 @@ const EndCardInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
   const eased = Easing.out(Easing.cubic)(inK);
   const rise = interpolate(eased, [0, 1], [26, 0]);
 
-  const size = Math.round(width * 0.072);
+  // FIT to a safe width, never a fixed size. Shipped with a fixed 0.072*width
+  // and it bled off both edges the first time a real handle went in
+  // ("Segue @lojaprimecamp" at 900 weight is far wider than 1080px). The
+  // headline solved this long ago by measuring; the end card has to as well.
+  const safeW = width * 0.84;          // ~8% breathing room each side
+  const base = Math.round(width * 0.072);
+  const weightOf = (i: number) => (i === 0 ? 900 : 600);
+  const scaleOf = (i: number) => (i === 0 ? 1 : 0.62);
+  const widthAt = (t: string, px: number, w: number) =>
+    t ? measureText({text: t, fontFamily, fontSize: px, fontWeight: w, letterSpacing: '-1px'}).width : 0;
+  // one shrink factor for the whole block, so the lines keep their relative
+  // sizes instead of the longest one collapsing on its own
+  let fit = 1;
+  lines.forEach((t, i) => {
+    const w = widthAt(t, base * scaleOf(i), weightOf(i));
+    if (w > safeW) fit = Math.min(fit, safeW / w);
+  });
+  const size = Math.max(28, Math.round(base * fit));
 
   return (
     <AbsoluteFill style={{justifyContent: 'center', alignItems: 'center'}}>
@@ -494,6 +511,11 @@ const EndCardInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
               letterSpacing: '-1px',
               color: i === 0 ? accent : '#fff',
               textAlign: 'center',
+              // belt and braces on top of the measured fit: if a face ever
+              // measures differently than it renders, this wraps instead of
+              // bleeding off frame — a wrapped CTA is readable, a clipped one
+              // is the bug that was just reported.
+              maxWidth: safeW,
               textShadow: '0 4px 24px rgba(0,0,0,.6)',
             }}
           >
