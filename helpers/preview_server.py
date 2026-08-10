@@ -48,6 +48,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -248,15 +249,76 @@ def running_ativavid_processes() -> list[str]:
              "Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | "
              "Where-Object { $_.CommandLine -match 'preview_server|watch_edits' } | "
              "ForEach-Object { $_.CommandLine }"],
-            capture_output=True, text=True, timeout=8,
+            # stdin=DEVNULL is the fix, not decoration: the server usually runs
+            # detached (Start-Process, hidden, handles redirected), and a child
+            # that inherits a dead stdin can come back with stdout None. The
+            # same query run from a normal shell always worked, which is what
+            # made this look like a query bug instead of a handle bug.
+            # encoding/errors are the actual fix. PowerShell emits the project
+            # paths, which here contain "Amanhã", "LUMINÁRIA", "café" — the
+            # default decode raised UnicodeDecodeError inside subprocess's
+            # reader THREAD, which killed the thread and left stdout as None.
+            # That None was the AttributeError that 500'd the whole dashboard,
+            # three layers away from the real cause.
+            capture_output=True, text=True, timeout=8, stdin=subprocess.DEVNULL,
+            encoding="utf-8", errors="replace",
         )
+        # `or ""`: observed None here on Windows when the server itself was
+        # launched detached with redirected handles. Root cause unproven, so
+        # this guards the symptom rather than claiming a fix — and the except
+        # below is deliberately broad for the same reason: "which processes are
+        # attached" is a nice-to-have, and it must never be able to take the
+        # whole dashboard down with it (it did: HTTP 500 on /api/projects).
         if out.returncode == 0:
-            lines = [ln.strip() for ln in out.stdout.splitlines() if ln.strip()]
-    except (OSError, subprocess.SubprocessError):
+            lines = [ln.strip() for ln in (out.stdout or "").splitlines() if ln.strip()]
+    except Exception as e:
+        # Degrade, but not in silence: a broad except that swallows the reason
+        # turns "feature is off" into an unsolvable mystery. Logged once.
+        if not _proc_cache.get("warned"):
+            print(f"[processos] deteccao indisponivel: {type(e).__name__}: {e}",
+                  file=sys.stderr, flush=True)
+            _proc_cache["warned"] = True
         lines = []
     _proc_cache["at"] = now
     _proc_cache["lines"] = lines
     return list(lines)
+
+
+_TEMPLATE_EDITABLE = {"CustomGraphics.tsx"}
+
+
+def template_state(edit: Path) -> str:
+    """'ok' | 'stale' | 'none' — does this project's src/ match the shipped template?
+
+    Same comparison check_template_integrity.py makes, surfaced per project so a
+    whole shelf of projects can be seen at once. It matters because the template
+    is SHARED: improving it (a new caption style, an end card) instantly leaves
+    every already-scaffolded project behind, and the only sign today is a failed
+    integrity check at render time — one project at a time, after the wait.
+
+    CustomGraphics.tsx is excluded: it is the one file a project is meant to own.
+    """
+    src = edit / "remotion" / "src"
+    if not src.is_dir():
+        return "none"
+    for track in ("shortform", "longform"):
+        tsrc = APP_DIR.parent / track / "src"
+        if not tsrc.is_dir():
+            continue
+        shipped = {p.name for p in tsrc.glob("*.ts*")} - _TEMPLATE_EDITABLE
+        local = {p.name for p in src.glob("*.ts*")} - _TEMPLATE_EDITABLE
+        if not shipped or not (shipped & local):
+            continue
+        if shipped - local:            # a file the template has and this project lacks
+            return "stale"
+        for name in shipped:
+            try:
+                if (tsrc / name).read_bytes() != (src / name).read_bytes():
+                    return "stale"
+            except OSError:
+                return "stale"
+        return "ok"
+    return "none"
 
 
 def describe_pending(edit: Path) -> dict | None:
@@ -578,6 +640,26 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"ok": True, "from": before, "finalVideo": resolved})
             return
 
+        if action == "fixTemplate":
+            # Delegates to the existing checker rather than copying files here:
+            # it already owns which files are template-owned and which one
+            # (CustomGraphics.tsx) the project keeps. Two implementations of
+            # that rule would drift.
+            rem = edit / "remotion"
+            if not rem.is_dir():
+                self._json({"ok": False, "error": "projeto sem pasta remotion/"}, 404)
+                return
+            script = Path(__file__).resolve().parent / "check_template_integrity.py"
+            p = subprocess.run([sys.executable, str(script), str(rem), "--fix"],
+                               capture_output=True, text=True)
+            state = template_state(edit)
+            if state != "ok":
+                tail = (p.stderr or p.stdout or "").strip().splitlines()
+                self._json({"ok": False, "error": (tail[-1] if tail else "--fix falhou")[:200]}, 500)
+                return
+            self._json({"ok": True, "template": state})
+            return
+
         self._json({"ok": False, "error": f"ação desconhecida: {action}"}, 400)
 
     def _make_cover(self) -> None:
@@ -730,7 +812,10 @@ class Handler(BaseHTTPRequestHandler):
         """
         rows = []
         seen: set[Path] = set()
-        procs = running_ativavid_processes()
+        try:
+            procs = running_ativavid_processes()
+        except Exception:
+            procs = []   # never let an optional signal 500 the whole page
         for proot in self.projects_roots:
             if not proot.exists():
                 continue
@@ -784,6 +869,7 @@ class Handler(BaseHTTPRequestHandler):
                     "servers": sum(1 for c in mine if "preview_server" in c),
                     "watchers": sum(1 for c in mine if "watch_edits" in c),
                     "pendingDetail": describe_pending(edit),
+                    "template": template_state(edit),
                     "project": state.get("project") or edit.parent.name,
                     "folder": edit.parent.name,
                     "path": str(edit),

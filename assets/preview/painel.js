@@ -44,6 +44,7 @@ function render(data) {
   const stale = list.filter((p) => p.delivery && p.delivery.stalePointer);
   const pending = list.filter((p) => p.pendingEdits || p.pendingStyle);
   const watched = list.filter((p) => p.watchers);
+  const staleTpl = list.filter((p) => p.template === 'stale');
   const box = $('alerts');
   box.innerHTML = '';
   const add = (kind, html) => { el('div', `pn-alert ${kind}`, box).innerHTML = html; };
@@ -67,7 +68,15 @@ function render(data) {
     add('warn', `<b>${idleWatched.length}</b> projeto(s) com watcher armado sem nada pendente — ` +
       `qualquer save ali dispara trabalho automático: ${idleWatched.map((p) => p.folder).join(', ')}`);
   }
-  if (!broken.length && !pending.length && !stale.length && !idleWatched.length && list.length) {
+  // Improving the SHARED template leaves every scaffolded project behind at
+  // once, and until now the only sign was a failed integrity check at render
+  // time — one project, after the wait. This says it up front, for all of them.
+  if (staleTpl.length) {
+    add('warn', `<b>${staleTpl.length}</b> projeto(s) com template desatualizado — ` +
+      `o próximo render acusa violação de integridade até atualizar`);
+  }
+  if (!broken.length && !pending.length && !stale.length && !idleWatched.length
+      && !staleTpl.length && list.length) {
     add('good', 'Nada pendente — todas as entregas abrem e nenhum pedido está esperando.');
   }
 
@@ -134,6 +143,11 @@ function render(data) {
       t.title = `state.json diz "${p.delivery.declared}", mas o arquivo é "${p.delivery.name}"`;
     }
     if (!p.hasState) el('span', 'pn-tag', tags, 'sem state.json');
+    if (p.template === 'stale') {
+      const t = el('span', 'pn-tag warn', tags, 'template desatualizado');
+      t.title = 'o src/ deste projeto ficou para trás do template da skill — '
+              + 'o próximo render acusa violação de integridade';
+    }
 
     const foot = el('div', 'pn-foot', card);
 
@@ -156,6 +170,16 @@ function render(data) {
     const bFolder = el('button', 'btn ghost small', foot, 'pasta');
     bFolder.title = 'abrir a pasta com a entrega selecionada';
     bFolder.addEventListener('click', () => act('folder', 'abrir a pasta'));
+
+    if (p.template === 'stale') {
+      const bT = el('button', 'btn small pn-fix', foot, 'atualizar template');
+      bT.title = 'restaura o src/ deste projeto a partir do template da skill '
+               + '(CustomGraphics.tsx, que é do projeto, não é tocado)';
+      bT.addEventListener('click', async () => {
+        const d = await act('fixTemplate', 'atualizar o template');
+        if (d) { toast('Template atualizado'); load(); }
+      });
+    }
 
     // only offered where it is provably wrong — never a blanket "fix things"
     if (p.delivery && p.delivery.stalePointer) {
