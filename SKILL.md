@@ -198,8 +198,11 @@ render, e a trilha de legenda tambem fica visivel na Fase 1 justamente pra o
 chip estar ao alcance do clique. E uma conferencia de TEXTO e enquadramento,
 nao um preview animado — a aba Estilo e que desenha o look real.
 
-**Tudo do post fica em `<edit>/post/`** — `capa.jpg`, `capa_feed.jpg`,
-`post_brief.md` e `legenda.txt`. Uma pasta so, porque o `<edit>` tem ~15
+**Tudo do post fica em `<edit>/post/`** — `capa.jpg`, `post_brief.md` e
+`legenda.txt`. **Uma capa so, em 9:16**: o Instagram usa a mesma imagem na aba
+Reels e na grade do perfil, e nao existe capa separada de feed pra enviar — a
+grade so RECORTA a que voce mandou. Gerar um segundo arquivo "de feed" era
+prometer um upload que a plataforma nao aceita. Uma pasta so, porque o `<edit>` tem ~15
 artefatos de trabalho (cut.mp4, clips_graded/, remotion/, transcripts/) e
 cacar os arquivos do post no meio deles na hora de publicar e a friccao que
 faz um passo ser pulado. **Escreva a legenda final em `post/legenda.txt`** —
