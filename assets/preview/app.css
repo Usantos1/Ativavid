@@ -1410,6 +1410,24 @@ kbd {
   border: 1px solid var(--stroke);
 }
 
+/* end-card copy: brand-level text, so it sits with the element that uses it */
+.endcard-copy { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 4px; }
+.ec-field { display: flex; align-items: center; gap: 7px; }
+.ec-label { font-size: 10px; letter-spacing: 0.8px; text-transform: uppercase; color: var(--muted); }
+.endcard-copy input {
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--well-bg);
+  border: 1px solid var(--stroke);
+  border-radius: 9px;
+  padding: 6px 10px;
+  width: 210px;
+  outline: none;
+}
+.endcard-copy input:focus { border-color: rgba(255, 119, 19, 0.5); }
+.ec-hint { font-size: 10.5px; color: var(--muted); }
+
 /* the one control here that changes POLICY rather than looks — rose, the
    colour this app already uses for destructive/consequential things, so it
    never reads as just another style pick */

@@ -713,6 +713,7 @@ async function loadSharedDefaultStyle() {
     if (r.ok) {
       SHARED_DEFAULT_STYLE = await r.json();
       S.fastMode = !!SHARED_DEFAULT_STYLE.fastMode;
+      S.endCardCopy = SHARED_DEFAULT_STYLE.endCardCopy || null;
     }
   } catch (e) { /* no shared default saved yet, or server hiccup — catalog fallback stands */ }
   refreshFastMode();
@@ -1814,6 +1815,7 @@ let wasShowing = false; // gate was up on the previous render (for the re-fit)
 function renderSetup() {
   const show = S.tab === 'style';
   $('styleSetup').classList.toggle('hidden', !show);
+  refreshEndCardCopy();   // follows the "Card final" checkbox
   const hasVideo = S.videoDuration > 0;
   $('stage').classList.toggle('hidden', show || !hasVideo);
   $('emptyState').classList.toggle('hidden', hasVideo || show);
@@ -1990,6 +1992,26 @@ $('setupGo').addEventListener('click', async () => {
 function refreshFastMode() {
   $('fastModeChk').classList.toggle('on', !!S.fastMode);
 }
+
+// The end card's copy belongs to the BRAND, not to one video — so it lives in
+// the preset. Without it, fast mode would stop on every single video to ask for
+// the same handle, which is exactly what fast mode exists to avoid.
+function refreshEndCardCopy() {
+  const on = !!(S.style && S.style.elements && S.style.elements.endCard);
+  $('endCardCopy').classList.toggle('hidden', !on);
+  if (!on) return;
+  const c = S.endCardCopy || {};
+  // don't fight the user mid-typing
+  if (document.activeElement !== $('ecLine1')) $('ecLine1').value = c.line1 || '';
+  if (document.activeElement !== $('ecLine2')) $('ecLine2').value = c.line2 || '';
+}
+['ecLine1', 'ecLine2'].forEach((id) => {
+  $(id).addEventListener('input', () => {
+    S.endCardCopy = {line1: $('ecLine1').value.trim(), line2: $('ecLine2').value.trim()};
+  });
+  // the timeline owns S / space / arrows — typing here must not fire them
+  $(id).addEventListener('keydown', (e) => e.stopPropagation());
+});
 $('fastModeChk').addEventListener('click', () => {
   S.fastMode = !S.fastMode;
   refreshFastMode();
@@ -2014,6 +2036,7 @@ $('setupSaveDefault').addEventListener('click', async () => {
     // makes sense WITH one: "fast" means "the recipe is already decided", and
     // without a saved recipe there is nothing to skip the asking for.
     fastMode: !!S.fastMode,
+    endCardCopy: S.endCardCopy || null,
   };
   const res = await fetch('/api/default-style', {
     method: 'POST',

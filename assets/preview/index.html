@@ -146,6 +146,21 @@
       <div class="setup-group setup-group--wide">
         <div class="group-head"><span class="group-title">Elementos da edição</span></div>
         <div id="optElements" class="check-row"></div>
+        <!-- Only shown when the end card is on. Lives with the PRESET, not with
+             this one video: the skill is told never to invent brand identity,
+             and fast mode is told never to stop — the only way both hold is if
+             the copy was given once, in advance. -->
+        <div id="endCardCopy" class="endcard-copy hidden">
+          <label class="ec-field">
+            <span class="ec-label">@ da loja</span>
+            <input id="ecLine1" type="text" placeholder="Segue @lojaprimecamp" maxlength="60">
+          </label>
+          <label class="ec-field">
+            <span class="ec-label">chamada</span>
+            <input id="ecLine2" type="text" placeholder="ou me chama no direct" maxlength="60">
+          </label>
+          <span class="ec-hint">salvo com “Salvar como padrão” — vale para os próximos vídeos</span>
+        </div>
       </div>
 
       <div class="setup-footer">

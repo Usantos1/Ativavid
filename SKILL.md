@@ -56,8 +56,12 @@ nenhum preset decide por eles:
   Nada a jusante recupera isso, e o render inteiro sai perdido.
 - **Transcricao visivelmente ruim** (frases truncadas, palavras impossiveis no
   `takes_packed.md`): as legendas E os pontos de corte saem dela.
-- **Falta a copy da marca** que o preset nao tem — `endCard.lines`, @ da loja,
-  CTA. Nao invente identidade; pergunte.
+- **Falta a copy da marca E o preset tambem nao tem.** O `@` e a chamada do
+  card final ficam em `endCardCopy` no preset, preenchidos na aba Estilo — sao
+  da MARCA, nao de um video, entao se perguntam uma vez e valem para todos.
+  Com eles salvos, siga direto. Sem eles, pare e pergunte: identidade nao se
+  inventa. (Era uma contradicao: a regra mandava perguntar sempre e o modo
+  rapido mandava nao parar, o que faria ele parar em todo video.)
 - **A fonte nao se parece com o formato de sempre** (duracao muito fora, outro
   cenario, outra pessoa): o preset foi confirmado para o caso rotineiro, e este
   deixou de ser um.
