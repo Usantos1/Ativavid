@@ -913,6 +913,7 @@ function nudgeTakeEdge(i, side, dir) {
  * display its own stub.
  */
 const LEGENDA_STUB = '(a legenda do post entra aqui';
+const HASHTAG_MAX = 5;   // teto da casa — ver SKILL.md
 
 async function loadPostCaption() {
   const panel = $('postPanel');
@@ -932,8 +933,13 @@ async function loadPostCaption() {
     : 'Ainda não escrita. Peça a legenda ao Claude — ela é salva em post/legenda.txt e aparece aqui.';
   $('postCopy').disabled = !written;
   const tags = written ? (txt.match(/#[\wÀ-ÿ]+/g) || []).length : 0;
+  // 5 is the house ceiling (see SKILL.md). Counting by eye is exactly how
+  // "no máximo 5" quietly became eleven, so the count says when it is over.
+  const over = tags > HASHTAG_MAX;
+  $('postHint').classList.toggle('over', over);
   $('postHint').textContent = written
     ? `${txt.length} caracteres · ${tags} hashtag${tags === 1 ? '' : 's'}`
+      + (over ? ` — acima do limite de ${HASHTAG_MAX}` : '')
     : '';
 }
 

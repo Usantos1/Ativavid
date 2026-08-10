@@ -268,6 +268,12 @@ de caracteres e de hashtags e um botão copiar. Ela é lida de
 ficava pra trás, então ela fica ao lado do vídeo a que pertence. O painel é só
 leitura — quem escreve o texto é você, no arquivo.
 
+**HASHTAGS: no máximo 5.** Teto, não meta — três boas valem mais que cinco
+mornas. Prefira nicho e negócio; as genéricas de alcance (`#viral`, `#fyp`,
+`#reels`) competem com contas enormes, não trazem o público certo e ocupam
+vaga sem devolver nada. O contador na aba Final fica **vermelho acima de 5**,
+então dá pra ver sem contar na mão.
+
 **`/painel`** (linked from the header) lists every sibling project — phase,
 delivery, whether that delivery still opens, and which projects have a saved
 request waiting (**quoted inline**, so "something is pending" does not mean

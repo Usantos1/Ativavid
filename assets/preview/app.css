@@ -1461,6 +1461,8 @@ kbd {
 .post-head { display: flex; align-items: baseline; gap: 10px; }
 .post-head .spacer { flex: 1; }
 .post-hint { font-size: 10.5px; color: var(--muted); }
+/* over the house ceiling of 5 — same rose the app uses for "this needs fixing" */
+.post-hint.over { color: var(--rose-fg); font-weight: 700; }
 .post-text {
   font-size: 12.5px;
   line-height: 1.5;

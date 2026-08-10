@@ -133,9 +133,10 @@ def main() -> None:
     L.append("## Ao escrever")
     L.append("- Primeira linha é o que aparece antes do “mais” — o gancho vive ali.")
     L.append("- Não repita a headline palavra por palavra; ela já está na tela.")
-    L.append("- Hashtags: misture nicho e amplitude, e mantenha as do negócio.")
-    L.append("  Evite as genéricas de alcance (#viral, #fyp) — elas competem com")
-    L.append("  contas enormes e não trazem o público certo.")
+    L.append("- Hashtags: **no máximo 5, e isso é um teto, não uma meta.**")
+    L.append("  Prefira nicho e negócio ao invés de alcance: as genéricas")
+    L.append("  (#viral, #fyp, #reels) competem com contas enormes e não trazem")
+    L.append("  o público certo — ocupam vaga sem devolver nada.")
     L.append("- Termine com uma pergunta ou CTA que caiba na conversa do vídeo.")
 
     # same folder the covers go to: one place holding everything the post
