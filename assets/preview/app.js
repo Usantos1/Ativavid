@@ -687,6 +687,9 @@ let S = {
   // worth hiding behind a click, but people kept missing it entirely. Still
   // remembers an explicit collapse (only '0' turns it off; unset/'1' both open).
   jcutOpen: localStorage.getItem('ativa-vid.jcutOpen') !== '0',
+  // ON by default: the whole point is catching a wrong word before paying for
+  // a render, and a check nobody switches on does not get made.
+  capPreviewOn: localStorage.getItem('ativa-vid.capPreview') !== '0',
   history: [], // undo stack: snapshots of {draft, insertsDraft, notes} taken BEFORE each edit
   future: [], // redo stack: snapshots popped off history by undo()
   // caption text corrections, keyed by index into S.captions: {from, to}.
@@ -1460,6 +1463,7 @@ function renderAll() {
   drawWave();
   updateScrollRange();
   positionNeedle();
+  refreshCapToggle();
 }
 
 // ---------- correction markers ----------
@@ -2106,10 +2110,15 @@ function renderJcutAudio() {
 
 function renderChips() {
   const phase2 = S.tab === 2;
-  $('trkCaptions').classList.toggle('hidden', !phase2);
+  // The caption track also shows on Fase 1 whenever captions already exist.
+  // Without this the fix-before-render loop is broken in half: the WYSIWYG
+  // overlay lives on Fase 1, but the chip you click to correct a word lived
+  // only on Fase 2 — you could see the wrong word and not reach it.
+  const showCaps = phase2 || S.captions.length > 0;
+  $('trkCaptions').classList.toggle('hidden', !showCaps);
   insertTracksEl.classList.toggle('hidden', !phase2);
   insertTracksEl.innerHTML = '';
-  if (!phase2) return;
+  if (!showCaps) return;
 
   laneCaptions.innerHTML = '';
   S.captions.forEach((c, i) => {
@@ -2125,6 +2134,10 @@ function renderChips() {
       : `${c.text} — clique para corrigir o texto`;
     chip.dataset.ci = String(i);
   });
+
+  // Inserts stay Fase-2 only: they describe the Phase-2 render, and on the
+  // Fase-1 cut there is nothing for them to sit against.
+  if (!phase2) return;
 
   // TEXT and IMAGE get their own tracks — a headline and a photo are different
   // kinds of edit, and mixing them on one lane hid the images entirely.
@@ -2279,7 +2292,69 @@ function positionNeedle() {
   $('timeNow').textContent = fmt(tDraft);
   $('timeTotal').textContent = fmt(draftTotal() || S.videoDuration);
 }
+/* ---------- WYSIWYG caption layer over the player ----------
+ * The expensive loop this kills: render (~2 min on a short reel, more on a
+ * long one) → spot a mis-transcribed word → fix → render again. Here the word
+ * is on screen before any render, and clicking the chip fixes it.
+ *
+ * Deliberately a WORDING/FIT check, not a pixel-perfect preview: it reproduces
+ * the picked style's family, weight, size and placement, not its animation.
+ * Claiming more than that would be a preview that lies, and the Estilo tab is
+ * where the real look already gets rendered.
+ */
+const CAP_OVERLAY_STYLES = {
+  karaoke:   {family: "'Poppins',sans-serif", weight: 900, size: 76, bottom: 300, ink: 'accent'},
+  stacked:   {family: "'Poppins',sans-serif", weight: 900, size: 74, bottom: 320, ink: 'white', italic: true},
+  scatter:   {family: "'Lora',serif",         weight: 400, size: 70, bottom: 330, ink: 'white'},
+  simples:   {family: "'Poppins',sans-serif", weight: 600, size: 82, bottom: 430, ink: 'accent'},
+  serifada:  {family: "'Libre Baskerville',serif", weight: 700, size: 84, bottom: 430, ink: 'accent'},
+  classica:  {family: "'Inter',sans-serif",   weight: 500, size: 52, bottom: 430, ink: 'accent'},
+  bloco:     {family: "'Poppins',sans-serif", weight: 800, size: 76, bottom: 430, ink: 'slab'},
+};
+
+function updateCapOverlay() {
+  const box = $('capOverlay');
+  const style = S.style && S.style.captions;
+  // Fase 2 plays the finished render, which already HAS the captions burned
+  // in — drawing a second copy on top would be a lie and a double image.
+  const usable = S.capPreviewOn && S.tab !== 2 && style && style !== 'nenhuma' && S.captions.length;
+  if (!usable) { box.classList.add('hidden'); return; }
+
+  const t = video.currentTime;
+  const cur = S.captions.find((c) => t >= c.start && t < c.end);
+  if (!cur) { box.classList.add('hidden'); return; }
+
+  const i = S.captions.indexOf(cur);
+  const fix = S.captionFixes[i];
+  const text = fix ? fix.to : cur.text;
+  const V = CAP_OVERLAY_STYLES[style] || CAP_OVERLAY_STYLES.karaoke;
+
+  // the render is authored at 1080 wide; scale everything to the player
+  const s = (video.clientWidth || 1) / 1080;
+  const ink = V.ink === 'slab' ? inkOn(S.style.captionAccent || '#111214')
+            : V.ink === 'accent' ? (S.style.captionAccent || '#f4f1e9')
+            : '#fff';
+
+  box.classList.remove('hidden');
+  box.style.paddingBottom = `${V.bottom * s}px`;
+  box.innerHTML = '';
+  const line = el('div', 'cap-overlay-line' + (V.ink === 'slab' ? ' slab' : ''), box);
+  line.style.fontFamily = V.family;
+  line.style.fontWeight = String(V.weight);
+  line.style.fontSize = `${V.size * s}px`;
+  line.style.color = ink;
+  if (V.italic) line.style.fontStyle = 'italic';
+  if (V.ink === 'slab') {
+    line.style.background = S.style.captionAccent || '#111214';
+    line.style.padding = `${V.size * 0.09 * s}px ${V.size * 0.16 * s}px`;
+    line.style.borderRadius = `${V.size * 0.16 * s}px`;
+  }
+  line.textContent = text;
+  if (fix) line.classList.add('fixed');
+}
+
 function rafLoop() {
+  updateCapOverlay();
   if (capAnims.length) {
     const now = performance.now() / 1000;
     for (const step of capAnims) step(now);
@@ -2319,7 +2394,7 @@ panel.addEventListener('pointerdown', (e) => {
   // caption chips are click-to-edit, not draggable — their timing belongs to
   // the transcript, only the WORDS are the user's to correct here
   const cap = e.target.closest('.chip.caption');
-  if (cap && S.tab === 2) {
+  if (cap) {   // any tab the chips render on — Fase 1 is where fixing pays off
     openCaptionEditor(+cap.dataset.ci, cap);
     e.preventDefault();
     return;
@@ -2527,6 +2602,31 @@ $('btnUndo').addEventListener('click', undo);
 $('btnRedo').addEventListener('click', redo);
 $('btnSplit').innerHTML = ICON.razor;
 $('btnSplit').addEventListener('click', splitAtPlayhead);
+
+function refreshCapToggle() {
+  const btn = $('btnCapPreview');
+  const style = S.style && S.style.captions;
+  // hidden where it cannot help: Fase 2 already has captions in the picture,
+  // and a project with no captions has nothing to preview
+  const relevant = S.tab !== 2 && style && style !== 'nenhuma' && S.captions.length > 0;
+  btn.classList.toggle('hidden', !relevant);
+  btn.classList.toggle('on', !!S.capPreviewOn);
+  btn.title = S.capPreviewOn
+    ? 'Legenda sobreposta — clique num trecho errado na trilha de legenda para corrigir'
+    : 'Mostrar a legenda sobre o vídeo, antes de renderizar';
+}
+$('btnCapPreview').addEventListener('click', () => {
+  S.capPreviewOn = !S.capPreviewOn;
+  localStorage.setItem('ativa-vid.capPreview', S.capPreviewOn ? '1' : '0');
+  refreshCapToggle();
+  updateCapOverlay();
+});
+// Not only from rafLoop: the browser freezes requestAnimationFrame whenever the
+// tab is not visible, so a caption that was on screen would stay frozen on the
+// wrong line after a background seek. These events fire regardless.
+['seeked', 'timeupdate', 'loadedmetadata'].forEach((ev) =>
+  video.addEventListener(ev, updateCapOverlay)
+);
 $('btnCover').innerHTML = ICON.cover;
 $('btnCover').addEventListener('click', saveCover);
 

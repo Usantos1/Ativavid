@@ -166,6 +166,12 @@
   <section id="playerWrap" class="player-wrap">
     <div class="player-frame glass">
       <video id="video" playsinline preload="auto"></video>
+      <!-- WYSIWYG caption layer. Only meaningful BEFORE the Fase-2 render,
+           where the video has no burned-in captions yet: seeing the wrong word
+           here costs a click, seeing it after the render costs a re-render. -->
+      <div id="capOverlay" class="cap-overlay hidden"></div>
+      <button id="btnCapPreview" class="btn ghost small cap-toggle hidden"
+              title="Mostrar a legenda sobre o vídeo, como vai ficar">legenda</button>
     </div>
   </section>
 
