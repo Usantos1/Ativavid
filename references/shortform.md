@@ -173,6 +173,21 @@ An unchecked box is an explicit NO, not a silence. Copy the picks into
    verbatim). Then `npx remotion render Reels out/render.mp4`, loudnorm →
    `edit/final.mp4` (see Phase 3).
 
+   **Render speed — measured, not guessed.** The Remotion pass is ~80% of all
+   render time (measured on a 9.6s / 288-frame reel: Phase 1 ffmpeg 43.7s,
+   Remotion 182.9s at the stock config). Remotion's default concurrency leaves
+   most of the machine idle: the same render took **104s at `--concurrency=8`
+   on an 8-core box — 1.76x**. `remotion.config.ts` now sets concurrency to
+   `os.cpus().length`, so a scaffolded project gets this without a flag.
+   **Do not reach for `--gl=angle`.** Measured on the same render it was
+   SLOWER (156s vs 104s): the composition is video-decode and layout bound,
+   not GPU bound, so ANGLE adds overhead and buys nothing.
+
+   When batching many videos, remember the tradeoff: one render at full
+   concurrency minimises LATENCY for that video, but N projects rendering
+   at once maximises THROUGHPUT. For a queue, prefer several projects in
+   parallel at lower per-render concurrency.
+
 Never edit `src/Main.tsx`. Bespoke graphics go in `src/CustomGraphics.tsx`
 (the ONE editable file — read it only when the video needs a custom graphic).
 
