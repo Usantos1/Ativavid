@@ -18,19 +18,53 @@ description: ATIVAVID — edit any video by conversation, in phases. Two tracks 
 
 ## Hard Rules (production correctness — non-negotiable)
 
-1. **The phase gate is real.** No Phase-2 work before the cut is approved.
+1. **The phase gate is real.** No Phase-2 work before the cut is approved —
+   **unless MODO RAPIDO is on** (see below), where the saved preset IS the
+   standing approval and the deliverable itself is what gets reviewed.
 2. **Per-segment extract → lossless `-c copy` concat**, never a single-pass filtergraph. (Under the default J-cut the picture and the sound of a take are extracted as separate ranges and the audio tracks are summed — that is the one sanctioned mix, and the video path is still per-segment + lossless concat.)
 3. **30ms audio fades at every segment boundary** (encoded in render.py).
 4. **Never cut inside a word** — snap to word boundaries from the transcript.
 5. **Pad every cut edge** (30–200ms window; trail slightly longer than lead). Cut on silence whenever possible.
 6. **Cache transcripts per source.** Never re-transcribe unless the source changed.
 7. **Color grade per-segment during extraction**, never post-concat.
-8. **Strategy confirmation before execution.**
+8. **Strategy confirmation before execution** — same exception: with MODO
+   RAPIDO the recipe was confirmed once, in advance, and re-asking per video
+   is the cost it exists to remove.
 9. **All session outputs in `<videos_dir>/edit/`** — never inside the ativa-vid repo.
 10. **PHASE 2 is Remotion-only** — no ffmpeg/PIL burned text or overlays.
 11. **PHASE 2 is data-driven.** Scaffold by copying the track template; describe the video in `public/edit-data.json`. **Never read or edit the template TSX** (`src/Main.tsx` etc.) — the only editable code file is `src/CustomGraphics.tsx`, only for bespoke graphics. Run `helpers/check_template_integrity.py <edit>/remotion` before every `npx remotion render` — it hashes `src/` against the shipped template and catches a violation of this rule before the render, instead of after.
 12. **Verify numerically first.** Run `verify_cut.py` on every rendered cut; open images only for flagged junctions. Batch any multi-frame look into one `contact_sheet.py` / `grade.py --candidates` montage.
 13. **Never Read machine data into context**: `transcripts/*.json` (raw), `captions.json`, `track.json`, `segments.json`, matte/track binaries. Read `takes_packed.md` and helper stdout instead.
+
+## Modo rapido (sem portao de aprovacao)
+
+Ligado em `assets/preview/default-style.json` (`"fastMode": true`), pela caixa
+**Modo rapido** na aba Estilo. **Leia esse arquivo no inicio de todo trabalho** —
+e ele que diz se voce para ou entrega.
+
+Ligado: corte, Fase 2, Fase 3 e entrega, sem perguntar nada e sem esperar
+aprovacao do corte. O usuario revisa o FINAL. Isso existe porque o formato dele
+e repetido e o portao passou a custar mais do que protege: ~10 min de espera
+humana por video, num alvo de 50 videos por dia.
+
+O que continua te PARANDO, mesmo no modo rapido — sao problemas do material, e
+nenhum preset decide por eles:
+
+- **Fonte em LOG com `detect_color.py` em `confidence: low`.** Grade errado
+  contamina todos os segmentos e so aparece no final.
+- **Voz inaudivel ou muito abaixo da mediana** (`voice_levels.py` sinalizando).
+  Nada a jusante recupera isso, e o render inteiro sai perdido.
+- **Transcricao visivelmente ruim** (frases truncadas, palavras impossiveis no
+  `takes_packed.md`): as legendas E os pontos de corte saem dela.
+- **Falta a copy da marca** que o preset nao tem — `endCard.lines`, @ da loja,
+  CTA. Nao invente identidade; pergunte.
+- **A fonte nao se parece com o formato de sempre** (duracao muito fora, outro
+  cenario, outra pessoa): o preset foi confirmado para o caso rotineiro, e este
+  deixou de ser um.
+
+Nesses casos pare e pergunte, com o motivo em uma linha. Em todo o resto, siga
+ate a entrega. E sempre diga o que foi decidido sozinho, para o usuario poder
+discordar depois do fato.
 
 ## Execution medium — ffmpeg pipeline (default) vs Adobe Premiere (MCP)
 

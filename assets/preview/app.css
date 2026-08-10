@@ -1410,6 +1410,17 @@ kbd {
   border: 1px solid var(--stroke);
 }
 
+/* the one control here that changes POLICY rather than looks — rose, the
+   colour this app already uses for destructive/consequential things, so it
+   never reads as just another style pick */
+.fast-chk { flex: 0 0 auto; cursor: pointer; }
+.fast-chk.on {
+  border-color: rgba(255, 84, 112, 0.55);
+  background: rgba(255, 84, 112, 0.12);
+}
+.fast-chk.on .chk-box { border-color: var(--rose-fg); background: var(--rose-fg); }
+.fast-chk.on .chk-name { color: var(--rose-fg); }
+
 .setup-actions { display: flex; align-items: center; gap: 12px; }
 .setup-actions .btn { flex: 0 0 auto; }
 .setup-summary-row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }

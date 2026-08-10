@@ -710,8 +710,12 @@ let SHARED_DEFAULT_STYLE = null;
 async function loadSharedDefaultStyle() {
   try {
     const r = await fetch('/assets/default-style.json', { cache: 'no-store' });
-    if (r.ok) SHARED_DEFAULT_STYLE = await r.json();
+    if (r.ok) {
+      SHARED_DEFAULT_STYLE = await r.json();
+      S.fastMode = !!SHARED_DEFAULT_STYLE.fastMode;
+    }
   } catch (e) { /* no shared default saved yet, or server hiccup — catalog fallback stands */ }
+  refreshFastMode();
 }
 
 function defaultStyle() {
@@ -1983,6 +1987,19 @@ $('setupGo').addEventListener('click', async () => {
 // click would mean you can never pick something unusual for just this one
 // video without it becoming the new default. Only the core fields defaultStyle()
 // actually reads — no names/Used flags, those are preview_style.json's concern.
+function refreshFastMode() {
+  $('fastModeChk').classList.toggle('on', !!S.fastMode);
+}
+$('fastModeChk').addEventListener('click', () => {
+  S.fastMode = !S.fastMode;
+  refreshFastMode();
+  // deliberately NOT saved on click: it only counts once "Salvar como padrão"
+  // writes it, so a stray click cannot quietly switch off the approval gate
+  toast(S.fastMode
+    ? 'Modo rápido marcado — clique "Salvar como padrão" para valer'
+    : 'Modo rápido desmarcado — salve o padrão para valer', 3200);
+});
+
 $('setupSaveDefault').addEventListener('click', async () => {
   const payload = {
     edit: S.style.edit,
@@ -1993,6 +2010,10 @@ $('setupSaveDefault').addEventListener('click', async () => {
     emphasisAccent: S.style.emphasisAccent,
     circleAccent: S.style.circleAccent,
     elements: { ...S.style.elements },
+    // Policy, not looks — but it belongs with the house preset because it only
+    // makes sense WITH one: "fast" means "the recipe is already decided", and
+    // without a saved recipe there is nothing to skip the asking for.
+    fastMode: !!S.fastMode,
   };
   const res = await fetch('/api/default-style', {
     method: 'POST',
