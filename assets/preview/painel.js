@@ -197,12 +197,12 @@ function render(data) {
     bDel.addEventListener('click', async () => {
       // typing the name is the guard: it makes the user read WHICH project,
       // which a yes/no dialog does not
-      const typed = prompt(
-        `Excluir "${p.folder}"?\n\nVai para a LIXEIRA (dá pra restaurar).\n` +
-        `Some o projeto inteiro: fontes, renders, transcrições.\n\n` +
-        `Digite o nome da pasta para confirmar:`);
-      if (typed === null) return;
-      if (typed.trim() !== p.folder) { toast('Nome não confere — nada foi excluído', 3500); return; }
+      // One click to confirm, not a typed name. The real safety net is that
+      // this goes to the Recycle Bin — it is undoable, so guarding it like an
+      // irreversible action just taxed every legitimate delete.
+      if (!confirm(`Excluir "${p.folder}"? Vai para a Lixeira.`)) return;
+      // the server still requires the folder name in the payload, so a stray
+      // API call cannot delete anything — the UI just fills it in for you
       const d = await act('deleteProject', 'excluir', {confirm: p.folder});
       if (d) { toast(`"${d.deleted}" foi para a Lixeira`, 4000); load(); }
     });

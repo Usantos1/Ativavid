@@ -96,11 +96,8 @@ are identical and cached — reuse an approved `edl.json`; skip `cut.mp4`/previe
     ├── verify/                  ← montages / flagged-boundary views
     ├── captions.srt + chapters.txt   ← longform deliverables
     ├── final.mp4                ← delivered render (Phase 2 + 3, loudnorm'd)
-    ├── post/                    ← EVERYTHING the post needs, in one place
-    │   ├── capa.jpg             ← cover, 9:16 story format (tecla C na aba Final)
-    │   ├── post_brief.md        ← material for writing the caption (post_brief.py)
-    │   └── legenda.txt          ← the caption text — WRITE IT HERE; the Final
-    │                              tab shows it under the tracks with a copy button
+    ├── legenda.txt              ← texto do post — ESCREVA AQUI
+    ├── post_brief.md            ← material pra escrever a legenda (post_brief.py)
     └── remotion/                ← Remotion project (Phase 2 + 3)
         ├── public/              ← cut.mp4, edit-data.json (THE edit), captions.json,
         │                          track.json, segments.json, pexels/ web/ brand/, sfx/, trilha.mp3
@@ -242,37 +239,19 @@ render, e a trilha de legenda tambem fica visivel na Fase 1 justamente pra o
 chip estar ao alcance do clique. E uma conferencia de TEXTO e enquadramento,
 nao um preview animado — a aba Estilo e que desenha o look real.
 
-**Tudo do post fica em `<edit>/post/`** — `capa.jpg`, `post_brief.md` e
-`legenda.txt`. **Uma capa so, em 9:16**: o Instagram usa a mesma imagem na aba
-Reels e na grade do perfil, e nao existe capa separada de feed pra enviar — a
-grade so RECORTA a que voce mandou. Gerar um segundo arquivo "de feed" era
-prometer um upload que a plataforma nao aceita. Uma pasta so, porque o `<edit>` tem ~15
-artefatos de trabalho (cut.mp4, clips_graded/, remotion/, transcripts/) e
-cacar os arquivos do post no meio deles na hora de publicar e a friccao que
-faz um passo ser pulado. **Escreva a legenda final em `post/legenda.txt`** —
-`post_brief.py` cria o arquivo vazio justamente pra ela ter um lugar obvio;
-texto que so existe no chat nao esta onde alguem procura na hora de postar.
-
-**Capa do post** — on the Final tab, `C` (or the frame button) freezes the
-current frame of the DELIVERED render as `post/capa.jpg` — 9:16, story
-format, and nothing else. Instagram takes ONE cover: the Reels tab and the
-profile grid show the same image, with no separate feed cover to upload, so
-cropped variants were an asset nobody could use. The frame is taken from
-`final.mp4` rather than composed server-side on purpose: it already carries the
-real headline, font and accent, so there is no second implementation of the look
-to drift from the template.
-
 **A legenda aparece no editor** — na aba Final, abaixo das faixas, com contagem
 de caracteres e de hashtags e um botão copiar. Ela é lida de
-`post/legenda.txt`: abrir um editor de texto só pra copiar era o passo que
+`legenda.txt`: abrir um editor de texto só pra copiar era o passo que
 ficava pra trás, então ela fica ao lado do vídeo a que pertence. O painel é só
 leitura — quem escreve o texto é você, no arquivo.
 
 **Excluir um projeto** — botão `excluir` na linha do projeto no `/painel`.
 Vai para a **Lixeira do Windows**, nunca apagado de vez: some o projeto
 inteiro (fontes, renders, transcrições), então um clique errado precisa
-continuar desfazível. Exige digitar o nome da pasta — não é sim/não, porque
-digitar obriga a LER qual projeto é. A rota recusa qualquer caminho fora de
+continuar desfazível. Um clique confirma: a Lixeira ja
+e a rede de seguranca, e exigir o nome digitado cobrava um pedagio de toda
+exclusao legitima para proteger contra algo que se desfaz. A rota ainda exige
+o nome no payload (a UI preenche), entao uma chamada solta nao apaga nada, e recusa qualquer caminho fora de
 `--projects-root` e recusa as pastas raiz.
 
 **HASHTAGS: no máximo 5.** Teto, não meta — três boas valem mais que cinco

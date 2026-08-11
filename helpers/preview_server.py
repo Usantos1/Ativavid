@@ -55,6 +55,17 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+# Windows hands a redirected stdout the cp1252 codec, and a single "→" in the
+# startup banner then raises UnicodeEncodeError and kills the server BEFORE it
+# ever binds the port — the preview just never comes up, with the traceback in
+# a log file nobody is reading. Every project name here is Portuguese, so the
+# accents are not going away; force UTF-8 on the streams instead.
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):  # not a reconfigurable text stream
+        pass
+
 # The image picker reuses pexels_search.py's own search/download/slugify
 # rather than reimplementing the API call — same helper the skill runs from
 # the CLI, so a fix there fixes both. Imported lazily-ish (module lives
@@ -476,9 +487,6 @@ class Handler(BaseHTTPRequestHandler):
         if route == "/api/project/action":
             self._project_action()
             return
-        if route == "/api/cover":
-            self._make_cover()
-            return
         if route == "/api/default-style":
             self._save_default_style()
             return
@@ -693,66 +701,6 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         self._json({"ok": False, "error": f"ação desconhecida: {action}"}, 400)
-
-    def _make_cover(self) -> None:
-        """Freeze one frame of the DELIVERED render as the post's cover image.
-
-        Taken from final.mp4 on purpose, not composed here: that frame already
-        carries the real headline, the real font and the real accent, burned in
-        by Remotion. Redrawing the text server-side (PIL) would be a second
-        implementation of the same look, and it would drift from the template
-        the first time a style changes.
-
-        One file, 9:16 (story format), and nothing else. Instagram takes a
-        single cover — the Reels tab and the profile grid show the same image,
-        with no separate feed cover to upload — so cropped variants were an
-        asset nobody could use.
-        """
-        try:
-            length = int(self.headers.get("Content-Length", "0"))
-            body = json.loads(self.rfile.read(length) or b"{}")
-        except (ValueError, json.JSONDecodeError):
-            self._json({"ok": False, "error": "invalid JSON"}, 400)
-            return
-        try:
-            t = max(0.0, float(body.get("timeSec", 0)))
-        except (TypeError, ValueError):
-            self._json({"ok": False, "error": "timeSec inválido"}, 400)
-            return
-
-        state: dict = {}
-        sp = self.root / "state.json"
-        if sp.exists():
-            try:
-                state = json.loads(sp.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, OSError):
-                pass
-        rel = self._resolve_final_video(state) or state.get("video") or "cut.mp4"
-        src = self._safe(self.root, rel)
-        if not src or not src.exists():
-            self._json({"ok": False, "error": "sem vídeo para tirar a capa"}, 404)
-            return
-
-        # everything you take to Instagram lands in ONE folder. The edit dir
-        # holds ~15 working artifacts (cut.mp4, clips_graded/, remotion/,
-        # transcripts/…) and hunting the two covers out of it at posting time
-        # is the kind of friction that gets a step skipped.
-        post = self.root / "post"
-        post.mkdir(exist_ok=True)
-        out = post / "capa.jpg"
-        # -ss before -i seeks by keyframe and is fast, but lands on the wrong
-        # frame; the cover has to be the frame the user is actually looking at,
-        # so seek after -i (accurate) and accept the extra decode.
-        r = subprocess.run(
-            ["ffmpeg", "-y", "-v", "error", "-i", str(src), "-ss", f"{t:.3f}",
-             "-frames:v", "1", "-q:v", "2", str(out)],
-            capture_output=True, text=True,
-        )
-        if r.returncode != 0 or not out.exists():
-            self._json({"ok": False, "error": (r.stderr or "ffmpeg falhou")[:200]}, 500)
-            return
-        self._json({"ok": True, "cover": f"post/{out.name}",
-                    "timeSec": round(t, 3)})
 
     def _save_default_style(self) -> None:
         """The "house style" — every NEW project's Estilo tab starts here.

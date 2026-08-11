@@ -139,18 +139,15 @@ def main() -> None:
     L.append("  o público certo — ocupam vaga sem devolver nada.")
     L.append("- Termine com uma pergunta ou CTA que caiba na conversa do vídeo.")
 
-    # same folder the covers go to: one place holding everything the post
-    # needs, instead of three files scattered through the working dir
-    post = edit / "post"
-    post.mkdir(exist_ok=True)
-    out = post / "post_brief.md"
+    # direto no <edit>: a pasta post/ existia por causa das capas, que sairam
+    out = edit / "post_brief.md"
     text = "\n".join(L) + "\n"
     out.write_text(text, encoding="utf-8")
 
     # The caption itself is written by the model, not here — but the FILE is
     # created here so it always has an obvious home. Without it the text only
     # ever existed in the chat, which is not where anyone looks at posting time.
-    legenda = post / "legenda.txt"
+    legenda = edit / "legenda.txt"
     if not legenda.exists():
         legenda.write_text(
             "(a legenda do post entra aqui — escrita a partir de post_brief.md)\n",

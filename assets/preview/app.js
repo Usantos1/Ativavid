@@ -906,7 +906,7 @@ function nudgeTakeEdge(i, side, dir) {
 }
 
 /* ---------- the post's caption, shown next to the edit it belongs to -------
- * Read-only here: the text is written to <edit>/post/legenda.txt (see
+ * Read-only here: the text is written to <edit>/legenda.txt (see
  * post_brief.py) and this just surfaces it where the video is, so publishing
  * does not mean going to hunt for a file. Placeholder text written by the
  * helper counts as "not written yet" — otherwise the panel would proudly
@@ -920,17 +920,23 @@ async function loadPostCaption() {
   panel.classList.toggle('hidden', S.tab !== 2);
   if (S.tab !== 2) return;
   let txt = '';
-  try {
-    const r = await fetch(`/media/post/legenda.txt?v=${Date.now()}`, {cache: 'no-store'});
-    if (r.ok) txt = (await r.text()).trim();
-  } catch (e) { /* not written yet */ }
+  // post/ was where this used to live. Projects finished before the move still
+  // have their caption in there, and nobody is going to reorganise a delivered
+  // video by hand — so fall back to the old path instead of showing "ainda não
+  // escrita" over a caption that exists.
+  for (const path of ['legenda.txt', 'post/legenda.txt']) {
+    try {
+      const r = await fetch(`/media/${path}?v=${Date.now()}`, {cache: 'no-store'});
+      if (r.ok) { txt = (await r.text()).trim(); if (txt) break; }
+    } catch (e) { /* not written yet */ }
+  }
 
   const box = $('postText');
   const written = txt && !txt.startsWith(LEGENDA_STUB);
   box.classList.toggle('empty', !written);
   box.textContent = written
     ? txt
-    : 'Ainda não escrita. Peça a legenda ao Claude — ela é salva em post/legenda.txt e aparece aqui.';
+    : 'Ainda não escrita. Peça a legenda ao Claude — ela é salva em legenda.txt e aparece aqui.';
   $('postCopy').disabled = !written;
   const tags = written ? (txt.match(/#[\wÀ-ÿ]+/g) || []).length : 0;
   // 5 is the house ceiling (see SKILL.md). Counting by eye is exactly how
@@ -943,29 +949,6 @@ async function loadPostCaption() {
     : '';
 }
 
-/* ---------- capa: freeze the current frame as the post's cover ----------
- * The frame comes straight out of the delivered render, so whatever headline
- * and accent are burned into it ARE the cover's — no second implementation of
- * the look to drift from the template. The server also writes the 1:1 centre
- * crop, because that is what the Instagram grid shows and a cover can read
- * fine at 9:16 while losing its headline in the square.
- */
-async function saveCover() {
-  if (S.tab !== 2) { toast('A capa sai da aba Final (o render com headline)', 2200); return; }
-  const t = video.currentTime;
-  try {
-    const r = await fetch('/api/cover', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ timeSec: t }),
-    });
-    const d = await r.json();
-    if (!d.ok) { toast(d.error || 'Não consegui salvar a capa', 3500); return; }
-    toast(`✓ Capa salva em ${d.cover}`, 4000);
-  } catch (e) {
-    toast('Não consegui salvar a capa — servidor fora do ar?', 3500);
-  }
-}
 
 // ---------- razor: split the selected take at the playhead ----------
 // A split is just "one range in edl.ranges becomes two, same source, back
@@ -2619,9 +2602,6 @@ document.addEventListener('keydown', (e) => {
   } else if ((e.key === 's' || e.key === 'S') && !e.ctrlKey && !e.metaKey) {
     e.preventDefault();
     splitAtPlayhead();
-  } else if ((e.key === 'c' || e.key === 'C') && !e.ctrlKey && !e.metaKey) {
-    e.preventDefault();
-    saveCover();
   } else if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
     e.preventDefault();
     undo();
@@ -2677,8 +2657,6 @@ $('btnCapPreview').addEventListener('click', () => {
 ['seeked', 'timeupdate', 'loadedmetadata'].forEach((ev) =>
   video.addEventListener(ev, updateCapOverlay)
 );
-$('btnCover').innerHTML = ICON.cover;
-$('btnCover').addEventListener('click', saveCover);
 
 $('postCopy').addEventListener('click', async () => {
   try {
