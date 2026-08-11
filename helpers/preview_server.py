@@ -32,8 +32,13 @@ Routes:
                         <edit>/remotion/public/pexels/ and returns the local
                         path, so an insert can point at it
   /painel           GET  cross-project dashboard (every sibling project's phase,
-                        delivery health and pending requests) — READ ONLY
+                        delivery health and pending requests)
   /api/projects     GET  the data behind /painel
+  /p/<pasta>/…      ANY  the SAME editor, scoped to any project under
+                        --projects-root: the prefix rebinds `root` for one
+                        request, so /p/Foo/api/state and /p/Foo/media/x read
+                        Foo. One server serves every project; the dashboard's
+                        `editor` button links here.
 
 Usage:
     uv run helpers/preview_server.py --root <videos_dir>/edit [--port 4820]
@@ -53,7 +58,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 # Windows hands a redirected stdout the cp1252 codec, and a single "→" in the
 # startup banner then raises UnicodeEncodeError and kills the server BEFORE it
@@ -377,6 +382,7 @@ def describe_pending(edit: Path) -> dict | None:
 class Handler(BaseHTTPRequestHandler):
     root: Path  # set on the class by main()
     projects_roots: list[Path] = []
+    scoped = False  # per-request: is this a /p/<pasta>/ view of ANOTHER project?
     protocol_version = "HTTP/1.1"
 
     # ---- helpers ----
@@ -449,8 +455,33 @@ class Handler(BaseHTTPRequestHandler):
         return p if p and p.exists() else None
 
     # ---- routes ----
+    def _scope(self, path: str) -> str:
+        """Serve the editor for ANY scanned project, at /p/<pasta>/….
+
+        The alternative was spawning a second server per project — a port and a
+        process each, and this user has already had 21 orphans pointing at
+        folders that no longer existed. A path prefix costs neither: it rebinds
+        `root` for the length of ONE request (an instance attribute shadowing
+        the class one), so every route below reads the right project without
+        knowing this exists. No prefix → the server's own root, unchanged.
+        """
+        self.root = type(self).root          # reset: keep-alive reuses instances
+        self.scoped = False
+        m = re.match(r"/p/([^/]+)(/.*)?$", path)
+        if not m:
+            return path
+        folder = unquote(m.group(1))
+        for proot in self.projects_roots:
+            edit = self._project_edit_dir(str(proot / folder / "edit"))
+            if edit:
+                self.root, self.scoped = edit, True
+                return m.group(2) or "/"
+        # unknown project: fall through to the server's own root rather than
+        # 404, so a stale bookmark opens SOMETHING instead of a dead page
+        return m.group(2) or "/"
+
     def do_GET(self) -> None:  # noqa: N802
-        path = self.path.split("?", 1)[0]
+        path = self._scope(self.path.split("?", 1)[0])
         if path in ("/", "/index.html", "/fase1", "/estilo", "/fase2"):
             # the last three are the SPA's own tab routes (app.js reads
             # location.pathname) — a real path, not a query string or hash,
@@ -480,7 +511,7 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"error": "unknown route"}, 404)
 
     def do_POST(self) -> None:  # noqa: N802
-        route = self.path.split("?", 1)[0]
+        route = self._scope(self.path.split("?", 1)[0])
         if route == "/api/open-folder":
             self._open_folder()
             return

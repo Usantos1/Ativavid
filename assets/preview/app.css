@@ -194,6 +194,9 @@ header::after {
 }
 .project-name { font-weight: 900; font-size: 17px; letter-spacing: 0.2px; }
 .state-message { font-size: 12px; color: var(--dim); margin-top: 3px; }
+/* dashboard-opened project: this line stops being status and starts being a
+   warning about where a save lands, so it has to read as one */
+.state-message.warn { color: var(--warn, #f0a13a); font-weight: 600; }
 
 .head-actions { margin-left: auto; display: flex; align-items: center; gap: 10px; }
 

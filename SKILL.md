@@ -245,6 +245,14 @@ de caracteres e de hashtags e um botão copiar. Ela é lida de
 ficava pra trás, então ela fica ao lado do vídeo a que pertence. O painel é só
 leitura — quem escreve o texto é você, no arquivo.
 
+**Abrir qualquer projeto no editor** — botao `editor` na linha do projeto no
+`/painel`, que abre `/p/<pasta>/fase1` numa aba nova. E o mesmo editor: o
+prefixo reaponta a raiz por UMA requisicao, entao um servidor serve todos os
+projetos, sem porta nem processo por projeto (ja houve 21 orfaos apontando pra
+pastas que nao existiam mais). O cabecalho avisa em laranja quando o projeto
+veio do painel — o `watch_edits.py` esta armado em UMA pasta, entao um Salvar
+ali cai num arquivo que ninguem le, e o aviso diz qual pasta e.
+
 **Excluir um projeto** — botão `excluir` na linha do projeto no `/painel`.
 Vai para a **Lixeira do Windows**, nunca apagado de vez: some o projeto
 inteiro (fontes, renders, transcrições), então um clique errado precisa

@@ -645,6 +645,14 @@ const LABEL_W = 48; // .track-label width (content x offset of lanes)
 const MIN_SEG = 0.2; // s
 const THUMB_EVERY = 2.0;
 
+/* ---------- serving ANOTHER project's editor, at /p/<pasta>/ --------------
+ * The dashboard opens any scanned project here. Every request below is
+ * relative to whatever prefix the page itself was served at, so the server
+ * scopes them to that project; served at "/" the prefix is empty and this is
+ * exactly the old behaviour.
+ */
+const BASE = (location.pathname.match(/^\/p\/[^/]+/) || [''])[0];
+
 // ---------- tab routing ----------
 // A real path per tab (/fase1, /estilo, /fase2), not a #hash — a link to a
 // specific tab lands there directly, refresh keeps you where you were, and
@@ -654,7 +662,8 @@ const THUMB_EVERY = 2.0;
 const TAB_TO_PATH = { 1: '/fase1', style: '/estilo', 2: '/fase2' };
 const PATH_TO_TAB = { '/fase1': 1, '/estilo': 'style', '/fase2': 2 };
 function tabFromPath() {
-  return PATH_TO_TAB[location.pathname] ?? 1;
+  // under /p/<pasta>/ the tab is the part AFTER the prefix
+  return PATH_TO_TAB[location.pathname.slice(BASE.length)] ?? 1;
 }
 
 // ---------- state ----------
@@ -926,7 +935,7 @@ async function loadPostCaption() {
   // escrita" over a caption that exists.
   for (const path of ['legenda.txt', 'post/legenda.txt']) {
     try {
-      const r = await fetch(`/media/${path}?v=${Date.now()}`, {cache: 'no-store'});
+      const r = await fetch(`${BASE}/media/${path}?v=${Date.now()}`, {cache: 'no-store'});
       if (r.ok) { txt = (await r.text()).trim(); if (txt) break; }
     } catch (e) { /* not written yet */ }
   }
@@ -1127,7 +1136,7 @@ function refreshHeader() {
 // ---------- data loading ----------
 async function poll() {
   try {
-    const res = await fetch('/api/state');
+    const res = await fetch(`${BASE}/api/state`);
     const data = await res.json();
     const sig = JSON.stringify([data.state, data.edl, data.mtimes, data.videoDuration]);
     if (sig !== S.lastSig) {
@@ -1151,7 +1160,22 @@ async function applyState(data) {
   S.savedPending = !!data.hasPendingEdits;
 
   $('projectName').textContent = S.state.project || 'ATIVAVID';
-  $('stateMessage').textContent = S.state.message || '';
+  // Opened from the dashboard, this is NOT the project the session is watching:
+  // watch_edits.py is armed on one edit dir, so a save here lands in a file
+  // nobody is reading. The toast still says "salvo" and the work still does not
+  // happen — the exact silent failure the skill warns about. Say so, and name
+  // the folder, because "peça ao Claude" is useless if you ask in the session
+  // pointed at a different video.
+  if (BASE) {
+    const folder = decodeURIComponent(BASE.slice('/p/'.length));
+    $('stateMessage').textContent =
+      `aberto pelo painel — o que você salvar aqui vai para ${folder}, `
+      + 'e o Claude só aplica se você disser qual projeto é';
+    $('stateMessage').classList.add('warn');
+  } else {
+    $('stateMessage').textContent = S.state.message || '';
+    $('stateMessage').classList.remove('warn');
+  }
 
   const ranges = (data.edl && data.edl.ranges) || [];
   // J-cut timeline, written by render.py. Under a J-cut the picture of every take
@@ -1210,7 +1234,7 @@ async function applyState(data) {
   // replaceState, not the click handler's real navigation: applyState reruns
   // on every 2s poll, and pushing a history entry each time would make the
   // back button useless (dozens of identical entries instead of one per tab)
-  const wantPath = TAB_TO_PATH[S.tab];
+  const wantPath = BASE + TAB_TO_PATH[S.tab];
   if (location.pathname !== wantPath) history.replaceState(null, '', wantPath);
   S.captions = [];
   S.editData = null;
@@ -1218,13 +1242,13 @@ async function applyState(data) {
   if ((S.state.phase || 1) >= 2) {
     if (S.state.captions) {
       try {
-        const caps = await (await fetch(`/media/${S.state.captions}?v=${Date.now()}`)).json();
+        const caps = await (await fetch(`${BASE}/media/${S.state.captions}?v=${Date.now()}`)).json();
         S.captions = groupCaptions(caps);
       } catch (e) { /* absent yet */ }
     }
     if (S.state.editData) {
       try {
-        S.editData = await (await fetch(`/media/${S.state.editData}?v=${Date.now()}`)).json();
+        S.editData = await (await fetch(`${BASE}/media/${S.state.editData}?v=${Date.now()}`)).json();
         buildInsertsDraft();
       } catch (e) { /* absent yet */ }
     }
@@ -1248,7 +1272,7 @@ async function applyState(data) {
 // when it exists, so captions/inserts are visible. Keeps the playback position.
 function updateVideoSrc() {
   const rel = (S.tab === 2 && S.state.finalVideo) ? S.state.finalVideo : (S.state.video || 'cut.mp4');
-  const vsrc = `/media/${rel}?v=${(S.mtimes && (S.mtimes.finalVideo || S.mtimes.video)) || 0}`;
+  const vsrc = `${BASE}/media/${rel}?v=${(S.mtimes && (S.mtimes.finalVideo || S.mtimes.video)) || 0}`;
   if (video.dataset.src === vsrc) return;
   const t = video.currentTime;
   const wasPlaying = !video.paused && !video.ended;
@@ -1381,13 +1405,13 @@ function buildInsertsDraft() {
 
 async function loadWave() {
   try {
-    S.wave = await (await fetch('/gen/waveform.json')).json();
+    S.wave = await (await fetch(`${BASE}/gen/waveform.json`)).json();
     drawWave();
   } catch (e) { S.wave = null; }
 }
 async function loadThumbsMeta() {
   try {
-    const meta = await (await fetch('/gen/thumbs/meta.json')).json();
+    const meta = await (await fetch(`${BASE}/gen/thumbs/meta.json`)).json();
     S.thumbCount = meta.count || 0;
     renderClips();
   } catch (e) { S.thumbCount = 0; }
@@ -1957,7 +1981,7 @@ $('setupGo').addEventListener('click', async () => {
       .map((e) => e.name),
     note: S.style.note,
   };
-  const res = await fetch('/api/save', {
+  const res = await fetch(`${BASE}/api/save`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -2027,7 +2051,7 @@ $('setupSaveDefault').addEventListener('click', async () => {
     fastMode: !!S.fastMode,
     endCardCopy: S.endCardCopy || null,
   };
-  const res = await fetch('/api/default-style', {
+  const res = await fetch(`${BASE}/api/default-style`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -2071,7 +2095,7 @@ function renderClips() {
         const idx = first + k + 1; // ffmpeg %04d is 1-based
         if (idx > S.thumbCount) break;
         const img = el('img', '', strip);
-        img.src = `/gen/thumbs/${String(idx).padStart(4, '0')}.jpg`;
+        img.src = `${BASE}/gen/thumbs/${String(idx).padStart(4, '0')}.jpg`;
         img.style.width = `${THUMB_EVERY * S.pps}px`;
         img.style.objectFit = 'cover';
       }
@@ -2693,7 +2717,7 @@ $('imgGo').addEventListener('click', async () => {
   box.innerHTML = '<div class="img-empty">buscando…</div>';
   let data;
   try {
-    data = await (await fetch(`/api/images/search?q=${encodeURIComponent(q)}`)).json();
+    data = await (await fetch(`${BASE}/api/images/search?q=${encodeURIComponent(q)}`)).json();
   } catch (e) {
     box.innerHTML = '<div class="img-empty">falha na busca — servidor de pé?</div>';
     return;
@@ -2718,7 +2742,7 @@ async function pickImage(query, r) {
   toast('Baixando…', 1500);
   let data;
   try {
-    data = await (await fetch('/api/images/pick', {
+    data = await (await fetch(`${BASE}/api/images/pick`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url: r.full, id: r.id, query, credit: r.credit }),
@@ -2747,7 +2771,7 @@ async function pickImage(query, r) {
 $('openFolderIcon').innerHTML = ICON.folder;
 $('btnOpenFolder').addEventListener('click', async () => {
   try {
-    const res = await fetch('/api/open-folder', { method: 'POST' });
+    const res = await fetch(`${BASE}/api/open-folder`, { method: 'POST' });
     const data = await res.json();
     if (!data.ok) toast('Não consegui abrir a pasta', 3000);
   } catch (e) { toast('Não consegui abrir a pasta — servidor fora do ar?', 3500); }
@@ -2822,7 +2846,7 @@ function goToTab(tab) {
   tab.classList.add('active');
   S.tab = tab.dataset.tab === 'style' ? 'style' : +tab.dataset.tab;
   S.selected = -1;
-  const path = TAB_TO_PATH[S.tab];
+  const path = BASE + TAB_TO_PATH[S.tab];
   // a real nav here (not applyState's replaceState) — a click is a place the
   // user meant to go, so back/forward should be able to return to it
   if (location.pathname !== path) history.pushState(null, '', path);
@@ -2895,7 +2919,7 @@ $('btnSave').addEventListener('click', async () => {
       renderedEnd: +f.end.toFixed(3),
     }));
   }
-  const res = await fetch('/api/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+  const res = await fetch(`${BASE}/api/save`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
   if ((await res.json()).ok) {
     S.savedPending = true;
     S.notes = [];

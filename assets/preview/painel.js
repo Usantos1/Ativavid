@@ -162,6 +162,18 @@ function render(data) {
       return d;
     };
 
+    // The whole editor, for THIS project, in a tab — the same app served under
+    // a /p/<pasta>/ prefix (see _scope in preview_server.py). Before this the
+    // panel could tell you a project needed attention and then leave you with
+    // no way in: the editor only ever opened the one folder its server was
+    // started on. A link, not a fetch, so middle-click and "open in new tab"
+    // behave the way they look like they should.
+    const bEdit = el('a', 'btn ghost small', foot, 'editor');
+    bEdit.href = `/p/${encodeURIComponent(p.folder)}/fase1`;
+    bEdit.target = '_blank';
+    bEdit.rel = 'noopener';
+    bEdit.title = 'abrir este projeto no editor, numa aba nova';
+
     const bVideo = el('button', 'btn ghost small', foot, 'assistir');
     bVideo.disabled = !p.delivery || p.delivery.broken;
     bVideo.title = bVideo.disabled ? 'sem entrega que abra' : 'abrir a entrega no player';
