@@ -188,6 +188,16 @@ An unchecked box is an explicit NO, not a silence. Copy the picks into
    at once maximises THROUGHPUT. For a queue, prefer several projects in
    parallel at lower per-render concurrency.
 
+   **Medido** (`render_queue.py`, dois reels de 21,5s e 26,6s, 8 nucleos):
+   serial a concorrencia total = 840s; dois em paralelo com os nucleos
+   divididos = 526s. Dentro da fase paralela, 1014s de trabalho de render
+   sairam em 526s de relogio — **1,93x de sobreposicao real**. Cada render
+   individual fica MAIS LENTO (426s -> 526s), que e o preco esperado de
+   dividir os nucleos; o que melhora e a vazao, que e o que importa em lote.
+   Ressalva honesta: a fase serial disputou CPU com outro render meu, entao
+   os 840s estao inflados e o ganho ponta a ponta e menor que 1,60x. O 1,93x
+   foi medido dentro da fase paralela e nao sofre disso.
+
 Never edit `src/Main.tsx`. Bespoke graphics go in `src/CustomGraphics.tsx`
 (the ONE editable file — read it only when the video needs a custom graphic).
 
