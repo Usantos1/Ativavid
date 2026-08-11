@@ -467,8 +467,14 @@ const EndCardInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
   // and it bled off both edges the first time a real handle went in
   // ("Segue @lojaprimecamp" at 900 weight is far wider than 1080px). The
   // headline solved this long ago by measuring; the end card has to as well.
-  const safeW = width * 0.84;          // ~8% breathing room each side
-  const base = Math.round(width * 0.072);
+  // 0.84 stopped the bleed but replaced it with a different problem: any handle
+  // long enough to hit the budget renders AT the budget, so "Segue
+  // @lojaprimecamp" came out edge to edge, headline-sized, on a card that is
+  // supposed to read as a sign-off. The fit is doing its job — the target was
+  // too generous. 0.70 leaves a real margin, and the smaller base means short
+  // handles shrink too instead of only long ones being clamped.
+  const safeW = width * 0.70;          // 15% breathing room each side
+  const base = Math.round(width * 0.058);
   const weightOf = (i: number) => (i === 0 ? 900 : 600);
   const scaleOf = (i: number) => (i === 0 ? 1 : 0.62);
   const widthAt = (t: string, px: number, w: number) =>
