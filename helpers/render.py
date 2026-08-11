@@ -321,6 +321,8 @@ def extract_segment(
     draft: bool = False,
     keep_resolution: bool = False,
     gain_db: float = 0.0,
+    gain_windows: list | None = None,
+    bleep_windows: list | None = None,
     streams: str = "av",
 ) -> None:
     """Extract a cut range as its own MP4 with grade + 30ms audio fades baked in.
@@ -386,16 +388,72 @@ def extract_segment(
     # so the edges still land at true silence. A boosted segment gets a limiter
     # so a loud syllable inside a quiet take cannot clip after the gain.
     af_parts: list[str] = []
+    # Windowed level match, applied BEFORE the flat range gain. A range holding two
+    # speakers cannot be rescued by `gain_db`: the quiet one needs +7dB while the
+    # close-mic one is already fine, and boosting the whole range just pushes the
+    # good voice up with it. `gain_windows` lifts only the marked spans — times are
+    # in SOURCE seconds and get rebased to the segment here, so a window survives a
+    # re-render even if the range's start moves. Volume has timeline support, so
+    # `enable=` is evaluated per frame.
+    boosted = False
+    for w in gain_windows or []:
+        w_db = float(w.get("db", 0.0) or 0.0)
+        if abs(w_db) <= 0.05:
+            continue
+        a = max(0.0, float(w["start"]) - seg_start)
+        b = min(duration, float(w["end"]) - seg_start)
+        if b - a <= 0.01:
+            continue  # window falls outside this segment
+        af_parts.append(f"volume={w_db:+.2f}dB:enable='between(t,{a:.3f},{b:.3f})'")
+        boosted = boosted or w_db > 0
     if abs(gain_db) > 0.05:
         af_parts.append(f"volume={gain_db:+.2f}dB")
-        if gain_db > 0:
-            af_parts.append("alimiter=level_in=1:level_out=1:limit=0.95")
+        boosted = boosted or gain_db > 0
+    if boosted:
+        af_parts.append("alimiter=level_in=1:level_out=1:limit=0.95")
+
+    # Censor bleeps — a 1kHz tone REPLACING the audio inside each window. The
+    # speech is muted and the tone gated by the SAME expression, so the swap is
+    # sample-exact and no fragment of the word survives underneath it. Times are
+    # in SOURCE seconds, like gain_windows. `sine` is a source filter, so the tone
+    # is generated inside the filtergraph and needs no extra input file. Gating
+    # uses volume's `eval=frame` expression rather than `enable=`, because enable
+    # can only mute an existing signal — it cannot un-mute the tone.
+    bleeps: list[tuple[float, float]] = []
+    for w in bleep_windows or []:
+        a = max(0.0, float(w["start"]) - seg_start)
+        b = min(duration, float(w["end"]) - seg_start)
+        if b - a > 0.005:
+            bleeps.append((a, b))
 
     # 30ms audio fades at both edges (Rule 3) — prevent pops
     fade_out_start = max(0.0, duration - 0.03)
-    af_parts.append("afade=t=in:st=0:d=0.03")
-    af_parts.append(f"afade=t=out:st={fade_out_start:.3f}:d=0.03")
-    af = ",".join(af_parts)
+    fades = (f"afade=t=in:st=0:d=0.03,"
+             f"afade=t=out:st={fade_out_start:.3f}:d=0.03")
+    af = ",".join(af_parts + [fades])
+
+    filter_complex = ""
+    if bleeps and streams != "v":
+        gate = "+".join(f"between(t,{a:.3f},{b:.3f})" for a, b in bleeps)
+        # Amplitude is peak-linear: 0.30 ≈ -10.5 dBFS peak / -13.5 dBFS RMS, which
+        # sits just above conversational speech so the tone actually masks the word.
+        # Built with `aevalsrc`, NOT `sine` — ffmpeg's sine source emits at 0.125
+        # amplitude (-18 dBFS), so a level set against it is ~18 dB quieter than it
+        # reads and the bleep is inaudible under the speech it is meant to cover.
+        amp = float((bleep_windows or [{}])[0].get("level", 0.30) or 0.30)
+        osc = f"{amp:.3f}*sin(2*PI*1000*t)"
+        speech = ",".join(af_parts + [f"volume=volume='if({gate},0,1)':eval=frame"])
+        parts = [
+            f"[0:a]{speech}[sp]",
+            f"aevalsrc=exprs={osc}|{osc}:s=48000:d={duration:.6f}:c=stereo,"
+            f"volume=volume='if({gate},1,0)':eval=frame[bp]",
+            f"[sp][bp]amix=inputs=2:duration=first:normalize=0,{fades}[aout]",
+        ]
+        if streams != "a" and vf:
+            # -vf and -filter_complex cannot both drive the same output, so the
+            # video chain moves into the graph too when a segment carries both.
+            parts.insert(0, f"[0:v]{vf}[vout]")
+        filter_complex = ";".join(parts)
 
     if draft:
         preset, crf = "ultrafast", "28"
@@ -410,9 +468,13 @@ def extract_segment(
         "-i", str(source),
         "-t", f"{duration:.6f}",
     ]
+    if filter_complex:
+        cmd += ["-filter_complex", filter_complex]
     if streams != "a":
-        if vf:
+        if vf and not filter_complex:
             cmd += ["-vf", vf]
+        elif filter_complex:
+            cmd += ["-map", "[vout]" if vf else "0:v"]
         cmd += ["-c:v", "libx264", "-preset", preset, "-crf", crf, "-pix_fmt", "yuv420p"]
         # Every path above lands on Rec.709 (tonemap for HDR, wide_gamut_chain for
         # BT.2020 SDR, passthrough for the rest), so tag it explicitly. Without this
@@ -428,7 +490,7 @@ def extract_segment(
         cmd += ["-vn"]
 
     if streams != "v":
-        cmd += ["-af", af]
+        cmd += ["-map", "[aout]"] if filter_complex else ["-af", af]
         if out_path.suffix.lower() == ".wav":
             # PCM for the J-cut mix — the segments get summed, so no point
             # compounding AAC generations before the single final encode.
@@ -528,15 +590,22 @@ def extract_all_segments(
             seg_filter = resolved
 
         gain_db = float(r.get("gain_db", 0.0) or 0.0)
+        gain_windows = r.get("gain_windows") or []
+        bleep_windows = r.get("bleep_windows") or []
 
         note = r.get("beat") or r.get("note") or ""
         grade_note = f"  grade: {seg_filter or '(none)'}" if is_auto else ""
         gain_note = f"  gain: {gain_db:+.1f}dB" if abs(gain_db) > 0.05 else ""
+        if gain_windows:
+            gain_note += f"  +{len(gain_windows)} janela(s)"
+        if bleep_windows:
+            gain_note += f"  {len(bleep_windows)} apito(s)"
         print(f"  [{i:02d}] {src_name}  {start:7.2f}-{end:7.2f}  ({duration:5.2f}s)  {note}{grade_note}{gain_note}", flush=True)
         extract_segment(
             src_path, start, duration, seg_filter, out_path,
             preview=preview, draft=draft, keep_resolution=keep_resolution,
-            gain_db=gain_db,
+            gain_db=gain_db, gain_windows=gain_windows,
+            bleep_windows=bleep_windows,
         )
         return out_path
 
@@ -758,6 +827,8 @@ def extract_and_assemble_jcut(
                                           verbose=False)[0]
                       if is_auto else resolved)
         gain_db = float(r.get("gain_db", 0.0) or 0.0)
+        gain_windows = r.get("gain_windows") or []
+        bleep_windows = r.get("bleep_windows") or []
         vpath = clips_dir / f"seg_{i:02d}_{r['source']}_v.mp4"
         apath = clips_dir / f"seg_{i:02d}_{r['source']}_a.wav"
         extract_segment(p["src"], p["v_in"], p["v_out"] - p["v_in"], seg_filter,
@@ -766,6 +837,7 @@ def extract_and_assemble_jcut(
         extract_segment(p["src"], p["a_in"], p["a_out"] - p["a_in"], "",
                         apath, preview=preview, draft=draft,
                         keep_resolution=keep_resolution, gain_db=gain_db,
+                        gain_windows=gain_windows, bleep_windows=bleep_windows,
                         streams="a")
         p["video_path"], p["audio_path"] = vpath, apath
 
@@ -776,6 +848,10 @@ def extract_and_assemble_jcut(
         elif p["silence_avail_ms"] is not None:
             tail_note = f"  cauda 0f (só {p['silence_avail_ms']}ms de silêncio)"
         gain_note = f"  gain: {gain_db:+.1f}dB" if abs(gain_db) > 0.05 else ""
+        if gain_windows:
+            gain_note += f"  +{len(gain_windows)} janela(s)"
+        if bleep_windows:
+            gain_note += f"  {len(bleep_windows)} apito(s)"
         print(f"  [{i:02d}] {r['source']}  v {p['v_in']:7.2f}-{p['v_out']:7.2f}"
               f"  a {p['a_in']:7.2f}-{p['a_out']:7.2f}"
               f"  {r.get('beat') or ''}{tail_note}{gain_note}", flush=True)

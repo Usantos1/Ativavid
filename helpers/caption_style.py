@@ -94,9 +94,27 @@ def load_words(transcript_path: Path) -> list[dict]:
     return fused
 
 
+_PICTO_JOINERS = {0x200D, 0xFE0E, 0xFE0F}  # ZWJ + variation selectors
+
+
+def is_emoji_run(text: str) -> bool:
+    """A token made only of pictographs (e.g. "🤣🤣🤣").
+
+    `strip_p` treats them as punctuation and strips them to "", so the length
+    tests below would call them degenerate — exactly backwards: an emoji run is
+    the LARGEST thing on the line, not too small to carry a beat. Users retype
+    captions with emoji from the preview, so this is a real input, not an edge
+    case: it cost a circled solo word its circle the first time it happened.
+    """
+    core = text.strip()
+    return bool(core) and all(
+        ord(ch) >= 0x2190 or ord(ch) in _PICTO_JOINERS for ch in core
+    )
+
+
 def is_degenerate(w: dict) -> bool:
     t = norm(w["text"])
-    if t in EMPH:
+    if t in EMPH or is_emoji_run(w["text"]):
         return False
     return len(strip_p(w["text"])) <= 2 or (t in STOP and len(strip_p(w["text"])) <= 3)
 
@@ -126,6 +144,11 @@ def group_cues(words: list[dict]) -> list[list[dict]]:
             nxt is None
             or (nxt["startMs"] - w["endMs"] > PAUSE_MS)
             or w["text"].endswith(ENDBREAK)
+            # an emoji run is a complete beat on its own — it carries no
+            # punctuation, so without this it glues onto whatever follows. The
+            # word it replaces usually ended in a period, and that period was
+            # quietly doing the grouping.
+            or is_emoji_run(w["text"])
             or len(cur) >= MAX_WORDS
         )
         if brk:
@@ -170,7 +193,25 @@ def group_cues(words: list[dict]) -> list[list[dict]]:
             remaining_ok = len(cw) > 2 or not is_degenerate(cw[0])
             if gap <= PAUSE_MS and cw[-1]["startMs"] > nxt[0]["startMs"] - 260 and remaining_ok:
                 nxt.insert(0, cw.pop())
-    return fixed
+    # last resort: both merges above bail when the neighbour is already at
+    # MAX_WORDS, which lets a brief solo survive between two full stacks —
+    # measured, a 181ms "né?" wedged between two 4-word cues. MAX_WORDS is a
+    # readability PREFERENCE; MIN_SOLO_MS is a legibility FLOOR, so overflow the
+    # stack by one word rather than ship a cue that flashes. Prefer the neighbour
+    # it was actually spoken with (the smaller gap).
+    swept: list[list[dict]] = []
+    for k, cw in enumerate(fixed):
+        if len(cw) == 1 and unsolo(cw[0]) and (swept or k + 1 < len(fixed)):
+            prev_gap = (cw[0]["startMs"] - swept[-1][-1]["endMs"]) if swept else None
+            next_gap = (fixed[k + 1][0]["startMs"] - cw[0]["endMs"]) if k + 1 < len(fixed) else None
+            if prev_gap is not None and (next_gap is None or prev_gap <= next_gap):
+                swept[-1].append(cw[0])
+                continue
+            if next_gap is not None:
+                fixed[k + 1].insert(0, cw[0])
+                continue
+        swept.append(cw)
+    return swept
 
 
 def build_lines(ws: list[dict]) -> list[list[dict]]:
