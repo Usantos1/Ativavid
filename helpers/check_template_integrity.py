@@ -27,6 +27,8 @@ Exit code 0 = clean, 1 = drift detected (or missing files), 2 = usage/setup erro
 """
 from __future__ import annotations
 
+import _utf8  # noqa: F401  — UTF-8 no stdout antes de qualquer print
+
 import argparse
 import hashlib
 import shutil

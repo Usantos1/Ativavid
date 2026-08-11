@@ -20,6 +20,8 @@ Exit code 0 = clean, 1 = has CHECK flags.
 """
 from __future__ import annotations
 
+import _utf8  # noqa: F401  — UTF-8 no stdout antes de qualquer print
+
 import argparse
 import json
 import re

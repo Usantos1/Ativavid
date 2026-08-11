@@ -45,6 +45,8 @@ Usage:
 """
 from __future__ import annotations
 
+import _utf8  # noqa: F401  — UTF-8 no stdout antes de qualquer print
+
 import argparse
 import array
 import ctypes
@@ -59,17 +61,6 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
-
-# Windows hands a redirected stdout the cp1252 codec, and a single "→" in the
-# startup banner then raises UnicodeEncodeError and kills the server BEFORE it
-# ever binds the port — the preview just never comes up, with the traceback in
-# a log file nobody is reading. Every project name here is Portuguese, so the
-# accents are not going away; force UTF-8 on the streams instead.
-for _s in (sys.stdout, sys.stderr):
-    try:
-        _s.reconfigure(encoding="utf-8", errors="replace")
-    except (AttributeError, ValueError):  # not a reconfigurable text stream
-        pass
 
 # The image picker reuses pexels_search.py's own search/download/slugify
 # rather than reimplementing the API call — same helper the skill runs from

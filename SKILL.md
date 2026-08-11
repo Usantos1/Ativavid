@@ -144,6 +144,16 @@ Phase 2/3 (see the track references for usage):
 - **`captions_for_remotion.py`** (karaoke JSON) · **`face_track.py`** (eye-track JSON) · **`person_matte.py`** (RVM alpha matte; `uv sync --extra matting`) · **`pexels_search.py`** · **`wikimedia_images.py`** (no key, brands/people first choice) · **`google_images.py`** (fallback, mind rights) · **`captions_srt.py`** (longform .srt) · **`chapters.py`** (YouTube chapters) · **`elevenlabs_music.py`** (AI soundtrack, ElevenLabs Music v2 — reuses `ELEVENLABS_API_KEY`, needs a paid plan; pass a context-driven MUSICAL vibe: genre + instruments + tempo + mood, not SFX-y phrasing; auto-framed as a composed instrumental) · **`post_brief.py`** (`--edit-dir <edit>` → `post_brief.md`: hook, beats with their quotes, spoken text and style, gathered for writing the post's caption + hashtags. It does NOT write the caption — wording is a judgement call about a specific brand and a specific joke, and a template yields exactly the generic "Confira! 🔥 #viral" that makes a feed read as automated. Write it from the brief.).
 - **`check_template_integrity.py <edit>/remotion [--track shortform|longform] [--fix]`** — hashes `remotion/src/*` (everything except `CustomGraphics.tsx`) against the shipped `assets/<track>/src/` template. Run before every `npx remotion render`; a non-zero exit means Hard Rule 11 got broken (a template file was hand-edited) — `--fix` restores it verbatim, never touches `CustomGraphics.tsx`.
 
+Sanidade da propria skill:
+- **`selftest.py`** — `python helpers/selftest.py [-v]`, ~10s, sem chave e sem
+  rede. 47 checagens: todo helper responde `--help` com **stdout em cp1252**
+  (a falha que mais volta: nunca reproduz num console interativo, e derruba
+  `render.py` e o servidor de preview), sintaxe de todo `.py` e `.js`, o
+  servidor sobe e serve suas rotas — inclusive o escopo `/p/<pasta>/` e a
+  recusa de caminhos fora do `--projects-root` — e o template Remotion passa na
+  propria checagem de integridade. Sai com o numero de falhas. **Rode depois de
+  mexer em helper ou no preview.**
+
 Interface:
 - **`preview_server.py --root <edit> [--port 4820]`** — serves the standard preview interface (see the Preview interface section). App code lives at `assets/preview/` and is IMMUTABLE.
 

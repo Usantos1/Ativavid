@@ -10,6 +10,8 @@ Options: --cols (default 3), --tile-width (default auto ≤1600px total).
 """
 from __future__ import annotations
 
+import _utf8  # noqa: F401  — UTF-8 no stdout antes de qualquer print
+
 import argparse
 import subprocess
 import sys

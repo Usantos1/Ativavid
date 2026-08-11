@@ -32,6 +32,8 @@ plus a stdout index of every tile's timestamp. Read the PNGs.
 """
 from __future__ import annotations
 
+import _utf8  # noqa: F401  — UTF-8 no stdout antes de qualquer print
+
 import argparse
 import re
 import shutil

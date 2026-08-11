@@ -27,6 +27,8 @@ Can also be imported by render.py: `get_preset(name)` and `auto_grade_for_clip(p
 
 from __future__ import annotations
 
+import _utf8  # noqa: F401  — UTF-8 no stdout antes de qualquer print
+
 import argparse
 import json
 import subprocess

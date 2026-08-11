@@ -15,6 +15,8 @@ Each stdout line is one notification. Stays quiet while nothing changes.
 """
 from __future__ import annotations
 
+import _utf8  # noqa: F401  — UTF-8 no stdout antes de qualquer print
+
 import atexit
 import json
 import os
@@ -213,6 +215,13 @@ def fmt(t: float) -> str:
 
 
 def main() -> int:
+    # `--help` used to be taken as a DIRECTORY NAME and die on FileNotFoundError,
+    # which reads as a broken helper rather than a misuse. Every other helper
+    # here answers --help; this one is the odd one out because it takes a bare
+    # positional, so answer it by hand instead of pulling in argparse for one arg.
+    if any(a in ("-h", "--help") for a in sys.argv[1:]):
+        print(__doc__ or "uso: watch_edits.py <edit dir>")
+        return 0
     root = Path(sys.argv[1] if len(sys.argv) > 1 else ".").expanduser().resolve()
 
     if acquire_singleton(root) is None:
