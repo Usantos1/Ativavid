@@ -390,6 +390,11 @@ entries exist here.
   do NOT hand-edit word timings into `captions.json`, they are derived. The
   usual cause is a transcription slip, so fixing the transcript entry and
   regenerating is both the correct and the cheaper path.
+  **Corrigir só `captions.json` da um FALSO OK no estilo Empilhado** (o padrao
+  da casa): ele desenha a partir de `caption-cues.json`, um arquivo separado.
+  A palavra fica certa no JSON, o video continua com a errada, e nada acusa.
+  Comece pela transcricao e regenere OS DOIS — verificado renderizando o
+  frame, nao lendo o arquivo.
 - `editData.newInserts[]` — images the user picked from the preview's own search
   (already downloaded to `remotion/public/pexels/`). Each carries `src` (a ref
   relative to `public/`), `start`/`end`, and `credit`. APPEND them to
