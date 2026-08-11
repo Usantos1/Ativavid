@@ -640,6 +640,38 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"ok": True, "from": before, "finalVideo": resolved})
             return
 
+        if action == "deleteProject":
+            # To the RECYCLE BIN, never a hard delete. This is the only action
+            # here that destroys work, and the whole project folder goes — the
+            # sources, the renders, the transcripts. A wrong click has to stay
+            # undoable, so it is a move, not an erase.
+            proj = edit.parent
+            for root in self.projects_roots:
+                if proj.resolve() == root.resolve():   # never the roots themselves
+                    self._json({"ok": False, "error": "isso e uma pasta raiz, nao um projeto"}, 400)
+                    return
+            # Confirmation is required and must name the folder: an accidental
+            # POST cannot delete anything, and the UI has to have shown the
+            # user which project it is about to remove.
+            if (body.get("confirm") or "").strip() != proj.name:
+                self._json({"ok": False, "error": "confirmacao nao confere com o nome do projeto"}, 400)
+                return
+            ps = (
+                "Add-Type -AssemblyName Microsoft.VisualBasic; "
+                "[Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory("
+                f"'{str(proj).replace(chr(39), chr(39) * 2)}', "
+                "'OnlyErrorDialogs', 'SendToRecycleBin')"
+            )
+            r = subprocess.run(["powershell", "-NoProfile", "-Command", ps],
+                               capture_output=True, text=True, timeout=120,
+                               stdin=subprocess.DEVNULL, encoding="utf-8", errors="replace")
+            if r.returncode != 0 or proj.exists():
+                self._json({"ok": False,
+                            "error": (r.stderr or "falhou ao mover para a Lixeira").strip()[:200]}, 500)
+                return
+            self._json({"ok": True, "deleted": proj.name, "recycled": True})
+            return
+
         if action == "fixTemplate":
             # Delegates to the existing checker rather than copying files here:
             # it already owns which files are template-owned and which one

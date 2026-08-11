@@ -268,6 +268,13 @@ de caracteres e de hashtags e um botão copiar. Ela é lida de
 ficava pra trás, então ela fica ao lado do vídeo a que pertence. O painel é só
 leitura — quem escreve o texto é você, no arquivo.
 
+**Excluir um projeto** — botão `excluir` na linha do projeto no `/painel`.
+Vai para a **Lixeira do Windows**, nunca apagado de vez: some o projeto
+inteiro (fontes, renders, transcrições), então um clique errado precisa
+continuar desfazível. Exige digitar o nome da pasta — não é sim/não, porque
+digitar obriga a LER qual projeto é. A rota recusa qualquer caminho fora de
+`--projects-root` e recusa as pastas raiz.
+
 **HASHTAGS: no máximo 5.** Teto, não meta — três boas valem mais que cinco
 mornas. Prefira nicho e negócio; as genéricas de alcance (`#viral`, `#fyp`,
 `#reels`) competem com contas enormes, não trazem o público certo e ocupam

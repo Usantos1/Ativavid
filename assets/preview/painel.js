@@ -151,11 +151,11 @@ function render(data) {
 
     const foot = el('div', 'pn-foot', card);
 
-    const act = async (action, label) => {
+    const act = async (action, label, extra) => {
       const r = await fetch('/api/project/action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: p.path, action }),
+        body: JSON.stringify({ path: p.path, action, ...(extra || {}) }),
       });
       const d = await r.json().catch(() => ({}));
       if (!d.ok) { toast(d.error || `Não consegui ${label}`); return null; }
@@ -190,6 +190,22 @@ function render(data) {
         if (d) { toast(`Corrigido: ${d.from} → ${d.finalVideo}`); load(); }
       });
     }
+
+    // last in the row, and the only one that destroys anything
+    const bDel = el('button', 'btn small pn-del', foot, 'excluir');
+    bDel.title = 'move o projeto inteiro para a Lixeira do Windows';
+    bDel.addEventListener('click', async () => {
+      // typing the name is the guard: it makes the user read WHICH project,
+      // which a yes/no dialog does not
+      const typed = prompt(
+        `Excluir "${p.folder}"?\n\nVai para a LIXEIRA (dá pra restaurar).\n` +
+        `Some o projeto inteiro: fontes, renders, transcrições.\n\n` +
+        `Digite o nome da pasta para confirmar:`);
+      if (typed === null) return;
+      if (typed.trim() !== p.folder) { toast('Nome não confere — nada foi excluído', 3500); return; }
+      const d = await act('deleteProject', 'excluir', {confirm: p.folder});
+      if (d) { toast(`"${d.deleted}" foi para a Lixeira`, 4000); load(); }
+    });
 
     const copy = el('button', 'btn ghost small', foot, 'copiar');
     copy.title = p.path;
