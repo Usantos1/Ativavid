@@ -48,6 +48,16 @@ function render(data) {
   const box = $('alerts');
   box.innerHTML = '';
   const add = (kind, html) => { el('div', `pn-alert ${kind}`, box).innerHTML = html; };
+  // First, because it explains every other thing that will look broken: the
+  // browser always gets the CURRENT app.js, but the server still runs the
+  // Python it was started with. So a new button appears and its route 404s
+  // into a blank tab — indistinguishable from a bug, and the reason this
+  // banner exists at all.
+  if (data.serverStale) {
+    add('bad', 'Este servidor foi iniciado antes da última atualização da skill — '
+      + 'a tela é a nova, o servidor é o antigo, então botões novos abrem em branco. '
+      + '<b>Reinicie o preview</b> (peça ao Claude, ou rode o preview_server de novo).');
+  }
   if (broken.length) {
     add('bad', `<b>${broken.length}</b> entrega(s) não abrem — arquivo truncado ou corrompido: ` +
       broken.map((p) => p.folder).join(', '));

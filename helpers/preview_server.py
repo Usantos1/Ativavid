@@ -83,6 +83,14 @@ except Exception:  # noqa: BLE001 — missing deps must not break the server
     pexels_search = None
 
 APP_DIR = Path(__file__).resolve().parent.parent / "assets" / "preview"
+
+# A running server holds the Python it was STARTED with, while the browser is
+# always handed the current app.js — so after the skill is updated the UI grows
+# a button whose route does not exist yet, and clicking it 404s into a blank
+# tab. It looks like a broken feature; it is a stale process. Remember the
+# file's mtime at boot and compare later, so the panel can say so out loud
+# instead of leaving you to guess.
+SERVER_MTIME_AT_BOOT = Path(__file__).stat().st_mtime
 PEAKS_PER_SEC = 40
 THUMB_EVERY_S = 2.0
 THUMB_HEIGHT = 90
@@ -900,6 +908,7 @@ class Handler(BaseHTTPRequestHandler):
             "ok": True,
             "roots": [str(p) for p in self.projects_roots],
             "current": str(self.root),
+            "serverStale": Path(__file__).stat().st_mtime != SERVER_MTIME_AT_BOOT,
             "projects": rows,
         })
 
