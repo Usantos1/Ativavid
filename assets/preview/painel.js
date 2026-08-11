@@ -176,13 +176,13 @@ function render(data) {
     // a /p/<pasta>/ prefix (see _scope in preview_server.py). Before this the
     // panel could tell you a project needed attention and then leave you with
     // no way in: the editor only ever opened the one folder its server was
-    // started on. A link, not a fetch, so middle-click and "open in new tab"
-    // behave the way they look like they should.
+    // started on. A link, not a fetch, and deliberately NOT forced to _blank:
+    // it navigates in place, while middle-click and ctrl-click still open a tab
+    // for whoever wants one. Forcing a tab piles them up when you work down a
+    // list, and the editor already has its own way back to the panel.
     const bEdit = el('a', 'btn ghost small', foot, 'editor');
     bEdit.href = `/p/${encodeURIComponent(p.folder)}/fase1`;
-    bEdit.target = '_blank';
-    bEdit.rel = 'noopener';
-    bEdit.title = 'abrir este projeto no editor, numa aba nova';
+    bEdit.title = 'abrir este projeto no editor';
 
     const bVideo = el('button', 'btn ghost small', foot, 'assistir');
     bVideo.disabled = !p.delivery || p.delivery.broken;
@@ -278,7 +278,14 @@ load();
  * cannot yank the page out from under someone reading it. */
 setInterval(() => {
   if (document.hidden) return;                 // don't scan for a tab nobody is looking at
-  if (document.activeElement && document.activeElement.tagName === 'BUTTON') return;
+  // load() replaces every card, so a refresh landing between mousedown and
+  // mouseup destroys the element you were clicking and the click goes nowhere.
+  // The focus guard alone missed two cases: the `editor` LINK (not a BUTTON),
+  // and the moment before anything has focus at all. Hovering the grid means
+  // you are aiming at something — wait.
+  const act = document.activeElement;
+  if (act && (act.tagName === 'BUTTON' || act.tagName === 'A')) return;
+  if ($('grid').matches(':hover')) return;
   const y = window.scrollY;
   load().then(() => window.scrollTo({ top: y }));
 }, 8000);
