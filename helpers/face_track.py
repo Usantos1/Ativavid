@@ -100,7 +100,7 @@ def main() -> None:
         "fps": fps, "width": W, "height": H,
         "count": len(points), "detected": detected,
         "points": points,
-    }))
+    }), encoding="utf-8")
     print(f"{args.output} — {len(points)} frames, {detected} with a face "
           f"({100*detected//max(1,len(points))}%)")
 

@@ -67,7 +67,7 @@ def acquire_singleton(root: Path) -> Path | None:
             old_pid = None
         if old_pid and old_pid != os.getpid() and _pid_alive(old_pid):
             return None
-    pidfile.write_text(str(os.getpid()))
+    pidfile.write_text(str(os.getpid()), encoding="utf-8")
 
     def _release() -> None:
         try:

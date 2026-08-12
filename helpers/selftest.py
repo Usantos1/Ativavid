@@ -142,11 +142,17 @@ def check_reads_are_utf8() -> None:
         for node in ast.walk(tree):
             if (isinstance(node, ast.Call)
                     and isinstance(node.func, ast.Attribute)
-                    and node.func.attr == "read_text"
+                    and node.func.attr in ("read_text", "write_text")
                     and not any(k.arg == "encoding" for k in node.keywords)):
-                offenders.append(f"{f.name}:{node.lineno}")
-    record(not offenders, "toda leitura de texto declara encoding",
+                offenders.append(f"{f.name}:{node.lineno} ({node.func.attr})")
+    record(not offenders, "toda leitura/escrita de texto declara encoding",
            ", ".join(offenders[:8]) + (f" (+{len(offenders) - 8})" if len(offenders) > 8 else ""))
+
+    # A escrita foi acrescentada depois, e nao por simetria: com ela livre, o
+    # servidor gravava preview_edits.json no locale e o watch_edits lia em
+    # utf-8, entao UMA correcao com acento — e portugues sempre tem — matava o
+    # vigia com UnicodeDecodeError. Nunca chegava ninguem. Era exatamente o
+    # "salvei e nada aconteceu" que este produto ja conhece.
 
     # and prove the failure mode is what the check claims, so the check cannot
     # quietly become a rule nobody remembers the reason for

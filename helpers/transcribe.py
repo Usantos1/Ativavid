@@ -605,7 +605,7 @@ def _transcribe_audio(
                 payload = call_groq(chunk, api_key, model=model, language=language)
             if cache:
                 cache_dir.mkdir(parents=True, exist_ok=True)
-                cache.write_text(json.dumps(payload))
+                cache.write_text(json.dumps(payload), encoding="utf-8")
             return payload
 
         if len(chunks) == 1:
@@ -728,7 +728,7 @@ def transcribe_one(
                                     cache_dir=chunk_cache, chunk_seconds=active_chunk,
                                     backend=resolved, wcpp=wcpp)
 
-    out_path.write_text(json.dumps(payload, indent=2))
+    out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     # only THIS video's chunk dir — siblings may belong to parallel batch workers
     shutil.rmtree(chunk_cache, ignore_errors=True)
     dt = time.time() - t0

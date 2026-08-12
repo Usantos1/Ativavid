@@ -143,7 +143,7 @@ def gen_waveform(video: Path, out_json: Path) -> None:
         "min": mins,
         "max": maxs,
         "srcMtime": video.stat().st_mtime,
-    }))
+    }), encoding="utf-8")
     tmp.replace(out_json)
 
 
@@ -162,7 +162,7 @@ def gen_thumbs(video: Path, out_dir: Path) -> None:
         "everySec": THUMB_EVERY_S,
         "count": len(list(out_dir.glob("*.jpg"))),
         "srcMtime": video.stat().st_mtime,
-    }))
+    }), encoding="utf-8")
 
 
 def _bring_window_to_front(want_title_start: str, timeout_s: float = 2.0) -> bool:
@@ -382,6 +382,7 @@ class Handler(BaseHTTPRequestHandler):
     root: Path  # set on the class by main()
     projects_roots: list[Path] = []
     scoped = False  # per-request: is this a /p/<pasta>/ view of ANOTHER project?
+    scope_miss = False  # per-request: /p/<pasta>/ nomeou um projeto inexistente
     protocol_version = "HTTP/1.1"
 
     # ---- helpers ----
@@ -466,6 +467,7 @@ class Handler(BaseHTTPRequestHandler):
         """
         self.root = type(self).root          # reset: keep-alive reuses instances
         self.scoped = False
+        self.scope_miss = False
         m = re.match(r"/p/([^/]+)(/.*)?$", path)
         if not m:
             return path
@@ -475,8 +477,13 @@ class Handler(BaseHTTPRequestHandler):
             if edit:
                 self.root, self.scoped = edit, True
                 return m.group(2) or "/"
-        # unknown project: fall through to the server's own root rather than
-        # 404, so a stale bookmark opens SOMETHING instead of a dead page
+        # Unknown project. Falling through to the server's own root was fine
+        # for a GET — a stale bookmark shows SOMETHING rather than a dead page.
+        # It is not fine for a write: /p/ProjetoApagado/api/save would land in
+        # whichever project this server was started on, under a URL naming a
+        # different one, and the UI would confirm "salvo". Renaming a folder is
+        # enough to trigger it. So: remember the miss, and let do_POST refuse.
+        self.scope_miss = True
         return m.group(2) or "/"
 
     def do_GET(self) -> None:  # noqa: N802
@@ -511,6 +518,12 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         route = self._scope(self.path.split("?", 1)[0])
+        if self.scope_miss:
+            # never write into a project the URL did not ask for
+            self._json({"ok": False, "error":
+                        "Esse projeto não existe mais nesta pasta — nada foi salvo. "
+                        "Volte ao painel e abra o projeto de novo."}, 404)
+            return
         if route == "/api/open-folder":
             self._open_folder()
             return
@@ -540,7 +553,7 @@ class Handler(BaseHTTPRequestHandler):
         name = "preview_style.json" if body.get("type") == "style-setup" else "preview_edits.json"
         out = self.root / name
         tmp = out.with_suffix(".tmp")
-        tmp.write_text(json.dumps(body, ensure_ascii=False, indent=2))
+        tmp.write_text(json.dumps(body, ensure_ascii=False, indent=2), encoding="utf-8")
         tmp.replace(out)
         self._json({"ok": True, "file": str(out)})
 
@@ -745,7 +758,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         out = APP_DIR / "default-style.json"
         tmp = out.with_suffix(".tmp")
-        tmp.write_text(json.dumps(body, ensure_ascii=False, indent=2))
+        tmp.write_text(json.dumps(body, ensure_ascii=False, indent=2), encoding="utf-8")
         tmp.replace(out)
         self._json({"ok": True})
 

@@ -120,7 +120,7 @@ def acquire_render_lock(out_path: Path) -> None:
                 "recusando iniciar um segundo render duplicado. Se esse processo "
                 f"já morreu sem limpar o lock, apague {lock_path} e rode de novo."
             )
-    lock_path.write_text(str(os.getpid()))
+    lock_path.write_text(str(os.getpid()), encoding="utf-8")
 
     def _release() -> None:
         try:
@@ -624,7 +624,7 @@ def concat_segments(segment_paths: list[Path], out_path: Path, edit_dir: Path) -
     """Lossless concat via the concat demuxer. No re-encode."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
     concat_list = edit_dir / "_concat.txt"
-    concat_list.write_text("".join(f"file '{p.resolve()}'\n" for p in segment_paths))
+    concat_list.write_text("".join(f"file '{p.resolve()}'\n" for p in segment_paths), encoding="utf-8")
 
     cmd = [
         "ffmpeg", "-y",
@@ -758,7 +758,7 @@ def assemble_jcut(plan: list[dict], out_path: Path, edit_dir: Path) -> None:
     """Concat the video track, sum the offset audio tracks, mux them together."""
     work = edit_dir / "clips_graded"
     vlist = edit_dir / "_concat_jcut.txt"
-    vlist.write_text("".join(f"file '{p['video_path'].resolve()}'\n" for p in plan))
+    vlist.write_text("".join(f"file '{p['video_path'].resolve()}'\n" for p in plan), encoding="utf-8")
 
     video_only = work / "_jcut_video.mp4"
     run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(vlist),
@@ -966,7 +966,7 @@ def build_master_srt(edl: dict, edit_dir: Path, out_path: Path) -> None:
         lines.append(f"{_srt_timestamp(a)} --> {_srt_timestamp(b)}")
         lines.append(t)
         lines.append("")
-    out_path.write_text("\n".join(lines))
+    out_path.write_text("\n".join(lines), encoding="utf-8")
     print(f"master SRT → {out_path.name} ({len(entries)} cues)")
 
 
@@ -1295,7 +1295,7 @@ def main() -> None:
     snapped = snap_ranges_to_frames(edl, target_fps)
     if snapped:
         edl["total_duration_s"] = round(sum(r["end"] - r["start"] for r in edl["ranges"]), 3)
-        edl_path.write_text(json.dumps(edl, ensure_ascii=False, indent=2))
+        edl_path.write_text(json.dumps(edl, ensure_ascii=False, indent=2), encoding="utf-8")
         print(f"  frame-aligned {snapped} range(s) to {target_fps}fps → edl.json updated")
 
     if args.draft:
@@ -1334,7 +1334,7 @@ def main() -> None:
         ]
         edl["total_duration_s"] = round(
             sum(p["v_out"] - p["v_in"] for p in plan), 3)
-        edl_path.write_text(json.dumps(edl, ensure_ascii=False, indent=2))
+        edl_path.write_text(json.dumps(edl, ensure_ascii=False, indent=2), encoding="utf-8")
         print(f"  timeline J-cut: {edl['total_duration_s']}s → edl.json atualizado")
     else:
         # 1. Extract per-segment (auto-grade per range if EDL grade is "auto")
@@ -1350,7 +1350,7 @@ def main() -> None:
         if edl.pop("jcut_timeline", None) is not None:
             edl["total_duration_s"] = round(
                 sum(r["end"] - r["start"] for r in edl["ranges"]), 3)
-            edl_path.write_text(json.dumps(edl, ensure_ascii=False, indent=2))
+            edl_path.write_text(json.dumps(edl, ensure_ascii=False, indent=2), encoding="utf-8")
             print("  J-cut desligado → jcut_timeline removido do edl.json")
 
     # 3. Subtitles: build if requested, resolve final path
