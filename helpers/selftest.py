@@ -268,6 +268,51 @@ def check_preview_server() -> None:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+# ------------------------------------------------------- 3b. preset da casa
+def check_house_preset() -> None:
+    """default-style.json may only name elements the catalogue defines.
+
+    Caught a live one: `"undefined": true` was stored among the elements,
+    because #fastModeChk wears class="chk" for the look but has no data-id, so
+    the delegated handler wrote S.style.elements[undefined] on every click of
+    "Modo rápido". This file is the HOUSE preset — defaultStyle() spreads it
+    into every new project, and watch_edits.py turns the truthy keys into the
+    list of elements to build, so the junk reached the Fase 2 instructions as
+    an element named "undefined". Nothing raised anywhere along that path.
+
+    Checked here rather than in the UI because the damage is PERSISTENT: one
+    stray click contaminates the file, and every project after it inherits.
+    """
+    import re
+    preset = PREVIEW / "default-style.json"
+    appjs = PREVIEW / "app.js"
+    if not preset.exists() or not appjs.exists():
+        record(None, "preset da casa", "arquivo ausente")
+        return
+    try:
+        elems = (json.loads(preset.read_text(encoding="utf-8")).get("elements") or {})
+    except (json.JSONDecodeError, OSError) as e:
+        record(False, "preset da casa e JSON valido", str(e)[:90])
+        return
+
+    bloco = re.search(r"elements:\s*\[(.*?)\n\s*\]", appjs.read_text(encoding="utf-8"), re.S)
+    if not bloco:
+        record(None, "preset da casa", "nao achei STYLE_CATALOG.elements em app.js")
+        return
+    catalogo = set(re.findall(r"id:\s*'([^']+)'", bloco.group(1)))
+    orfas = sorted(set(elems) - catalogo)
+    record(not orfas, "preset da casa so tem elementos do catalogo",
+           f"fora do catalogo: {orfas} (catalogo: {sorted(catalogo)})" if orfas else "")
+
+    # and the same trap in the markup: any .chk inside the style panel that is
+    # not the fast-mode toggle must carry a data-id, or it writes a phantom key
+    html = (PREVIEW / "index.html").read_text(encoding="utf-8")
+    sem_id = [m for m in re.findall(r'<(?:label|div)[^>]*class="[^"]*\bchk\b[^"]*"[^>]*>', html)
+              if "data-id" not in m and "fastModeChk" not in m]
+    record(not sem_id, "nenhum .chk anonimo no HTML do painel de estilo",
+           f"{len(sem_id)} elemento(s) sem data-id" if sem_id else "")
+
+
 # ---------------------------------------------------------------- 4. template
 def check_template() -> None:
     src = SKILL / "assets" / "shortform" / "src"
@@ -302,6 +347,7 @@ def main() -> int:
                       ("1b. leitura de texto em UTF-8", check_reads_are_utf8),
                       ("2. sintaxe", check_syntax),
                       ("3. servidor de preview", check_preview_server),
+                      ("3b. preset da casa", check_house_preset),
                       ("4. template remotion", check_template)):
         print(title, flush=True)
         try:

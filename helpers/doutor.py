@@ -238,6 +238,14 @@ def checar_python() -> None:
 
 
 def main() -> int:
+    # Sem argparse (nao ha flags de verdade a parsear), mas --help tem de
+    # responder como em todo helper daqui: o selftest cobra isso de todos, e
+    # foi ele que pegou este arquivo rodando o diagnostico inteiro quando lhe
+    # pediram ajuda — e devolvendo o numero de bloqueios como se fosse erro.
+    if any(a in ("-h", "--help") for a in sys.argv[1:]):
+        print(__doc__ or "uso: doutor.py [--json]")
+        return 0
+
     for fn in (checar_programas, checar_chaves, checar_python,
                checar_espaco, checar_processos):
         try:

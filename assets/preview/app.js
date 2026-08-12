@@ -1931,7 +1931,14 @@ $('styleSetup').addEventListener('click', (e) => {
     return;
   }
   const chk = e.target.closest('.chk');
-  if (chk) {
+  // A .chk with no data-id is not an edit element — #fastModeChk wears the
+  // same class for the same look and has its OWN handler. Without this guard
+  // every click on "Modo rápido" also wrote S.style.elements[undefined]=true,
+  // which was then saved into the house preset, spread to every new project
+  // through defaultStyle()'s spread, and reached the Fase 2 instructions as an
+  // element literally named "undefined". Found it already stored in
+  // default-style.json — this had been happening for a while, silently.
+  if (chk && chk.dataset.id) {
     pushHistory();
     S.style.elements[chk.dataset.id] = !S.style.elements[chk.dataset.id];
     renderSetup();
