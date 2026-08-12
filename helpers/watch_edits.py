@@ -62,7 +62,7 @@ def acquire_singleton(root: Path) -> Path | None:
     pidfile = root / PIDFILE_NAME
     if pidfile.exists():
         try:
-            old_pid = int(pidfile.read_text().strip())
+            old_pid = int(pidfile.read_text(encoding="utf-8").strip())
         except (OSError, ValueError):
             old_pid = None
         if old_pid and old_pid != os.getpid() and _pid_alive(old_pid):
@@ -71,7 +71,7 @@ def acquire_singleton(root: Path) -> Path | None:
 
     def _release() -> None:
         try:
-            if pidfile.exists() and pidfile.read_text().strip() == str(os.getpid()):
+            if pidfile.exists() and pidfile.read_text(encoding="utf-8").strip() == str(os.getpid()):
                 pidfile.unlink()
         except OSError:
             pass
@@ -96,7 +96,7 @@ def acquire_singleton(root: Path) -> Path | None:
 
 def digest(p: Path) -> str:
     try:
-        d = json.loads(p.read_text())
+        d = json.loads(p.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as e:
         return f"preview_edits.json ilegível ({e.__class__.__name__}) — peça ao usuário para salvar de novo"
 
@@ -132,7 +132,7 @@ def digest(p: Path) -> str:
 def style_digest(p: Path) -> str:
     """The gate choice: what Fase 2 should be built as."""
     try:
-        d = json.loads(p.read_text())
+        d = json.loads(p.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as e:
         return f"preview_style.json ilegível ({e.__class__.__name__}) — peça ao usuário para salvar de novo"
 

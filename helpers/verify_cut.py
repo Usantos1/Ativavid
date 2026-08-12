@@ -142,7 +142,7 @@ def main() -> None:
     ap.add_argument("--json", action="store_true", help="machine output")
     args = ap.parse_args()
 
-    edl = json.loads(args.edl.read_text())
+    edl = json.loads(args.edl.read_text(encoding="utf-8"))
     ranges = edl["ranges"]
 
     # Under a J-cut the output is SHORTER than the sum of the ranges and the picture

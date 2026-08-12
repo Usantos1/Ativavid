@@ -131,7 +131,7 @@ def main() -> None:
     info_path = video.with_name(video.stem + ".info.json")
     if info_path.exists():
         try:
-            raw = json.loads(info_path.read_text())
+            raw = json.loads(info_path.read_text(encoding="utf-8"))
             info = {"title": raw.get("title"), "uploader": raw.get("uploader") or raw.get("channel"),
                     "source_url": raw.get("webpage_url"), "upload_date": raw.get("upload_date")}
         except Exception:

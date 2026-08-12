@@ -113,6 +113,57 @@ def check_redirected_stdout() -> None:
             record(False, f"--help {f.name}", last[-1][:110] if last else f"rc={r.returncode}")
 
 
+# ------------------------------------------------------- 1b. leitura em UTF-8
+def check_reads_are_utf8() -> None:
+    """No text read may rely on the locale encoding.
+
+    This is the READ half of the cp1252 problem, and it is worse than the write
+    half because it does not raise: `Path.read_text()` with no encoding decodes
+    a UTF-8 file as cp1252, so "Doce para café" silently becomes "Doce para
+    cafÃ©" and JSON parses happily. Everything downstream — the project name in
+    the UI, the beats in edl.json, the transcript that becomes the subtitles,
+    the correction note the user typed — is Portuguese, so this corrupts
+    exactly the content that matters, with no error anywhere.
+
+    Static, not behavioural: reproducing it needs a cp1252 locale, and the whole
+    point is that catching it must not depend on the ambient locale.
+
+    AST rather than grep, and that is not fussiness — the grep version flagged
+    this very docstring for containing the words `read_text()`. A check that
+    cries wolf on prose gets ignored, which is the same as not having it.
+    """
+    import ast
+    offenders = []
+    for f in sorted(HELPERS.glob("*.py")):
+        try:
+            tree = ast.parse(f.read_text(encoding="utf-8"), str(f))
+        except SyntaxError:
+            continue  # already reported by the syntax check
+        for node in ast.walk(tree):
+            if (isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "read_text"
+                    and not any(k.arg == "encoding" for k in node.keywords)):
+                offenders.append(f"{f.name}:{node.lineno}")
+    record(not offenders, "toda leitura de texto declara encoding",
+           ", ".join(offenders[:8]) + (f" (+{len(offenders) - 8})" if len(offenders) > 8 else ""))
+
+    # and prove the failure mode is what the check claims, so the check cannot
+    # quietly become a rule nobody remembers the reason for
+    tmp = Path(tempfile.mkdtemp(prefix="ativavid-enc-"))
+    try:
+        p = tmp / "state.json"
+        original = "Doce para café — Adoçar seu dia"
+        p.write_text(json.dumps({"project": original}, ensure_ascii=False), encoding="utf-8")
+        mangled = json.loads(p.read_bytes().decode("cp1252"))["project"]
+        clean = json.loads(p.read_text(encoding="utf-8"))["project"]
+        record(clean == original and mangled != original,
+               "cp1252 corrompe em silencio (premissa da checagem acima)",
+               f"cp1252 leu {mangled!r}")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 # ---------------------------------------------------------------- 2. syntax
 def check_syntax() -> None:
     bad = []
@@ -248,6 +299,7 @@ def check_template() -> None:
 def main() -> int:
     print("ATIVAVID selftest\n")
     for title, fn in (("1. stdout redirecionado (cp1252)", check_redirected_stdout),
+                      ("1b. leitura de texto em UTF-8", check_reads_are_utf8),
                       ("2. sintaxe", check_syntax),
                       ("3. servidor de preview", check_preview_server),
                       ("4. template remotion", check_template)):

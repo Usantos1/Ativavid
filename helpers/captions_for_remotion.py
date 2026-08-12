@@ -29,7 +29,7 @@ from pathlib import Path
 
 def captions_from_transcript(transcript_path: Path) -> list[dict]:
     """Words already on the output timeline (transcript of the final cut)."""
-    words = [w for w in json.loads(transcript_path.read_text()).get("words", [])
+    words = [w for w in json.loads(transcript_path.read_text(encoding="utf-8")).get("words", [])
              if w.get("type") == "word" and w.get("start") is not None]
     caps: list[dict] = []
     for w in words:
@@ -65,7 +65,7 @@ def build_captions(edl: dict, edit_dir: Path) -> list[dict]:
         if not tr_path.exists():
             off += dur
             continue
-        words = [w for w in json.loads(tr_path.read_text()).get("words", [])
+        words = [w for w in json.loads(tr_path.read_text(encoding="utf-8")).get("words", [])
                  if w.get("type") == "word" and w.get("start") is not None]
         seg = [w for w in words if (a - 0.08) <= w["start"] < b]
         seg.sort(key=lambda w: w["start"])
@@ -102,7 +102,7 @@ def main() -> None:
         caps = captions_from_transcript(args.transcript.resolve())
     elif args.edl:
         edl_path = args.edl.resolve()
-        caps = build_captions(json.loads(edl_path.read_text()), edl_path.parent)
+        caps = build_captions(json.loads(edl_path.read_text(encoding="utf-8")), edl_path.parent)
     else:
         ap.error("provide --transcript <cut.json> or an edl.json")
 

@@ -111,7 +111,7 @@ def acquire_render_lock(out_path: Path) -> None:
     lock_path = out_path.with_name(out_path.name + ".lock")
     if lock_path.exists():
         try:
-            old_pid = int(lock_path.read_text().strip())
+            old_pid = int(lock_path.read_text(encoding="utf-8").strip())
         except (OSError, ValueError):
             old_pid = None
         if old_pid and old_pid != os.getpid() and _pid_alive(old_pid):
@@ -124,7 +124,7 @@ def acquire_render_lock(out_path: Path) -> None:
 
     def _release() -> None:
         try:
-            if lock_path.exists() and lock_path.read_text().strip() == str(os.getpid()):
+            if lock_path.exists() and lock_path.read_text(encoding="utf-8").strip() == str(os.getpid()):
                 lock_path.unlink()
         except OSError:
             pass
@@ -923,7 +923,7 @@ def build_master_srt(edl: dict, edit_dir: Path, out_path: Path) -> None:
             seg_offset += seg_duration
             continue
 
-        transcript = json.loads(tr_path.read_text())
+        transcript = json.loads(tr_path.read_text(encoding="utf-8"))
         words_in_seg = _words_in_range(transcript, seg_start, seg_end)
 
         # Group into 2-word chunks, break on punctuation
@@ -1282,7 +1282,7 @@ def main() -> None:
     if not edl_path.exists():
         sys.exit(f"edl not found: {edl_path}")
 
-    edl = json.loads(edl_path.read_text())
+    edl = json.loads(edl_path.read_text(encoding="utf-8"))
     edit_dir = edl_path.parent
     out_path = args.output.resolve()
     acquire_render_lock(out_path)

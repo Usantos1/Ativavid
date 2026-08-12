@@ -100,7 +100,7 @@ def _sample_stats(video: Path, n: int = 24) -> dict[str, float] | None:
         yavg: list[float] = []
         sat: list[float] = []
         depth = 8
-        for line in Path(meta).read_text().splitlines():
+        for line in Path(meta).read_text(encoding="utf-8").splitlines():
             line = line.strip()
             if "=" not in line:
                 continue

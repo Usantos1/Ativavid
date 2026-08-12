@@ -38,7 +38,7 @@ def main() -> None:
     ap.add_argument("-o", "--output", type=Path, required=True)
     args = ap.parse_args()
 
-    edl = json.loads(args.edl.read_text())
+    edl = json.loads(args.edl.read_text(encoding="utf-8"))
     ranges = edl["ranges"]
 
     chapters: list[tuple[float, str]] = []

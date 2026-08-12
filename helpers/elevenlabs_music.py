@@ -55,7 +55,7 @@ def load_api_key() -> str:
     """Same key as transcribe.py's ElevenLabs backend — one .env entry covers both."""
     for candidate in [Path(__file__).resolve().parent.parent / ".env", Path(".env")]:
         if candidate.exists():
-            for line in candidate.read_text().splitlines():
+            for line in candidate.read_text(encoding="utf-8").splitlines():
                 line = line.strip()
                 if line.startswith("ELEVENLABS_API_KEY=") and "=" in line:
                     v = line.split("=", 1)[1].strip().strip('"').strip("'")

@@ -447,7 +447,7 @@ class Handler(BaseHTTPRequestHandler):
         rel = "cut.mp4"
         if state_p.exists():
             try:
-                rel = json.loads(state_p.read_text()).get("video") or rel
+                rel = json.loads(state_p.read_text(encoding="utf-8")).get("video") or rel
             except json.JSONDecodeError:
                 pass
         p = self._safe(self.root, rel)
@@ -552,7 +552,7 @@ class Handler(BaseHTTPRequestHandler):
         state: dict = {}
         if state_p.exists():
             try:
-                state = json.loads(state_p.read_text())
+                state = json.loads(state_p.read_text(encoding="utf-8"))
             except json.JSONDecodeError:
                 pass
         # same stale-pointer resolution the Final tab uses — see _resolve_final_video
@@ -933,7 +933,7 @@ class Handler(BaseHTTPRequestHandler):
         state: dict = {}
         if state_p.exists():
             try:
-                state = json.loads(state_p.read_text())
+                state = json.loads(state_p.read_text(encoding="utf-8"))
             except json.JSONDecodeError:
                 state = {"error": "state.json inválido"}
         # Patch the RESPONSE only — never the file on disk. The UI then plays
@@ -958,7 +958,7 @@ class Handler(BaseHTTPRequestHandler):
         p = self._safe(self.root, rel)
         if p and p.exists():
             try:
-                edl = json.loads(p.read_text())
+                edl = json.loads(p.read_text(encoding="utf-8"))
             except json.JSONDecodeError:
                 pass
         edits_p = self.root / "preview_edits.json"
@@ -981,7 +981,7 @@ class Handler(BaseHTTPRequestHandler):
         stale = True
         if out.exists():
             try:
-                stale = json.loads(out.read_text()).get("srcMtime") != video.stat().st_mtime
+                stale = json.loads(out.read_text(encoding="utf-8")).get("srcMtime") != video.stat().st_mtime
             except json.JSONDecodeError:
                 pass
         if stale:
@@ -999,7 +999,7 @@ class Handler(BaseHTTPRequestHandler):
             stale = True
             if meta.exists():
                 try:
-                    stale = json.loads(meta.read_text()).get("srcMtime") != video.stat().st_mtime
+                    stale = json.loads(meta.read_text(encoding="utf-8")).get("srcMtime") != video.stat().st_mtime
                 except json.JSONDecodeError:
                     pass
             if stale:

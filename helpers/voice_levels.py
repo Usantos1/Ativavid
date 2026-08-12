@@ -158,7 +158,7 @@ def load_words(video: Path, edit_dir: Path | None) -> list[dict]:
     tpath = edit_dir / "transcripts" / f"{video.stem}.json"
     if not tpath.exists():
         return []
-    data = json.loads(tpath.read_text())
+    data = json.loads(tpath.read_text(encoding="utf-8"))
     words = data.get("words") or []
     out = []
     for w in words:
@@ -297,7 +297,7 @@ def analyze(video: Path, edit_dir: Path | None, drop_db: float, edl_path: Path |
 
     edl_rows = []
     if edl_path and edl_path.exists():
-        edl = json.loads(edl_path.read_text())
+        edl = json.loads(edl_path.read_text(encoding="utf-8"))
         for i, r in enumerate(edl.get("ranges", [])):
             r_start, r_end = float(r["start"]), float(r["end"])
             mask = (times >= r_start) & (times <= r_end)

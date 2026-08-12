@@ -71,7 +71,7 @@ def is_short(t: str) -> bool:
 def load_words(transcript_path: Path) -> list[dict]:
     """Words on the output timeline → [{text, startMs, endMs}], abbreviations fused."""
     raw = [
-        w for w in json.loads(transcript_path.read_text()).get("words", [])
+        w for w in json.loads(transcript_path.read_text(encoding="utf-8")).get("words", [])
         if w.get("type") == "word" and w.get("start") is not None
     ]
     words: list[dict] = []

@@ -135,7 +135,7 @@ def load_api_key() -> str:
     for candidate in [Path(__file__).resolve().parent.parent / ".env", Path(".env")]:
         if candidate.exists():
             found: dict[str, str] = {}
-            for line in candidate.read_text().splitlines():
+            for line in candidate.read_text(encoding="utf-8").splitlines():
                 line = line.strip()
                 if not line or line.startswith("#") or "=" not in line:
                     continue
@@ -161,7 +161,7 @@ def load_elevenlabs_key() -> str:
     """
     for candidate in [Path(__file__).resolve().parent.parent / ".env", Path(".env")]:
         if candidate.exists():
-            for line in candidate.read_text().splitlines():
+            for line in candidate.read_text(encoding="utf-8").splitlines():
                 line = line.strip()
                 if not line or line.startswith("#") or "=" not in line:
                     continue
@@ -181,7 +181,7 @@ def _env_value(name: str) -> str:
     """Read one setting from .env (repo root or cwd) or the environment."""
     for candidate in [Path(__file__).resolve().parent.parent / ".env", Path(".env")]:
         if candidate.exists():
-            for line in candidate.read_text().splitlines():
+            for line in candidate.read_text(encoding="utf-8").splitlines():
                 line = line.strip()
                 if not line or line.startswith("#") or "=" not in line:
                     continue
@@ -306,7 +306,7 @@ def call_whispercpp(
             proc = subprocess.run(cmd, capture_output=True, text=True)
             out_json = stem.with_suffix(".json")
             if proc.returncode == 0 and out_json.exists():
-                return json.loads(out_json.read_text())
+                return json.loads(out_json.read_text(encoding="utf-8"))
             err = proc.stderr or ""
             if "failed to initialize whisper context" in err:
                 raise ModelLoadError(
@@ -594,7 +594,7 @@ def _transcribe_audio(
             if cache and cache.exists():
                 if verbose:
                     print(f"    chunk {i + 1}/{len(chunks)} (cached)", flush=True)
-                return json.loads(cache.read_text())
+                return json.loads(cache.read_text(encoding="utf-8"))
             if verbose and len(chunks) > 1:
                 print(f"    chunk {i + 1}/{len(chunks)}", flush=True)
             if backend == "elevenlabs":

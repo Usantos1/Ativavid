@@ -27,7 +27,7 @@ from pathlib import Path
 def load_words(transcript: Path | None, captions: Path | None) -> list[dict]:
     """Return [{text, start, end}] in seconds, from a transcript or a captions.json."""
     if transcript:
-        raw = json.loads(transcript.read_text()).get("words", [])
+        raw = json.loads(transcript.read_text(encoding="utf-8")).get("words", [])
         out = []
         for w in raw:
             if w.get("type") != "word" or w.get("start") is None:
@@ -38,7 +38,7 @@ def load_words(transcript: Path | None, captions: Path | None) -> list[dict]:
                 out.append({"text": text, "start": t, "end": max(e, t + 0.08)})
         return out
     # captions.json (word-level Caption[])
-    data = json.loads(captions.read_text())
+    data = json.loads(captions.read_text(encoding="utf-8"))
     return [{"text": (c.get("text") or "").strip(),
              "start": c["startMs"] / 1000, "end": c["endMs"] / 1000}
             for c in data if (c.get("text") or "").strip()]
