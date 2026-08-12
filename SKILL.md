@@ -144,6 +144,15 @@ Phase 2/3 (see the track references for usage):
 - **`captions_for_remotion.py`** (karaoke JSON) · **`face_track.py`** (eye-track JSON) · **`person_matte.py`** (RVM alpha matte; `uv sync --extra matting`) · **`pexels_search.py`** · **`wikimedia_images.py`** (no key, brands/people first choice) · **`google_images.py`** (fallback, mind rights) · **`captions_srt.py`** (longform .srt) · **`chapters.py`** (YouTube chapters) · **`elevenlabs_music.py`** (AI soundtrack, ElevenLabs Music v2 — reuses `ELEVENLABS_API_KEY`, needs a paid plan; pass a context-driven MUSICAL vibe: genre + instruments + tempo + mood, not SFX-y phrasing; auto-framed as a composed instrumental) · **`post_brief.py`** (`--edit-dir <edit>` → `post_brief.md`: hook, beats with their quotes, spoken text and style, gathered for writing the post's caption + hashtags. It does NOT write the caption — wording is a judgement call about a specific brand and a specific joke, and a template yields exactly the generic "Confira! 🔥 #viral" that makes a feed read as automated. Write it from the brief.).
 - **`check_template_integrity.py <edit>/remotion [--track shortform|longform] [--fix]`** — hashes `remotion/src/*` (everything except `CustomGraphics.tsx`) against the shipped `assets/<track>/src/` template. Run before every `npx remotion render`; a non-zero exit means Hard Rule 11 got broken (a template file was hand-edited) — `--fix` restores it verbatim, never touches `CustomGraphics.tsx`.
 
+Diagnostico da maquina (para quem nao programa):
+- **`doutor.py`** — `python helpers/doutor.py [--json]`. Diz em portugues o que
+  falta pra editar e o comando exato pra resolver: ffmpeg/ffprobe, Node 18+,
+  chaves no `.env`, bibliotecas, espaco no disco **do projeto** (nao no da
+  skill) e servidores/vigias esquecidos apontando pra pasta apagada. Separa
+  "PRECISA RESOLVER" de "DA PRA VIVER SEM" — sai com o numero de bloqueios.
+  **Rode isso antes de dizer que algo esta quebrado.** Nunca imprime traceback:
+  um erro tecnico so informa que deu errado, o que a pessoa ja sabia.
+
 Sanidade da propria skill:
 - **`selftest.py`** — `python helpers/selftest.py [-v]`, ~10s, sem chave e sem
   rede. 47 checagens: todo helper responde `--help` com **stdout em cp1252**
