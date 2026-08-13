@@ -1,4 +1,5 @@
 # Compila o instalador .exe (Inno Setup 6).
+# Saida: installer/dist/Instalar ATIVAVID <versao>.exe
 # Se o Inno nao estiver instalado, tenta winget install.
 
 $ErrorActionPreference = "Stop"
@@ -14,6 +15,17 @@ function Find-Iscc {
     "${env:LocalAppData}\Programs\Inno Setup 6\ISCC.exe"
   )
   return $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+}
+
+function Read-AppVersion {
+  $verFile = Join-Path (Split-Path $Root -Parent) "VERSION"
+  if (Test-Path $verFile) {
+    $v = (Get-Content $verFile -Raw).Trim()
+    if ($v) { return $v }
+  }
+  $line = Select-String -Path $Iss -Pattern '#define MyAppVersion "([^"]+)"' | Select-Object -First 1
+  if ($line) { return $line.Matches[0].Groups[1].Value }
+  return "0.0.0"
 }
 
 $iscc = Find-Iscc
@@ -34,12 +46,23 @@ if (-not $iscc) {
   exit 2
 }
 
-Write-Host "Compilando com $iscc"
+$ver = Read-AppVersion
+$expectedName = "Instalar ATIVAVID $ver.exe"
+
+# Remove nomes antigos / duplicados na dist (so fica a build nova)
+Get-ChildItem $Out -Filter "*.exe" -ErrorAction SilentlyContinue | Remove-Item -Force
+
+Write-Host "Compilando com $iscc (saida: $expectedName)"
 & $iscc $Iss
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-$setup = Get-ChildItem $Out -Filter "Instalar ATIVAVID.exe" | Select-Object -First 1
+
+$setup = Get-ChildItem $Out -Filter $expectedName | Select-Object -First 1
 if (-not $setup) {
-  $setup = Get-ChildItem $Out -Filter "*.exe" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+  $setup = Get-ChildItem $Out -Filter "Instalar ATIVAVID*.exe" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+}
+if (-not $setup) {
+  Write-Host "Instalador nao encontrado em $Out" -ForegroundColor Red
+  exit 1
 }
 $sizeMb = [math]::Round($setup.Length / 1MB, 1)
 Write-Host ("OK: {0} ({1} MB)" -f $setup.FullName, $sizeMb) -ForegroundColor Green

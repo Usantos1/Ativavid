@@ -45,14 +45,15 @@
 
   async function refreshHint() {
     const hint = $("#sbHint");
-    if (!hint) return;
+    const label = $("#tbVersionLabel");
     try {
-      const res = await fetch("/api/health");
+      const res = await fetch("/api/health", { cache: "no-store" });
       const h = await res.json();
       const ver = String(h.version || "?").replace(/^v/i, "");
-      hint.textContent = `Versão sistema: ${ver}`;
+      if (hint) hint.textContent = `Versão sistema: ${ver}`;
+      if (label) label.textContent = `v${ver}`;
     } catch {
-      hint.textContent = "Versão sistema: —";
+      if (hint) hint.textContent = "Versão sistema: —";
     }
   }
 
@@ -72,16 +73,8 @@
     if (!$("#titlebar") || !$("#btnWinMin")) return;
     document.body.classList.add("desktop-app");
 
-    const label = $("#tbVersionLabel");
-    if (label) {
-      try {
-        const res = await fetch("/api/health");
-        const h = await res.json();
-        label.textContent = `v${String(h.version || "?").replace(/^v/i, "")}`;
-      } catch {
-        label.textContent = "v…";
-      }
-    }
+    // Versão: refreshHint() (e o poll do hub) mantém titlebar + sidebar iguais
+    await refreshHint();
 
     const cfg = $("#btnTbConfig");
     if (cfg && !cfg.dataset.wired) {

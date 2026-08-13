@@ -54,7 +54,7 @@ def _ffprobe_cmd() -> str:
 
 
 def _ffmpeg_encoders() -> set[str]:
-    out = _run([_ffmpeg_cmd(), "-hide_banner", "-encoders"], timeout=6)
+    out = _run([_ffmpeg_cmd(), "-hide_banner", "-encoders"], timeout=2.5)
     found: set[str] = set()
     for name in ("h264_nvenc", "hevc_nvenc", "h264_qsv", "h264_amf", "h264_videotoolbox"):
         if name in out:
@@ -220,18 +220,32 @@ def detect_machine(
     *,
     force: bool = False,
     probe_encoders: bool = False,
+    quick: bool = False,
 ) -> dict[str, Any]:
-    """Detecta OS/RAM/GPU. Nunca levanta — /api/system precisa sempre responder."""
+    """Detecta OS/RAM/GPU. Nunca levanta — /api/system precisa sempre responder.
+
+    quick=True: sem PowerShell/GPU e sem ffmpeg -encoders (UI Sistema <1s).
+    Doutor usa quick=False (detalhe completo).
+    """
     global _CACHE, _CACHE_AT
     now = time.time()
+    root_key = ""
+    if projects_root is not None:
+        try:
+            root_key = str(Path(projects_root).expanduser().resolve())
+        except OSError:
+            root_key = str(projects_root)
     if (
         not force
         and _CACHE is not None
         and (now - _CACHE_AT) < _CACHE_TTL_S
         and (
-            projects_root is None
-            or str(_CACHE.get("projectsRoot") or "") == str(projects_root)
+            not root_key
+            or str(_CACHE.get("projectsRoot") or "") == root_key
+            or str(_CACHE.get("projectsRoot") or "") == str(projects_root or "")
         )
+        # cache full serve quick; cache quick does NOT serve full
+        and (quick or not _CACHE.get("quick"))
     ):
         return dict(_CACHE)
 
@@ -248,13 +262,20 @@ def detect_machine(
 
     try:
         result = _detect_machine_inner(
-            projects_root, probe_encoders=probe_encoders
+            projects_root,
+            probe_encoders=probe_encoders,
+            quick=quick,
         )
     except Exception as e:
         result = _minimal_machine(projects_root, err=str(e)[:240])
 
-    _CACHE = result
-    _CACHE_AT = time.time()
+    if root_key:
+        result["projectsRoot"] = root_key
+    result["quick"] = bool(quick)
+    # Só sobrescreve cache full com full; quick só se ainda não há cache
+    if not quick or _CACHE is None or _CACHE.get("quick"):
+        _CACHE = result
+        _CACHE_AT = time.time()
     return dict(result)
 
 
@@ -262,6 +283,7 @@ def _detect_machine_inner(
     projects_root: Path | None,
     *,
     probe_encoders: bool,
+    quick: bool = False,
 ) -> dict[str, Any]:
     total_ram, free_ram = _ram_gb()
     cpu = platform.processor() or platform.machine()
@@ -272,8 +294,15 @@ def _detect_machine_inner(
     ff_ok = Path(ff_bin).exists() if os.path.isabs(ff_bin) else bool(shutil.which(ff_bin) or shutil.which("ffmpeg"))
     fp_ok = Path(fp_bin).exists() if os.path.isabs(fp_bin) else bool(shutil.which(fp_bin) or shutil.which("ffprobe"))
 
-    encoders = _ffmpeg_encoders() if ff_ok else set()
-    gpus = _gpu_windows()
+    encoders: set[str] = set()
+    gpus: list[dict[str, Any]] = []
+    if quick:
+        # UI Sistema: RAM/cores/disco + encoders ffmpeg (rápido). Sem PowerShell GPU.
+        encoders = _ffmpeg_encoders() if ff_ok else set()
+    else:
+        encoders = _ffmpeg_encoders() if ff_ok else set()
+        gpus = _gpu_windows()
+
     nvidia = any("nvidia" in (g.get("name") or "").lower() for g in gpus) or ("h264_nvenc" in encoders)
     qsv = "h264_qsv" in encoders or any("intel" in (g.get("name") or "").lower() for g in gpus)
     amf = "h264_amf" in encoders or any(
@@ -297,13 +326,18 @@ def _detect_machine_inner(
     disk_free = None
     root = projects_root or Path.home() / "ATIVAVID" / "Projetos"
     try:
+        root = Path(root).expanduser()
         root.mkdir(parents=True, exist_ok=True)
+        root = root.resolve()
         disk_free = round(shutil.disk_usage(str(root)).free / (1024**3), 1)
     except OSError:
         pass
 
-    ff = _run([ff_bin, "-version"], timeout=3).splitlines() if ff_ok else []
-    fp = _run([fp_bin, "-version"], timeout=3).splitlines() if fp_ok else []
+    ff: list[str] = []
+    fp: list[str] = []
+    if not quick:
+        ff = _run([ff_bin, "-version"], timeout=3).splitlines() if ff_ok else []
+        fp = _run([fp_bin, "-version"], timeout=3).splitlines() if fp_ok else []
 
     return {
         "os": platform.system(),

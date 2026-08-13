@@ -1,12 +1,12 @@
-﻿; ATIVAVID â€” Inno Setup
+﻿; ATIVAVID — Inno Setup
 ; Compile: .\installer\build.ps1
-; Saida: installer/dist/Instalar ATIVAVID.exe
+; Saida: installer/dist/Instalar ATIVAVID 0.x.y.exe
 ;
 ; Instala em C:\Program Files\ATIVAVID (como app Windows normal).
-; Atalho â†’ ATIVAVID.vbs (sem janela CMD).
+; Atalho → ATIVAVID.vbs (sem janela CMD).
 
 #define MyAppName "ATIVAVID"
-#define MyAppVersion "0.1.35"
+#define MyAppVersion "0.1.37"
 #define MyAppPublisher "ATIVAVID"
 #define MyAppURL "https://github.com/fillrochaa/edvid"
 #define MyAppExeName "ATIVAVID.vbs"
@@ -23,7 +23,7 @@ DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 DisableDirPage=no
 OutputDir=dist
-OutputBaseFilename=Instalar ATIVAVID
+OutputBaseFilename=Instalar ATIVAVID {#MyAppVersion}
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern

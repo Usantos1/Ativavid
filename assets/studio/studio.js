@@ -235,15 +235,24 @@ async function refreshJobs() {
 
 async function refreshHealth() {
   const el = $("#sbHint");
-  if (!el) return;
+  let ver = null;
   try {
     const h = await api("/api/health");
-    const ver = String(h.version || "?").replace(/^v/i, "");
-    el.textContent = `Versão sistema: ${ver}`;
+    ver = String(h.version || "?").replace(/^v/i, "");
     if (h.license) renderLicense(h.license);
   } catch {
-    el.textContent = "Versão sistema: —";
+    if (el) el.textContent = "Versão sistema: —";
+    return;
   }
+  applyAppVersion(ver);
+}
+
+function applyAppVersion(ver) {
+  const v = String(ver || "?").replace(/^v/i, "");
+  const el = $("#sbHint");
+  if (el) el.textContent = `Versão sistema: ${v}`;
+  const label = $("#tbVersionLabel");
+  if (label) label.textContent = `v${v}`;
 }
 
 function renderLicense(lic) {
@@ -1669,57 +1678,128 @@ async function loadLicenca() {
   }
 }
 
+function applySistemaData(data) {
+  const hint = $("#sysMachineHint");
+  const m = data.machine || {};
+  const perf = data.performance || {};
+  const s = data.settings || {};
+  if (hint) {
+    const base =
+      `${m.os || "?"} ${m.osRelease || ""} · ${m.cores || "?"} núcleos · RAM ${m.ramGb ?? "?"} GB · `
+      + `encoder ${(m.accel && m.accel.preferredEncoder) || "libx264"} · disco ${m.diskFreeGb ?? "?"} GB`;
+    hint.textContent = m.error ? `${base} (aviso: ${m.error})` : base;
+  }
+  if ($("#sysPerfHint")) {
+    $("#sysPerfHint").textContent =
+      `Perfil ${perf.label || "—"} · jobs=${perf.parallelJobs} · proxy=${perf.proxyEnabled ? perf.proxyHeight + "p" : "off"}`;
+  }
+  if ($("#sysMetricProfile")) $("#sysMetricProfile").textContent = perf.label || "—";
+  if ($("#sysMetricJobs")) $("#sysMetricJobs").textContent = String(perf.parallelJobs ?? "—");
+  if ($("#sysMetricProxy")) {
+    $("#sysMetricProxy").textContent = perf.proxyEnabled ? `${perf.proxyHeight}p` : "off";
+  }
+  if ($("#perfProfile") && s.performanceProfile) $("#perfProfile").value = s.performanceProfile || "auto";
+  if ($("#projectsRootHint") && m.projectsRoot) {
+    $("#projectsRootHint").textContent = m.projectsRoot || "";
+  }
+  if ($("#projectsRootInput") && !$("#projectsRootInput").value) {
+    $("#projectsRootInput").value = s.projectsRoot || m.projectsRoot || "";
+  }
+  if ($("#githubRepoInput") && (s.githubRepo || true)) {
+    $("#githubRepoInput").value = s.githubRepo || "Usantos1/Ativavid";
+  }
+  if ($("#supabaseUrlInput")) $("#supabaseUrlInput").value = s.supabaseUrl || "";
+  if ($("#supabaseAnonInput")) $("#supabaseAnonInput").value = s.supabaseAnonKey || "";
+  if ($("#checkoutUrlInput")) $("#checkoutUrlInput").value = s.checkoutUrl || "";
+  const srvHint = $("#adminServiceHint");
+  if (srvHint) {
+    if (s.hasServiceRole) {
+      srvHint.hidden = false;
+      srvHint.textContent = "Service role já salva neste PC (deixe em branco para manter).";
+    } else {
+      srvHint.hidden = true;
+    }
+  }
+}
+
+async function loadSistemaFromDoutor() {
+  // Fallback: mesmos dados do Diagnóstico (quando /api/system falha)
+  const [doutor, settings] = await Promise.all([
+    api("/api/doutor"),
+    api("/api/settings").catch(() => ({})),
+  ]);
+  const itens = doutor.itens || [];
+  const sys = itens.find((i) => /^Sistema\s/i.test(i.titulo || ""));
+  const accel = itens.find((i) => /Aceleração|libx264|nvenc|qsv|amf/i.test(i.titulo || ""));
+  const perfil = itens.find((i) => /Perfil/i.test(i.titulo || ""));
+  let cores = "?", ram = "?", disk = "?", enc = "libx264", os = "Windows", osRel = "";
+  if (sys && sys.detalhe) {
+    const d = String(sys.detalhe);
+    const cm = d.match(/CPU\s+(\d+)/i);
+    const rm = d.match(/RAM\s+([\d.]+)/i);
+    const dm = d.match(/Disco[^\d]*([\d.]+)/i);
+    if (cm) cores = cm[1];
+    if (rm) ram = rm[1];
+    if (dm) disk = dm[1];
+  }
+  if (sys && sys.titulo) {
+    const tm = String(sys.titulo).replace(/^Sistema\s+/i, "").trim().split(/\s+/);
+    if (tm[0]) os = tm[0];
+    if (tm[1]) osRel = tm[1];
+  }
+  if (accel && accel.titulo) {
+    const em = String(accel.titulo).match(/:\s*(\S+)/);
+    if (em) enc = em[1];
+    else if (/libx264/i.test(accel.titulo)) enc = "libx264";
+  }
+  let label = "—", jobs = "—", proxyOn = true, proxyH = 540;
+  if (perfil) {
+    const pm = String(perfil.titulo || "").match(/Perfil[^:]*:\s*(.+)$/i);
+    if (pm) label = pm[1].trim();
+    const jd = String(perfil.detalhe || "");
+    const jm = jd.match(/Jobs[^=]*=(\d+)/i);
+    if (jm) jobs = jm[1];
+  }
+  applySistemaData({
+    machine: {
+      os, osRelease: osRel, cores, ramGb: ram, diskFreeGb: disk,
+      projectsRoot: settings.projectsRoot || "",
+      accel: { preferredEncoder: enc },
+    },
+    performance: {
+      label,
+      parallelJobs: jobs,
+      proxyEnabled: proxyOn,
+      proxyHeight: proxyH,
+    },
+    settings: settings || {},
+  });
+}
+
 async function loadSistema() {
   const hint = $("#sysMachineHint");
   if (hint) hint.textContent = "Detectando…";
   try {
-    const data = await api("/api/system");
-    const m = data.machine || {};
-    const perf = data.performance || {};
-    const s = data.settings || {};
-    if (hint) {
-      const base =
-        `${m.os || "?"} ${m.osRelease || ""} · ${m.cores || "?"} núcleos · RAM ${m.ramGb ?? "?"} GB · `
-        + `encoder ${(m.accel && m.accel.preferredEncoder) || "libx264"} · disco ${m.diskFreeGb ?? "?"} GB`;
-      hint.textContent = m.error ? `${base} (aviso: ${m.error})` : base;
-    }
-    if ($("#sysPerfHint")) {
-      $("#sysPerfHint").textContent =
-        `Perfil ${perf.label || "—"} · jobs=${perf.parallelJobs} · proxy=${perf.proxyEnabled ? perf.proxyHeight + "p" : "off"}`;
-    }
-    if ($("#sysMetricProfile")) $("#sysMetricProfile").textContent = perf.label || "—";
-    if ($("#sysMetricJobs")) $("#sysMetricJobs").textContent = String(perf.parallelJobs ?? "—");
-    if ($("#sysMetricProxy")) {
-      $("#sysMetricProxy").textContent = perf.proxyEnabled ? `${perf.proxyHeight}p` : "off";
-    }
-    if ($("#perfProfile")) $("#perfProfile").value = s.performanceProfile || "auto";
-    if ($("#projectsRootHint")) {
-      $("#projectsRootHint").textContent = m.projectsRoot || "";
-    }
-    if ($("#projectsRootInput") && !$("#projectsRootInput").value) {
-      $("#projectsRootInput").value = s.projectsRoot || m.projectsRoot || "";
-    }
-    if ($("#githubRepoInput")) {
-      $("#githubRepoInput").value = s.githubRepo || "Usantos1/Ativavid";
-    }
-    if ($("#supabaseUrlInput")) $("#supabaseUrlInput").value = s.supabaseUrl || "";
-    if ($("#supabaseAnonInput")) $("#supabaseAnonInput").value = s.supabaseAnonKey || "";
-    if ($("#checkoutUrlInput")) $("#checkoutUrlInput").value = s.checkoutUrl || "";
-    const srvHint = $("#adminServiceHint");
-    if (srvHint) {
-      if (s.hasServiceRole) {
-        srvHint.hidden = false;
-        srvHint.textContent = "Service role já salva neste PC (deixe em branco para manter).";
-      } else {
-        srvHint.hidden = true;
-      }
-    }
+    const ctrl = typeof AbortSignal !== "undefined" && AbortSignal.timeout
+      ? { signal: AbortSignal.timeout(8000) }
+      : {};
+    const res = await fetch("/api/system", ctrl);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || res.statusText || "erro");
+    applySistemaData(data);
   } catch (e) {
-    const msg = String(e && e.message ? e.message : e);
-    if (hint) {
-      hint.textContent = /failed to fetch|networkerror|load failed/i.test(msg)
-        ? "Servidor local não respondeu — feche o ATIVAVID e abra de novo."
-        : `Falha ao detectar: ${msg}`;
+    try {
+      await loadSistemaFromDoutor();
+      if (hint && /Detectando|Servidor|Falha/i.test(hint.textContent || "")) {
+        /* applySistemaData already set hint */
+      }
+    } catch (e2) {
+      const msg = String(e && e.message ? e.message : e);
+      if (hint) {
+        hint.textContent = /failed to fetch|networkerror|load failed|aborted|timeout/i.test(msg)
+          ? "Não li o hardware aqui — rode o Diagnóstico abaixo (mesmos dados)."
+          : `Falha ao detectar: ${msg}`;
+      }
     }
   }
   try {
@@ -1822,15 +1902,14 @@ async function wireTitlebar() {
   }
 
   const btnVer = $("#btnTbVersion");
-  const label = $("#tbVersionLabel");
   const refreshVersion = async () => {
-    // Fonte da verdade: /api/health (mesmo da sidebar)
+    // Mesma fonte da sidebar — e aplica nos dois lugares
     let ver = "?";
     try {
       const h = await api("/api/health");
       ver = String(h.version || "?").replace(/^v/i, "");
     } catch { /* ignore */ }
-    if (label) label.textContent = `v${ver}`;
+    applyAppVersion(ver);
     try {
       const up = await api("/api/update/check");
       if (btnVer) {

@@ -116,7 +116,30 @@ class DesktopHandler(ps.Handler):
         raw = self.path.split("?", 1)[0]
         # Hub + studio static — BEFORE preview /p scope
         if raw in ("/", "/hub", "/studio", "/index.html"):
-            self._studio_file(STUDIO / "index.html", "text/html; charset=utf-8")
+            html = (STUDIO / "index.html").read_text(encoding="utf-8")
+            try:
+                from app.update_check import current_version
+                ver = current_version()
+            except Exception:
+                ver = "0"
+            html = html.replace("VERSION_PLACEHOLDER", ver).replace(
+                'src="/assets/studio/studio.js"',
+                f'src="/assets/studio/studio.js?v={ver}"',
+            )
+            data = html.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            try:
+                self.wfile.write(data)
+            except _CLIENT_GONE:
+                return
+            except OSError as e:
+                if _client_gone(e):
+                    return
+                raise
             return
         # House style + bare editor tabs (applyState used to rewrite
         # /estilo-padrao → /estilo and a reload then 404'd as unknown route
@@ -173,8 +196,49 @@ class DesktopHandler(ps.Handler):
         if raw == "/api/doutor":
             self._json(ls.run_doutor())
             return
+        if raw == "/api/system":
+            # Direto aqui (sem shim) — resposta sempre JSON, detecção quick.
+            from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutTimeout
+
+            from app.performance import profile_settings
+            from app.settings_store import load_settings, public_settings
+            from app.system_info import _minimal_machine, detect_machine
+
+            m: dict = {}
+            try:
+                with ThreadPoolExecutor(max_workers=1) as pool:
+                    fut = pool.submit(
+                        detect_machine,
+                        self.projects_root,
+                        quick=True,
+                    )
+                    try:
+                        m = fut.result(timeout=5.0)
+                    except FutTimeout:
+                        m = _minimal_machine(
+                            self.projects_root,
+                            err="detecção demorou — veja Diagnóstico abaixo",
+                        )
+            except Exception as e:  # noqa: BLE001
+                m = _minimal_machine(self.projects_root, err=str(e)[:200])
+            try:
+                s = load_settings()
+                pub = public_settings()
+            except Exception:
+                s, pub = {}, {}
+            try:
+                perf = profile_settings(s.get("performanceProfile") if s else None, m)
+            except Exception:
+                perf = {
+                    "profile": "auto",
+                    "label": "Automático",
+                    "parallelJobs": 1,
+                    "proxyEnabled": True,
+                    "proxyHeight": 540,
+                }
+            self._json({"machine": m, "settings": pub, "performance": perf})
+            return
         if raw in (
-            "/api/system",
             "/api/settings",
             "/api/cache",
             "/api/doutor/copy",

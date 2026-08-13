@@ -1060,12 +1060,22 @@ class StudioHandler(BaseHTTPRequestHandler):
             self._json({"jobs": jobs, "busy": self.worker.busy_id})
             return
         if path == "/api/system":
+            from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutTimeout
+
             from app.system_info import detect_machine, _minimal_machine
             from app.performance import profile_settings
             from app.settings_store import load_settings, public_settings
 
             try:
-                m = detect_machine(self.projects_root)
+                with ThreadPoolExecutor(max_workers=1) as pool:
+                    fut = pool.submit(detect_machine, self.projects_root, quick=True)
+                    try:
+                        m = fut.result(timeout=5.0)
+                    except FutTimeout:
+                        m = _minimal_machine(
+                            self.projects_root,
+                            err="detecção demorou — veja Diagnóstico abaixo",
+                        )
             except Exception as e:  # noqa: BLE001
                 m = _minimal_machine(self.projects_root, err=str(e)[:240])
             try:

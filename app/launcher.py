@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
+import subprocess
 import sys
 import threading
 import time
@@ -211,14 +213,91 @@ def _watch_show_request(api: WindowApi) -> None:
         time.sleep(0.6)
 
 
-def _handoff_if_running(port: int) -> bool:
-    """Se o servidor já está no ar, só reabre a janela (não sobe 2º processo)."""
+def _kill_listeners_on_port(port: int) -> None:
+    """Encerra quem ainda segura a porta (build antiga após atualizar)."""
+    if sys.platform != "win32":
+        return
     try:
-        with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/health", timeout=0.6) as r:
+        from app.win_process import hide_console_kwargs
+
+        hide = hide_console_kwargs()
+    except Exception:
+        hide = {}
+    try:
+        out = subprocess.check_output(
+            ["netstat", "-ano", "-p", "tcp"],
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            **hide,
+        )
+    except Exception:
+        return
+    needle = f":{int(port)}"
+    pids: set[str] = set()
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) < 5:
+            continue
+        if parts[0].upper() != "TCP":
+            continue
+        if "LISTENING" not in (p.upper() for p in parts):
+            continue
+        local = parts[1]
+        if not local.endswith(needle):
+            continue
+        pid = parts[-1]
+        if pid.isdigit() and pid != "0":
+            pids.add(pid)
+    me = str(os.getpid())
+    for pid in pids:
+        if pid == me:
+            continue
+        try:
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", pid],
+                capture_output=True,
+                timeout=8,
+                **hide,
+            )
+        except Exception:
+            pass
+
+
+def _handoff_if_running(port: int) -> bool:
+    """Se o servidor já está no ar, só reabre a janela (não sobe 2º processo).
+
+    Se a versão em disco for outra (acabou de atualizar), mata o processo antigo
+    e sobe o build novo — senão a titlebar fica na versão velha sem reload.
+    """
+    health: dict = {}
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/health", timeout=0.8) as r:
             if r.status != 200:
                 return False
+            try:
+                health = json.loads(r.read().decode("utf-8", errors="replace") or "{}")
+            except Exception:
+                health = {}
     except Exception:
         return False
+
+    try:
+        from app.update_check import current_version
+
+        mine = str(current_version() or "").lstrip("v").strip()
+        running = str(health.get("version") or "").lstrip("v").strip()
+        if mine and running and mine != running:
+            print(
+                f"Build em disco {mine} ≠ processo na porta ({running}) — reiniciando…",
+                flush=True,
+            )
+            _kill_listeners_on_port(port)
+            time.sleep(0.8)
+            return False
+    except Exception:
+        pass
+
     hwnd = _find_hwnd()
     if hwnd:
         try:
