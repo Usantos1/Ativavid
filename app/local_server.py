@@ -1060,16 +1060,34 @@ class StudioHandler(BaseHTTPRequestHandler):
             self._json({"jobs": jobs, "busy": self.worker.busy_id})
             return
         if path == "/api/system":
-            from app.system_info import detect_machine
+            from app.system_info import detect_machine, _minimal_machine
             from app.performance import profile_settings
             from app.settings_store import load_settings, public_settings
 
-            m = detect_machine(self.projects_root)
-            s = load_settings()
+            try:
+                m = detect_machine(self.projects_root)
+            except Exception as e:  # noqa: BLE001
+                m = _minimal_machine(self.projects_root, err=str(e)[:240])
+            try:
+                s = load_settings()
+                pub = public_settings()
+            except Exception:
+                s = {}
+                pub = {}
+            try:
+                perf = profile_settings(s.get("performanceProfile") if s else None, m)
+            except Exception:
+                perf = {
+                    "profile": "auto",
+                    "label": "Automático",
+                    "parallelJobs": 1,
+                    "proxyEnabled": True,
+                    "proxyHeight": 540,
+                }
             self._json({
                 "machine": m,
-                "settings": public_settings(),
-                "performance": profile_settings(s.get("performanceProfile"), m),
+                "settings": pub,
+                "performance": perf,
             })
             return
         if path == "/api/settings":

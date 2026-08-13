@@ -82,6 +82,33 @@ def refresh_path_env(env: dict | None = None) -> dict:
     return out
 
 
+def wrap_win_cmdline(argv: list[str]) -> list[str]:
+    """On Windows, launch .cmd/.bat via cmd.exe so CREATE_NO_WINDOW works.
+
+    `npx.cmd` / `npm.cmd` with CREATE_NO_WINDOW raise WinError 2 (file not found)
+    because CreateProcess cannot run batch files directly.
+    """
+    if sys.platform != "win32" or not argv:
+        return list(argv)
+    exe = Path(str(argv[0])).name.lower()
+    if exe.endswith((".cmd", ".bat")) or exe in {"npm", "npx"}:
+        return ["cmd.exe", "/d", "/c", *argv]
+    return list(argv)
+
+
+def run_hidden(argv: list[str], **kwargs):
+    """subprocess.run with no console flash; wraps npm/npx on Windows."""
+    cmd = wrap_win_cmdline(list(argv))
+    kwargs = {**kwargs, **hide_console_kwargs()}
+    try:
+        return subprocess.run(cmd, **kwargs)
+    except FileNotFoundError as e:
+        missing = getattr(e, "filename", None) or (cmd[0] if cmd else "?")
+        raise FileNotFoundError(
+            f"[WinError 2] Não achou: {missing!r} (cmd={cmd!r})"
+        ) from e
+
+
 def resolve_python_cmd(repo: Path | None = None) -> list[str]:
     """Argv prefix to run Python after install — prefer .venv, never require `uv` on PATH.
 

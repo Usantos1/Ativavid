@@ -108,10 +108,35 @@ def _helper(name: str, *args: str, check: bool = True) -> subprocess.CompletedPr
     return _uv_python(str(HELPERS / name), *args, check=check)
 
 
+def _ffprobe_exe() -> str:
+    try:
+        from app.ffmpeg_tools import ffprobe_bin  # type: ignore
+        return ffprobe_bin()
+    except Exception:
+        return "ffprobe"
+
+
+def _ffmpeg_exe() -> str:
+    try:
+        from app.ffmpeg_tools import ffmpeg_bin  # type: ignore
+        return ffmpeg_bin()
+    except Exception:
+        return "ffmpeg"
+
+
+def _run_tool(argv: list[str], **kwargs) -> subprocess.CompletedProcess:
+    """subprocess.run with Windows hide + npm/npx via cmd.exe (avoids WinError 2)."""
+    try:
+        from app.win_process import run_hidden  # type: ignore
+        return run_hidden(argv, **kwargs)
+    except ImportError:
+        return subprocess.run(argv, **kwargs)
+
+
 def _ffprobe_duration(path: Path) -> float:
-    out = subprocess.run(
+    out = _run_tool(
         [
-            "ffprobe", "-v", "error", "-show_entries", "format=duration",
+            _ffprobe_exe(), "-v", "error", "-show_entries", "format=duration",
             "-of", "default=nokey=1:noprint_wrappers=1", str(path),
         ],
         capture_output=True, text=True, check=True,
@@ -120,9 +145,9 @@ def _ffprobe_duration(path: Path) -> float:
 
 
 def _ffprobe_fps(path: Path) -> float:
-    out = subprocess.run(
+    out = _run_tool(
         [
-            "ffprobe", "-v", "error", "-select_streams", "v:0",
+            _ffprobe_exe(), "-v", "error", "-select_streams", "v:0",
             "-show_entries", "stream=r_frame_rate",
             "-of", "default=nokey=1:noprint_wrappers=1", str(path),
         ],
@@ -135,11 +160,8 @@ def _ffprobe_fps(path: Path) -> float:
 
 
 def _ffprobe_wh(path: Path) -> tuple[int, int]:
-    from app.ffmpeg_tools import ffprobe_bin
-    from app.win_process import hide_console_kwargs
-
     cmd = [
-        ffprobe_bin(),
+        _ffprobe_exe(),
         "-v",
         "error",
         "-select_streams",
@@ -150,13 +172,12 @@ def _ffprobe_wh(path: Path) -> tuple[int, int]:
         "csv=p=0",
         str(path),
     ]
-    r = subprocess.run(
+    r = _run_tool(
         cmd,
         capture_output=True,
         text=True,
         encoding="utf-8",
         errors="replace",
-        **hide_console_kwargs(),
     )
     if r.returncode != 0:
         err = (r.stderr or r.stdout or "").strip() or f"exit {r.returncode}"
@@ -175,9 +196,9 @@ def _ffprobe_rotation(path: Path) -> int:
     landscape pixels with ±90 so the *display* is vertical — render.py already
     accounts for this; the format gate must too."""
     try:
-        r = subprocess.run(
+        r = _run_tool(
             [
-                "ffprobe", "-v", "error", "-select_streams", "v:0",
+                _ffprobe_exe(), "-v", "error", "-select_streams", "v:0",
                 "-show_entries", "stream_side_data=rotation",
                 "-of", "default=noprint_wrappers=1:nokey=1", str(path),
             ],
@@ -190,9 +211,9 @@ def _ffprobe_rotation(path: Path) -> int:
         pass
     # fallback: stream tag
     try:
-        r = subprocess.run(
+        r = _run_tool(
             [
-                "ffprobe", "-v", "error", "-select_streams", "v:0",
+                _ffprobe_exe(), "-v", "error", "-select_streams", "v:0",
                 "-show_entries", "stream_tags=rotate",
                 "-of", "default=nw=1:nk=1", str(path),
             ],
@@ -214,9 +235,9 @@ def _display_wh(path: Path) -> tuple[int, int]:
 
 
 def _count_frames(path: Path) -> int:
-    out = subprocess.run(
+    out = _run_tool(
         [
-            "ffprobe", "-v", "error", "-select_streams", "v:0",
+            _ffprobe_exe(), "-v", "error", "-select_streams", "v:0",
             "-count_frames", "-show_entries", "stream=nb_read_frames",
             "-of", "default=nw=1:nk=1", str(path),
         ],
@@ -863,13 +884,8 @@ def remux_final(edit_dir: Path, with_music: bool, duration: float) -> Path:
         "setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv[vid]"
     )
     fc = f"{vid_chain};[0:a]loudnorm=I=-14:TP=-1:LRA=11[out]"
-    try:
-        from app.win_process import hide_console_kwargs  # type: ignore
-        hide = hide_console_kwargs()
-    except Exception:
-        hide = {}
     cmd = [
-        "ffmpeg", "-y",
+        _ffmpeg_exe(), "-y",
         "-i", str(render),
         "-filter_complex", fc,
         "-map", "[vid]", "-map", "[out]",
@@ -881,8 +897,8 @@ def remux_final(edit_dir: Path, with_music: bool, duration: float) -> Path:
         str(final),
     ]
 
-    proc = subprocess.run(
-        cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", **hide
+    proc = _run_tool(
+        cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
     if proc.returncode != 0:
         raise RuntimeError(f"remux failed:\n{proc.stderr[-3000:]}")
@@ -891,15 +907,25 @@ def remux_final(edit_dir: Path, with_music: bool, duration: float) -> Path:
 
 
 def _npm_cmd() -> str:
+    try:
+        from app.win_process import refresh_path_env  # type: ignore
+        refresh_path_env()
+    except Exception:
+        pass
     if os.name == "nt":
-        return "npm.cmd"
-    return "npm"
+        return shutil.which("npm.cmd") or shutil.which("npm") or "npm.cmd"
+    return shutil.which("npm") or "npm"
 
 
 def _npx_cmd() -> str:
+    try:
+        from app.win_process import refresh_path_env  # type: ignore
+        refresh_path_env()
+    except Exception:
+        pass
     if os.name == "nt":
-        return "npx.cmd"
-    return "npx"
+        return shutil.which("npx.cmd") or shutil.which("npx") or "npx.cmd"
+    return shutil.which("npx") or "npx"
 
 
 
@@ -986,15 +1012,21 @@ def scaffold_remotion(edit_dir: Path, *, track: str = "shortform") -> Path:
     if not src.exists():
         raise RuntimeError(f"template missing: {src}")
     shutil.copytree(src, dest)
-    proc = subprocess.run(
-        [_npm_cmd(), "install"],
-        cwd=dest,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        shell=False,
-    )
+    try:
+        proc = _run_tool(
+            [_npm_cmd(), "install"],
+            cwd=dest,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            shell=False,
+        )
+    except FileNotFoundError as e:
+        raise RuntimeError(
+            f"npm não encontrado no PATH do app (Node LTS). "
+            f"Instale: winget install OpenJS.NodeJS.LTS — detalhe: {e}"
+        ) from e
     if proc.returncode != 0:
         raise RuntimeError(f"npm install failed:\n{proc.stderr[-3000:]}")
     return dest
@@ -1008,6 +1040,17 @@ def run(
     skip_phase2: bool = False,
 ) -> dict:
     """Run the full pipeline. Returns a result dict; raises NeedsReview on gates."""
+    try:
+        from app.win_process import refresh_path_env  # type: ignore
+        refresh_path_env()
+    except Exception:
+        pass
+    try:
+        from app.ffmpeg_tools import ensure_ffmpeg_on_path  # type: ignore
+        ensure_ffmpeg_on_path()
+    except Exception:
+        pass
+
     source = source.resolve()
     edit_dir = edit_dir.resolve()
     edit_dir.mkdir(parents=True, exist_ok=True)
@@ -1363,24 +1406,24 @@ def run(
     cache_b = offthread_cache_bytes()
     with remotion_slot():
         try:
-            from app.win_process import hide_console_kwargs  # type: ignore
-            hide = hide_console_kwargs()
-        except Exception:
-            hide = {}
-        rend = subprocess.run(
-            [
-                _npx_cmd(), "remotion", "render", comp_id, "out/render.mp4",
-                f"--concurrency={conc}",
-                f"--offthreadvideo-cache-size-in-bytes={cache_b}",
-            ],
-            cwd=remotion,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            shell=False,
-            **hide,
-        )
+            rend = _run_tool(
+                [
+                    _npx_cmd(), "remotion", "render", comp_id, "out/render.mp4",
+                    f"--concurrency={conc}",
+                    f"--offthreadvideo-cache-size-in-bytes={cache_b}",
+                ],
+                cwd=remotion,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                shell=False,
+            )
+        except FileNotFoundError as e:
+            raise RuntimeError(
+                f"npx/Node não encontrado ao renderizar Remotion. "
+                f"Instale: winget install OpenJS.NodeJS.LTS — detalhe: {e}"
+            ) from e
     if rend.returncode != 0:
         raise RuntimeError(f"remotion render failed:\n{rend.stderr[-4000:]}\n{rend.stdout[-2000:]}")
 

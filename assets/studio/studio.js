@@ -1678,9 +1678,10 @@ async function loadSistema() {
     const perf = data.performance || {};
     const s = data.settings || {};
     if (hint) {
-      hint.textContent =
+      const base =
         `${m.os || "?"} ${m.osRelease || ""} · ${m.cores || "?"} núcleos · RAM ${m.ramGb ?? "?"} GB · `
         + `encoder ${(m.accel && m.accel.preferredEncoder) || "libx264"} · disco ${m.diskFreeGb ?? "?"} GB`;
+      hint.textContent = m.error ? `${base} (aviso: ${m.error})` : base;
     }
     if ($("#sysPerfHint")) {
       $("#sysPerfHint").textContent =
@@ -1714,8 +1715,12 @@ async function loadSistema() {
       }
     }
   } catch (e) {
-    if (hint) hint.textContent = `Falha ao detectar: ${e.message || e}`;
-    throw e;
+    const msg = String(e && e.message ? e.message : e);
+    if (hint) {
+      hint.textContent = /failed to fetch|networkerror|load failed/i.test(msg)
+        ? "Servidor local não respondeu — feche o ATIVAVID e abra de novo."
+        : `Falha ao detectar: ${msg}`;
+    }
   }
   try {
     const up = await api("/api/update/check");
@@ -1723,10 +1728,12 @@ async function loadSistema() {
   } catch { /* ignore */ }
   try {
     const cache = await api("/api/cache");
-    $("#cacheHint").textContent = `Cache temporário: ${cache.gb ?? 0} GB (originais e finais ficam intactos)`;
+    if ($("#cacheHint")) {
+      $("#cacheHint").textContent = `Cache temporário: ${cache.gb ?? 0} GB (originais e finais ficam intactos)`;
+    }
     if ($("#sysMetricCache")) $("#sysMetricCache").textContent = `${cache.gb ?? 0} GB`;
   } catch {
-    $("#cacheHint").textContent = "Cache: —";
+    if ($("#cacheHint")) $("#cacheHint").textContent = "Cache: —";
   }
   await loadBrandsUi().catch(() => {});
 }

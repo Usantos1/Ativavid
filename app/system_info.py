@@ -10,15 +10,15 @@ import time
 from pathlib import Path
 from typing import Any
 
-from app.win_process import hide_console_kwargs
+from app.win_process import hide_console_kwargs, refresh_path_env
 
-# Evita re-disparar 8–10 processos (e flash de CMD) a cada refresh da UI
+# Evita re-disparar processos lentos a cada refresh da UI
 _CACHE: dict[str, Any] | None = None
 _CACHE_AT = 0.0
 _CACHE_TTL_S = 120.0
 
 
-def _run(cmd: list[str], timeout: float = 8.0) -> str:
+def _run(cmd: list[str], timeout: float = 4.0) -> str:
     try:
         r = subprocess.run(
             cmd,
@@ -35,8 +35,26 @@ def _run(cmd: list[str], timeout: float = 8.0) -> str:
         return ""
 
 
+def _ffmpeg_cmd() -> str:
+    try:
+        from app.ffmpeg_tools import ffmpeg_bin
+
+        return ffmpeg_bin()
+    except Exception:
+        return shutil.which("ffmpeg") or "ffmpeg"
+
+
+def _ffprobe_cmd() -> str:
+    try:
+        from app.ffmpeg_tools import ffprobe_bin
+
+        return ffprobe_bin()
+    except Exception:
+        return shutil.which("ffprobe") or "ffprobe"
+
+
 def _ffmpeg_encoders() -> set[str]:
-    out = _run(["ffmpeg", "-hide_banner", "-encoders"], timeout=10)
+    out = _run([_ffmpeg_cmd(), "-hide_banner", "-encoders"], timeout=6)
     found: set[str] = set()
     for name in ("h264_nvenc", "hevc_nvenc", "h264_qsv", "h264_amf", "h264_videotoolbox"):
         if name in out:
@@ -52,7 +70,7 @@ def _encoder_opens(name: str) -> bool:
         "h264_amf": ["-quality", "balanced", "-rc", "cqp", "-qp_i", "22", "-qp_p", "24", "-pix_fmt", "yuv420p"],
     }.get(name, [])
     cmd = [
-        "ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "lavfi",
+        _ffmpeg_cmd(), "-hide_banner", "-loglevel", "error", "-f", "lavfi",
         "-i", "color=c=black:s=64x64:d=0.04", "-frames:v", "1", "-an",
         "-c:v", name, *extras, "-f", "null", "-",
     ]
@@ -60,7 +78,7 @@ def _encoder_opens(name: str) -> bool:
         r = subprocess.run(
             cmd,
             capture_output=True,
-            timeout=6,
+            timeout=5,
             encoding="utf-8",
             errors="replace",
             stdin=subprocess.DEVNULL,
@@ -71,7 +89,53 @@ def _encoder_opens(name: str) -> bool:
         return False
 
 
+def _ram_gb_ctypes() -> tuple[float | None, float | None]:
+    """RAM via WinAPI — sem PowerShell (rápido e estável no pythonw)."""
+    if sys.platform != "win32":
+        return None, None
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class MEMORYSTATUSEX(ctypes.Structure):
+            _fields_ = [
+                ("dwLength", wintypes.DWORD),
+                ("dwMemoryLoad", wintypes.DWORD),
+                ("ullTotalPhys", ctypes.c_uint64),
+                ("ullAvailPhys", ctypes.c_uint64),
+                ("ullTotalPageFile", ctypes.c_uint64),
+                ("ullAvailPageFile", ctypes.c_uint64),
+                ("ullTotalVirtual", ctypes.c_uint64),
+                ("ullAvailVirtual", ctypes.c_uint64),
+                ("ullAvailExtendedVirtual", ctypes.c_uint64),
+            ]
+
+        stat = MEMORYSTATUSEX()
+        stat.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+        if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat)):
+            return None, None
+        total = round(stat.ullTotalPhys / (1024**3), 1)
+        free = round(stat.ullAvailPhys / (1024**3), 1)
+        return total, free
+    except Exception:
+        return None, None
+
+
+def _ram_gb() -> tuple[float | None, float | None]:
+    total, free = _ram_gb_ctypes()
+    if total is not None:
+        return total, free
+    try:
+        import psutil  # type: ignore
+
+        vm = psutil.virtual_memory()
+        return round(vm.total / (1024**3), 1), round(vm.available / (1024**3), 1)
+    except Exception:
+        return None, None
+
+
 def _gpu_windows() -> list[dict[str, Any]]:
+    """Lista GPUs. Timeout curto — falha silenciosa não pode derrubar /api/system."""
     if sys.platform != "win32":
         return []
     ps = (
@@ -79,8 +143,16 @@ def _gpu_windows() -> list[dict[str, Any]]:
         "Select-Object Name, AdapterRAM, DriverVersion | ConvertTo-Json -Compress"
     )
     raw = _run(
-        ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", ps],
-        timeout=8,
+        [
+            "powershell.exe",
+            "-NoProfile",
+            "-NonInteractive",
+            "-WindowStyle",
+            "Hidden",
+            "-Command",
+            ps,
+        ],
+        timeout=4,
     )
     if not raw:
         return []
@@ -107,34 +179,40 @@ def _gpu_windows() -> list[dict[str, Any]]:
     return gpus
 
 
-def _ram_gb() -> tuple[float | None, float | None]:
-    """(total, available) in GB."""
-    if sys.platform == "win32":
-        ps = (
-            "$o=Get-CimInstance Win32_OperatingSystem; "
-            "[pscustomobject]@{total=$o.TotalVisibleMemorySize; free=$o.FreePhysicalMemory} "
-            "| ConvertTo-Json -Compress"
-        )
-        raw = _run(
-            ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", ps],
-            timeout=6,
-        )
-        if raw:
-            import json
-            try:
-                d = json.loads(raw)
-                total = round(int(d["total"]) / (1024**2), 1)
-                free = round(int(d["free"]) / (1024**2), 1)
-                return total, free
-            except (json.JSONDecodeError, KeyError, TypeError, ValueError):
-                pass
+def _minimal_machine(projects_root: Path | None = None, err: str = "") -> dict[str, Any]:
+    root = projects_root or Path.home() / "ATIVAVID" / "Projetos"
+    disk_free = None
     try:
-        import psutil  # type: ignore
-
-        vm = psutil.virtual_memory()
-        return round(vm.total / (1024**3), 1), round(vm.available / (1024**3), 1)
-    except Exception:
-        return None, None
+        root.mkdir(parents=True, exist_ok=True)
+        disk_free = round(shutil.disk_usage(str(root)).free / (1024**3), 1)
+    except OSError:
+        pass
+    total, free = _ram_gb()
+    return {
+        "os": platform.system(),
+        "osRelease": platform.release(),
+        "osVersion": platform.version(),
+        "python": platform.python_version(),
+        "cpu": platform.processor() or platform.machine(),
+        "cores": os.cpu_count() or 1,
+        "ramGb": total,
+        "ramFreeGb": free,
+        "gpus": [],
+        "diskFreeGb": disk_free,
+        "projectsRoot": str(root),
+        "ffmpeg": {"installed": False, "version": None, "encoders": []},
+        "ffprobe": {"installed": False, "version": None},
+        "accel": {
+            "nvenc": False,
+            "qsv": False,
+            "amf": False,
+            "preferredEncoder": "libx264",
+            "mode": "cpu",
+            "nvencListed": False,
+            "probed": False,
+        },
+        "error": err or None,
+    }
 
 
 def detect_machine(
@@ -143,7 +221,7 @@ def detect_machine(
     force: bool = False,
     probe_encoders: bool = False,
 ) -> dict[str, Any]:
-    """Detecta OS/RAM/GPU. Por padrão NÃO abre cada encoder (isso trava a UI do Sistema)."""
+    """Detecta OS/RAM/GPU. Nunca levanta — /api/system precisa sempre responder."""
     global _CACHE, _CACHE_AT
     now = time.time()
     if (
@@ -157,10 +235,44 @@ def detect_machine(
     ):
         return dict(_CACHE)
 
+    try:
+        refresh_path_env()
+    except Exception:
+        pass
+    try:
+        from app.ffmpeg_tools import ensure_ffmpeg_on_path
+
+        ensure_ffmpeg_on_path()
+    except Exception:
+        pass
+
+    try:
+        result = _detect_machine_inner(
+            projects_root, probe_encoders=probe_encoders
+        )
+    except Exception as e:
+        result = _minimal_machine(projects_root, err=str(e)[:240])
+
+    _CACHE = result
+    _CACHE_AT = time.time()
+    return dict(result)
+
+
+def _detect_machine_inner(
+    projects_root: Path | None,
+    *,
+    probe_encoders: bool,
+) -> dict[str, Any]:
     total_ram, free_ram = _ram_gb()
     cpu = platform.processor() or platform.machine()
     cores = os.cpu_count() or 1
-    encoders = _ffmpeg_encoders() if shutil.which("ffmpeg") else set()
+
+    ff_bin = _ffmpeg_cmd()
+    fp_bin = _ffprobe_cmd()
+    ff_ok = Path(ff_bin).exists() if os.path.isabs(ff_bin) else bool(shutil.which(ff_bin) or shutil.which("ffmpeg"))
+    fp_ok = Path(fp_bin).exists() if os.path.isabs(fp_bin) else bool(shutil.which(fp_bin) or shutil.which("ffprobe"))
+
+    encoders = _ffmpeg_encoders() if ff_ok else set()
     gpus = _gpu_windows()
     nvidia = any("nvidia" in (g.get("name") or "").lower() for g in gpus) or ("h264_nvenc" in encoders)
     qsv = "h264_qsv" in encoders or any("intel" in (g.get("name") or "").lower() for g in gpus)
@@ -190,10 +302,10 @@ def detect_machine(
     except OSError:
         pass
 
-    ff = _run(["ffmpeg", "-version"], timeout=5).splitlines()
-    fp = _run(["ffprobe", "-version"], timeout=5).splitlines()
+    ff = _run([ff_bin, "-version"], timeout=3).splitlines() if ff_ok else []
+    fp = _run([fp_bin, "-version"], timeout=3).splitlines() if fp_ok else []
 
-    result = {
+    return {
         "os": platform.system(),
         "osRelease": platform.release(),
         "osVersion": platform.version(),
@@ -206,12 +318,12 @@ def detect_machine(
         "diskFreeGb": disk_free,
         "projectsRoot": str(root),
         "ffmpeg": {
-            "installed": bool(shutil.which("ffmpeg")),
+            "installed": bool(ff_ok),
             "version": ff[0][:80] if ff else None,
             "encoders": sorted(encoders),
         },
         "ffprobe": {
-            "installed": bool(shutil.which("ffprobe")),
+            "installed": bool(fp_ok),
             "version": fp[0][:80] if fp else None,
         },
         "accel": {
@@ -224,6 +336,3 @@ def detect_machine(
             "probed": bool(probe_encoders),
         },
     }
-    _CACHE = result
-    _CACHE_AT = now
-    return dict(result)
