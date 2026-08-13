@@ -94,7 +94,8 @@ class DesktopHandler(ps.Handler):
         self.send_response(200)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data)))
-        self.send_header("Cache-Control", "no-store")
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+        self.send_header("Pragma", "no-cache")
         self.end_headers()
         try:
             self.wfile.write(data)
@@ -118,14 +119,24 @@ class DesktopHandler(ps.Handler):
         if raw in ("/", "/hub", "/studio", "/index.html"):
             html = (STUDIO / "index.html").read_text(encoding="utf-8")
             try:
-                from app.update_check import current_version
-                ver = current_version()
+                from app.update_check import boot_fingerprint, running_version
+
+                ver = running_version()
+                bust = boot_fingerprint().replace("|", "-")
             except Exception:
                 ver = "0"
-            html = html.replace("VERSION_PLACEHOLDER", ver).replace(
+                bust = "0"
+            html = html.replace("VERSION_PLACEHOLDER", bust).replace(
                 'src="/assets/studio/studio.js"',
-                f'src="/assets/studio/studio.js?v={ver}"',
+                f'src="/assets/studio/studio.js?v={bust}"',
             )
+            # meta para debug na UI
+            if "<!--ATIVAVID_VER-->" not in html:
+                html = html.replace(
+                    "<head>",
+                    f"<head>\n  <!--ATIVAVID_VER {ver} {bust}-->",
+                    1,
+                )
             data = html.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -177,12 +188,13 @@ class DesktopHandler(ps.Handler):
             llm = ls.load_llm_proxy()
             from app import license as lic
             from app import llm_gateway as gw
-            from app.update_check import current_version
+            from app.update_check import boot_fingerprint, running_version
 
             gws = gw.status()
             self._json({
                 "ok": True,
-                "version": current_version(),
+                "version": running_version(),
+                "fingerprint": boot_fingerprint(),
                 "projectsRoot": str(self.projects_root),
                 "hasGroq": bool(keys.get("GROQ_API_KEY")),
                 "hasElevenLabs": bool(keys.get("ELEVENLABS_API_KEY")),

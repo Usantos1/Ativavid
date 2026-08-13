@@ -936,12 +936,13 @@ class StudioHandler(BaseHTTPRequestHandler):
 
         if path == "/api/health":
             keys = load_env_keys()
-            from app.update_check import current_version
+            from app.update_check import boot_fingerprint, running_version
             from app import license as lic
 
             self._json({
                 "ok": True,
-                "version": current_version(),
+                "version": running_version(),
+                "fingerprint": boot_fingerprint(),
                 "projectsRoot": str(self.projects_root),
                 "hasGroq": bool(keys.get("GROQ_API_KEY")),
                 "hasElevenLabs": bool(keys.get("ELEVENLABS_API_KEY")),

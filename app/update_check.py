@@ -13,8 +13,16 @@ REPO = Path(__file__).resolve().parent.parent
 VERSION_FILE = REPO / "VERSION"
 DEFAULT_VERSION = "0.1.0"
 
+# Versão/código deste PROCESSO — congelados no 1º uso.
+# Depois do instalador atualizar o VERSION no disco, um processo antigo
+# ainda reportaria a versão nova se lesse o arquivo a cada /api/health —
+# e o handoff acharia que já está atualizado (titlebar/JS velhos).
+_RUNNING_VERSION: str | None = None
+_BOOT_FINGERPRINT: str | None = None
+
 
 def current_version() -> str:
+    """Versão no disco agora (pode mudar após instalar sem reiniciar)."""
     if VERSION_FILE.exists():
         return VERSION_FILE.read_text(encoding="utf-8").strip() or DEFAULT_VERSION
     py = REPO / "pyproject.toml"
@@ -23,6 +31,36 @@ def current_version() -> str:
             if line.strip().startswith("version"):
                 return line.split("=", 1)[-1].strip().strip('"').strip("'") or DEFAULT_VERSION
     return DEFAULT_VERSION
+
+
+def running_version() -> str:
+    """Versão com que ESTE processo subiu (não muda se o arquivo VERSION for trocado)."""
+    global _RUNNING_VERSION
+    if _RUNNING_VERSION is None:
+        _RUNNING_VERSION = current_version()
+    return _RUNNING_VERSION
+
+
+def _studio_stamp() -> str:
+    p = REPO / "assets" / "studio" / "studio.js"
+    try:
+        st = p.stat()
+        return f"{int(st.st_mtime_ns)}-{st.st_size}"
+    except OSError:
+        return "0"
+
+
+def disk_fingerprint() -> str:
+    """Assinatura do build no disco (versão + studio.js)."""
+    return f"{current_version()}|{_studio_stamp()}"
+
+
+def boot_fingerprint() -> str:
+    """Assinatura do build com que este processo subiu."""
+    global _BOOT_FINGERPRINT
+    if _BOOT_FINGERPRINT is None:
+        _BOOT_FINGERPRINT = f"{running_version()}|{_studio_stamp()}"
+    return _BOOT_FINGERPRINT
 
 
 def configured_repo() -> str:

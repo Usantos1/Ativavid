@@ -125,6 +125,8 @@ _TRAY_ICON = None
 _QUIT_REQUESTED = False
 _API_REF: WindowApi | None = None
 _SHOW_REQUEST = Path.home() / "ATIVAVID" / "show.request"
+_RELOAD_REQUEST = Path.home() / "ATIVAVID" / "reload.request"
+_HTTP_PORT = 4850
 
 
 def _hide_to_tray(api: WindowApi) -> None:
@@ -203,11 +205,39 @@ def _ensure_tray(api: WindowApi) -> None:
     threading.Thread(target=_run, name="ativavid-tray", daemon=True).start()
 
 
+def _reload_webview(api: WindowApi | None = None) -> None:
+    """Recarrega a UI (após update / handoff) para pegar studio.js novo."""
+    api = api or _API_REF
+    if not api or not api._window:
+        return
+    try:
+        from app.update_check import running_version
+
+        ver = running_version()
+    except Exception:
+        ver = str(int(time.time()))
+    try:
+        # force-bust cache do WebView2
+        api._window.load_url(f"http://127.0.0.1:{_HTTP_PORT}/?_={ver}&r={int(time.time())}")
+    except Exception:
+        try:
+            api._window.evaluate_js("location.reload(true)")
+        except Exception:
+            pass
+
+
 def _watch_show_request(api: WindowApi) -> None:
     while not _QUIT_REQUESTED:
         try:
             if _SHOW_REQUEST.exists():
                 _show_from_tray(api)
+            if _RELOAD_REQUEST.exists():
+                try:
+                    _RELOAD_REQUEST.unlink()
+                except OSError:
+                    pass
+                _show_from_tray(api)
+                _reload_webview(api)
         except Exception:
             pass
         time.sleep(0.6)
@@ -267,8 +297,9 @@ def _kill_listeners_on_port(port: int) -> None:
 def _handoff_if_running(port: int) -> bool:
     """Se o servidor já está no ar, só reabre a janela (não sobe 2º processo).
 
-    Se a versão em disco for outra (acabou de atualizar), mata o processo antigo
-    e sobe o build novo — senão a titlebar fica na versão velha sem reload.
+    Compara fingerprint do disco com o do processo na porta. O VERSION no disco
+    pode já ter sido atualizado pelo instalador enquanto o processo antigo ainda
+    roda — por isso não basta comparar a string de versão lida do arquivo.
     """
     health: dict = {}
     try:
@@ -283,20 +314,36 @@ def _handoff_if_running(port: int) -> bool:
         return False
 
     try:
-        from app.update_check import current_version
+        from app.update_check import disk_fingerprint
 
-        mine = str(current_version() or "").lstrip("v").strip()
-        running = str(health.get("version") or "").lstrip("v").strip()
-        if mine and running and mine != running:
+        disk_fp = disk_fingerprint()
+        run_fp = str(health.get("fingerprint") or "").strip()
+        # Build antigo (sem fingerprint) ou fingerprint diferente → mata e sobe o novo
+        if not run_fp or run_fp != disk_fp:
             print(
-                f"Build em disco {mine} ≠ processo na porta ({running}) — reiniciando…",
+                f"Build em disco ≠ processo na porta "
+                f"(disk={disk_fp!r} running={run_fp or health.get('version')!r}) — reiniciando…",
                 flush=True,
             )
             _kill_listeners_on_port(port)
-            time.sleep(0.8)
+            time.sleep(1.0)
+            # Confirma que a porta liberou
+            try:
+                with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/health", timeout=0.4) as r:
+                    if r.status == 200:
+                        _kill_listeners_on_port(port)
+                        time.sleep(0.8)
+            except Exception:
+                pass
             return False
     except Exception:
-        pass
+        # Em dúvida, não handoff — sobe processo novo
+        try:
+            _kill_listeners_on_port(port)
+            time.sleep(0.8)
+        except Exception:
+            pass
+        return False
 
     hwnd = _find_hwnd()
     if hwnd:
@@ -307,6 +354,11 @@ def _handoff_if_running(port: int) -> bool:
             ctypes.windll.user32.ShowWindow(hwnd, SW_RESTORE)
             ctypes.windll.user32.SetForegroundWindow(hwnd)
         except Exception:
+            pass
+        try:
+            _RELOAD_REQUEST.parent.mkdir(parents=True, exist_ok=True)
+            _RELOAD_REQUEST.write_text("1", encoding="utf-8")
+        except OSError:
             pass
         return True
     try:
@@ -733,6 +785,9 @@ def main() -> None:
     if not args.browser and _handoff_if_running(args.port):
         print("ATIVAVID já estava aberto — janela restaurada.", flush=True)
         return
+
+    global _HTTP_PORT
+    _HTTP_PORT = int(args.port)
 
     srv, url = ds.build_server(args.projects_root, args.port)
     print(f"ATIVAVID Local -> {url}", flush=True)
