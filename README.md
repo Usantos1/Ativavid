@@ -10,7 +10,7 @@ App Windows para editar v├¡deo com IA: arraste o arquivo ÔåÆ 1 clique Ôå
 4. Destino padr├úo: `C:\Program Files\ATIVAVID`
 5. Abra pelo atalho **ATIVAVID** (sem janela CMD)
 
-Vers├úo atual: **0.1.38** ÔÇö [download direto](https://github.com/Usantos1/Ativavid/releases/download/v0.1.38/Instalar.ATIVAVID.exe)
+Vers├úo atual: **0.1.39** ÔÇö [download direto](https://github.com/Usantos1/Ativavid/releases/download/v0.1.39/Instalar.ATIVAVID.exe)
 
 ## Primeiro uso
 
