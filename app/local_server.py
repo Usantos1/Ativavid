@@ -73,6 +73,10 @@ def friendly_error(raw: str) -> str:
     low = text.lower()
     if "cancel" in low:
         return "Edição cancelada"
+    if "winerror 2" in low or "cannot find the file" in low or "não pode encontrar o arquivo" in low:
+        return "Falta ferramenta no PC (Python/FFmpeg/Node) — reinstale ou rode o setup"
+    if "uv" in low and ("not found" in low or "winerror" in low or "enoent" in low):
+        return "Instalação incompleta — rode de novo o instalador ATIVAVID"
     if "segments sum" in low or "!= cut.mp4" in low:
         return "Falha ao sincronizar o corte — tente de novo"
     if "no frame found at position" in low or "could not extract frame" in low:
@@ -80,13 +84,13 @@ def friendly_error(raw: str) -> str:
     if "cmd failed" in low or "render.py" in low or "remotion" in low:
         return "Não foi possível montar o vídeo final"
     if "ffmpeg" in low or "ffprobe" in low:
-        return "Falha no processamento de vídeo"
+        return "FFmpeg não encontrado — reinstale o ATIVAVID"
     if "groq" in low or "api key" in low or "401" in low or "403" in low:
         return "Problema de conexão com a IA/transcrição"
     if "transcrib" in low or "whisper" in low:
         return "Não foi possível transcrever o áudio"
     if "npm" in low or "node" in low:
-        return "Falha na etapa visual (legendas)"
+        return "Falta Node.js — reinstale o ATIVAVID"
     # first meaningful line, no path dump
     line = text.splitlines()[0].strip()
     line = re.sub(r"[A-Za-z]:\\[^\s]+", "", line).strip(" :-")
@@ -682,6 +686,12 @@ class Worker:
 
         env = os.environ.copy()
         env.update(load_env_keys())
+        try:
+            from app.win_process import refresh_path_env
+
+            env = refresh_path_env(env)
+        except Exception:
+            pass
         # helpers + repo (app.llm_session usado pelo plano de corte IA)
         env["PYTHONPATH"] = (
             str(HELPERS) + os.pathsep + str(REPO) + os.pathsep + env.get("PYTHONPATH", "")
@@ -710,7 +720,7 @@ class Worker:
         except Exception:  # noqa: BLE001
             pass
 
-        from app.win_process import hide_console_kwargs
+        from app.win_process import hide_console_kwargs, resolve_python_cmd
 
         popen_kwargs: dict = {
             "cwd": str(REPO),
@@ -723,17 +733,32 @@ class Worker:
             **hide_console_kwargs(),
         }
 
+        py_cmd = resolve_python_cmd(REPO)
+        cmd = [
+            *py_cmd,
+            str(RUN_FAST),
+            str(source),
+            "--edit-dir", str(edit_dir),
+            "--preset", str(preset_path),
+            "--json",
+        ]
+
         with self._proc_lock:
-            proc = subprocess.Popen(
-                [
-                    "uv", "run", "python", str(RUN_FAST),
-                    str(source),
-                    "--edit-dir", str(edit_dir),
-                    "--preset", str(preset_path),
-                    "--json",
-                ],
-                **popen_kwargs,
-            )
+            try:
+                proc = subprocess.Popen(cmd, **popen_kwargs)
+            except FileNotFoundError as e:
+                self.store.update(
+                    job_id,
+                    status="error",
+                    message="Instalação incompleta — falta Python/uv no PATH",
+                    reason="error",
+                    detail=(
+                        f"{e}\nComando: {' '.join(cmd)}\n"
+                        "Feche o ATIVAVID e rode de novo o instalador, "
+                        "ou no PowerShell: winget install astral-sh.uv Gyan.FFmpeg OpenJS.NodeJS.LTS"
+                    ),
+                )
+                return
             self._procs[job_id] = proc
             self._proc = proc
 

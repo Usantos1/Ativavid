@@ -62,25 +62,40 @@ def set_stage(edit_dir: Path, stage: str, message: str, progress: int | None = N
 
 
 def _uv_python(*args: str, cwd: Path | None = None, check: bool = True) -> subprocess.CompletedProcess:
-    cmd = ["uv", "run", "python", *args]
-    env = os.environ.copy()
-    # helpers import _utf8 from the helpers dir
-    env["PYTHONPATH"] = str(HELPERS) + os.pathsep + env.get("PYTHONPATH", "")
     try:
-        from app.win_process import hide_console_kwargs  # type: ignore
+        from app.win_process import hide_console_kwargs, resolve_python_cmd  # type: ignore
         hide = hide_console_kwargs()
+        cmd = [*resolve_python_cmd(REPO), *args]
     except Exception:
         hide = {}
-    proc = subprocess.run(
-        cmd,
-        cwd=cwd or REPO,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        env=env,
-        **hide,
-    )
+        cmd = ["uv", "run", "python", *args]
+    env = os.environ.copy()
+    # helpers import _utf8 from the helpers dir
+    env["PYTHONPATH"] = str(HELPERS) + os.pathsep + str(REPO) + os.pathsep + env.get("PYTHONPATH", "")
+    try:
+        from app.ffmpeg_tools import ensure_ffmpeg_on_path  # type: ignore
+        vend = ensure_ffmpeg_on_path()
+        if vend:
+            env["PATH"] = str(vend) + os.pathsep + env.get("PATH", "")
+    except Exception:
+        pass
+    try:
+        proc = subprocess.run(
+            cmd,
+            cwd=cwd or REPO,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=env,
+            **hide,
+        )
+    except FileNotFoundError as e:
+        raise RuntimeError(
+            f"WinError 2 — não achou o executável ({cmd[0]!r}). "
+            "Reinstale o ATIVAVID ou: winget install astral-sh.uv Gyan.FFmpeg OpenJS.NodeJS.LTS\n"
+            f"detalhe: {e}"
+        ) from e
     if check and proc.returncode != 0:
         raise RuntimeError(
             f"cmd failed ({proc.returncode}): {' '.join(cmd)}\n"

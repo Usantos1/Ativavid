@@ -17,8 +17,10 @@ sys.path.insert(0, str(REPO))
 
 # FFmpeg embutido antes de qualquer probe/job
 try:
+    from app.win_process import refresh_path_env
     from app.ffmpeg_tools import ensure_ffmpeg_on_path
 
+    refresh_path_env()
     ensure_ffmpeg_on_path()
 except Exception:
     pass
