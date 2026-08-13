@@ -1522,14 +1522,6 @@ function wireForms() {
   const btnUpdate = $("#btnUpdateCheck");
   if (btnUpdate) {
     btnUpdate.onclick = async () => {
-      const repo = ($("#githubRepoInput")?.value || "").trim();
-      if (repo) {
-        await api("/api/settings", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ githubRepo: repo }),
-        });
-      }
       try {
         await api("/api/license/refresh", {
           method: "POST",
@@ -1538,7 +1530,7 @@ function wireForms() {
         }).then((lic) => renderLicense(lic)).catch(() => {});
       } catch { /* ignore */ }
       const res = await api("/api/update/check");
-      $("#updateHint").textContent = res.message || "Sem servidor de update neste build.";
+      $("#updateHint").textContent = res.message || "Não foi possível verificar.";
       if (res.force) {
         openUpdateDialog({ update: res, mode: "update_required", message: res.message });
         toast("Atualização obrigatória");
@@ -1550,33 +1542,17 @@ function wireForms() {
   const btnUpdateOpen = $("#btnUpdateOpen");
   if (btnUpdateOpen) {
     btnUpdateOpen.onclick = async () => {
-      const repo = ($("#githubRepoInput")?.value || "").trim();
-      if (repo) {
-        await api("/api/settings", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ githubRepo: repo }),
-        });
-      }
-      const check = await api("/api/update/check");
-      const url = check.downloadUrl || check.releaseUrl || "";
+      const check = await api("/api/update/check").catch(() => ({}));
+      const url =
+        check.downloadUrl ||
+        check.releaseUrl ||
+        "https://github.com/Usantos1/Ativavid/releases/latest";
       const res = await api("/api/update/open", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "release", url }),
       });
       toast(res.ok ? "Abrindo download…" : (res.error || "Não abriu"));
-    };
-  }
-  const btnUpdateSetup = $("#btnUpdateSetup");
-  if (btnUpdateSetup) {
-    btnUpdateSetup.onclick = async () => {
-      const res = await api("/api/update/open", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "setup" }),
-      });
-      toast(res.message || (res.ok ? "Pasta do instalador aberta" : "Falha"));
     };
   }
   const btnBrandAct = $("#btnBrandActivate");
@@ -1704,9 +1680,6 @@ function applySistemaData(data) {
   }
   if ($("#projectsRootInput") && !$("#projectsRootInput").value) {
     $("#projectsRootInput").value = s.projectsRoot || m.projectsRoot || "";
-  }
-  if ($("#githubRepoInput") && (s.githubRepo || true)) {
-    $("#githubRepoInput").value = s.githubRepo || "Usantos1/Ativavid";
   }
   if ($("#supabaseUrlInput")) $("#supabaseUrlInput").value = s.supabaseUrl || "";
   if ($("#supabaseAnonInput")) $("#supabaseAnonInput").value = s.supabaseAnonKey || "";

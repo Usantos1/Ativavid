@@ -1,15 +1,23 @@
-"""Brand kits multi-marca + presets de export."""
+"""Brand kits multi-marca + presets de export.
+
+Marcas ficam em %USERPROFILE%/ATIVAVID/brands (gravável).
+O pacote em Program Files só fornece a semente "Padrão".
+"""
 from __future__ import annotations
 
 import json
 import re
+import shutil
 from pathlib import Path
 from typing import Any
 
 REPO = Path(__file__).resolve().parent.parent
-BRANDS_DIR = REPO / "assets" / "brands"
+PKG_BRANDS = REPO / "assets" / "brands"
 PREVIEW = REPO / "assets" / "preview"
+USER_DIR = Path.home() / "ATIVAVID"
+BRANDS_DIR = USER_DIR / "brands"
 ACTIVE_PATH = BRANDS_DIR / "active.json"
+USER_PRESET = USER_DIR / "default-style.json"
 
 EXPORT_PRESETS = {
     "reels": {
@@ -45,14 +53,41 @@ def _slug(name: str) -> str:
 
 
 def ensure_brands_dir() -> None:
+    USER_DIR.mkdir(parents=True, exist_ok=True)
     BRANDS_DIR.mkdir(parents=True, exist_ok=True)
-    default = PREVIEW / "default-style.json"
+
     seed = BRANDS_DIR / "padrao.json"
-    if default.exists() and not seed.exists():
-        data = json.loads(default.read_text(encoding="utf-8-sig"))
-        data["brandId"] = "padrao"
-        data["brandName"] = "Padrão"
-        seed.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    if not seed.exists():
+        pkg = PKG_BRANDS / "padrao.json"
+        default = PREVIEW / "default-style.json"
+        if pkg.exists():
+            shutil.copy2(pkg, seed)
+        elif default.exists():
+            data = json.loads(default.read_text(encoding="utf-8-sig"))
+            data["brandId"] = "padrao"
+            data["brandName"] = data.get("brandName") or "Padrão"
+            seed.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        else:
+            seed.write_text(
+                json.dumps({
+                    "brandId": "padrao",
+                    "brandName": "Padrão",
+                    "exportPreset": "reels",
+                    "endCardCopy": {"line1": "", "line2": ""},
+                }, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+
+    # Garante brandName legível no seed
+    try:
+        data = json.loads(seed.read_text(encoding="utf-8-sig"))
+        if not data.get("brandName"):
+            data["brandName"] = "Padrão"
+            data["brandId"] = data.get("brandId") or "padrao"
+            seed.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    except (OSError, json.JSONDecodeError):
+        pass
+
     if not ACTIVE_PATH.exists():
         ACTIVE_PATH.write_text(
             json.dumps({"activeId": "padrao"}, indent=2) + "\n", encoding="utf-8"
@@ -70,7 +105,7 @@ def list_brands() -> list[dict[str, Any]]:
             data = json.loads(p.read_text(encoding="utf-8-sig"))
         except (OSError, json.JSONDecodeError):
             continue
-        bid = data.get("brandId") or p.stem
+        bid = str(data.get("brandId") or p.stem)
         out.append({
             "id": bid,
             "name": data.get("brandName") or bid,
@@ -78,6 +113,13 @@ def list_brands() -> list[dict[str, Any]]:
             "endCardCopy": data.get("endCardCopy"),
             "accent": data.get("accent"),
             "exportPreset": data.get("exportPreset") or "reels",
+        })
+    if not out:
+        out.append({
+            "id": "padrao",
+            "name": "Padrão",
+            "active": True,
+            "exportPreset": "reels",
         })
     return out
 
@@ -98,7 +140,6 @@ def load_brand(brand_id: str | None = None) -> dict[str, Any]:
         path = BRANDS_DIR / "padrao.json"
     if path.exists():
         return json.loads(path.read_text(encoding="utf-8-sig"))
-    # fallback preview default
     d = PREVIEW / "default-style.json"
     if d.exists():
         return json.loads(d.read_text(encoding="utf-8-sig"))
@@ -119,6 +160,25 @@ def save_brand(body: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
+def write_user_preset(data: dict[str, Any]) -> None:
+    """Espelha o estilo ativo onde o pipeline/UI leem (pasta do usuário)."""
+    USER_DIR.mkdir(parents=True, exist_ok=True)
+    payload = dict(data)
+    payload["fastMode"] = True
+    USER_PRESET.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    # Melhor esforço: também no pacote (dev / se tiver permissão)
+    try:
+        out = PREVIEW / "default-style.json"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+    except OSError:
+        pass
+
+
 def activate_brand(brand_id: str) -> dict[str, Any]:
     ensure_brands_dir()
     bid = _slug(brand_id)
@@ -127,14 +187,12 @@ def activate_brand(brand_id: str) -> dict[str, Any]:
         raise ValueError("marca não encontrada")
     data = json.loads(path.read_text(encoding="utf-8-sig"))
     ACTIVE_PATH.write_text(json.dumps({"activeId": bid}, indent=2) + "\n", encoding="utf-8")
-    # espelha no default-style usado pelo pipeline
-    preset = dict(data)
-    out = PREVIEW / "default-style.json"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(preset, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    return {"ok": True, "activeId": bid, "brand": {
-        "id": bid, "name": data.get("brandName") or bid,
-    }}
+    write_user_preset(data)
+    return {
+        "ok": True,
+        "activeId": bid,
+        "brand": {"id": bid, "name": data.get("brandName") or bid},
+    }
 
 
 def export_preset_info(preset_id: str | None) -> dict[str, Any]:

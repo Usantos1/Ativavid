@@ -28,7 +28,11 @@ REPO = Path(__file__).resolve().parent.parent
 HELPERS = REPO / "helpers"
 SHORTFORM = REPO / "assets" / "shortform"
 LONGFORM = REPO / "assets" / "longform"
-DEFAULT_PRESET = REPO / "assets" / "preview" / "default-style.json"
+DEFAULT_PRESET = (
+    (Path.home() / "ATIVAVID" / "default-style.json")
+    if (Path.home() / "ATIVAVID" / "default-style.json").exists()
+    else REPO / "assets" / "preview" / "default-style.json"
+)
 
 LEAD_S = 0.05
 TRAIL_S = 0.12

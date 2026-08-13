@@ -40,6 +40,8 @@ HELPERS = REPO / "helpers"
 STUDIO = REPO / "assets" / "studio"
 PREVIEW = REPO / "assets" / "preview"
 PRESET_PATH = PREVIEW / "default-style.json"
+USER_PRESET_PATH = Path.home() / "ATIVAVID" / "default-style.json"
+
 # Chaves em %USERPROFILE%\ATIVAVID\.env (Program Files é só leitura)
 USER_DIR = Path.home() / "ATIVAVID"
 ENV_PATH = USER_DIR / ".env"
@@ -403,8 +405,12 @@ def save_env_keys(updates: dict[str, str]) -> None:
 
 
 def load_preset() -> dict:
-    if PRESET_PATH.exists():
-        return json.loads(PRESET_PATH.read_text(encoding="utf-8-sig"))
+    for path in (USER_PRESET_PATH, PRESET_PATH):
+        if path.exists():
+            try:
+                return json.loads(path.read_text(encoding="utf-8-sig"))
+            except (OSError, json.JSONDecodeError):
+                continue
     return {
         "edit": "limpa",
         "headline": "realce",
@@ -431,16 +437,21 @@ def load_preset() -> dict:
             "musicAI": False,
             "endCard": True,
         },
-        "fastMode": True,
         "endCardCopy": {"line1": "", "line2": ""},
     }
 
 
 def save_preset(data: dict) -> None:
-    PRESET_PATH.parent.mkdir(parents=True, exist_ok=True)
     data = dict(data)
     data["fastMode"] = True
-    PRESET_PATH.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    raw = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+    USER_PRESET_PATH.parent.mkdir(parents=True, exist_ok=True)
+    USER_PRESET_PATH.write_text(raw, encoding="utf-8")
+    try:
+        PRESET_PATH.parent.mkdir(parents=True, exist_ok=True)
+        PRESET_PATH.write_text(raw, encoding="utf-8")
+    except OSError:
+        pass
 
 
 def run_doutor() -> dict:

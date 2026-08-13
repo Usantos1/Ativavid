@@ -147,14 +147,20 @@ def check_update(*, channel: str = "stable") -> dict[str, Any]:
         result["latestVersion"] = tag or None
         result["releaseUrl"] = data.get("html_url")
         result["source"] = "github"
-        # Asset .exe se existir
+        # Asset .exe se existir (instalador)
         assets = data.get("assets") if isinstance(data.get("assets"), list) else []
         for asset in assets:
             name = str((asset or {}).get("name") or "").lower()
             browser = (asset or {}).get("browser_download_url")
-            if browser and ("install" in name or name.endswith(".exe")):
+            if not browser:
+                continue
+            if name.endswith(".exe") or "install" in name or "instalar" in name:
                 result["downloadUrl"] = browser
                 break
+        if not result["downloadUrl"]:
+            result["downloadUrl"] = f"https://github.com/{gh}/releases/latest"
+        if not result.get("releaseUrl"):
+            result["releaseUrl"] = f"https://github.com/{gh}/releases/latest"
         if tag and tag != cur:
             result["updateAvailable"] = True
             result["message"] = f"Nova versão {tag} disponível"
