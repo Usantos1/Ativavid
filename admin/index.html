@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>ATIVAVID Admin — licenças</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { font-family: Segoe UI, sans-serif; color: #e8e8ec; background: #121218; }
+  body { max-width: 720px; margin: 32px auto; padding: 0 16px; }
+  h1 { font-size: 1.25rem; }
+  .hint { color: #9a9aa3; font-size: 13px; }
+  label { display: grid; gap: 6px; margin: 12px 0; font-size: 13px; font-weight: 600; }
+  input, textarea { padding: 10px 12px; border-radius: 10px; border: 1px solid #333; background: #1c1c22; color: inherit; }
+  button { cursor: pointer; border: 0; border-radius: 10px; padding: 10px 14px; font-weight: 700; background: #fe2c55; color: #fff; }
+  button.ghost { background: #2a2a32; }
+  pre { background: #0c0c0e; padding: 12px; border-radius: 10px; overflow: auto; font-size: 12px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .warn { color: #f5b942; }
+</style>
+</head>
+<body>
+  <h1>ATIVAVID · admin de licenças</h1>
+  <p class="hint warn">Só na sua máquina. Nunca coloque a service role no app do cliente.</p>
+
+  <label>Supabase URL
+    <input id="url" placeholder="https://xxxx.supabase.co">
+  </label>
+  <label>Service role key
+    <input id="key" type="password" placeholder="eyJhbGciOi…">
+  </label>
+  <label>E-mail do cliente
+    <input id="email" type="email" placeholder="cliente@email.com">
+  </label>
+  <label>Dias de validade
+    <input id="days" type="number" value="365" min="1">
+  </label>
+
+  <div class="row">
+    <button type="button" id="btnCreate">Criar licença anual</button>
+    <button type="button" class="ghost" id="btnList">Listar licenças</button>
+    <button type="button" class="ghost" id="btnSave">Salvar URL/key neste browser</button>
+  </div>
+
+  <pre id="out">Pronto.</pre>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const out = (x) => { $("out").textContent = typeof x === "string" ? x : JSON.stringify(x, null, 2); };
+
+function cfg() {
+  return {
+    url: $("url").value.trim().replace(/\/$/, ""),
+    key: $("key").value.trim(),
+  };
+}
+
+function licenseKey() {
+  const chunk = () => Math.floor(Math.random() * 0xffff).toString(16).padStart(4, "0").toUpperCase();
+  return `ATIV-${chunk()}-${chunk()}-${chunk()}`;
+}
+
+$("btnSave").onclick = () => {
+  localStorage.setItem("ativavid-admin", JSON.stringify({ url: $("url").value, key: $("key").value }));
+  out("Salvo neste navegador.");
+};
+
+$("btnCreate").onclick = async () => {
+  const { url, key } = cfg();
+  if (!url || !key) return out("Preencha URL e service role.");
+  const days = Number($("days").value || 365);
+  const valid_until = new Date(Date.now() + days * 86400000).toISOString();
+  const row = {
+    license_key: licenseKey(),
+    email: $("email").value.trim() || null,
+    status: "active",
+    valid_until,
+    max_devices: 1,
+    provider: "manual",
+  };
+  const res = await fetch(`${url}/rest/v1/licenses`, {
+    method: "POST",
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+      Prefer: "return=representation",
+    },
+    body: JSON.stringify(row),
+  });
+  const data = await res.json();
+  if (!res.ok) return out(data);
+  out({ ok: true, created: data, tell_customer: data[0]?.license_key });
+};
+
+$("btnList").onclick = async () => {
+  const { url, key } = cfg();
+  if (!url || !key) return out("Preencha URL e service role.");
+  const res = await fetch(`${url}/rest/v1/licenses?select=*&order=created_at.desc&limit=50`, {
+    headers: { apikey: key, Authorization: `Bearer ${key}` },
+  });
+  out(await res.json());
+};
+
+try {
+  const saved = JSON.parse(localStorage.getItem("ativavid-admin") || "{}");
+  if (saved.url) $("url").value = saved.url;
+  if (saved.key) $("key").value = saved.key;
+} catch {}
+</script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+{
+  "edit": "limpa",
+  "headline": "realce",
+  "captions": "stacked",
+  "accent": "#e30004",
+  "captionAccent": "#FFFFFF",
+  "emphasisAccent": "#FF0000",
+  "circleAccent": null,
+  "elements": {
+    "tracking": false,
+    "zoomAuto": true,
+    "zoomCuts": true,
+    "flashCut": true,
+    "musicAI": true,
+    "endCard": true
+  },
+  "fastMode": true,
+  "oneClick": true,
+  "rhythm": "dinamico",
+  "intensity": "medio",
+  "speechClean": "medio",
+  "videoGoal": "reels",
+  "brollMode": "quando_necessario",
+  "captionChunk": "frase_curta",
+  "exportPreset": "reels",
+  "endCardCopy": {
+    "line1": "Segue @lojaprimecamp",
+    "line2": "ou me chama no direct"
+  },
+  "note": "",
+  "brandId": "padrao",
+  "brandName": "Padrão"
+}

@@ -1,0 +1,495 @@
+#!/usr/bin/env python3
+"""ATIVAVID Desktop — hub de import + editor real da skill (timeline/agulha/estilo).
+
+Combina:
+  - APIs de fila/1-clique (local_server)
+  - Interface de edicao completa (preview_server + assets/preview)
+
+Rotas principais:
+  /                 hub CapCut-like (importar + fila)
+  /p/<pasta>/fase1  editor com timeline + agulha
+  /p/<pasta>/estilo estilos + legendas (cards visuais)
+  /p/<pasta>/fase2  final / visual + legenda do post
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import mimetypes
+import os
+import sys
+import threading
+from http.server import ThreadingHTTPServer
+from pathlib import Path
+from urllib.parse import urlparse
+
+REPO = Path(__file__).resolve().parent.parent
+HELPERS = REPO / "helpers"
+STUDIO = REPO / "assets" / "studio"
+sys.path.insert(0, str(HELPERS))
+sys.path.insert(0, str(REPO))
+
+import preview_server as ps  # noqa: E402
+from app import local_server as ls  # noqa: E402
+
+# Cliente (WebView) cancela request — comum ao trocar de página / scrub de vídeo.
+_CLIENT_GONE = (BrokenPipeError, ConnectionResetError, ConnectionAbortedError)
+
+
+def _client_gone(exc: BaseException | None) -> bool:
+    if exc is None:
+        return False
+    if isinstance(exc, _CLIENT_GONE):
+        return True
+    if isinstance(exc, OSError):
+        win = getattr(exc, "winerror", None)
+        if win in (10053, 10054):  # WSAECONNABORTED / WSAECONNRESET
+            return True
+        if getattr(exc, "errno", None) in (32, 104):  # EPIPE / ECONNRESET
+            return True
+    return False
+
+
+class QuietThreadingHTTPServer(ThreadingHTTPServer):
+    """Não despeja traceback quando o WebView aborta a conexão."""
+
+    def handle_error(self, request, client_address) -> None:  # noqa: ARG002
+        if _client_gone(sys.exc_info()[1]):
+            return
+        super().handle_error(request, client_address)
+
+
+class DesktopHandler(ps.Handler):
+    """Preview editor + studio hub/queue APIs on one port."""
+
+    store: ls.JobStore
+    worker: ls.Worker
+    projects_root: Path
+
+    def _json(self, obj: object, code: int = 200) -> None:
+        raw = json.dumps(obj, ensure_ascii=False).encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(raw)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
+        try:
+            self.wfile.write(raw)
+        except _CLIENT_GONE:
+            return
+        except OSError as e:
+            if _client_gone(e):
+                return
+            raise
+
+    def _studio_file(self, path: Path, ctype: str | None = None) -> None:
+        if not path.exists() or not path.is_file():
+            self._json({"error": "not found"}, 404)
+            return
+        data = path.read_bytes()
+        ctype = ctype or mimetypes.guess_type(str(path))[0] or "application/octet-stream"
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        try:
+            self.wfile.write(data)
+        except _CLIENT_GONE:
+            return
+        except OSError as e:
+            if _client_gone(e):
+                return
+            raise
+
+    def do_OPTIONS(self) -> None:  # noqa: N802
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
+
+    def do_GET(self) -> None:  # noqa: N802
+        raw = self.path.split("?", 1)[0]
+        # Hub + studio static — BEFORE preview /p scope
+        if raw in ("/", "/hub", "/studio", "/index.html"):
+            self._studio_file(STUDIO / "index.html", "text/html; charset=utf-8")
+            return
+        # House style + bare editor tabs (applyState used to rewrite
+        # /estilo-padrao → /estilo and a reload then 404'd as unknown route
+        # on servers that only knew the hub).
+        if raw in ("/estilo-padrao", "/estilo", "/fase1", "/fase2"):
+            data = (ps.APP_DIR / "index.html").read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(data)
+            return
+        if raw.startswith("/assets/studio/"):
+            rel = raw[len("/assets/studio/"):]
+            self._studio_file(STUDIO / rel)
+            return
+
+        # Embedded OpenAI-compatible gateway (same process — no porta 8080)
+        if raw in ("/v1/models", "/v1/models/"):
+            from app import llm_gateway as gw
+
+            code, payload = gw.list_models()
+            self._json(payload, code)
+            return
+        if raw == "/api/llm-gateway":
+            from app import llm_gateway as gw
+
+            self._json(gw.status())
+            return
+
+        # Queue / brand APIs
+        if raw == "/api/health":
+            keys = ls.load_env_keys()
+            llm = ls.load_llm_proxy()
+            from app import license as lic
+            from app import llm_gateway as gw
+            from app.update_check import current_version
+
+            gws = gw.status()
+            self._json({
+                "ok": True,
+                "version": current_version(),
+                "projectsRoot": str(self.projects_root),
+                "hasGroq": bool(keys.get("GROQ_API_KEY")),
+                "hasElevenLabs": bool(keys.get("ELEVENLABS_API_KEY")),
+                "hasLlmProxy": bool(llm.get("hasKey") and llm.get("baseUrl")),
+                "llmGateway": gws,
+                "busy": self.worker.busy_id,
+                "queued": self.worker.q.qsize(),
+                "license": lic.public_status(),
+            })
+            return
+        if raw == "/api/doutor":
+            self._json(ls.run_doutor())
+            return
+        if raw in (
+            "/api/system",
+            "/api/settings",
+            "/api/cache",
+            "/api/doutor/copy",
+            "/api/recovery",
+            "/api/update/check",
+            "/api/brands",
+            "/api/library",
+            "/api/library/file",
+            "/api/license",
+            "/api/auth",
+            "/api/admin/licenses",
+            "/api/admin/access",
+            "/api/admin/devices",
+        ):
+            return self._studio_get()
+        if raw == "/api/preset":
+            self._json(ls.load_preset())
+            return
+        if raw == "/api/keys":
+            keys = ls.load_env_keys()
+            self._json({
+                "GROQ_API_KEY": bool(keys.get("GROQ_API_KEY")),
+                "ELEVENLABS_API_KEY": bool(keys.get("ELEVENLABS_API_KEY")),
+                "PEXELS_API_KEY": bool(keys.get("PEXELS_API_KEY")),
+            })
+            return
+        if raw == "/api/llm-proxy":
+            self._json(ls.load_llm_proxy())
+            return
+        if raw == "/api/llm-proxy/models":
+            from app.llm_proxy import list_models
+
+            result = list_models()
+            self._json(result, 200 if result.get("ok") else 502)
+            return
+        if raw == "/api/llm-proxy/sessions":
+            self._json({"providers": ls.sessions_public()})
+            return
+        if raw == "/api/jobs":
+            from urllib.parse import quote
+
+            jobs = self.store.list()
+            for j in jobs:
+                folder = Path(j["projectDir"]).name
+                enc = quote(folder, safe="-_.")
+                j["editorUrl"] = f"/p/{enc}/fase1"
+                j["estiloUrl"] = f"/p/{enc}/estilo"
+                j["finalUrl"] = f"/p/{enc}/fase2"
+                j["thumbUrl"] = f"/api/jobs/{j['id']}/thumb"
+                edit = Path(j["editDir"])
+                j["hasCut"] = (edit / "cut.mp4").exists()
+                j["hasFinal"] = (edit / "final.mp4").exists()
+                j["hasThumb"] = (edit / "thumb.jpg").exists()
+                st_path = edit / "pipeline_status.json"
+                if j.get("status") == "processing" and st_path.exists():
+                    try:
+                        st = json.loads(st_path.read_text(encoding="utf-8-sig"))
+                        j["stage"] = st.get("stage") or "processing"
+                        j["progress"] = st.get("progress")
+                        if st.get("message"):
+                            j["message"] = st["message"]
+                    except (OSError, json.JSONDecodeError):
+                        j["stage"] = "processing"
+                else:
+                    j["stage"] = j.get("status")
+                j["stageLabel"] = ls.STAGE_LABELS.get(str(j.get("stage") or ""), j.get("message") or "")
+                score_path = edit / "score.json"
+                if score_path.exists():
+                    try:
+                        j["score"] = json.loads(score_path.read_text(encoding="utf-8-sig"))
+                    except (OSError, json.JSONDecodeError):
+                        pass
+                # Ensure editor can open even after a needs_review stop
+                if not (edit / "state.json").exists():
+                    edit.mkdir(parents=True, exist_ok=True)
+                    (edit / "state.json").write_text(
+                        json.dumps({
+                            "project": j.get("name") or folder,
+                            "phase": 1,
+                            "message": j.get("message") or "Sem corte ainda",
+                            "fps": 30,
+                            "style": ls.load_preset(),
+                        }, indent=2, ensure_ascii=False),
+                        encoding="utf-8",
+                    )
+            self._json({"jobs": jobs, "busy": self.worker.busy_id})
+            return
+        if raw.startswith("/api/jobs/"):
+            # reuse local_server job media routes via a thin shim
+            parts = raw.strip("/").split("/")
+            if len(parts) >= 3:
+                job_id = parts[2]
+                job = self.store.get(job_id)
+                if not job:
+                    self._json({"error": "job not found"}, 404)
+                    return
+                if len(parts) == 3:
+                    folder = Path(job["projectDir"]).name
+                    job = dict(job)
+                    job["editorUrl"] = f"/p/{folder}/fase1"
+                    job["estiloUrl"] = f"/p/{folder}/estilo"
+                    job["finalUrl"] = f"/p/{folder}/fase2"
+                    job["thumbUrl"] = f"/api/jobs/{job_id}/thumb"
+                    self._json(job)
+                    return
+                action = parts[3]
+                edit = Path(job["editDir"])
+                if action == "thumb":
+                    thumb = ls.ensure_job_thumb(job)
+                    if not thumb:
+                        self._json({"error": "sem preview"}, 404)
+                        return
+                    self._studio_file(thumb, "image/jpeg")
+                    return
+                if action == "final":
+                    self._studio_file(edit / "final.mp4", "video/mp4")
+                    return
+                if action == "cut":
+                    self._studio_file(edit / "cut.mp4", "video/mp4")
+                    return
+                if action == "legenda":
+                    leg = edit / "legenda.txt"
+                    if not leg.exists():
+                        self._json({"error": "sem legenda"}, 404)
+                        return
+                    self._studio_file(leg, "text/plain; charset=utf-8")
+                    return
+            self._json({"error": "not found"}, 404)
+            return
+
+        # Everything else → real preview editor (timeline, agulha, estilo…)
+        return ps.Handler.do_GET(self)
+
+    def do_POST(self) -> None:  # noqa: N802
+        raw = self.path.split("?", 1)[0]
+
+        if raw in ("/v1/chat/completions", "/v1/chat/completions/"):
+            from app import llm_gateway as gw
+
+            try:
+                n = int(self.headers.get("Content-Length") or 0)
+                body = json.loads(self.rfile.read(n) or b"{}")
+            except (ValueError, json.JSONDecodeError):
+                self._json({"error": {"message": "JSON inválido"}}, 400)
+                return
+            code, payload = gw.chat_completions(body if isinstance(body, dict) else {})
+            self._json(payload, code)
+            return
+
+        if raw in (
+            "/api/preset",
+            "/api/keys",
+            "/api/keys/test",
+            "/api/settings",
+            "/api/cache/clear",
+            "/api/probe",
+            "/api/ai-edit",
+            "/api/brands",
+            "/api/library/add",
+            "/api/library/use",
+            "/api/library/upload",
+            "/api/update/open",
+            "/api/proxy/rebuild",
+            "/api/open-path",
+            "/api/llm-proxy",
+            "/api/llm-proxy/test",
+            "/api/llm-proxy/capture",
+            "/api/llm-proxy/open-extension",
+            "/api/license/refresh",
+            "/api/license/activate",
+            "/api/auth/login",
+            "/api/auth/signup",
+            "/api/auth/logout",
+            "/api/admin/licenses",
+            "/api/admin/access",
+            "/api/admin/devices",
+            "/api/jobs",
+            "/api/jobs/open-folder",
+            "/api/jobs/retry",
+            "/api/jobs/cancel",
+            "/api/jobs/requeue-folder",
+            "/api/jobs/delete",
+        ):
+            return self._studio_post()
+
+        return ps.Handler.do_POST(self)
+
+    def _studio_get(self) -> None:
+        shim_cls = ls.StudioHandler
+        shim_cls.store = self.store
+        shim_cls.worker = self.worker
+        shim_cls.projects_root = self.projects_root
+        fake = shim_cls.__new__(shim_cls)
+        for name in (
+            "client_address", "server", "request", "headers", "rfile", "wfile",
+            "command", "path", "request_version", "requestline", "close_connection",
+            "connection", "raw_requestline",
+        ):
+            if hasattr(self, name):
+                setattr(fake, name, getattr(self, name))
+        if not hasattr(fake, "requestline"):
+            fake.requestline = f"GET {self.path} HTTP/1.1"
+        if not hasattr(fake, "request_version"):
+            fake.request_version = "HTTP/1.1"
+        fake.store = self.store
+        fake.worker = self.worker
+        fake.projects_root = self.projects_root
+        shim_cls.do_GET(fake)
+
+    def _studio_post(self) -> None:
+        """Run StudioHandler.do_POST on a fully-attributed shim (no requestline crash)."""
+        shim_cls = ls.StudioHandler
+        shim_cls.store = self.store
+        shim_cls.worker = self.worker
+        shim_cls.projects_root = self.projects_root
+        fake = shim_cls.__new__(shim_cls)
+        # Copy every attr BaseHTTPRequestHandler may touch while answering.
+        for name in (
+            "client_address",
+            "server",
+            "request",
+            "headers",
+            "rfile",
+            "wfile",
+            "command",
+            "path",
+            "request_version",
+            "requestline",
+            "close_connection",
+            "connection",
+            "raw_requestline",
+        ):
+            if hasattr(self, name):
+                setattr(fake, name, getattr(self, name))
+        if not hasattr(fake, "requestline"):
+            fake.requestline = f"{getattr(self, 'command', 'POST')} {self.path} HTTP/1.1"
+        if not hasattr(fake, "request_version"):
+            fake.request_version = "HTTP/1.1"
+        if not hasattr(fake, "close_connection"):
+            fake.close_connection = True
+        fake.store = self.store
+        fake.worker = self.worker
+        fake.projects_root = self.projects_root
+        shim_cls.do_POST(fake)
+
+
+def ensure_hub_root(projects_root: Path) -> Path:
+    """Dummy <edit> so preview_server class attrs are valid at boot."""
+    hub = projects_root / ".ativavid" / "hub" / "edit"
+    hub.mkdir(parents=True, exist_ok=True)
+    state = hub / "state.json"
+    # Always refresh so Estilo padrão can open the visual catalog
+    state.write_text(
+        json.dumps({
+            "project": "Estilo padrão da marca",
+            "phase": 1,
+            "message": "Escolha o visual padrão",
+            "fps": 30,
+            "awaitingStyle": True,
+            "style": ls.load_preset(),
+        }, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    return hub
+
+
+def build_server(projects_root: Path, port: int) -> tuple[ThreadingHTTPServer, str]:
+    projects_root = projects_root.expanduser().resolve()
+    projects_root.mkdir(parents=True, exist_ok=True)
+    hub_edit = ensure_hub_root(projects_root)
+
+    store = ls.JobStore(projects_root)
+    worker = ls.Worker(store)
+    worker.start()
+
+    # preview class attrs
+    ps.Handler.root = hub_edit
+    ps.Handler.projects_roots = [projects_root]
+
+    DesktopHandler.store = store
+    DesktopHandler.worker = worker
+    DesktopHandler.projects_root = projects_root
+    DesktopHandler.root = hub_edit
+    DesktopHandler.projects_roots = [projects_root]
+
+    from app import llm_gateway as gw
+
+    gw.ensure_local_base_url(port)
+
+    srv = QuietThreadingHTTPServer(("127.0.0.1", port), DesktopHandler)
+    url = f"http://127.0.0.1:{port}/"
+    return srv, url
+
+
+def main() -> None:
+    for k, v in ls.load_env_keys().items():
+        os.environ.setdefault(k, v)
+
+    ap = argparse.ArgumentParser(description="ATIVAVID Desktop unified server")
+    default_root = Path(
+        os.environ.get("ATIVAVID_PROJECTS") or (Path.home() / "ATIVAVID" / "Projetos")
+    )
+    ap.add_argument("--projects-root", type=Path, default=default_root)
+    ap.add_argument("--port", type=int, default=4850)
+    args = ap.parse_args()
+
+    srv, url = build_server(args.projects_root, args.port)
+    print(f"ATIVAVID Desktop -> {url}", flush=True)
+    print(f"Projetos: {args.projects_root.resolve()}", flush=True)
+    print("Hub: /   Editor: /p/<projeto>/fase1", flush=True)
+    try:
+        srv.serve_forever()
+    except KeyboardInterrupt:
+        print("\nencerrado", flush=True)
+
+
+if __name__ == "__main__":
+    main()

@@ -237,6 +237,34 @@ def checar_python() -> None:
         diz(OK, "Bibliotecas do Python instaladas")
 
 
+def checar_sistema() -> None:
+    try:
+        sys.path.insert(0, str(SKILL))
+        from app.system_info import detect_machine
+        from app.performance import profile_settings
+
+        m = detect_machine()
+        perf = profile_settings("auto", m)
+        diz(OK, f"Sistema {m.get('os')} {m.get('osRelease')}",
+            f"CPU {m.get('cores')} núcleos · RAM {m.get('ramGb')} GB "
+            f"({m.get('ramFreeGb')} livres) · Disco projetos {m.get('diskFreeGb')} GB")
+        accel = m.get("accel") or {}
+        enc = accel.get("preferredEncoder") or "libx264"
+        if enc != "libx264":
+            diz(OK, f"Aceleração de vídeo: {enc}", f"Modo {accel.get('mode')}")
+        else:
+            diz(AVISO, "Renderização em CPU (libx264)",
+                "Sem NVENC/QSV/AMF detectado no ffmpeg — funciona, mas fica mais lento.")
+        diz(OK, f"Perfil automático: {perf.get('label')}",
+            f"Jobs paralelos={perf.get('parallelJobs')} · encoder={perf.get('encoder')}")
+        gpus = m.get("gpus") or []
+        if gpus:
+            for g in gpus[:3]:
+                diz(OK, f"GPU: {g.get('name')}", f"VRAM≈{g.get('vramGb')} GB" if g.get("vramGb") else "")
+    except Exception as e:  # noqa: BLE001
+        diz(AVISO, "Não consegui ler o hardware", str(e)[:120])
+
+
 def main() -> int:
     # Sem argparse (nao ha flags de verdade a parsear), mas --help tem de
     # responder como em todo helper daqui: o selftest cobra isso de todos, e
@@ -246,7 +274,7 @@ def main() -> int:
         print(__doc__ or "uso: doutor.py [--json]")
         return 0
 
-    for fn in (checar_programas, checar_chaves, checar_python,
+    for fn in (checar_programas, checar_sistema, checar_chaves, checar_python,
                checar_espaco, checar_processos):
         try:
             fn()

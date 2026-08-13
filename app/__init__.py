@@ -1,0 +1,1 @@
+"""ATIVAVID local app package."""

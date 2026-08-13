@@ -252,21 +252,16 @@ async function load() {
   }
 }
 
-// theme toggle, same contract as the editor (shared localStorage key)
-function applyThemeIcon() {
-  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
-  $('btnTheme').innerHTML = dark
-    ? '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="3.1" fill="none" stroke="currentColor" stroke-width="1.4"/><g stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M8 1.4v1.7M8 12.9v1.7M14.6 8h-1.7M3.1 8H1.4M12.6 3.4l-1.2 1.2M4.6 11.4l-1.2 1.2M12.6 12.6l-1.2-1.2M4.6 4.6L3.4 3.4"/></g></svg>'
-    : '<svg viewBox="0 0 16 16"><path d="M13.8 9.9A6 6 0 1 1 6.1 2.2a5 5 0 0 0 7.7 7.7z"/></svg>';
-}
+// theme toggle — mesmo padrão global (localStorage ativavid-theme)
 $('btnTheme').addEventListener('click', () => {
   const next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
   document.documentElement.setAttribute('data-theme', next);
-  localStorage.setItem('ativavid-theme', next);
-  applyThemeIcon();
+  try { localStorage.setItem('ativavid-theme', next); } catch { /* ignore */ }
 });
-applyThemeIcon();
-
+window.addEventListener('storage', (e) => {
+  if (e.key !== 'ativavid-theme' || !e.newValue) return;
+  document.documentElement.setAttribute('data-theme', e.newValue);
+});
 $('btnReload').addEventListener('click', () => { load(); toast('Atualizado'); });
 load();
 

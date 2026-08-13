@@ -82,8 +82,9 @@ const OFFSET_Y = CAP.stackedOffsetY ?? 0.156; // fraction of height, below cente
 const FONT_SCALE = CAP.fontScale ?? 1;
 const SFX = CAP.sfx ?? {};
 const SFX_ON = SFX.enabled !== false;
-const CLICK_VOL = SFX.clickVolume ?? 0.45;
-const SCRATCH_VOL = SFX.scratchVolume ?? 0.16;
+const CLICK_VOL = SFX.clickVolume ?? 0.55;
+const SCRATCH_VOL = SFX.scratchVolume ?? 0.28;
+const STACK_CLICK_VOL = SFX.stackClickVolume ?? Math.min(0.28, CLICK_VOL * 0.5);
 
 type Word = {text: string; fromMs: number; toMs: number};
 type CueData = {
@@ -282,6 +283,9 @@ export const StackedCaptions: React.FC = () => {
             <Cue cue={cue} cueDurationFrames={dur} />
             {SFX_ON && isSolo ? (
               <Audio src={staticFile('sfx/caption-click.mp3')} volume={CLICK_VOL} />
+            ) : null}
+            {SFX_ON && !isSolo ? (
+              <Audio src={staticFile('sfx/caption-click.mp3')} volume={STACK_CLICK_VOL} />
             ) : null}
             {SFX_ON && isCircled ? (
               <Sequence from={2} layout="none">

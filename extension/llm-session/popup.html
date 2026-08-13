@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <style>
+    :root { color-scheme: dark; font-family: Segoe UI, system-ui, sans-serif; }
+    body { margin: 0; width: 300px; background: #121216; color: #f3f3f3; }
+    header { padding: 12px 14px 8px; border-bottom: 1px solid #2a2a32; }
+    h1 { margin: 0; font-size: 14px; }
+    p { margin: 6px 0 0; font-size: 11px; color: #9a9aa3; line-height: 1.4; }
+    .list { padding: 10px; display: grid; gap: 8px; }
+    button {
+      width: 100%; text-align: left; border: 1px solid #3a3a45; background: #1c1c22;
+      color: inherit; border-radius: 10px; padding: 10px 12px; cursor: pointer;
+    }
+    button:hover { border-color: #fe2c55; }
+    button b { display: block; font-size: 13px; }
+    button span { font-size: 11px; color: #9a9aa3; }
+    #status { padding: 0 14px 12px; font-size: 11px; color: #00e5d4; min-height: 1.2em; }
+    #status.err { color: #ff5a6a; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ATIVAVID Session</h1>
+    <p>Abra o site logado e capture. Os cookies vão só para o app local (127.0.0.1:4850).</p>
+  </header>
+  <div class="list">
+    <button data-provider="gemini-web" data-url="https://gemini.google.com/app"><b>Gemini Web</b><span>gemini.google.com</span></button>
+    <button data-provider="chatgpt-web" data-url="https://chatgpt.com"><b>ChatGPT Web</b><span>chatgpt.com</span></button>
+    <button data-provider="claude-web" data-url="https://claude.ai"><b>Claude Web</b><span>claude.ai</span></button>
+    <button data-provider="deepseek-web" data-url="https://chat.deepseek.com"><b>DeepSeek Web</b><span>chat.deepseek.com</span></button>
+  </div>
+  <div id="status"></div>
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,618 @@
+#!/usr/bin/env python3
+"""ATIVAVID Local — janela nativa (WebView2) + hub + editor real."""
+from __future__ import annotations
+
+import argparse
+import os
+import sys
+import threading
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parent.parent
+os.chdir(REPO)
+sys.path.insert(0, str(REPO))
+
+# FFmpeg embutido antes de qualquer probe/job
+try:
+    from app.ffmpeg_tools import ensure_ffmpeg_on_path
+
+    ensure_ffmpeg_on_path()
+except Exception:
+    pass
+
+from app import desktop_server as ds  # noqa: E402
+from app import local_server as ls  # noqa: E402
+
+WINDOW_TITLE = "ATIVAVID"
+
+
+class WindowApi:
+    """Botões da titlebar CapCut (min / max / fechar)."""
+
+    def __init__(self) -> None:
+        self._window = None
+        self._maximized = False
+        self._restore: tuple[int, int, int, int] | None = None
+
+    def bind(self, window) -> None:
+        self._window = window
+
+    def minimize(self) -> None:
+        if self._window:
+            self._window.minimize()
+
+    def toggle_maximize(self) -> bool:
+        hwnd = _find_hwnd()
+        if not hwnd:
+            if not self._window:
+                return False
+            try:
+                if self._maximized:
+                    self._window.restore()
+                    self._maximized = False
+                else:
+                    self._window.maximize()
+                    self._maximized = True
+            except Exception:
+                pass
+            return self._maximized
+
+        if self._maximized:
+            _set_thick_frame(hwnd, True)
+            if self._restore:
+                _set_window_rect(hwnd, *self._restore)
+            else:
+                try:
+                    if self._window:
+                        self._window.restore()
+                except Exception:
+                    pass
+            self._maximized = False
+            _set_maximized_flag(False)
+            _apply_dwm_chrome(maximized=False)
+            return False
+
+        self._restore = _get_window_rect(hwnd)
+        if _fill_work_area(hwnd):
+            self._maximized = True
+            _set_maximized_flag(True)
+            return True
+        try:
+            if self._window:
+                self._window.maximize()
+                self._maximized = True
+                _set_maximized_flag(True)
+                _apply_dwm_chrome(maximized=True)
+        except Exception:
+            pass
+        return self._maximized
+
+    def is_maximized(self) -> bool:
+        return bool(self._maximized)
+
+    def close(self) -> None:
+        if self._window:
+            self._window.destroy()
+
+
+_MAXIMIZED = False
+
+
+def _set_maximized_flag(on: bool) -> None:
+    global _MAXIMIZED
+    _MAXIMIZED = bool(on)
+
+
+def _is_app_maximized() -> bool:
+    return bool(_MAXIMIZED)
+
+
+def _get_window_rect(hwnd: int) -> tuple[int, int, int, int] | None:
+    if not hwnd:
+        return None
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        rect = wintypes.RECT()
+        if not ctypes.windll.user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+            return None
+        return (
+            int(rect.left),
+            int(rect.top),
+            int(rect.right - rect.left),
+            int(rect.bottom - rect.top),
+        )
+    except Exception:
+        return None
+
+
+def _dwm_set_attr(hwnd: int, attr: int, value: int) -> None:
+    import ctypes
+    from ctypes import wintypes
+
+    fn = ctypes.windll.dwmapi.DwmSetWindowAttribute
+    fn.argtypes = [wintypes.HWND, wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD]
+    fn(hwnd, attr, ctypes.byref(ctypes.c_int(value)), 4)
+
+
+def _apply_dwm_chrome(*, maximized: bool = False) -> None:
+    """Sem borda accent e sem cantos arredondados (evita faixa transparente no topo)."""
+    if sys.platform != "win32":
+        return
+    hwnd = _find_hwnd()
+    if not hwnd:
+        return
+    try:
+        DWMWA_WINDOW_CORNER_PREFERENCE = 33
+        DWMWA_BORDER_COLOR = 34
+        DWMWA_COLOR_NONE = 0xFFFFFFFE
+        DWMWCP_DONOTROUND = 1
+
+        _dwm_set_attr(hwnd, DWMWA_BORDER_COLOR, DWMWA_COLOR_NONE)
+        # Sempre sem round — em janela o round deixava uma faixa “vazia” acima da titlebar.
+        _dwm_set_attr(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND)
+    except Exception:
+        pass
+
+
+def _set_window_rect(hwnd: int, x: int, y: int, w: int, h: int) -> None:
+    import ctypes
+
+    SWP_NOZORDER = 0x0004
+    SWP_NOACTIVATE = 0x0010
+    SWP_FRAMECHANGED = 0x0020
+    ctypes.windll.user32.SetWindowPos(
+        hwnd,
+        0,
+        int(x),
+        int(y),
+        int(w),
+        int(h),
+        SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+    )
+
+
+def _set_thick_frame(hwnd: int, enabled: bool) -> None:
+    """WS_THICKFRAME cria margem invisível — fora no maximize, ligado em janela."""
+    if not hwnd:
+        return
+    try:
+        import ctypes
+
+        user32 = ctypes.windll.user32
+        GWL_STYLE = -16
+        WS_THICKFRAME = 0x00040000
+        WS_CAPTION = 0x00C00000
+        WS_MINIMIZEBOX = 0x00020000
+        WS_MAXIMIZEBOX = 0x00010000
+        WS_SYSMENU = 0x00080000
+        SWP_FRAMECHANGED = 0x0020
+        SWP_NOMOVE = 0x0002
+        SWP_NOSIZE = 0x0001
+        SWP_NOZORDER = 0x0004
+        SWP_NOACTIVATE = 0x0010
+
+        style = int(user32.GetWindowLongW(hwnd, GWL_STYLE))
+        style &= ~WS_CAPTION
+        style |= WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU
+        if enabled:
+            style |= WS_THICKFRAME
+        else:
+            style &= ~WS_THICKFRAME
+        user32.SetWindowLongW(hwnd, GWL_STYLE, style)
+        user32.SetWindowPos(
+            hwnd,
+            0,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+        )
+    except Exception:
+        pass
+
+
+def _monitor_work_area(hwnd: int) -> tuple[int, int, int, int] | None:
+    """Área útil do monitor (sem a taskbar)."""
+    if not hwnd:
+        return None
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class RECT(ctypes.Structure):
+            _fields_ = [
+                ("left", wintypes.LONG),
+                ("top", wintypes.LONG),
+                ("right", wintypes.LONG),
+                ("bottom", wintypes.LONG),
+            ]
+
+        class MONITORINFO(ctypes.Structure):
+            _fields_ = [
+                ("cbSize", wintypes.DWORD),
+                ("rcMonitor", RECT),
+                ("rcWork", RECT),
+                ("dwFlags", wintypes.DWORD),
+            ]
+
+        user32 = ctypes.windll.user32
+        MONITOR_DEFAULTTONEAREST = 2
+        hmon = user32.MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST)
+        if not hmon:
+            return None
+        mi = MONITORINFO()
+        mi.cbSize = ctypes.sizeof(MONITORINFO)
+        if not user32.GetMonitorInfoW(hmon, ctypes.byref(mi)):
+            return None
+        r = mi.rcWork
+        return (
+            int(r.left),
+            int(r.top),
+            int(r.right - r.left),
+            int(r.bottom - r.top),
+        )
+    except Exception:
+        return None
+
+
+def _fill_work_area(hwnd: int) -> bool:
+    """Maximiza sem margens: tira thickframe e preenche a área útil."""
+    work = _monitor_work_area(hwnd)
+    if not work:
+        return False
+    _set_thick_frame(hwnd, False)
+    _set_window_rect(hwnd, *work)
+    _apply_dwm_chrome(maximized=True)
+    _set_maximized_flag(True)
+    return True
+
+
+def _clamp_to_work_area() -> None:
+    """Corrige maximize nativo que cobre a taskbar ou deixa fresta."""
+    hwnd = _find_hwnd()
+    if not hwnd:
+        return
+    work = _monitor_work_area(hwnd)
+    if not work:
+        return
+    cur = _get_window_rect(hwnd)
+    if not cur:
+        return
+    wx, wy, ww, wh = work
+    cx, cy, cw, ch = cur
+    # Maior que a área útil (cobriu taskbar) OU menor com fresta (borda thickframe)
+    covers_taskbar = ch >= wh + 8 or cy + ch > wy + wh + 4
+    has_gap = (
+        _is_app_maximized()
+        and (abs(cx - wx) > 1 or abs(cy - wy) > 1 or abs(cw - ww) > 2 or abs(ch - wh) > 2)
+    )
+    if covers_taskbar or has_gap:
+        _fill_work_area(hwnd)
+    else:
+        _apply_dwm_chrome(maximized=_is_app_maximized())
+
+
+def _wait_http(url: str, timeout: float = 25.0) -> None:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            with urllib.request.urlopen(url, timeout=1.0) as r:
+                if r.status == 200:
+                    return
+        except (urllib.error.URLError, TimeoutError, OSError):
+            time.sleep(0.15)
+    raise SystemExit(f"servidor nao subiu em {url}")
+
+
+def _find_hwnd() -> int:
+    if sys.platform != "win32":
+        return 0
+    try:
+        import ctypes
+
+        user32 = ctypes.windll.user32
+        for title in (WINDOW_TITLE, "ATIVAVID - Seu vídeo editado por IA"):
+            hwnd = int(user32.FindWindowW(None, title) or 0)
+            if hwnd:
+                return hwnd
+    except Exception:
+        pass
+    return 0
+
+
+def _apply_windows_icon(icon_path: Path) -> None:
+    """Set title-bar / taskbar icon on the Edge/WebView2 host window (Win32)."""
+    if sys.platform != "win32" or not icon_path.exists():
+        return
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        user32 = ctypes.windll.user32
+        IMAGE_ICON = 1
+        LR_LOADFROMFILE = 0x0010
+        WM_SETICON = 0x0080
+        ICON_SMALL = 0
+        ICON_BIG = 1
+
+        user32.LoadImageW.argtypes = [
+            wintypes.HINSTANCE,
+            wintypes.LPCWSTR,
+            wintypes.UINT,
+            ctypes.c_int,
+            ctypes.c_int,
+            wintypes.UINT,
+        ]
+        user32.LoadImageW.restype = wintypes.HANDLE
+
+        hwnd = _find_hwnd()
+        if not hwnd:
+            return
+        hicon_big = user32.LoadImageW(None, str(icon_path), IMAGE_ICON, 0, 0, LR_LOADFROMFILE)
+        hicon_small = user32.LoadImageW(None, str(icon_path), IMAGE_ICON, 16, 16, LR_LOADFROMFILE)
+        if hicon_big:
+            user32.SendMessageW(hwnd, WM_SETICON, ICON_BIG, hicon_big)
+        if hicon_small:
+            user32.SendMessageW(hwnd, WM_SETICON, ICON_SMALL, hicon_small)
+    except Exception:
+        pass
+
+
+def _enable_frameless_resize() -> None:
+    """Reativa bordas de resize + Aero Snap em janela frameless (CapCut)."""
+    if sys.platform != "win32":
+        return
+    if _is_app_maximized():
+        # Não reintroduz thickframe enquanto maximizado (gera fresta vermelha).
+        hwnd = _find_hwnd()
+        if hwnd:
+            _set_thick_frame(hwnd, False)
+            _apply_dwm_chrome(maximized=True)
+        return
+    hwnd = _find_hwnd()
+    if not hwnd:
+        return
+    _set_thick_frame(hwnd, True)
+    _apply_dwm_chrome(maximized=False)
+
+
+# Mantém refs vivas (senão o GC derruba o wndproc).
+_OLD_WNDPROC = None
+_WNDPROC_REF = None
+_EDGE_HOOKED = False
+
+
+def _install_edge_to_edge_hook() -> None:
+    """Cliente = janela inteira: some a faixa NC e o X cola no canto."""
+    global _OLD_WNDPROC, _WNDPROC_REF, _EDGE_HOOKED
+    if sys.platform != "win32" or _EDGE_HOOKED:
+        return
+    hwnd = _find_hwnd()
+    if not hwnd:
+        return
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        user32 = ctypes.windll.user32
+        GWLP_WNDPROC = -4
+        WM_NCCALCSIZE = 0x0083
+        WM_NCHITTEST = 0x0084
+        HTCLIENT = 1
+        HTLEFT, HTRIGHT = 10, 11
+        HTTOP, HTTOPLEFT, HTTOPRIGHT = 12, 13, 14
+        HTBOTTOM, HTBOTTOMLEFT, HTBOTTOMRIGHT = 15, 16, 17
+        BORDER = 8
+
+        LRESULT = ctypes.c_ssize_t
+        WNDPROC = ctypes.WINFUNCTYPE(
+            LRESULT, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM
+        )
+
+        if ctypes.sizeof(ctypes.c_void_p) == 8:
+            set_long = user32.SetWindowLongPtrW
+            call_proc = user32.CallWindowProcW
+            set_long.restype = ctypes.c_void_p
+            set_long.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_void_p]
+            call_proc.restype = LRESULT
+            call_proc.argtypes = [
+                ctypes.c_void_p,
+                wintypes.HWND,
+                wintypes.UINT,
+                wintypes.WPARAM,
+                wintypes.LPARAM,
+            ]
+        else:
+            set_long = user32.SetWindowLongW
+            call_proc = user32.CallWindowProcW
+            set_long.restype = ctypes.c_long
+            call_proc.restype = LRESULT
+
+        def _proc(hwnd_msg, msg, wparam, lparam):
+            if msg == WM_NCCALCSIZE and wparam:
+                # Sem área non-client → UI cola nas bordas (CapCut).
+                return 0
+            if msg == WM_NCHITTEST and not _is_app_maximized():
+                # Redimensionar pelas bordas (já que NC sumiu).
+                x = ctypes.c_int16(lparam & 0xFFFF).value
+                y = ctypes.c_int16((lparam >> 16) & 0xFFFF).value
+                rect = wintypes.RECT()
+                user32.GetWindowRect(hwnd_msg, ctypes.byref(rect))
+                left, top, right, bottom = rect.left, rect.top, rect.right, rect.bottom
+                on_left = (x - left) < BORDER
+                on_right = (right - x) < BORDER
+                on_top = (y - top) < BORDER
+                on_bottom = (bottom - y) < BORDER
+                if on_top and on_left:
+                    return HTTOPLEFT
+                if on_top and on_right:
+                    return HTTOPRIGHT
+                if on_bottom and on_left:
+                    return HTBOTTOMLEFT
+                if on_bottom and on_right:
+                    return HTBOTTOMRIGHT
+                if on_left:
+                    return HTLEFT
+                if on_right:
+                    return HTRIGHT
+                if on_top:
+                    return HTTOP
+                if on_bottom:
+                    return HTBOTTOM
+                return HTCLIENT
+            return int(call_proc(_OLD_WNDPROC, hwnd_msg, msg, wparam, lparam) or 0)
+
+        _WNDPROC_REF = WNDPROC(_proc)
+        _OLD_WNDPROC = set_long(hwnd, GWLP_WNDPROC, ctypes.cast(_WNDPROC_REF, ctypes.c_void_p).value)
+        _EDGE_HOOKED = True
+        # Recalcula frame
+        SWP_FRAMECHANGED = 0x0020
+        SWP_NOMOVE = 0x0002
+        SWP_NOSIZE = 0x0001
+        SWP_NOZORDER = 0x0004
+        SWP_NOACTIVATE = 0x0010
+        user32.SetWindowPos(
+            hwnd,
+            0,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+        )
+    except Exception:
+        pass
+
+
+def main() -> None:
+    for k, v in ls.load_env_keys().items():
+        os.environ.setdefault(k, v)
+
+    ap = argparse.ArgumentParser(description="ATIVAVID Local desktop")
+    default_root = Path(
+        os.environ.get("ATIVAVID_PROJECTS") or (Path.home() / "ATIVAVID" / "Projetos")
+    )
+    ap.add_argument("--projects-root", type=Path, default=default_root)
+    ap.add_argument("--port", type=int, default=4850)
+    ap.add_argument("--browser", action="store_true")
+    args = ap.parse_args()
+
+    srv, url = ds.build_server(args.projects_root, args.port)
+    print(f"ATIVAVID Local -> {url}", flush=True)
+    print(f"Projetos: {args.projects_root.expanduser().resolve()}", flush=True)
+
+    threading.Thread(target=srv.serve_forever, name="ativavid-http", daemon=True).start()
+    _wait_http(url)
+
+    if args.browser:
+        import webbrowser
+
+        webbrowser.open(url)
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            print("\nencerrado", flush=True)
+        return
+
+    try:
+        import webview
+    except ImportError:
+        print("pywebview ausente — abrindo no navegador. Rode: uv sync", flush=True)
+        import webbrowser
+
+        webbrowser.open(url)
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            pass
+        return
+
+    api = WindowApi()
+    # CapCut: frameless + titlebar HTML. Win32 reativa resize/snap.
+    # min_size cabe em metade de monitor 1080p (Aero Snap).
+    window = webview.create_window(
+        title=WINDOW_TITLE,
+        url=url,
+        width=1480,
+        height=920,
+        min_size=(900, 600),
+        background_color="#0c0c0e",
+        text_select=True,
+        frameless=True,
+        easy_drag=False,
+        shadow=False,
+        resizable=True,
+        fullscreen=False,
+        maximized=False,
+        js_api=api,
+    )
+    api.bind(window)
+    icon = REPO / "assets" / "preview" / "ativa-vid-icon.ico"
+    try:
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("ATIVAVID.Local.1")
+    except Exception:
+        pass
+
+    def _on_shown() -> None:
+        _enable_frameless_resize()
+        _apply_dwm_chrome(maximized=False)
+        _apply_windows_icon(icon)
+        _install_edge_to_edge_hook()
+        threading.Timer(0.35, _enable_frameless_resize).start()
+        threading.Timer(0.4, lambda: _apply_dwm_chrome(maximized=False)).start()
+        threading.Timer(0.45, _install_edge_to_edge_hook).start()
+
+    def _on_resized() -> None:
+        _clamp_to_work_area()
+
+    def _on_maximized() -> None:
+        api._maximized = True
+        _set_maximized_flag(True)
+        hwnd = _find_hwnd()
+        if hwnd:
+            _fill_work_area(hwnd)
+
+    def _on_restored() -> None:
+        api._maximized = False
+        _set_maximized_flag(False)
+        hwnd = _find_hwnd()
+        if hwnd:
+            _set_thick_frame(hwnd, True)
+        _apply_dwm_chrome(maximized=False)
+
+    try:
+        window.events.shown += _on_shown
+    except Exception:
+        pass
+    try:
+        window.events.resized += _on_resized
+    except Exception:
+        pass
+    try:
+        window.events.maximized += _on_maximized
+    except Exception:
+        pass
+    try:
+        window.events.restored += _on_restored
+    except Exception:
+        pass
+
+    webview.start(gui="edgechromium", debug=False, icon=str(icon) if icon.exists() else None)
+    try:
+        srv.shutdown()
+    except Exception:
+        pass
+
+
+if __name__ == "__main__":
+    main()

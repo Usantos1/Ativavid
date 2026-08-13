@@ -69,3 +69,11 @@ project.md
 
 # Personal, per-creator templates (never committed — each user builds their own)
 templates/
+
+.ativavid-sessions.json
+.ativavid-sessions.tmp
+
+# FFmpeg embutido pelo setup.ps1 (binários grandes)
+vendor/ffmpeg/*.exe
+vendor/ffmpeg/*.dll
+!vendor/ffmpeg/.gitkeep

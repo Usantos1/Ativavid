@@ -31,6 +31,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -43,6 +44,99 @@ except Exception:
     def auto_grade_for_clip(video, start=0.0, duration=None, verbose=False):  # type: ignore
         return "eq=contrast=1.03:saturation=0.98", {}
 
+
+_ENCODER_CACHE: str | None = None
+
+# Remotion OffthreadVideo seeks by keyframe. Segment concat used to leave
+# 5–8s GOPs (one keyframe per take), which fails mid-clip under memory pressure
+# with "No frame found at position …". Force ~1s GOPs on every encoder.
+_SEEKABLE_GOP = ["-g", "30"]
+
+_WIN_HIDE = 0
+if sys.platform == "win32":
+    _WIN_HIDE = int(getattr(subprocess, "CREATE_NO_WINDOW", 0) or 0)
+
+
+def _run(cmd, **kwargs):
+    """subprocess.run that does not flash a CMD window on Windows."""
+    if _WIN_HIDE and "creationflags" not in kwargs:
+        kwargs["creationflags"] = _WIN_HIDE
+    return subprocess.run(cmd, **kwargs)
+
+
+def _encoder_works(name: str, extra: list[str]) -> bool:
+    """Real open-encoder probe — `-encoders` lists nvenc even when the driver is too old."""
+    cmd = [
+        "ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "lavfi",
+        "-i", "color=c=black:s=64x64:d=0.04",
+        "-frames:v", "1", "-an",
+        "-c:v", name, *extra,
+        "-f", "null", "-",
+    ]
+    try:
+        r = _run(
+            cmd, capture_output=True, timeout=20,
+            encoding="utf-8", errors="replace",
+        )
+        return r.returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def pick_video_encoder() -> tuple[str, list[str]]:
+    """Prefer a GPU encoder that actually opens; else libx264.
+
+    Returns (name, extra_args_after_-c:v).
+    """
+    global _ENCODER_CACHE
+    if _ENCODER_CACHE is None:
+        try:
+            r = _run(
+                ["ffmpeg", "-hide_banner", "-encoders"],
+                capture_output=True, text=True, timeout=15,
+                encoding="utf-8", errors="replace",
+            )
+            blob = (r.stdout or "") + (r.stderr or "")
+        except (OSError, subprocess.SubprocessError):
+            blob = ""
+        candidates: list[tuple[str, list[str]]] = []
+        if "h264_nvenc" in blob:
+            candidates.append((
+                "h264_nvenc",
+                ["-preset", "p4", "-rc", "vbr", "-cq", "23", "-b:v", "0", "-pix_fmt", "yuv420p"],
+            ))
+        if "h264_qsv" in blob:
+            candidates.append((
+                "h264_qsv",
+                ["-preset", "medium", "-global_quality", "23", "-pix_fmt", "nv12"],
+            ))
+        if "h264_amf" in blob:
+            candidates.append((
+                "h264_amf",
+                ["-quality", "balanced", "-rc", "cqp", "-qp_i", "22", "-qp_p", "24", "-pix_fmt", "yuv420p"],
+            ))
+        chosen = "libx264"
+        for name, extra in candidates:
+            if _encoder_works(name, extra):
+                chosen = name
+                break
+        _ENCODER_CACHE = chosen
+        if chosen == "libx264" and candidates:
+            print(
+                f"  note: GPU encoder indisponível ({candidates[0][0]}) — usando libx264",
+                flush=True,
+            )
+    name = _ENCODER_CACHE or "libx264"
+    if name == "h264_nvenc":
+        return name, ["-preset", "p4", "-rc", "vbr", "-cq", "23", "-b:v", "0", "-pix_fmt", "yuv420p", *_SEEKABLE_GOP]
+    if name == "h264_qsv":
+        return name, ["-preset", "medium", "-global_quality", "23", "-pix_fmt", "nv12", *_SEEKABLE_GOP]
+    if name == "h264_amf":
+        return name, [
+            "-quality", "balanced", "-rc", "cqp", "-qp_i", "22", "-qp_p", "24",
+            "-pix_fmt", "yuv420p", *_SEEKABLE_GOP,
+        ]
+    return "libx264", ["-g", "30", "-keyint_min", "15"]
 
 # -------- Subtitle style (bold-overlay, proven at 1920×1080 and 1080×1920) --
 #
@@ -67,7 +161,7 @@ SUB_FORCE_STYLE = (
 def run(cmd: list[str], quiet: bool = False) -> None:
     if not quiet:
         print(f"  $ {' '.join(str(c) for c in cmd[:6])}{' …' if len(cmd) > 6 else ''}")
-    subprocess.run(cmd, check=True)
+    _run(cmd, check=True)
 
 
 # -------- Duplicate-invocation guard -----------------------------------------
@@ -80,6 +174,12 @@ def run(cmd: list[str], quiet: bool = False) -> None:
 # the one that lost while looking to a human like the render is just slow.
 # A pidfile next to the requested output makes the second invocation bail
 # immediately with a clear reason instead of racing the first.
+
+
+# Renders that hang (ffmpeg wait, driver stall, etc.) leave a live PID + lock
+# forever and block every retry. After this age the lock is treated as hung
+# and reclaimed (the old PID is asked to exit when possible).
+_RENDER_LOCK_STALE_S = 45 * 60
 
 
 def _pid_alive(pid: int) -> bool:
@@ -104,22 +204,58 @@ def _pid_alive(pid: int) -> bool:
     return True
 
 
+def _terminate_pid(pid: int) -> None:
+    """Best-effort kill of a hung render owner (never raises)."""
+    if pid <= 0 or pid == os.getpid():
+        return
+    try:
+        if os.name == "nt":
+            import subprocess
+
+            _run(
+                ["taskkill", "/PID", str(pid), "/T", "/F"],
+                capture_output=True,
+                timeout=15,
+                check=False,
+            )
+        else:
+            os.kill(pid, 9)
+    except OSError:
+        pass
+
+
 def acquire_render_lock(out_path: Path) -> None:
     """Claim `<out_path>.lock`, or exit with a clear message if another live
-    render.py already owns this output. A stale lock (dead PID) is reclaimed
-    automatically; the lock is released on interpreter exit either way."""
+    render.py already owns this output. A stale lock (dead PID or hung past
+    ``_RENDER_LOCK_STALE_S``) is reclaimed automatically; the lock is released
+    on interpreter exit either way."""
     lock_path = out_path.with_name(out_path.name + ".lock")
     if lock_path.exists():
         try:
             old_pid = int(lock_path.read_text(encoding="utf-8").strip())
         except (OSError, ValueError):
             old_pid = None
+        try:
+            age_s = max(0.0, time.time() - lock_path.stat().st_mtime)
+        except OSError:
+            age_s = 0.0
         if old_pid and old_pid != os.getpid() and _pid_alive(old_pid):
-            sys.exit(
-                f"render.py já está rodando para {out_path.name} (pid {old_pid}) — "
-                "recusando iniciar um segundo render duplicado. Se esse processo "
-                f"já morreu sem limpar o lock, apague {lock_path} e rode de novo."
+            if age_s < _RENDER_LOCK_STALE_S:
+                sys.exit(
+                    f"render.py já está rodando para {out_path.name} (pid {old_pid}) — "
+                    "recusando iniciar um segundo render duplicado. Se esse processo "
+                    f"já morreu sem limpar o lock, apague {lock_path} e rode de novo."
+                )
+            print(
+                f"[warn] lock de {out_path.name} travado há {int(age_s // 60)} min "
+                f"(pid {old_pid}) — encerrando e reclamando",
+                flush=True,
             )
+            _terminate_pid(old_pid)
+            try:
+                lock_path.unlink(missing_ok=True)
+            except OSError:
+                pass
     lock_path.write_text(str(os.getpid()), encoding="utf-8")
 
     def _release() -> None:
@@ -188,7 +324,7 @@ TONEMAP_CHAIN = (
 def _color_tags(video: Path) -> dict[str, str]:
     """Read the source's color tags (empty strings when absent/unknown)."""
     try:
-        out = subprocess.run(
+        out = _run(
             ["ffprobe", "-v", "error", "-select_streams", "v:0",
              "-show_entries", "stream=color_transfer,color_primaries,color_space,color_range",
              "-of", "default=noprint_wrappers=1", str(video)],
@@ -253,7 +389,7 @@ def is_portrait_source(video: Path) -> bool:
     the wrong size, so we swap dims when the rotation is ±90°/±270°.
     """
     try:
-        out = subprocess.run(
+        out = _run(
             ["ffprobe", "-v", "error", "-select_streams", "v:0",
              "-show_entries", "stream=width,height",
              "-of", "csv=p=0", str(video)],
@@ -266,7 +402,7 @@ def is_portrait_source(video: Path) -> bool:
 
     rot = 0
     try:
-        r = subprocess.run(
+        r = _run(
             ["ffprobe", "-v", "error", "-select_streams", "v:0",
              "-show_entries", "stream_side_data=rotation",
              "-of", "default=noprint_wrappers=1:nokey=1", str(video)],
@@ -289,7 +425,7 @@ def source_fps(video: Path) -> float:
     if it can't be determined, so callers fall back to the safe default.
     """
     try:
-        out = subprocess.run(
+        out = _run(
             ["ffprobe", "-v", "error", "-select_streams", "v:0",
              "-show_entries", "stream=r_frame_rate",
              "-of", "default=noprint_wrappers=1:nokey=1", str(video)],
@@ -459,10 +595,15 @@ def extract_segment(
 
     if draft:
         preset, crf = "ultrafast", "28"
+        venc, vextra = "libx264", ["-preset", preset, "-crf", crf, "-pix_fmt", "yuv420p", "-g", "30", "-keyint_min", "15"]
     elif preview:
         preset, crf = "medium", "22"
+        venc, vextra = "libx264", ["-preset", preset, "-crf", crf, "-pix_fmt", "yuv420p", "-g", "30", "-keyint_min", "15"]
     else:
         preset, crf = "fast", "20"
+        venc, vextra = pick_video_encoder()
+        if venc == "libx264":
+            vextra = ["-preset", preset, "-crf", crf, "-pix_fmt", "yuv420p", "-g", "30", "-keyint_min", "15"]
 
     cmd = [
         "ffmpeg", "-y",
@@ -477,7 +618,7 @@ def extract_segment(
             cmd += ["-vf", vf]
         elif filter_complex:
             cmd += ["-map", "[vout]" if vf else "0:v"]
-        cmd += ["-c:v", "libx264", "-preset", preset, "-crf", crf, "-pix_fmt", "yuv420p"]
+        cmd += ["-c:v", venc, *vextra]
         # Every path above lands on Rec.709 (tonemap for HDR, wide_gamut_chain for
         # BT.2020 SDR, passthrough for the rest), so tag it explicitly. Without this
         # the segments can inherit the source's tags and downstream decoders
@@ -505,7 +646,15 @@ def extract_segment(
     if out_path.suffix.lower() in (".mp4", ".mov"):
         cmd += ["-movflags", "+faststart"]
     cmd += [str(out_path)]
-    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    try:
+        _run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    except subprocess.CalledProcessError as e:
+        err = (e.stderr or b"").decode("utf-8", errors="replace").strip()
+        # Last lines are usually the real reason (nvenc driver, filter, etc.)
+        tail = "\n".join(err.splitlines()[-12:]) if err else "(sem stderr)"
+        raise RuntimeError(
+            f"ffmpeg extract falhou (exit {e.returncode}) em {out_path.name}:\n{tail}"
+        ) from None
 
 
 def snap_ranges_to_frames(edl: dict, fps: int) -> int:
@@ -635,7 +784,7 @@ def concat_segments(segment_paths: list[Path], out_path: Path, edit_dir: Path) -
         str(out_path),
     ]
     print(f"concat → {out_path.name}")
-    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    _run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     concat_list.unlink(missing_ok=True)
 
 
@@ -691,7 +840,7 @@ def trailing_silence(source: Path, start: float, end: float,
     This is what bounds the tail trim: we only ever remove what is already silent.
     """
     dur = end - start
-    r = subprocess.run(
+    r = _run(
         ["ffmpeg", "-hide_banner", "-nostats", "-ss", f"{start:.6f}",
          "-t", f"{dur:.6f}", "-i", str(source), "-vn",
          "-af", f"silencedetect=noise={noise_db}dB:d=0.02", "-f", "null", "-"],
@@ -995,7 +1144,7 @@ def measure_loudness(video_path: Path) -> dict[str, str] | None:
         "-af", filter_str,
         "-vn", "-f", "null", "-",
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = _run(cmd, capture_output=True, text=True)
     # loudnorm prints the JSON to stderr at the end of the run
     stderr = proc.stderr
 
@@ -1018,20 +1167,22 @@ def measure_loudness(video_path: Path) -> dict[str, str] | None:
 
 # A conservative broadcast chain for a single spoken voice. Applied BEFORE
 # loudnorm so the normalizer measures the already-mastered signal.
-#   1. highpass 80 Hz .......... kill rumble / HVAC / handling / plosive thump
-#   2. -2.5 dB @ 200 Hz (Q1.1) .. reduce boxiness / mud
-#   3. acompressor ............. even out dynamics, bring the voice forward
-#   4. +2.5 dB @ 3.2 kHz (Q1.6) . presence / intelligibility
-#   5. high-shelf +3 dB @ 9 kHz . air / brightness
-#   6. deesser ................. tame sibilance the presence boost exaggerates
-#   7. alimiter ................ safety ceiling before loudnorm
+#   1. highpass 90 Hz .......... kill rumble / HVAC / handling / plosive thump
+#   2. afftdn .................. tame room / store hiss (keeps speech)
+#   3. -2.5 dB @ 200 Hz (Q1.1) .. reduce boxiness / mud
+#   4. acompressor ............. even out dynamics, bring the voice forward
+#   5. +2.5 dB @ 3.2 kHz (Q1.6) . presence / intelligibility
+#   6. high-shelf +2.5 dB @ 9 kHz . air (slightly softer so denoise isn't harsh)
+#   7. deesser ................. tame sibilance the presence boost exaggerates
+#   8. alimiter ................ safety ceiling before loudnorm
 # Every value is a starting point — tune per voice/room if the material asks.
 VOICE_MASTER_CHAIN = (
-    "highpass=f=80,"
+    "highpass=f=90,"
+    "afftdn=nr=13:nf=-38:tn=1,"
     "equalizer=f=200:t=q:w=1.1:g=-2.5,"
     "acompressor=threshold=-20dB:ratio=3:attack=12:release=200:makeup=3:knee=6,"
     "equalizer=f=3200:t=q:w=1.6:g=2.5,"
-    "treble=g=3:f=9000,"
+    "treble=g=2.5:f=9000,"
     "deesser=i=0.35,"
     "alimiter=level_in=1:level_out=1:limit=0.95"
 )
@@ -1053,7 +1204,7 @@ def apply_voice_master(input_path: Path, output_path: Path) -> None:
         str(output_path),
     ]
     print(f"  voice master: EQ + compression + de-ess → {output_path.name}")
-    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    _run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
 
 
 def apply_loudnorm_two_pass(
@@ -1076,15 +1227,16 @@ def apply_loudnorm_two_pass(
             "ffmpeg", "-y", "-hide_banner", "-nostats",
             "-i", str(input_path),
             "-c:v", "copy",
-            "-af", filter_str,
+            # apad: if loudnorm audio ends a few ms early, -shortest must NOT
+            # amputate video frames (that caused "segments sum Nf != cut.mp4 Mf").
+            "-af", f"{filter_str},apad",
             "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
-            # never let audio outlive the video (see snap_ranges_to_frames)
             "-shortest",
             "-movflags", "+faststart",
             str(output_path),
         ]
         print(f"  loudnorm (1-pass preview) → {output_path.name}")
-        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        _run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         return True
 
     # Full two-pass
@@ -1110,15 +1262,16 @@ def apply_loudnorm_two_pass(
         "ffmpeg", "-y", "-hide_banner", "-nostats",
         "-i", str(input_path),
         "-c:v", "copy",
-        "-af", filter_str,
+        "-af", f"{filter_str},apad",
         "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
-        # never let audio outlive the video (see snap_ranges_to_frames)
+        # With apad, audio never ends first — -shortest stops on video end,
+        # so we keep every picture frame and still clip any audio overrun.
         "-shortest",
         "-movflags", "+faststart",
         str(output_path),
     ]
     print(f"  loudnorm pass 2: normalizing → {output_path.name}")
-    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    _run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     return True
 
 
@@ -1201,7 +1354,7 @@ def build_final_composite(
     ]
     print(f"compositing → {out_path.name}")
     print(f"  overlays: {len(overlays)}, subtitles: {'yes' if has_subs else 'no'}")
-    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    _run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
 
 
 # -------- Main ---------------------------------------------------------------

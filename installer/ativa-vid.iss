@@ -1,0 +1,71 @@
+﻿; ATIVAVID â€” Inno Setup
+; Compile: .\installer\build.ps1
+; Saida: installer/dist/Instalar ATIVAVID.exe
+;
+; Instala em C:\Program Files\ATIVAVID (como app Windows normal).
+; Atalho â†’ ATIVAVID.vbs (sem janela CMD).
+
+#define MyAppName "ATIVAVID"
+#define MyAppVersion "0.1.26"
+#define MyAppPublisher "ATIVAVID"
+#define MyAppURL "https://github.com/fillrochaa/edvid"
+#define MyAppExeName "ATIVAVID.vbs"
+
+[Setup]
+AppId={{A7C1D2E3-4F56-7890-ABCD-EF1234567890}
+AppName={#MyAppName}
+AppVersion={#MyAppVersion}
+AppPublisher={#MyAppPublisher}
+AppPublisherURL={#MyAppURL}
+; Pasta padrao de programa Windows (pede admin uma vez)
+DefaultDirName={autopf}\{#MyAppName}
+DefaultGroupName={#MyAppName}
+DisableProgramGroupPage=yes
+DisableDirPage=no
+OutputDir=dist
+OutputBaseFilename=Instalar ATIVAVID
+Compression=lzma
+SolidCompression=yes
+WizardStyle=modern
+ArchitecturesInstallIn64BitMode=x64compatible
+PrivilegesRequired=admin
+SetupIconFile=..\assets\preview\ativa-vid-icon.ico
+UninstallDisplayIcon={app}\assets\preview\ativa-vid-icon.ico
+CloseApplications=force
+RestartApplications=no
+VersionInfoProductName=ATIVAVID
+VersionInfoDescription=Instalar ATIVAVID
+VersionInfoCompany=ATIVAVID
+VersionInfoVersion={#MyAppVersion}
+InfoBeforeFile=
+UsePreviousAppDir=yes
+
+[Languages]
+Name: "brazilianportuguese"; MessagesFile: "compiler:Languages\BrazilianPortuguese.isl"
+Name: "english"; MessagesFile: "compiler:Default.isl"
+
+[Tasks]
+Name: "desktopicon"; Description: "Criar atalho na Area de Trabalho"; GroupDescription: "Atalhos:"; Flags: checkedonce
+
+[Files]
+Source: "..\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; \
+  Excludes: "vendor\ffmpeg\*.exe,vendor\ffmpeg\*.dll,.git,.venv,node_modules,__pycache__,*.pyc,edit,cloud,installer\dist,.env,.ativavid-sessions.json,.ativavid-settings.json,ativa_vid.egg-info,Projetos"
+
+[Icons]
+Name: "{group}\{#MyAppName}"; Filename: "{sys}\wscript.exe"; Parameters: "//nologo ""{app}\{#MyAppExeName}"""; WorkingDir: "{app}"; IconFilename: "{app}\assets\preview\ativa-vid-icon.ico"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{sys}\wscript.exe"; Parameters: "//nologo ""{app}\{#MyAppExeName}"""; WorkingDir: "{app}"; IconFilename: "{app}\assets\preview\ativa-vid-icon.ico"; Tasks: desktopicon
+
+[Run]
+Filename: "powershell.exe"; \
+  Parameters: "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File ""{app}\installer\setup.ps1"" -NoShortcut"; \
+  WorkingDir: "{app}"; \
+  StatusMsg: "Instalando dependencias (FFmpeg, Node, Python)â€¦"; \
+  Flags: runhidden waituntilterminated
+Filename: "{sys}\wscript.exe"; Parameters: "//nologo ""{app}\{#MyAppExeName}"""; WorkingDir: "{app}"; Description: "Abrir ATIVAVID"; Flags: nowait postinstall skipifsilent
+
+[Code]
+function InitializeSetup(): Boolean;
+begin
+  Result := True;
+end;
+

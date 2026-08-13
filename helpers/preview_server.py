@@ -74,6 +74,7 @@ except Exception:  # noqa: BLE001 — missing deps must not break the server
     pexels_search = None
 
 APP_DIR = Path(__file__).resolve().parent.parent / "assets" / "preview"
+STUDIO_DIR = APP_DIR.parent / "studio"
 
 # A running server holds the Python it was STARTED with, while the browser is
 # always handed the current app.js — so after the skill is updated the UI grows
@@ -401,7 +402,16 @@ class Handler(BaseHTTPRequestHandler):
     def _json(self, obj: object, code: int = 200) -> None:
         body = json.dumps(obj, ensure_ascii=False).encode()
         self._hdr(code, "application/json; charset=utf-8", len(body))
-        self.wfile.write(body)
+        try:
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            return
+        except OSError as e:
+            if getattr(e, "winerror", None) in (10053, 10054):
+                return
+            if getattr(e, "errno", None) in (32, 104):
+                return
+            raise
 
     def _send_file(self, path: Path) -> None:
         """Static file with HTTP Range support (video scrubbing needs it)."""
@@ -435,8 +445,15 @@ class Handler(BaseHTTPRequestHandler):
                     break
                 try:
                     self.wfile.write(chunk)
-                except (BrokenPipeError, ConnectionResetError):
+                except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
                     return
+                except OSError as e:
+                    # Windows: WinError 10053/10054 when WebView cancela o stream
+                    if getattr(e, "winerror", None) in (10053, 10054):
+                        return
+                    if getattr(e, "errno", None) in (32, 104):
+                        return
+                    raise
                 remaining -= len(chunk)
 
     def _safe(self, base: Path, rel: str) -> Path | None:
@@ -488,12 +505,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802
         path = self._scope(self.path.split("?", 1)[0])
-        if path in ("/", "/index.html", "/fase1", "/estilo", "/fase2"):
-            # the last three are the SPA's own tab routes (app.js reads
-            # location.pathname) — a real path, not a query string or hash,
-            # so a direct load/refresh on /estilo has to be served the exact
-            # same index.html; app.js picks the tab client-side from the URL
+        if path in ("/", "/index.html", "/fase1", "/estilo", "/fase2", "/estilo-padrao"):
+            # the last SPA tab routes (app.js reads location.pathname) — a real
+            # path, not a query string or hash. /estilo-padrao is the desktop
+            # "house style" page (same index, HOUSE_STYLE mode in app.js).
             self._send_file(APP_DIR / "index.html")
+        elif path.startswith("/assets/studio/"):
+            p = self._safe(STUDIO_DIR, path[len("/assets/studio/"):])
+            self._send_file(p) if p else self._json({"error": "bad path"}, 400)
         elif path.startswith("/assets/"):
             p = self._safe(APP_DIR, path[len("/assets/"):])
             self._send_file(p) if p else self._json({"error": "bad path"}, 400)

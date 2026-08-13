@@ -1,0 +1,2 @@
+# Place ffmpeg.exe / ffprobe.exe here (installer/setup.ps1 downloads them when needed).
+# ATIVAVID.cmd prepends this folder to PATH.

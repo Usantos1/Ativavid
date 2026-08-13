@@ -652,6 +652,14 @@ const THUMB_EVERY = 2.0;
  * exactly the old behaviour.
  */
 const BASE = (location.pathname.match(/^\/p\/[^/]+/) || [''])[0];
+// Desktop hub "Estilo padrão" — full visual STYLE_CATALOG, saves house preset only
+const HOUSE_STYLE = location.pathname === '/estilo-padrao';
+// Hub embeds the catalog inside sidebar/appbar — hide preview chrome
+const HUB_EMBED = HOUSE_STYLE && new URLSearchParams(location.search).get('embed') === '1';
+if (HUB_EMBED) {
+  document.documentElement.classList.add('hub-embed');
+  document.body.classList.add('hub-embed');
+}
 
 // ---------- tab routing ----------
 // A real path per tab (/fase1, /estilo, /fase2), not a #hash — a link to a
@@ -662,6 +670,7 @@ const BASE = (location.pathname.match(/^\/p\/[^/]+/) || [''])[0];
 const TAB_TO_PATH = { 1: '/fase1', style: '/estilo', 2: '/fase2' };
 const PATH_TO_TAB = { '/fase1': 1, '/estilo': 'style', '/fase2': 2 };
 function tabFromPath() {
+  if (HOUSE_STYLE) return 'style';
   // under /p/<pasta>/ the tab is the part AFTER the prefix
   return PATH_TO_TAB[location.pathname.slice(BASE.length)] ?? 1;
 }
@@ -721,11 +730,12 @@ async function loadSharedDefaultStyle() {
     const r = await fetch('/assets/default-style.json', { cache: 'no-store' });
     if (r.ok) {
       SHARED_DEFAULT_STYLE = await r.json();
-      S.fastMode = !!SHARED_DEFAULT_STYLE.fastMode;
+      S.fastMode = !!(SHARED_DEFAULT_STYLE.oneClick ?? SHARED_DEFAULT_STYLE.fastMode);
       S.endCardCopy = SHARED_DEFAULT_STYLE.endCardCopy || null;
     }
   } catch (e) { /* no shared default saved yet, or server hiccup — catalog fallback stands */ }
   refreshFastMode();
+  refreshAutoControls();
 }
 
 function defaultStyle() {
@@ -945,7 +955,7 @@ async function loadPostCaption() {
   box.classList.toggle('empty', !written);
   box.textContent = written
     ? txt
-    : 'Ainda não escrita. Peça a legenda ao Claude — ela é salva em legenda.txt e aparece aqui.';
+    : 'Ainda não escrita — a legenda aparece aqui depois da edição.';
   $('postCopy').disabled = !written;
   const tags = written ? (txt.match(/#[\wÀ-ÿ]+/g) || []).length : 0;
   // 5 is the house ceiling (see SKILL.md). Counting by eye is exactly how
@@ -1166,16 +1176,20 @@ async function applyState(data) {
   // happen — the exact silent failure the skill warns about. Say so, and name
   // the folder, because "peça ao Claude" is useless if you ask in the session
   // pointed at a different video.
+  let statusLine = '';
   if (BASE) {
     const folder = decodeURIComponent(BASE.slice('/p/'.length));
-    $('stateMessage').textContent =
-      `aberto pelo painel — o que você salvar aqui vai para ${folder}, `
-      + 'e o Claude só aplica se você disser qual projeto é';
-    $('stateMessage').classList.add('warn');
+    statusLine = `Projeto ${folder} — o que você salvar aqui vale só para este vídeo`;
   } else {
-    $('stateMessage').textContent = S.state.message || '';
-    $('stateMessage').classList.remove('warn');
+    statusLine = S.state.message || '';
   }
+  const sm = $('stateMessage');
+  if (sm) {
+    sm.textContent = statusLine;
+    sm.classList.remove('warn');
+  }
+  const pn = $('projectName');
+  if (pn) pn.title = statusLine || (S.state.project || '');
 
   const ranges = (data.edl && data.edl.ranges) || [];
   // J-cut timeline, written by render.py. Under a J-cut the picture of every take
@@ -1204,38 +1218,66 @@ async function applyState(data) {
   // session) shows what is actually rendered — not a stale local selection
   S.style = { ...defaultStyle(), ...(S.state.style || {}) };
   S.style.elements = { ...defaultStyle().elements, ...((S.state.style || {}).elements || {}) };
+  // House-style page: prefer the shared default-style.json over empty hub state
+  if (HOUSE_STYLE && SHARED_DEFAULT_STYLE) {
+    S.style = { ...defaultStyle(), ...SHARED_DEFAULT_STYLE };
+    S.style.elements = { ...defaultStyle().elements, ...(SHARED_DEFAULT_STYLE.elements || {}) };
+    if (SHARED_DEFAULT_STYLE.endCardCopy) S.endCardCopy = { ...SHARED_DEFAULT_STYLE.endCardCopy };
+    if (typeof SHARED_DEFAULT_STYLE.oneClick === 'boolean') S.fastMode = SHARED_DEFAULT_STYLE.oneClick;
+    else if (typeof SHARED_DEFAULT_STYLE.fastMode === 'boolean') S.fastMode = SHARED_DEFAULT_STYLE.fastMode;
+  }
+  refreshAutoControls();
   $('setupNote').value = S.style.note || '';
   // the skill opened the gate → land the user on the Estilo tab
-  if (S.state.awaitingStyle) S.tab = 'style';
+  if (S.state.awaitingStyle || HOUSE_STYLE) S.tab = 'style';
 
   const hasVideo = S.videoDuration > 0;
-  $('playerWrap').classList.toggle('hidden', !hasVideo);
-  $('editorCol').classList.toggle('hidden', !hasVideo);
+  $('playerWrap').classList.toggle('hidden', !hasVideo || HOUSE_STYLE);
+  $('editorCol').classList.toggle('hidden', !hasVideo || HOUSE_STYLE);
 
-  if (hasVideo) {
-    updateVideoSrc();
+  if (hasVideo && !HOUSE_STYLE) {
+    detectProxy().then(() => updateVideoSrc());
     loadWave();
     loadThumbsMeta();
+    refreshScorePill();
   }
 
   // phase 2 data
   const tab2 = document.querySelector('[data-tab="2"]');
-  tab2.disabled = (S.state.phase || 1) < 2;
+  tab2.disabled = HOUSE_STYLE || (S.state.phase || 1) < 2;
   // Estilo opens when the catalog applies to this job: the skill asked for a
   // pick, or one is already recorded. Before that there is nothing to choose.
   const tabS = document.querySelector('[data-tab="style"]');
-  tabS.disabled = !S.state.awaitingStyle && !S.state.style;
+  tabS.disabled = HOUSE_STYLE ? false : (!S.state.awaitingStyle && !S.state.style);
+  const tab1 = document.querySelector('[data-tab="1"]');
+  if (tab1) tab1.disabled = !!HOUSE_STYLE;
+
+  if (HOUSE_STYLE) {
+    document.body.classList.add('house-style');
+    const pn = $('projectName');
+    if (pn) {
+      pn.textContent = 'Estilo padrão da marca';
+      pn.title = 'Escolhas visuais iguais às do editor — salvas para todos os vídeos';
+    }
+    const sm = $('stateMessage');
+    if (sm) sm.textContent = 'Escolhas visuais iguais às do editor — salvas para todos os vídeos';
+  }
   if (tabS.disabled && S.tab === 'style') S.tab = 1;
   // a deep link to #fase2 before Fase 2 exists yet has nothing to show
   if (tab2.disabled && S.tab === 2) S.tab = 1;
   document.querySelectorAll('.tab').forEach((x) => {
-    x.classList.toggle('active', String(x.dataset.tab) === String(S.tab));
+    const on = String(x.dataset.tab) === String(S.tab);
+    x.classList.toggle('active', on);
+    x.setAttribute('aria-selected', on ? 'true' : 'false');
   });
   // replaceState, not the click handler's real navigation: applyState reruns
   // on every 2s poll, and pushing a history entry each time would make the
   // back button useless (dozens of identical entries instead of one per tab)
-  const wantPath = BASE + TAB_TO_PATH[S.tab];
-  if (location.pathname !== wantPath) history.replaceState(null, '', wantPath);
+  const wantPath = HOUSE_STYLE ? '/estilo-padrao' : (BASE + TAB_TO_PATH[S.tab]);
+  const wantSearch = HUB_EMBED ? '?embed=1' : '';
+  if (location.pathname !== wantPath || (HUB_EMBED && location.search.indexOf('embed=1') < 0)) {
+    history.replaceState(null, '', wantPath + wantSearch);
+  }
   S.captions = [];
   S.editData = null;
   S.insertsDraft = [];
@@ -1271,15 +1313,52 @@ async function applyState(data) {
 // Fase 1 plays the clean cut; Fase 2 plays the Phase-2 render (state.finalVideo)
 // when it exists, so captions/inserts are visible. Keeps the playback position.
 function updateVideoSrc() {
-  const rel = (S.tab === 2 && S.state.finalVideo) ? S.state.finalVideo : (S.state.video || 'cut.mp4');
-  const vsrc = `${BASE}/media/${rel}?v=${(S.mtimes && (S.mtimes.finalVideo || S.mtimes.video)) || 0}`;
+  let rel = (S.tab === 2 && S.state.finalVideo) ? S.state.finalVideo : (S.state.video || 'cut.mp4');
+  // proxy leve no corte (Fase 1) quando existir — scrub mais fluido
+  if (S.tab !== 2 && S.hasProxy && !S.proxyFailed && rel === 'cut.mp4') rel = 'cut_proxy.mp4';
+  const vsrc = `${BASE}/media/${rel}?v=${(S.mtimes && (S.mtimes.finalVideo || S.mtimes.video)) || Date.now()}`;
   if (video.dataset.src === vsrc) return;
   const t = video.currentTime;
   const wasPlaying = !video.paused && !video.ended;
   video.dataset.src = vsrc;
+  video.dataset.rel = rel;
   video.src = vsrc;
   video.currentTime = t;
-  if (wasPlaying) video.play();
+  if (wasPlaying) video.play().catch(() => {});
+}
+
+async function rebuildProxy() {
+  if (!BASE || !BASE.startsWith('/p/')) return false;
+  const folder = decodeURIComponent(BASE.slice('/p/'.length).split('/')[0]);
+  try {
+    const res = await fetch('/api/proxy/rebuild', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ folder }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      S.hasProxy = true;
+      S.proxyFailed = false;
+      updateVideoSrc();
+      toast('Proxy atualizado', 2000);
+      return true;
+    }
+  } catch { /* ignore */ }
+  return false;
+}
+
+function wireProxyFallback() {
+  video.addEventListener('error', () => {
+    const rel = video.dataset.rel || '';
+    if (rel.includes('cut_proxy')) {
+      S.proxyFailed = true;
+      S.hasProxy = false;
+      updateVideoSrc();
+      toast('Proxy falhou — usando vídeo completo', 2800);
+      rebuildProxy(); // tenta regenerar em background
+    }
+  });
 }
 
 function groupCaptions(caps) {
@@ -1362,14 +1441,39 @@ function closeCaptionEditor() {
   if (old) old.remove();
 }
 
+function stripAutoInsertsIfLimpa() {
+  // Estilo Limpa = quadro cheio. Sem cards de imagem por cima — só o que o
+  // usuário colocar à mão depois (isNew no draft). Pipeline/IA não deixam inserts.
+  const edit = (S.style && S.style.edit) || 'limpa';
+  if (String(edit).toLowerCase() !== 'limpa') return false;
+  let changed = false;
+  if (S.editData && Array.isArray(S.editData.inserts) && S.editData.inserts.length) {
+    S.editData.inserts = [];
+    changed = true;
+  }
+  return changed;
+}
+
 function buildInsertsDraft() {
   const d = S.editData;
+  if (!d) { S.insertsDraft = []; return; }
+  stripAutoInsertsIfLimpa();
   const list = [];
   if (d.hook && d.hook.enabled) {
     list.push({ kind: 'hook', label: `HOOK — ${(d.hook.lines || []).join(' / ')}`, start: 0, end: d.hook.endSec || 4 });
   }
   (d.inserts || []).forEach((it, i) => {
-    list.push({ kind: 'insert', label: (it.src || '').split('/').pop(), start: +it.start, end: +it.end, ref: i });
+    list.push({
+      kind: 'insert',
+      label: (it.src || it.query || '').split('/').pop() || 'insert',
+      start: +it.start,
+      end: +it.end,
+      ref: i,
+      src: it.src || '',
+      credit: it.credit || '',
+      auto: !!it.auto,
+      hint: !!it.hint,
+    });
   });
   // split-layout images (CustomGraphics reads the same array) — they are images
   // like any other insert, so they belong on the image track, not in code
@@ -1828,10 +1932,15 @@ let wasShowing = false; // gate was up on the previous render (for the re-fit)
 function renderSetup() {
   const show = S.tab === 'style';
   $('styleSetup').classList.toggle('hidden', !show);
+  // Layout amplo igual ao Estilos do hub (sidebar) — só no editor, não no embed
+  document.body.classList.toggle('styles-wide', show && !HUB_EMBED);
   refreshEndCardCopy();   // follows the "Card final" checkbox
   const hasVideo = S.videoDuration > 0;
   $('stage').classList.toggle('hidden', show || !hasVideo);
   $('emptyState').classList.toggle('hidden', hasVideo || show);
+  // Ajuda é da timeline — some na aba Estilos / embed do hub
+  const help = $('btnHelp');
+  if (help) help.classList.toggle('hidden', show || HUB_EMBED || HOUSE_STYLE);
 
   if (!show) {
     capAnims = []; // stop stepping demos that are not on screen
@@ -1844,9 +1953,18 @@ function renderSetup() {
   if (!wasShowing) $('styleSetup').scrollTop = 0; // open at the top, always
   wasShowing = true;
 
-  $('setupGo').textContent = S.state.awaitingStyle
-    ? 'Confirmar e iniciar a Fase 2'
-    : 'Salvar e refazer a Fase 2';
+  $('setupGo').textContent = HOUSE_STYLE
+    ? 'Salvar padrão e voltar'
+    : (S.state.awaitingStyle
+      ? 'Confirmar e iniciar a Fase 2'
+      : 'Salvar e refazer a Fase 2');
+  if (HOUSE_STYLE) {
+    // On the house page the primary action IS saving the default — hide the
+    // secondary twin so there aren't two "save" buttons doing almost the same.
+    $('setupSaveDefault').classList.add('hidden');
+  } else {
+    $('setupSaveDefault').classList.remove('hidden');
+  }
 
   capAnims = [];
   const radios = (host, group, chosen) => {
@@ -1927,6 +2045,11 @@ $('styleSetup').addEventListener('click', (e) => {
     if (S.style[key] === opt.dataset.id) return; // re-clicking the active card isn't an edit
     pushHistory();
     S.style[key] = opt.dataset.id;
+    // Limpa = quadro cheio: some cards de imagem do pipeline
+    if (key === 'edit' && opt.dataset.id === 'limpa') {
+      if (S.editData) S.editData.inserts = [];
+      buildInsertsDraft();
+    }
     renderSetup();
     return;
   }
@@ -1947,6 +2070,51 @@ $('styleSetup').addEventListener('click', (e) => {
 
 $('setupGo').addEventListener('click', async () => {
   S.style.note = $('setupNote').value.trim();
+
+  if (HOUSE_STYLE) {
+    const house = {
+      edit: S.style.edit,
+      headline: S.style.headline,
+      captions: S.style.captions,
+      accent: S.style.accent,
+      captionAccent: S.style.captionAccent,
+      emphasisAccent: S.style.emphasisAccent,
+      circleAccent: S.style.circleAccent,
+      elements: { ...S.style.elements },
+      fastMode: !!S.fastMode,
+      oneClick: !!S.fastMode,
+      rhythm: S.style.rhythm || 'dinamico',
+      intensity: S.style.intensity || 'medio',
+      speechClean: S.style.speechClean || 'medio',
+      videoGoal: S.style.videoGoal || 'reels',
+      brollMode: S.style.brollMode || 'quando_necessario',
+      captionChunk: S.style.captionChunk || 'frase_curta',
+      exportPreset: S.style.exportPreset || 'reels',
+      endCardCopy: S.endCardCopy || null,
+      note: S.style.note || '',
+    };
+    const res = await fetch('/api/default-style', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(house),
+    });
+    if ((await res.json()).ok) {
+      SHARED_DEFAULT_STYLE = house;
+      toast('✓ Estilo padrão salvo', 2000);
+      // Com embed=1 NÃO navegar o iframe para "/" — isso duplicava a sidebar.
+      if (HUB_EMBED) {
+        try {
+          window.parent.postMessage({ type: 'ativavid-house-style-saved' }, '*');
+        } catch { /* ignore */ }
+      } else {
+        setTimeout(() => { location.href = '/'; }, 450);
+      }
+    } else {
+      toast('Erro ao salvar o padrão', 4000);
+    }
+    return;
+  }
+
   const rerender = !S.state.awaitingStyle;
   const payload = {
     // a save with Fase 2 already on disk is a RE-RENDER request, not a first
@@ -1987,6 +2155,15 @@ $('setupGo').addEventListener('click', async () => {
       .filter((e) => S.style.elements[e.id])
       .map((e) => e.name),
     note: S.style.note,
+    fastMode: !!S.fastMode,
+    oneClick: !!S.fastMode,
+    rhythm: S.style.rhythm || 'dinamico',
+    intensity: S.style.intensity || 'medio',
+    speechClean: S.style.speechClean || 'medio',
+    videoGoal: S.style.videoGoal || 'reels',
+    brollMode: S.style.brollMode || 'quando_necessario',
+    captionChunk: S.style.captionChunk || 'frase_curta',
+    exportPreset: S.style.exportPreset || 'reels',
   };
   const res = await fetch(`${BASE}/api/save`, {
     method: 'POST',
@@ -1995,9 +2172,32 @@ $('setupGo').addEventListener('click', async () => {
   });
   if ((await res.json()).ok) {
     renderSetup();
+    // Local desktop: put this project back in the queue with the new style
+    if (BASE && BASE.startsWith('/p/')) {
+      const folder = decodeURIComponent(BASE.slice('/p/'.length).split('/')[0]);
+      try {
+        const rq = await fetch('/api/jobs/requeue-folder', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ folder }),
+        });
+        const body = await rq.json().catch(() => ({}));
+        if (rq.ok) {
+          toast(rerender
+            ? '✓ Estilo salvo — reeditando com o novo visual'
+            : '✓ Estilo salvo — editando com essas escolhas', 4500);
+          return;
+        }
+        toast(body.error || 'Estilo salvo — volte em Projetos e toque em Tentar de novo', 5000);
+        return;
+      } catch {
+        toast('Estilo salvo — volte em Projetos e toque em Tentar de novo', 5000);
+        return;
+      }
+    }
     toast(rerender
-      ? '✓ Novo estilo enviado — o Claude vai refazer a Fase 2 com ele'
-      : '✓ Estilo enviado — o Claude vai montar a Fase 2 com essas escolhas', 5000);
+      ? '✓ Estilo salvo neste projeto'
+      : '✓ Estilo confirmado neste projeto', 4000);
   } else {
     toast('Erro ao enviar — o servidor está de pé?', 4000);
   }
@@ -2038,8 +2238,8 @@ $('fastModeChk').addEventListener('click', () => {
   // deliberately NOT saved on click: it only counts once "Salvar como padrão"
   // writes it, so a stray click cannot quietly switch off the approval gate
   toast(S.fastMode
-    ? 'Modo rápido marcado — clique "Salvar como padrão" para valer'
-    : 'Modo rápido desmarcado — salve o padrão para valer', 3200);
+    ? 'Modo 1 clique marcado — clique "Salvar como padrão" para valer'
+    : 'Modo 1 clique desmarcado — salve o padrão para valer', 3200);
 });
 
 $('setupSaveDefault').addEventListener('click', async () => {
@@ -2056,6 +2256,15 @@ $('setupSaveDefault').addEventListener('click', async () => {
     // makes sense WITH one: "fast" means "the recipe is already decided", and
     // without a saved recipe there is nothing to skip the asking for.
     fastMode: !!S.fastMode,
+    oneClick: !!S.fastMode,
+    rhythm: S.style.rhythm || 'dinamico',
+    intensity: S.style.intensity || 'medio',
+    speechClean: S.style.speechClean || 'medio',
+    videoGoal: S.style.videoGoal || 'reels',
+    brollMode: S.style.brollMode || 'quando_necessario',
+    captionChunk: S.style.captionChunk || 'frase_curta',
+    exportPreset: S.style.exportPreset || 'reels',
+    smartEmphasis: S.style.smartEmphasis !== false,
     endCardCopy: S.endCardCopy || null,
   };
   const res = await fetch(`${BASE}/api/default-style`, {
@@ -2109,6 +2318,7 @@ function renderClips() {
     }
     const lab = el('div', 'clip-label', c);
     lab.textContent = `${r.beat || r.source} `;
+    if (String(r.beat || '').toUpperCase() === 'HOOK') c.classList.add('hook-beat');
     const dur = el('div', 'clip-dur', c);
     dur.textContent = `${r.dur.toFixed(2)}s`;
 
@@ -2696,15 +2906,42 @@ $('postCopy').addEventListener('click', async () => {
   } catch (e) { toast('Não consegui copiar'); }
 });
 
-// ---------- image picker ----------
-// Search is server-side (the key never reaches the browser) and nothing is
-// downloaded until a pick — a search that returns 12 thumbs shouldn't write
-// 12 files into the project for the 11 the user didn't want.
+// ---------- image picker (Pexels + biblioteca local) ----------
+let IMG_TAB = 'pexels';
+
+function projectFolder() {
+  if (!BASE) return '';
+  try {
+    return decodeURIComponent(BASE.slice('/p/'.length).split('/')[0]);
+  } catch {
+    return '';
+  }
+}
+
 function toggleImgPicker(open) {
   $('imgModal').classList.toggle('hidden', !open);
   $('imgBackdrop').classList.toggle('hidden', !open);
-  if (open) $('imgQuery').focus();
+  if (open) {
+    setImgTab(IMG_TAB);
+    if (IMG_TAB === 'pexels') $('imgQuery')?.focus();
+  }
 }
+
+function setImgTab(tab) {
+  IMG_TAB = tab === 'library' ? 'library' : 'pexels';
+  const pex = $('imgTabPexels');
+  const lib = $('imgTabLibrary');
+  if (pex) pex.classList.toggle('active', IMG_TAB === 'pexels');
+  if (lib) lib.classList.toggle('active', IMG_TAB === 'library');
+  $('imgPexelsPane')?.classList.toggle('hidden', IMG_TAB !== 'pexels');
+  $('imgLibraryPane')?.classList.toggle('hidden', IMG_TAB !== 'library');
+  $('imgHint').textContent = IMG_TAB === 'library'
+    ? 'Arquivos da pasta Biblioteca — clique para inserir na agulha.'
+    : 'A imagem escolhida entra na trilha de inserts, na posição da agulha.';
+  if (IMG_TAB === 'library') loadLibraryResults();
+  else $('imgResults').innerHTML = '';
+}
+
 $('btnImage').innerHTML = ICON.imgSearch;
 $('btnImage').addEventListener('click', () => {
   if (S.tab !== 2) { toast('A busca de imagem é da aba Final (Visual)', 2200); return; }
@@ -2716,6 +2953,107 @@ $('imgQuery').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); $('imgGo').click(); }
   if (e.key === 'Escape') { e.stopPropagation(); toggleImgPicker(false); }
 });
+$('imgTabPexels')?.addEventListener('click', () => setImgTab('pexels'));
+$('imgTabLibrary')?.addEventListener('click', () => setImgTab('library'));
+$('imgLibRefresh')?.addEventListener('click', () => loadLibraryResults());
+$('imgLibFolder')?.addEventListener('click', async () => {
+  try {
+    const lib = await (await fetch('/api/library')).json();
+    await fetch('/api/open-path', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: lib.root }),
+    });
+  } catch {
+    toast('Não abri a pasta da biblioteca', 2500);
+  }
+});
+$('imgLibUpload')?.addEventListener('change', async (e) => {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('file', file, file.name);
+  const folder = projectFolder();
+  const qs = folder ? `?use=1&folder=${encodeURIComponent(folder)}` : '';
+  toast('Enviando…', 1500);
+  try {
+    const res = await fetch(`/api/library/upload${qs}`, { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || 'falha no upload');
+    if (data.used && data.used.src) {
+      pushInsertFromRef(data.used.src, data.name || file.name, data.used.credit || 'biblioteca');
+      toggleImgPicker(false);
+      toast('✓ Arquivo na biblioteca e na timeline', 3500);
+    } else {
+      await loadLibraryResults();
+      toast('✓ Salvo na biblioteca — clique para inserir', 3000);
+    }
+  } catch (err) {
+    toast(err.message || 'Upload falhou', 3500);
+  }
+});
+
+async function loadLibraryResults() {
+  const box = $('imgResults');
+  box.innerHTML = '<div class="img-empty">carregando biblioteca…</div>';
+  let data;
+  try {
+    data = await (await fetch('/api/library')).json();
+  } catch {
+    box.innerHTML = '<div class="img-empty">falha ao listar biblioteca</div>';
+    return;
+  }
+  const items = data.items || [];
+  if (!items.length) {
+    box.innerHTML = '<div class="img-empty">Biblioteca vazia — use Enviar arquivo ou abra a pasta</div>';
+    return;
+  }
+  box.innerHTML = '';
+  items.forEach((it) => {
+    const card = el('button', 'img-card', box);
+    const thumb = `/api/library/file?rel=${encodeURIComponent(it.rel)}`;
+    if (it.kind === 'clip') {
+      card.innerHTML = `<div class="img-clip-ph">▶</div><span class="img-credit">${it.name}</span>`;
+    } else {
+      card.innerHTML = `<img src="${thumb}" alt=""><span class="img-credit">${it.name}</span>`;
+    }
+    card.addEventListener('click', () => pickLibraryAsset(it));
+  });
+}
+
+async function pickLibraryAsset(it) {
+  toast('Copiando…', 1200);
+  const folder = projectFolder();
+  let data;
+  try {
+    data = await (await fetch('/api/library/use', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: it.path, folder }),
+    })).json();
+  } catch {
+    toast('Falha ao usar arquivo da biblioteca', 3000);
+    return;
+  }
+  if (!data.ok && !data.src) { toast(data.error || 'Falha', 3000); return; }
+  pushInsertFromRef(data.src || data.ref, it.name, it.name);
+  toggleImgPicker(false);
+  toast('✓ Inserido da biblioteca — arraste e Salvar', 4000);
+}
+
+function pushInsertFromRef(src, label, credit) {
+  pushHistory();
+  const start = Math.max(0, renderedToDraft(video.currentTime));
+  const end = start + 2.5;
+  S.insertsDraft.push({
+    kind: 'insert', label: label || (src || '').split('/').pop(),
+    start, end, orig: { start, end },
+    isNew: true, src, credit: credit || '',
+  });
+  renderAll(); refreshHeader();
+  scheduleAutosave();
+}
 
 $('imgGo').addEventListener('click', async () => {
   const q = $('imgQuery').value.trim();
@@ -2760,46 +3098,218 @@ async function pickImage(query, r) {
   }
   if (!data.ok) { toast(data.error || 'Falha ao baixar', 3000); return; }
 
-  pushHistory();
-  const start = Math.max(0, renderedToDraft(video.currentTime));
-  const end = start + 2.5; // a sane default beat; the user drags it after
-  S.insertsDraft.push({
-    kind: 'insert', label: data.ref.split('/').pop(),
-    start, end, orig: { start, end },
-    isNew: true, src: data.ref, credit: data.credit,
-  });
+  pushInsertFromRef(data.ref, data.ref.split('/').pop(), data.credit);
   toggleImgPicker(false);
-  renderAll(); refreshHeader();
   toast('✓ Imagem inserida — arraste pra ajustar, depois Salvar', 4000);
 }
 
-// header — reveal the exported file (or the edit dir, before anything is
-// delivered) in Explorer, the way any NLE lets you jump to its export
-$('openFolderIcon').innerHTML = ICON.folder;
-$('btnOpenFolder').addEventListener('click', async () => {
-  try {
-    const res = await fetch(`${BASE}/api/open-folder`, { method: 'POST' });
-    const data = await res.json();
-    if (!data.ok) toast('Não consegui abrir a pasta', 3000);
-  } catch (e) { toast('Não consegui abrir a pasta — servidor fora do ar?', 3500); }
+// header — open-folder vive no hub (botão Pasta dos cards); tema global abaixo
+const openFolderBtn = $('btnOpenFolder');
+const openFolderIcon = $('openFolderIcon');
+if (openFolderIcon && typeof ICON !== 'undefined' && ICON.folder) {
+  openFolderIcon.innerHTML = ICON.folder;
+}
+if (openFolderBtn) {
+  openFolderBtn.addEventListener('click', async () => {
+    try {
+      const res = await fetch(`${BASE}/api/open-folder`, { method: 'POST' });
+      const data = await res.json();
+      if (!data.ok) toast('Não consegui abrir a pasta', 3000);
+    } catch (e) { toast('Não consegui abrir a pasta — servidor fora do ar?', 3500); }
+  });
+}
+
+// header — light/dark theme (padrão global: localStorage ativavid-theme)
+function applyTheme(next) {
+  document.documentElement.setAttribute('data-theme', next);
+  try { localStorage.setItem('ativavid-theme', next); } catch { /* ignore */ }
+  const btn = $('btnTheme');
+  if (btn) {
+    btn.title = next === 'light' ? 'Mudar para tema escuro' : 'Mudar para tema claro';
+  }
+}
+const themeBtn = $('btnTheme');
+if (themeBtn) {
+  themeBtn.addEventListener('click', () => {
+    const next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    applyTheme(next);
+  });
+}
+window.addEventListener('storage', (e) => {
+  if (e.key !== 'ativavid-theme' || !e.newValue) return;
+  document.documentElement.setAttribute('data-theme', e.newValue);
 });
 
-// header — light/dark theme toggle. index.html's inline head script already
-// applied the saved (or default) theme before first paint; this just wires
-// the click and keeps the icon in sync (icon shows the theme a click WOULD
-// switch to, same convention as most apps' sun/moon toggles).
-function applyThemeIcon() {
-  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
-  $('btnTheme').innerHTML = dark ? ICON.sun : ICON.moon;
-  $('btnTheme').title = dark ? 'Mudar para tema claro' : 'Mudar para tema escuro';
+
+// ---------- desktop: marcação IN/OUT → aplicar + fila ----------
+function noteLooksLikeRemove(text) {
+  const s = String(text || '').toLowerCase();
+  return /remov|apag|cort|tir[ae]|exclu|deleta|fora|tira isso|corta isso|sem isso/.test(s);
 }
-applyThemeIcon();
-$('btnTheme').addEventListener('click', () => {
-  const next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
-  document.documentElement.setAttribute('data-theme', next);
-  localStorage.setItem('ativavid-theme', next);
-  applyThemeIcon();
-});
+
+function removeDraftTimeRange(tStart, tEnd) {
+  if (!(tEnd > tStart + 0.04)) return false;
+  pushHistory();
+  let changed = false;
+  // iterate by index while draft mutates — always re-layout
+  let guard = 0;
+  while (guard++ < 64) {
+    const dl = draftLayout();
+    let hit = -1;
+    let srcA = 0;
+    let srcB = 0;
+    for (let i = 0; i < dl.length; i++) {
+      const d = dl[i];
+      if (d.removed || d.dur <= 0) continue;
+      const clipStart = d.out;
+      const clipEnd = d.out + d.dur;
+      if (tEnd <= clipStart || tStart >= clipEnd) continue;
+      const overlapA = Math.max(tStart, clipStart);
+      const overlapB = Math.min(tEnd, clipEnd);
+      srcA = draftTimeToSource(i, overlapA);
+      srcB = draftTimeToSource(i, overlapB);
+      if (srcB - srcA < MIN_SEG) continue;
+      hit = i;
+      break;
+    }
+    if (hit < 0) break;
+    const r = S.draft[hit];
+    const pieces = [];
+    if (srcA - r.start >= MIN_SEG) {
+      pieces.push({
+        source: r.source, start: r.start, end: srcA, beat: r.beat,
+        removed: false, srcIdx: null, orig: { start: r.start, end: r.end },
+      });
+    }
+    pieces.push({
+      source: r.source, start: srcA, end: srcB, beat: r.beat,
+      removed: true, srcIdx: null, orig: { start: r.start, end: r.end },
+    });
+    if (r.end - srcB >= MIN_SEG) {
+      pieces.push({
+        source: r.source, start: srcB, end: r.end, beat: r.beat,
+        removed: false, srcIdx: null, orig: { start: r.start, end: r.end },
+      });
+    }
+    S.draft.splice(hit, 1, ...pieces);
+    changed = true;
+  }
+  if (changed) {
+    S.selected = -1;
+    renderAll();
+    refreshHeader();
+  }
+  return changed;
+}
+
+async function saveEditsAndReturnToQueue() {
+  const payload = { type: 'timeline-edits' };
+  if (edlDirty()) {
+    payload.edl = {
+      ranges: S.draft.filter((r) => !r.removed).map((r) => ({
+        source: r.source, start: +r.start.toFixed(3), end: +r.end.toFixed(3), beat: r.beat,
+      })),
+      removed: S.draft.filter((r) => r.removed).map((r) => ({
+        source: r.source, beat: r.beat, start: r.orig.start, end: r.orig.end,
+      })),
+      changes: S.draft.filter((r) => !r.removed && (r.start !== r.orig.start || r.end !== r.orig.end)).map((r) => ({
+        source: r.source, beat: r.beat,
+        from: { start: r.orig.start, end: r.orig.end },
+        to: { start: +r.start.toFixed(3), end: +r.end.toFixed(3) },
+      })),
+    };
+  }
+  if (insertsDirty()) {
+    const limpa = (S.style?.edit || 'limpa') === 'limpa';
+    // Em limpa: só inserts que o usuário acabou de criar à mão (isNew).
+    const keepInsert = (c) => c.kind === 'insert' && !c.isNew && !limpa;
+    const keepNew = (c) => c.kind === 'insert' && c.isNew;
+    payload.editData = {
+      inserts: S.insertsDraft.filter(keepInsert).map((c) => ({
+        ref: c.ref, start: +c.start.toFixed(3), end: +c.end.toFixed(3),
+      })),
+      newInserts: S.insertsDraft.filter(keepNew).map((c) => ({
+        src: c.src, credit: c.credit || '', start: +c.start.toFixed(3), end: +c.end.toFixed(3),
+      })),
+      splitInserts: limpa ? [] : S.insertsDraft.filter((c) => c.kind === 'split').map((c) => ({
+        ref: c.ref, label: c.label, start: +c.start.toFixed(3), end: +c.end.toFixed(3),
+      })),
+      splitVideos: limpa ? [] : S.insertsDraft.filter((c) => c.kind === 'splitvideo').map((c) => ({
+        ref: c.ref, label: c.label, start: +c.start.toFixed(3), end: +c.end.toFixed(3),
+      })),
+      hook: S.insertsDraft.filter((c) => c.kind === 'hook').map((c) => ({ endSec: +c.end.toFixed(3) }))[0] || null,
+      behind: limpa ? [] : S.insertsDraft.filter((c) => c.kind === 'behind').map((c) => ({
+        ref: c.ref, start: +c.start.toFixed(3), dur: +(c.end - c.start).toFixed(3),
+      })),
+      wordAccents: S.insertsDraft.filter((c) => c.kind === 'word').map((c) => ({
+        ref: c.ref, text: c.label, start: +c.start.toFixed(3), end: +c.end.toFixed(3),
+      })),
+    };
+  }
+  if (S.notes.length) {
+    payload.notes = S.notes.map((n) => ({
+      start: +n.start.toFixed(3),
+      end: +n.end.toFixed(3),
+      renderedStart: +draftToRendered(n.start).toFixed(3),
+      renderedEnd: +draftToRendered(n.end).toFixed(3),
+      phase: S.tab === 2 ? 2 : 1,
+      text: n.text,
+    }));
+  }
+  const capFixes = Object.values(S.captionFixes);
+  if (capFixes.length) {
+    payload.captionFixes = capFixes.map((f) => ({
+      from: f.from, to: f.to,
+      renderedStart: +f.start.toFixed(3),
+      renderedEnd: +f.end.toFixed(3),
+    }));
+  }
+  if (!payload.edl && !payload.editData && !payload.notes && !payload.captionFixes) {
+    toast('Nada para salvar', 2000);
+    return false;
+  }
+  const res = await fetch(`${BASE}/api/save`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.ok) {
+    toast('Erro ao salvar — o servidor está de pé?', 4000);
+    return false;
+  }
+  S.savedPending = true;
+  S.notes = [];
+  S.captionFixes = {};
+  S.pendingIn = null;
+  S.draft.forEach((r) => {
+    r.orig = { start: r.start, end: r.end };
+    if (r.removed) r.hardRemoved = true;
+  });
+  S.draft = S.draft.filter((r) => !r.removed);
+  S.insertsDraft.forEach((c) => { c.orig = { start: c.start, end: c.end }; });
+  S.history = [];
+  S.future = [];
+  refreshUndoRedoButtons();
+  renderAll();
+  refreshHeader();
+
+  if (BASE && BASE.startsWith('/p/')) {
+    const folder = decodeURIComponent(BASE.slice('/p/'.length).split('/')[0]);
+    try {
+      await fetch('/api/jobs/requeue-folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folder }),
+      });
+    } catch { /* ignore */ }
+    toast('✓ Enviado à fila de edição', 2800);
+    setTimeout(() => { location.href = '/?view=fila'; }, 500);
+    return true;
+  }
+  toast('✓ Ajustes salvos neste projeto', 4000);
+  return true;
+}
 
 // ---------- correction markers: button, chips, editor ----------
 $('markIcon').innerHTML = ICON.flag;
@@ -2808,16 +3318,25 @@ $('laneNotes').addEventListener('click', (e) => {
   const chip = e.target.closest('.note-chip');
   if (chip) openNoteEditor(chip.dataset.id, false);
 });
-$('noteOk').addEventListener('click', () => {
+$('noteOk').addEventListener('click', async () => {
   const n = S.notes.find((x) => x.id === S.editingNote);
-  if (n) {
-    n.text = $('noteText').value.trim();
-    if (!n.text) { toast('Escreva o ajuste desejado', 2000); return; }
-  }
+  if (!n) return;
+  n.text = $('noteText').value.trim();
+  if (!n.text) { toast('Escreva o ajuste desejado', 2000); return; }
+  const start = n.start;
+  const end = n.end;
+  const text = n.text;
   S.editingNote = null;
   $('noteEditor').classList.add('hidden');
+  // Pedidos de corte/remoção: aplica já na timeline (desktop 1-clique)
+  if (noteLooksLikeRemove(text)) {
+    removeDraftTimeRange(start, end);
+    S.notes = S.notes.filter((x) => x.id !== n.id);
+  }
   renderNotes();
   refreshHeader();
+  // Confirmar = salvar + voltar à fila (não só rascunho local)
+  await saveEditsAndReturnToQueue();
 });
 $('noteDelete').addEventListener('click', () => {
   S.notes = S.notes.filter((x) => x.id !== S.editingNote);
@@ -2828,8 +3347,9 @@ $('noteDelete').addEventListener('click', () => {
 });
 $('noteClose').addEventListener('click', closeNoteEditor);
 
-// ---------- help modal (the old footer hint strip) ----------
+// ---------- help modal ----------
 function toggleHelp(open) {
+  if (open && (S.tab === 'style' || HUB_EMBED || HOUSE_STYLE)) return;
   $('helpModal').classList.toggle('hidden', !open);
   $('helpBackdrop').classList.toggle('hidden', !open);
 }
@@ -2849,14 +3369,21 @@ window.addEventListener('resize', () => { fitZoom(); renderAll(); renderSetup();
 // tabs
 function goToTab(tab) {
   if (tab.disabled) return;
-  document.querySelectorAll('.tab').forEach((t) => t.classList.remove('active'));
-  tab.classList.add('active');
+  if (HOUSE_STYLE && tab.dataset.tab !== 'style') return;
+  document.querySelectorAll('.tab').forEach((t) => {
+    const on = t === tab;
+    t.classList.toggle('active', on);
+    t.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
   S.tab = tab.dataset.tab === 'style' ? 'style' : +tab.dataset.tab;
   S.selected = -1;
-  const path = BASE + TAB_TO_PATH[S.tab];
+  const path = HOUSE_STYLE ? '/estilo-padrao' : (BASE + TAB_TO_PATH[S.tab]);
+  const search = HUB_EMBED ? '?embed=1' : '';
   // a real nav here (not applyState's replaceState) — a click is a place the
   // user meant to go, so back/forward should be able to return to it
-  if (location.pathname !== path) history.pushState(null, '', path);
+  if (location.pathname !== path || (HUB_EMBED && location.search.indexOf('embed=1') < 0)) {
+    history.pushState(null, '', path + search);
+  }
   updateVideoSrc(); // Fase 2 plays the Phase-2 render when available
   renderAll();
   renderSetup();
@@ -2872,77 +3399,7 @@ window.addEventListener('popstate', () => {
 
 // ---------- save / discard ----------
 $('btnSave').addEventListener('click', async () => {
-  const payload = { type: 'timeline-edits' };
-  if (edlDirty()) {
-    payload.edl = {
-      ranges: S.draft.filter((r) => !r.removed).map((r) => ({
-        source: r.source, start: +r.start.toFixed(3), end: +r.end.toFixed(3), beat: r.beat,
-      })),
-      removed: S.draft.filter((r) => r.removed).map((r) => ({ source: r.source, beat: r.beat, start: r.orig.start, end: r.orig.end })),
-      changes: S.draft.filter((r) => !r.removed && (r.start !== r.orig.start || r.end !== r.orig.end)).map((r) => ({
-        source: r.source, beat: r.beat,
-        from: { start: r.orig.start, end: r.orig.end },
-        to: { start: +r.start.toFixed(3), end: +r.end.toFixed(3) },
-      })),
-    };
-  }
-  if (insertsDirty()) {
-    payload.editData = {
-      inserts: S.insertsDraft.filter((c) => c.kind === 'insert' && !c.isNew).map((c) => ({ ref: c.ref, start: +c.start.toFixed(3), end: +c.end.toFixed(3) })),
-      // added from the image picker: no `ref` into the existing edit-data
-      // array yet (they aren't in it), so they carry their own src instead
-      // and the skill appends them
-      newInserts: S.insertsDraft.filter((c) => c.isNew).map((c) => ({
-        src: c.src, credit: c.credit || '', start: +c.start.toFixed(3), end: +c.end.toFixed(3),
-      })),
-      splitInserts: S.insertsDraft.filter((c) => c.kind === 'split').map((c) => ({ ref: c.ref, label: c.label, start: +c.start.toFixed(3), end: +c.end.toFixed(3) })),
-      splitVideos: S.insertsDraft.filter((c) => c.kind === 'splitvideo').map((c) => ({ ref: c.ref, label: c.label, start: +c.start.toFixed(3), end: +c.end.toFixed(3) })),
-      hook: S.insertsDraft.filter((c) => c.kind === 'hook').map((c) => ({ endSec: +c.end.toFixed(3) }))[0] || null,
-      behind: S.insertsDraft.filter((c) => c.kind === 'behind').map((c) => ({ ref: c.ref, start: +c.start.toFixed(3), dur: +(c.end - c.start).toFixed(3) })),
-      wordAccents: S.insertsDraft.filter((c) => c.kind === 'word').map((c) => ({ ref: c.ref, text: c.label, start: +c.start.toFixed(3), end: +c.end.toFixed(3) })),
-    };
-  }
-  if (S.notes.length) {
-    // written in the draft timeline the user was actually looking at, plus the
-    // rendered-timeline equivalent so the skill can find the spot in cut.mp4
-    payload.notes = S.notes.map((n) => ({
-      start: +n.start.toFixed(3),
-      end: +n.end.toFixed(3),
-      renderedStart: +draftToRendered(n.start).toFixed(3),
-      renderedEnd: +draftToRendered(n.end).toFixed(3),
-      phase: S.tab === 2 ? 2 : 1,
-      text: n.text,
-    }));
-  }
-  const capFixes = Object.values(S.captionFixes);
-  if (capFixes.length) {
-    // text only — `from`/`start`/`end` are there so the skill can locate the
-    // line in captions.json; it re-runs the caption pipeline rather than
-    // patching word timings by hand
-    payload.captionFixes = capFixes.map((f) => ({
-      from: f.from,
-      to: f.to,
-      renderedStart: +f.start.toFixed(3),
-      renderedEnd: +f.end.toFixed(3),
-    }));
-  }
-  const res = await fetch(`${BASE}/api/save`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-  if ((await res.json()).ok) {
-    S.savedPending = true;
-    S.notes = [];
-    S.captionFixes = {};
-    S.pendingIn = null;
-    S.draft.forEach((r) => { r.orig = { start: r.start, end: r.end }; if (r.removed) r.hardRemoved = true; });
-    // keep visual state but clear dirty counters
-    S.draft = S.draft.filter((r) => !r.removed);
-    S.insertsDraft.forEach((c) => { c.orig = { start: c.start, end: c.end }; });
-    // undo/redo can't reach past a save — the server already has this state
-    S.history = []; S.future = []; refreshUndoRedoButtons();
-    renderAll(); refreshHeader();
-    toast('✓ Salvo — o Claude foi avisado e vai aplicar os ajustes', 5000);
-  } else {
-    toast('Erro ao salvar — o servidor está de pé?', 4000);
-  }
+  await saveEditsAndReturnToQueue();
 });
 
 $('btnDiscard').addEventListener('click', () => {
@@ -2983,6 +3440,323 @@ function toast(msg, ms) {
   toastTimer = setTimeout(() => t.classList.add('hidden'), ms || 3000);
 }
 
+
+// ---------- automação / safe zone / IA edit / score ----------
+function refreshAutoControls() {
+  const st = S.style || {};
+  const map = [
+    ['autoRhythm', 'rhythm', 'dinamico'],
+    ['autoIntensity', 'intensity', 'medio'],
+    ['autoSpeech', 'speechClean', 'medio'],
+    ['autoGoal', 'videoGoal', 'reels'],
+    ['autoBroll', 'brollMode', 'quando_necessario'],
+    ['autoExport', 'exportPreset', 'reels'],
+    ['autoCaptionChunk', 'captionChunk', 'frase_curta'],
+  ];
+  for (const [id, key, def] of map) {
+    const el = $(id);
+    if (!el) continue;
+    const v = st[key] || (SHARED_DEFAULT_STYLE && SHARED_DEFAULT_STYLE[key]) || def;
+    el.value = v;
+  }
+}
+
+function wireAutoControls() {
+  const map = [
+    ['autoRhythm', 'rhythm'],
+    ['autoIntensity', 'intensity'],
+    ['autoSpeech', 'speechClean'],
+    ['autoGoal', 'videoGoal'],
+    ['autoBroll', 'brollMode'],
+    ['autoExport', 'exportPreset'],
+    ['autoCaptionChunk', 'captionChunk'],
+  ];
+  for (const [id, key] of map) {
+    const el = $(id);
+    if (!el) continue;
+    el.addEventListener('change', () => {
+      if (!S.style) S.style = defaultStyle();
+      S.style[key] = el.value;
+    });
+  }
+}
+
+function refreshSafeZone() {
+  const on = localStorage.getItem('ativa-vid.safeZone') === '1';
+  const sz = $('safeZone');
+  const btn = $('btnSafeZone');
+  if (sz) sz.classList.toggle('hidden', !on);
+  if (btn) btn.classList.toggle('on', on);
+}
+
+async function detectProxy() {
+  try {
+    const r = await fetch(`${BASE}/media/cut_proxy.mp4`, { method: 'HEAD' });
+    S.hasProxy = r.ok;
+    if (r.ok) S.proxyFailed = false;
+  } catch { S.hasProxy = false; }
+}
+
+const AI_UNDO = [];
+
+function aiAppendMsg(text, kind = 'bot') {
+  const thread = $('aiThread');
+  if (!thread || !text) return null;
+  const bubble = document.createElement('div');
+  bubble.className = `ai-msg ai-msg-${kind}`;
+  bubble.textContent = text;
+  thread.appendChild(bubble);
+  thread.scrollTop = thread.scrollHeight;
+  return bubble;
+}
+
+function openAiPanel() {
+  const panel = $('aiPanel');
+  if (!panel) return;
+  panel.classList.add('solid-float');
+  panel.classList.remove('hidden');
+  $('aiPrompt')?.focus();
+}
+function closeAiPanel() {
+  $('aiPanel')?.classList.add('hidden');
+}
+
+function applyTimelineOps(ops) {
+  if (!Array.isArray(ops) || !ops.length) return;
+  for (const op of ops) {
+    if (!op || !op.op) continue;
+    if (op.op === 'remove_range') {
+      removeDraftTimeRange(+op.start, +op.end);
+    } else if (op.op === 'trim_range') {
+      // remove before start, then after end (draft timeline seconds)
+      const total = draftTotal();
+      if (+op.start > 0.05) removeDraftTimeRange(0, +op.start);
+      if (+op.end < total - 0.05) removeDraftTimeRange(+op.end, total + 1);
+    } else if (op.op === 'set_duration_max') {
+      const total = draftTotal();
+      const maxSec = +op.maxSec;
+      if (maxSec > 0.5 && maxSec < total - 0.05) removeDraftTimeRange(maxSec, total + 1);
+    } else if (op.op === 'regenerate_hook' || op.op === 'mark_hook') {
+      if (op.lines && S.editData) {
+        S.editData.hook = { ...(S.editData.hook || {}), enabled: true, lines: op.lines };
+      }
+      if (op.op === 'mark_hook' && S.editData) {
+        const end = Math.max(1.5, (+op.end || 3) - (+op.start || 0));
+        S.editData.hook = { ...(S.editData.hook || {}), enabled: true, endSec: end };
+      }
+      buildInsertsDraft();
+    }
+  }
+}
+
+async function runAiEdit() {
+  const prompt = ($('aiPrompt').value || '').trim();
+  if (prompt.length < 3) { toast('Escreva o que mudar'); return; }
+  $('aiGo').disabled = true;
+  const errBox = $('aiErr');
+  if (errBox) errBox.classList.add('hidden');
+  aiAppendMsg(prompt, 'user');
+  $('aiPrompt').value = '';
+  const status = aiAppendMsg('Pensando…', 'status');
+  try {
+    const before = snapshotState();
+    const body = {
+      prompt,
+      durationSec: S.videoDuration || draftTotal() || null,
+      style: S.style,
+      editData: S.editData,
+      notes: S.notes,
+      folder: projectFolder(),
+    };
+    const res = await fetch('/api/ai-edit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || 'Falha na IA');
+    const patch = data.patch || {};
+    pushHistory();
+    AI_UNDO.push(before);
+    const beforeInsertKeys = new Set(
+      ((S.editData && S.editData.inserts) || [])
+        .map((it) => `${it.src || ''}|${Number(it.start) || 0}`)
+    );
+    if (patch.style) {
+      S.style = { ...S.style, ...patch.style, elements: { ...S.style.elements, ...(patch.style.elements || {}) } };
+    }
+    if (patch.editData) S.editData = { ...(S.editData || {}), ...patch.editData };
+    if (Array.isArray(patch.notes)) S.notes = patch.notes;
+    applyTimelineOps(patch.timelineOps || []);
+    buildInsertsDraft();
+    for (const c of S.insertsDraft) {
+      if (c.kind === 'insert' && c.src && !beforeInsertKeys.has(`${c.src}|${c.start}`)) {
+        c.isNew = true;
+      }
+    }
+    renderSetup();
+    renderClips();
+    renderNotes();
+    refreshHeader();
+    $('aiUndo').disabled = AI_UNDO.length === 0;
+    const nOps = (patch.timelineOps || []).length;
+    const reply = (data.summary || 'Alterações aplicadas')
+      + (data.actions && data.actions.length ? `\n${data.actions.length} ação(ões)` : '')
+      + (nOps ? ` · ${nOps} no corte` : '');
+    if (status) status.remove();
+    aiAppendMsg(reply, 'bot');
+    toast(data.summary || 'Alterações aplicadas');
+    scheduleAutosave();
+  } catch (e) {
+    const msg = e.message || 'erro';
+    if (status) status.remove();
+    if (errBox && $('aiErrText')) {
+      $('aiErrText').textContent = msg;
+      errBox.classList.remove('hidden');
+    } else {
+      aiAppendMsg(msg, 'bot');
+    }
+    toast(msg.length > 80 ? 'Sessão IA incompleta — veja Chaves & IA' : msg);
+  } finally {
+    $('aiGo').disabled = false;
+  }
+}
+
+function undoAiEdit() {
+  const snap = AI_UNDO.pop();
+  if (!snap) return;
+  pushHistory();
+  S.draft = snap.draft;
+  S.insertsDraft = snap.insertsDraft;
+  S.notes = snap.notes;
+  S.style = snap.style;
+  S.captionFixes = snap.captionFixes || {};
+  renderSetup();
+  renderClips();
+  refreshHeader();
+  $('aiUndo').disabled = AI_UNDO.length === 0;
+  toast('Desfeito');
+}
+
+function wireAiAndSafe() {
+  const aiBtn = $('btnAiEdit');
+  if (aiBtn) aiBtn.onclick = openAiPanel;
+  const aiClose = $('aiClose');
+  if (aiClose) aiClose.onclick = closeAiPanel;
+  const aiGo = $('aiGo');
+  if (aiGo) aiGo.onclick = () => runAiEdit();
+  const aiUndo = $('aiUndo');
+  if (aiUndo) aiUndo.onclick = undoAiEdit;
+  const aiPrompt = $('aiPrompt');
+  if (aiPrompt) aiPrompt.addEventListener('keydown', (e) => e.stopPropagation());
+  const sz = $('btnSafeZone');
+  if (sz) {
+    sz.onclick = () => {
+      const on = localStorage.getItem('ativa-vid.safeZone') !== '1';
+      localStorage.setItem('ativa-vid.safeZone', on ? '1' : '0');
+      refreshSafeZone();
+    };
+  }
+  refreshSafeZone();
+  wireAutoControls();
+}
+
+
+// ---------- score panel + autosave ----------
+async function refreshScorePill() {
+  const pill = $('scorePill');
+  if (!pill) return;
+  try {
+    const r = await fetch(`${BASE}/media/score.json?v=${Date.now()}`);
+    if (!r.ok) { pill.classList.add('hidden'); return; }
+    const s = await r.json();
+    S.lastScore = s;
+    $('scoreVal').textContent = s.overall != null ? s.overall : '—';
+    pill.title = (s.disclaimer || '') + (s.tips && s.tips[0] ? ' · ' + s.tips[0] : '');
+    pill.classList.remove('hidden');
+    pill.onclick = () => openScorePanel();
+  } catch {
+    pill.classList.add('hidden');
+  }
+}
+
+function openScorePanel() {
+  const s = S.lastScore;
+  if (!s) return;
+  let panel = $('scorePanel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'scorePanel';
+    panel.className = 'score-panel solid-float';
+    document.body.appendChild(panel);
+  }
+  panel.classList.add('solid-float');
+  const tip = (s.tips || []).map((x) => `<li>${x}</li>`).join('') || '<li>Sem alertas.</li>';
+  panel.innerHTML = `
+    <div class="score-head"><strong>Análise estrutural</strong>
+      <button type="button" class="btn ghost small" id="scoreClose">✕</button></div>
+    <p class="score-disc">${s.disclaimer || ''}</p>
+    <div class="score-grid">
+      <div><span>Geral</span><b>${s.overall ?? '—'}</b></div>
+      <div><span>Hook</span><b>${s.hook ?? '—'}</b></div>
+      <div><span>Clareza</span><b>${s.clarity ?? '—'}</b></div>
+      <div><span>Ritmo</span><b>${s.rhythm ?? '—'}</b></div>
+      <div><span>CTA</span><b>${s.cta ?? '—'}</b></div>
+    </div>
+    <ul class="score-tips">${tip}</ul>`;
+  panel.classList.remove('hidden');
+  const c = $('scoreClose');
+  if (c) c.onclick = () => panel.classList.add('hidden');
+}
+
+let _autosaveTimer = null;
+function scheduleAutosave() {
+  clearTimeout(_autosaveTimer);
+  _autosaveTimer = setTimeout(() => {
+    try {
+      const key = `ativavid-autosave:${BASE || 'house'}`;
+      const payload = {
+        at: Date.now(),
+        draft: S.draft,
+        insertsDraft: S.insertsDraft,
+        notes: S.notes,
+        style: S.style,
+        captionFixes: S.captionFixes,
+      };
+      localStorage.setItem(key, JSON.stringify(payload));
+    } catch { /* quota */ }
+  }, 1200);
+}
+
+function restoreAutosave() {
+  try {
+    const key = `ativavid-autosave:${BASE || 'house'}`;
+    const raw = localStorage.getItem(key);
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    if (!data || !Array.isArray(data.draft) || !data.draft.length) return false;
+    if (Date.now() - (data.at || 0) > 1000 * 60 * 60 * 48) return false; // 48h
+    if (!confirm('Há um rascunho automático deste projeto. Restaurar?')) {
+      localStorage.removeItem(key);
+      return false;
+    }
+    pushHistory();
+    S.draft = data.draft;
+    S.insertsDraft = data.insertsDraft || [];
+    S.notes = data.notes || [];
+    if (data.style) S.style = data.style;
+    S.captionFixes = data.captionFixes || {};
+    if ((S.style?.edit || 'limpa') === 'limpa') {
+      S.insertsDraft = (S.insertsDraft || []).filter((c) => c.kind !== 'insert');
+      if (S.editData) S.editData.inserts = [];
+    }
+    renderAll();
+    refreshHeader();
+    toast('Rascunho restaurado', 2500);
+    return true;
+  } catch { return false; }
+}
+
 // ---------- boot ----------
 document.querySelectorAll('.tl-chip[data-icon]').forEach((c) => {
   c.innerHTML = ICON[c.dataset.icon] || '';
@@ -2998,7 +3772,20 @@ $('jcutToggle').addEventListener('click', () => {
   positionNeedle();
 });
 
-loadSharedDefaultStyle().then(poll); // wait for it once — a flash of the wrong default is worse than a beat of delay
+wireAiAndSafe();
+wireProxyFallback();
+loadSharedDefaultStyle().then(async () => {
+  await detectProxy();
+  await refreshScorePill();
+  poll();
+  setTimeout(() => restoreAutosave(), 800);
+});
+// autosave on edits
+const _pushHistory = pushHistory;
+pushHistory = function(snap) {
+  _pushHistory(snap);
+  scheduleAutosave();
+}; // wait for it once — a flash of the wrong default is worse than a beat of delay
 rafLoop();
 // the headline fit is MEASURED, so it is wrong until Poppins is actually
 // loaded — rebuild once the fonts land

@@ -96,6 +96,29 @@ def load_words(transcript_path: Path) -> list[dict]:
     return fused
 
 
+def load_words_from_captions(captions_path: Path) -> list[dict]:
+    """Words already timed on the cut timeline (captions.json / @remotion/captions)."""
+    words: list[dict] = []
+    for c in json.loads(captions_path.read_text(encoding="utf-8")):
+        text = (c.get("text") or "").strip()
+        if not text:
+            continue
+        start = int(c["startMs"])
+        end = int(c["endMs"])
+        if end <= start:
+            end = start + 120
+        words.append({"text": text, "startMs": start, "endMs": end})
+    words.sort(key=lambda x: x["startMs"])
+    fused: list[dict] = []
+    for w in words:
+        if fused and w["text"].startswith("."):
+            fused[-1]["text"] += w["text"]
+            fused[-1]["endMs"] = w["endMs"]
+        else:
+            fused.append(dict(w))
+    return fused
+
+
 _PICTO_JOINERS = {0x200D, 0xFE0E, 0xFE0F}  # ZWJ + variation selectors
 
 
@@ -295,10 +318,11 @@ def build_cues(words: list[dict]) -> list[dict]:
         start = cw[0]["startMs"]
         end = cw[-1]["endMs"]
         if len(cw) == 1:
-            if norm(cw[0]["text"]) in EMPH:
+            # Prefer pencil-circle solos — the scratch SFX is the ASMR beat users notice
+            if norm(cw[0]["text"]) in EMPH or solo_alt % 2 == 0:
                 preset = "SOLO_OUTLINE"
             else:
-                preset = "SOLO_BIG" if solo_alt % 2 == 0 else "SOLO_OUTLINE"
+                preset = "SOLO_BIG"
             solo_alt += 1
             lines = [[cw[0]]]
             styles, boost, emph = [0], [False], [False]
@@ -328,12 +352,20 @@ def build_cues(words: list[dict]) -> list[dict]:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="→ caption-cues.json (stacked caption style)")
-    ap.add_argument("--transcript", type=Path, required=True, help="Transcript of the final cut.mp4")
+    ap.add_argument("--transcript", type=Path, default=None, help="Transcript of the final cut.mp4")
+    ap.add_argument("--captions", type=Path, default=None,
+                    help="captions.json already on the cut timeline (preferred when EDL-remapped)")
     ap.add_argument("-o", "--output", type=Path, required=True, help="Output caption-cues.json path")
     ap.add_argument("--lang", default="pt", help="Language hint for accent/negation lists (default pt)")
     args = ap.parse_args()
 
-    words = load_words(args.transcript.resolve())
+    if args.captions:
+        words = load_words_from_captions(args.captions.resolve())
+    elif args.transcript:
+        words = load_words(args.transcript.resolve())
+    else:
+        ap.error("provide --captions or --transcript")
+
     cues = build_cues(words)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(cues, ensure_ascii=False), encoding="utf-8")
