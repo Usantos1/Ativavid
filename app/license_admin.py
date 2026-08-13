@@ -61,6 +61,11 @@ def _rpc_admin(action: str, **kwargs: Any) -> dict[str, Any]:
         with request.urlopen(req, timeout=20) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             if isinstance(data, dict):
+                if data.get("error") == "unknown_action":
+                    data.setdefault(
+                        "message",
+                        "RPC admin desatualizado no Supabase. Rode de novo o arquivo supabase/rpc_admin.sql (inteiro) no SQL Editor.",
+                    )
                 return data
             return {"ok": False, "error": "bad_response", "raw": data}
     except error.HTTPError as e:

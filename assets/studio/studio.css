@@ -156,6 +156,7 @@ html[data-theme="light"] .titlebar::after {
   height: 100%;
   margin: 0;
   padding: 0;
+  gap: 0;
 }
 .tb-btn,
 .tb-win {
@@ -164,7 +165,7 @@ html[data-theme="light"] .titlebar::after {
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: var(--dim);
+  color: color-mix(in srgb, var(--text) 72%, var(--dim));
   display: grid;
   place-items: center;
   padding: 0;
@@ -191,10 +192,15 @@ html[data-theme="light"] .titlebar::after {
   height: 12px;
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.2;
+  stroke-width: 1.35;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
+.tb-win .ico-rest {
+  display: none;
+}
+body.maximized .tb-win .ico-max { display: none; }
+body.maximized .tb-win .ico-rest { display: block; }
 .tb-btn:hover,
 .tb-win:hover {
   background: color-mix(in srgb, var(--text) 8%, transparent);
@@ -211,21 +217,21 @@ html[data-theme="light"] .titlebar::after {
 }
 .tb-chip {
   align-self: center;
-  margin-right: 4px;
+  margin: 0 2px 0 0;
   border: 1px solid var(--line);
   background: color-mix(in srgb, var(--text) 4%, transparent);
   color: var(--dim);
   border-radius: 999px;
   padding: 3px 10px;
   font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  line-height: 1.2;
-  transition: border-color .15s, color .15s, background .15s;
+  font-weight: 650;
+  height: 26px;
+  line-height: 1;
+  white-space: nowrap;
 }
 .tb-chip:hover {
-  border-color: var(--teal);
   color: var(--text);
+  border-color: color-mix(in srgb, var(--text) 22%, transparent);
 }
 .tb-chip.update-available {
   border-color: var(--accent);
@@ -236,12 +242,10 @@ html[data-theme="light"] .titlebar::after {
   width: 1px;
   align-self: center;
   height: 16px;
-  margin: 0 4px;
+  margin: 0 2px;
   background: var(--line);
+  flex: 0 0 auto;
 }
-body.maximized .tb-win .ico-max { display: none; }
-body.maximized .tb-win .ico-rest { display: block !important; }
-body:not(.maximized) .tb-win .ico-rest { display: none !important; }
 
 .app-shell {
   display: grid;
@@ -1537,13 +1541,14 @@ body.view-estilo-on .ws-head {
 .lic-block {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
   padding: 16px 16px 14px;
   border-radius: 14px;
   border: 1px solid color-mix(in srgb, var(--text) 9%, transparent);
   background: color-mix(in srgb, var(--panel, #141414) 88%, transparent);
   min-width: 0;
-  height: 100%;
+  min-height: 0;
+  height: auto;
 }
 .sys-card h4,
 .sys-block h4,
@@ -1554,7 +1559,11 @@ body.view-estilo-on .ws-head {
   font-weight: 700;
 }
 .sys-card .panel-actions,
-.lic-block .panel-actions {
+.lic-block > .panel-actions.admin-access-actions {
+  margin-top: 8px;
+  padding-top: 4px;
+}
+.sys-card .panel-actions:last-of-type {
   margin-top: auto;
   padding-top: 12px;
 }
@@ -1843,6 +1852,34 @@ body.view-estilo-on .ws-head {
   margin: 6px 0 0;
   font-weight: 650;
 }
+.dlg-login-remember {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--dim);
+  cursor: pointer;
+  user-select: none;
+}
+.dlg-login-remember input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.dlg-login-form .key-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+}
+.dlg-login-actions {
+  margin-top: 16px;
+  justify-content: stretch;
+}
+.dlg-login-actions .export-btn { flex: 1; width: 100%; }
 .dlg-login-tabs {
   display: flex;
   gap: 6px;
@@ -1863,10 +1900,82 @@ body.view-estilo-on .ws-head {
   border-color: color-mix(in srgb, var(--accent) 45%, transparent);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
-.admin-day-presets { margin-top: 4px; }
+.admin-day-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
+}
 .admin-day-presets .ghost-btn {
   min-width: 48px;
   padding-inline: 10px;
+}
+.admin-access-list {
+  margin-top: 4px;
+  border: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+  overflow: hidden;
+}
+.admin-access-empty {
+  padding: 14px 12px;
+  margin: 0;
+}
+.admin-access-table.wrap {
+  overflow: auto;
+  max-height: min(320px, 42vh);
+}
+.access-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.access-table th,
+.access-table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid color-mix(in srgb, var(--text) 7%, transparent);
+  vertical-align: middle;
+}
+.access-table th {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted, var(--dim));
+  font-weight: 700;
+  position: sticky;
+  top: 0;
+  background: color-mix(in srgb, var(--panel) 92%, #000);
+}
+.access-table td:first-child {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.access-st {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+.access-st.active {
+  color: #7dffa0;
+  background: color-mix(in srgb, #7dffa0 14%, transparent);
+}
+.access-st.revoked {
+  color: #ff8f9f;
+  background: color-mix(in srgb, #ff8f9f 12%, transparent);
+}
+.access-table .ghost-btn {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 11px;
 }
 
 @media (max-width: 720px) {

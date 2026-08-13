@@ -1136,10 +1136,17 @@ function dirtyCount() {
 }
 function refreshHeader() {
   const n = dirtyCount();
+  const save = $('btnSave');
+  const discard = $('btnDiscard');
   $('dirtyPill').classList.toggle('hidden', n === 0);
   $('dirtyCount').textContent = n;
-  $('btnSave').classList.toggle('hidden', n === 0);
-  $('btnDiscard').classList.toggle('hidden', n === 0);
+  // Sempre visíveis — só desabilitam quando não há o que salvar
+  save.classList.remove('hidden');
+  discard.classList.remove('hidden');
+  save.disabled = n === 0;
+  discard.disabled = n === 0;
+  save.title = n === 0 ? 'Nada para salvar' : 'Salvar ajustes';
+  discard.title = n === 0 ? 'Nada para descartar' : 'Descartar ajustes';
   $('savedPill').classList.toggle('hidden', !(S.savedPending && n === 0));
 }
 
@@ -1349,6 +1356,7 @@ async function rebuildProxy() {
 }
 
 function wireProxyFallback() {
+  let rebuilding = false;
   video.addEventListener('error', () => {
     const rel = video.dataset.rel || '';
     if (rel.includes('cut_proxy')) {
@@ -1356,7 +1364,10 @@ function wireProxyFallback() {
       S.hasProxy = false;
       updateVideoSrc();
       toast('Proxy falhou — usando vídeo completo', 2800);
-      rebuildProxy(); // tenta regenerar em background
+      if (!rebuilding) {
+        rebuilding = true;
+        rebuildProxy().finally(() => { rebuilding = false; });
+      }
     }
   });
 }

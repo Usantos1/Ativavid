@@ -30,7 +30,7 @@ WINDOW_TITLE = "ATIVAVID"
 
 
 class WindowApi:
-    """Botões da titlebar CapCut (min / max / fechar)."""
+    """Botões da titlebar CapCut (min / max / fechar → bandeja)."""
 
     def __init__(self) -> None:
         self._window = None
@@ -94,8 +94,146 @@ class WindowApi:
         return bool(self._maximized)
 
     def close(self) -> None:
+        """X da titlebar: esconde na bandeja — servidor e cookies continuam."""
+        _hide_to_tray(self)
+
+    def show_window(self) -> None:
+        _show_from_tray(self)
+
+    def quit_app(self) -> None:
+        """Sair de verdade (menu da bandeja)."""
+        global _TRAY_ICON, _QUIT_REQUESTED
+        _QUIT_REQUESTED = True
+        try:
+            if _TRAY_ICON is not None:
+                _TRAY_ICON.stop()
+        except Exception:
+            pass
+        _TRAY_ICON = None
         if self._window:
-            self._window.destroy()
+            try:
+                self._window.destroy()
+            except Exception:
+                pass
+
+
+_TRAY_ICON = None
+_QUIT_REQUESTED = False
+_API_REF: WindowApi | None = None
+_SHOW_REQUEST = Path.home() / "ATIVAVID" / "show.request"
+
+
+def _hide_to_tray(api: WindowApi) -> None:
+    if not api._window:
+        return
+    try:
+        api._window.hide()
+    except Exception:
+        try:
+            api._window.minimize()
+        except Exception:
+            pass
+    _ensure_tray(api)
+
+
+def _show_from_tray(api: WindowApi | None = None) -> None:
+    api = api or _API_REF
+    hwnd = _find_hwnd()
+    if hwnd:
+        try:
+            import ctypes
+
+            SW_RESTORE = 9
+            ctypes.windll.user32.ShowWindow(hwnd, SW_RESTORE)
+            ctypes.windll.user32.SetForegroundWindow(hwnd)
+        except Exception:
+            pass
+    if api and api._window:
+        try:
+            api._window.show()
+            api._window.restore()
+        except Exception:
+            pass
+    try:
+        if _SHOW_REQUEST.exists():
+            _SHOW_REQUEST.unlink()
+    except OSError:
+        pass
+
+
+def _ensure_tray(api: WindowApi) -> None:
+    global _TRAY_ICON, _API_REF
+    _API_REF = api
+    if _TRAY_ICON is not None:
+        return
+    try:
+        import pystray
+        from PIL import Image
+    except ImportError:
+        return
+
+    icon_path = REPO / "assets" / "preview" / "ativa-vid-icon.png"
+    try:
+        image = Image.open(icon_path) if icon_path.exists() else Image.new("RGB", (64, 64), (255, 80, 120))
+    except Exception:
+        image = Image.new("RGB", (64, 64), (255, 80, 120))
+
+    def on_show(icon, item):  # noqa: ARG001
+        _show_from_tray(api)
+
+    def on_quit(icon, item):  # noqa: ARG001
+        api.quit_app()
+
+    menu = pystray.Menu(
+        pystray.MenuItem("Abrir ATIVAVID", on_show, default=True),
+        pystray.MenuItem("Sair", on_quit),
+    )
+    _TRAY_ICON = pystray.Icon("ativavid", image, "ATIVAVID (em segundo plano)", menu)
+
+    def _run() -> None:
+        try:
+            _TRAY_ICON.run()
+        except Exception:
+            pass
+
+    threading.Thread(target=_run, name="ativavid-tray", daemon=True).start()
+
+
+def _watch_show_request(api: WindowApi) -> None:
+    while not _QUIT_REQUESTED:
+        try:
+            if _SHOW_REQUEST.exists():
+                _show_from_tray(api)
+        except Exception:
+            pass
+        time.sleep(0.6)
+
+
+def _handoff_if_running(port: int) -> bool:
+    """Se o servidor já está no ar, só reabre a janela (não sobe 2º processo)."""
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/health", timeout=0.6) as r:
+            if r.status != 200:
+                return False
+    except Exception:
+        return False
+    hwnd = _find_hwnd()
+    if hwnd:
+        try:
+            import ctypes
+
+            SW_RESTORE = 9
+            ctypes.windll.user32.ShowWindow(hwnd, SW_RESTORE)
+            ctypes.windll.user32.SetForegroundWindow(hwnd)
+        except Exception:
+            pass
+        return True
+    try:
+        _SHOW_REQUEST.parent.mkdir(parents=True, exist_ok=True)
+        _SHOW_REQUEST.write_text("1", encoding="utf-8")
+    except OSError:
+        pass
+    return True
 
 
 _MAXIMIZED = False
@@ -503,12 +641,32 @@ def main() -> None:
     ap.add_argument("--browser", action="store_true")
     args = ap.parse_args()
 
+    # Extensão de cookies: cópia estável fora de Program Files
+    try:
+        from app.extension_sync import sync_extension
+
+        sync_extension()
+    except Exception:
+        pass
+
+    if not args.browser and _handoff_if_running(args.port):
+        print("ATIVAVID já estava aberto — janela restaurada.", flush=True)
+        return
+
     srv, url = ds.build_server(args.projects_root, args.port)
     print(f"ATIVAVID Local -> {url}", flush=True)
     print(f"Projetos: {args.projects_root.expanduser().resolve()}", flush=True)
 
     threading.Thread(target=srv.serve_forever, name="ativavid-http", daemon=True).start()
     _wait_http(url)
+
+    # Renova JWT se existir — mantém login entre aberturas
+    try:
+        from app import auth as au
+
+        au.ensure_session()
+    except Exception:
+        pass
 
     if args.browser:
         import webbrowser
@@ -607,11 +765,20 @@ def main() -> None:
     except Exception:
         pass
 
+    threading.Thread(target=_watch_show_request, args=(api,), name="ativavid-show", daemon=True).start()
+
     webview.start(gui="edgechromium", debug=False, icon=str(icon) if icon.exists() else None)
     try:
         srv.shutdown()
     except Exception:
         pass
+    global _TRAY_ICON
+    try:
+        if _TRAY_ICON is not None:
+            _TRAY_ICON.stop()
+    except Exception:
+        pass
+    _TRAY_ICON = None
 
 
 if __name__ == "__main__":

@@ -29,6 +29,13 @@ import sys
 from pathlib import Path
 
 SKILL = Path(__file__).resolve().parent.parent
+if str(SKILL) not in sys.path:
+    sys.path.insert(0, str(SKILL))
+try:
+    from app.win_process import hide_console_kwargs
+except Exception:  # noqa: BLE001
+    def hide_console_kwargs() -> dict:  # type: ignore[misc]
+        return {}
 
 OK, AVISO, BLOQUEIO = "ok", "aviso", "bloqueio"
 _itens: list[dict] = []
@@ -41,7 +48,7 @@ def diz(nivel: str, titulo: str, detalhe: str = "", solucao: str = "") -> None:
 def versao(cmd: list[str]) -> str:
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=20,
-                           encoding="utf-8", errors="replace")
+                           encoding="utf-8", errors="replace", **hide_console_kwargs())
         primeira = (r.stdout or r.stderr or "").strip().splitlines()
         return primeira[0][:70] if primeira else ""
     except (OSError, subprocess.SubprocessError):
@@ -183,7 +190,7 @@ def checar_processos() -> None:
              "Where-Object { $_.CommandLine -match 'preview_server|watch_edits' } | "
              "ForEach-Object { \"$($_.ProcessId)|$($_.CommandLine)\" }"],
             capture_output=True, text=True, timeout=25, stdin=subprocess.DEVNULL,
-            encoding="utf-8", errors="replace")
+            encoding="utf-8", errors="replace", **hide_console_kwargs())
     except (OSError, subprocess.SubprocessError):
         return
     linhas = [l.strip() for l in (r.stdout or "").splitlines() if l.strip()]

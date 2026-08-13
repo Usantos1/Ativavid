@@ -472,11 +472,18 @@ body.portrait .editor-col .transport { align-self: stretch; width: auto; }
 .transport {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   padding: 6px 12px;
   border-radius: 12px;
-  width: min(860px, 96%);
+  width: 100%;
+  max-width: min(860px, 100%);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+  overflow: visible;
+}
+.head-actions .btn:disabled {
+  opacity: 0.42;
+  cursor: default;
 }
 .transport .spacer { flex: 1; }
 /* separates "play the thing" + "mark a correction" from "look at the
@@ -2468,6 +2475,12 @@ body.hub-embed .editor-pane {
   flex-direction: column;
   background: var(--bg0);
 }
+html.hub-embed .titlebar,
+body.hub-embed .titlebar,
+html.hub-embed #hubSidebar,
+body.hub-embed #hubSidebar {
+  display: none !important;
+}
 
 @media (max-width: 1100px) {
   html.hub-embed .setup-inner,
@@ -2518,10 +2531,17 @@ body.editor-shell .editor-pane {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background:
-    radial-gradient(1200px 600px at 80% -10%, color-mix(in srgb, var(--teal) 18%, transparent), transparent 60%),
-    radial-gradient(1000px 500px at -10% 110%, color-mix(in srgb, var(--orange) 14%, transparent), transparent 60%),
-    linear-gradient(160deg, var(--bg1), var(--bg0));
+  background: var(--chrome-bg, var(--bg0));
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+body.editor-shell .editor-pane > .titlebar {
+  flex: 0 0 auto;
+}
+body.editor-shell .editor-pane > header.glass {
+  margin: 0 12px 0 0;
+  border-radius: 14px 0 0 0;
 }
 body.editor-shell:not(.hub-embed) .logo-chip {
   display: none;
@@ -2530,6 +2550,12 @@ body.editor-shell .editor-pane > main {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
+  margin: 0 12px 12px 0;
+  border-radius: 0 0 0 14px;
+  background:
+    radial-gradient(1200px 600px at 80% -10%, color-mix(in srgb, var(--teal) 18%, transparent), transparent 60%),
+    radial-gradient(1000px 500px at -10% 110%, color-mix(in srgb, var(--orange) 14%, transparent), transparent 60%),
+    linear-gradient(160deg, var(--bg1), var(--bg0));
 }
 body.editor-shell header.glass {
   flex: 0 0 auto;

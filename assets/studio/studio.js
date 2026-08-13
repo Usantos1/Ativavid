@@ -213,9 +213,14 @@ function renderJobs() {
     a[j.status] = (a[j.status] || 0) + 1;
     return a;
   }, {});
-  $("#queueMeta").textContent = state.jobs.length
-    ? Object.entries(counts).map(([k, v]) => `${v} ${STATUS_LABEL[k] || k}`).join(" · ")
-    : "Nenhum projeto";
+  const meta = $("#queueMeta");
+  if (meta) {
+    const workView = ["import", "fila", "done"].includes(state.view);
+    meta.hidden = !workView;
+    meta.textContent = state.jobs.length
+      ? Object.entries(counts).map(([k, v]) => `${v} ${STATUS_LABEL[k] || k}`).join(" · ")
+      : "Nenhum projeto";
+  }
 
   renderInto("jobListRecent", null, filterJobs("recent"));
   renderInto("jobListFila", "emptyFila", fila);
@@ -731,11 +736,13 @@ function setAuthDialogMode(mode) {
     if (hint) hint.textContent = "Crie sua conta. Depois o admin libera os dias de acesso neste e-mail.";
     if (btn) btn.textContent = "Criar conta";
     if ($("#authPassword")) $("#authPassword").autocomplete = "new-password";
+    if ($("#authRememberWrap")) $("#authRememberWrap").hidden = true;
   } else {
     if (title) title.textContent = "Entrar na conta";
     if (hint) hint.textContent = "Use o e-mail e a senha da sua conta. Admin libera os dias de acesso.";
     if (btn) btn.textContent = "Entrar";
     if ($("#authPassword")) $("#authPassword").autocomplete = "current-password";
+    if ($("#authRememberWrap")) $("#authRememberWrap").hidden = false;
   }
 }
 
@@ -747,10 +754,23 @@ function openLoginDialog(mode) {
     err.hidden = true;
     err.textContent = "";
   }
-  if ($("#authPassword")) $("#authPassword").value = "";
+  if ($("#authPassword")) {
+    $("#authPassword").value = "";
+    $("#authPassword").type = "password";
+  }
+  try {
+    const remembered = localStorage.getItem("ativavid-auth-email") || "";
+    const rememberOn = localStorage.getItem("ativavid-auth-remember") !== "0";
+    if ($("#authRemember")) $("#authRemember").checked = rememberOn;
+    if ($("#authEmail") && remembered && rememberOn) $("#authEmail").value = remembered;
+  } catch { /* ignore */ }
   setAuthDialogMode(mode || "login");
   if (!dlg.open) dlg.showModal();
-  setTimeout(() => $("#authEmail")?.focus(), 30);
+  setTimeout(() => {
+    const email = $("#authEmail");
+    if (email && !email.value) email.focus();
+    else $("#authPassword")?.focus();
+  }, 30);
 }
 
 function closeLoginDialog() {
@@ -797,6 +817,12 @@ function displayNameFromEmail(email) {
     .join(" ") || "Conta";
 }
 
+function adminOut(x) {
+  const el = $("#adminLicOut");
+  if (!el) return;
+  el.textContent = typeof x === "string" ? x : JSON.stringify(x, null, 2);
+}
+
 function applyAccountChrome(st) {
   const logged = !!st?.loggedIn;
   const email = st?.email || "";
@@ -833,7 +859,100 @@ function applyAccountChrome(st) {
     }
   }
   const panel = $("#licenseAdminPanel");
-  if (panel) panel.hidden = !(logged && st.isAdmin);
+  if (panel) {
+    const show = !!(logged && st.isAdmin);
+    panel.hidden = !show;
+    if (show) loadAccessList().catch(() => {});
+  }
+}
+
+function fmtAccessUntil(v) {
+  if (!v) return "—";
+  try {
+    const d = new Date(v);
+    if (Number.isNaN(d.getTime())) return String(v).slice(0, 10);
+    return d.toLocaleDateString("pt-BR");
+  } catch {
+    return String(v).slice(0, 10);
+  }
+}
+
+function renderAccessList(data) {
+  const empty = $("#adminAccessEmpty");
+  const table = $("#adminAccessTable");
+  if (!empty || !table) return;
+  if (!data || data.ok === false) {
+    empty.hidden = false;
+    table.hidden = true;
+    empty.textContent = (data && (data.message || data.error)) || "Falha ao listar. Rode supabase/rpc_admin.sql se ainda não rodou.";
+    return;
+  }
+  const rows = Array.isArray(data.access) ? data.access : [];
+  if (!rows.length) {
+    empty.hidden = false;
+    table.hidden = true;
+    empty.textContent = "Nenhuma conta liberada ainda — use o formulário acima.";
+    return;
+  }
+  empty.hidden = true;
+  table.hidden = false;
+  table.innerHTML = `
+    <table class="access-table">
+      <thead>
+        <tr><th>E-mail</th><th>Status</th><th>Até</th><th>PCs</th><th></th></tr>
+      </thead>
+      <tbody>
+        ${rows.map((r) => {
+          const email = escapeHtml(r.email || "—");
+          const st = escapeHtml(r.status || "—");
+          const until = escapeHtml(fmtAccessUntil(r.valid_until));
+          const pcs = escapeHtml(String(r.max_devices ?? "—"));
+          const rawEmail = String(r.email || "").replace(/"/g, "&quot;");
+          return `<tr>
+            <td title="${email}">${email}</td>
+            <td><span class="access-st ${st}">${st}</span></td>
+            <td>${until}</td>
+            <td>${pcs}</td>
+            <td><button type="button" class="ghost-btn access-revoke" data-email="${rawEmail}">Revogar</button></td>
+          </tr>`;
+        }).join("")}
+      </tbody>
+    </table>`;
+  table.querySelectorAll(".access-revoke").forEach((btn) => {
+    btn.onclick = async () => {
+      const email = btn.getAttribute("data-email") || "";
+      if (!email) return;
+      if ($("#adminLicEmail")) $("#adminLicEmail").value = email;
+      try {
+        const data = await api("/api/admin/access", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "revoke", email }),
+        });
+        adminOut(data);
+        toast(data.ok ? (data.message || "Revogado") : (data.message || "Falha"));
+        await loadAccessList();
+      } catch (e) {
+        toast(e.message || "Falha ao revogar");
+      }
+    };
+  });
+}
+
+async function loadAccessList() {
+  const empty = $("#adminAccessEmpty");
+  if (empty) {
+    empty.hidden = false;
+    empty.textContent = "Carregando acessos…";
+  }
+  try {
+    const data = await api("/api/admin/access");
+    renderAccessList(data);
+    return data;
+  } catch (e) {
+    renderAccessList({ ok: false, message: e.message || "Falha ao listar" });
+    throw e;
+  }
 }
 
 async function refreshAuthUi() {
@@ -918,10 +1037,15 @@ function wireForms() {
     });
   $("#btnOpenExt").onclick = async () => {
     try {
-      await api("/api/llm-proxy/open-extension", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-      toast("Pasta da extensão aberta — carregue em chrome://extensions");
+      const data = await api("/api/llm-proxy/open-extension", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      const hint = $("#extPathHint");
+      if (hint && data.path) {
+        hint.hidden = false;
+        hint.textContent = `Pasta: ${data.path} — carregue esta pasta no Chrome/Edge (não a de Program Files).`;
+      }
+      toast("Pasta estável aberta — carregue em chrome://extensions");
     } catch {
-      toast("Abra manualmente a pasta extension/llm-session");
+      toast("Abra manualmente %USERPROFILE%\\ATIVAVID\\extension\\llm-session");
     }
   };
 
@@ -1090,6 +1214,16 @@ function wireForms() {
         );
       }
       if ($("#authPassword")) $("#authPassword").value = "";
+      try {
+        const emailSaved = (data.email || ($("#authEmail")?.value || "").trim() || "");
+        if ($("#authRemember")?.checked && emailSaved) {
+          localStorage.setItem("ativavid-auth-email", emailSaved);
+          localStorage.setItem("ativavid-auth-remember", "1");
+        } else {
+          localStorage.removeItem("ativavid-auth-email");
+          localStorage.setItem("ativavid-auth-remember", "0");
+        }
+      } catch { /* ignore */ }
       const loggedIn = data.loggedIn !== false && !!(data.email || data.isAdmin || mode === "login");
       if (loggedIn || data.access_token || mode === "login" || data.loggedIn) {
         state.auth = {
@@ -1156,7 +1290,7 @@ function wireForms() {
       else openLoginDialog();
     };
   }
-  ["btnLoginClose", "btnLoginCancel"].forEach((id) => {
+  ["btnLoginClose"].forEach((id) => {
     const el = $(`#${id}`);
     if (el) el.onclick = () => closeLoginDialog();
   });
@@ -1175,11 +1309,6 @@ function wireForms() {
     };
   }
 
-  const adminOut = (x) => {
-    const el = $("#adminLicOut");
-    if (!el) return;
-    el.textContent = typeof x === "string" ? x : JSON.stringify(x, null, 2);
-  };
   const btnAdminSaveSrv = $("#btnAdminLicSaveSrv");
   if (btnAdminSaveSrv) {
     btnAdminSaveSrv.onclick = async () => {
@@ -1236,6 +1365,7 @@ function wireForms() {
         });
         adminOut(data);
         toast(data.ok ? (data.message || "Acesso liberado") : (data.message || "Falha"));
+        if (data.ok) await loadAccessList();
       } catch (e) {
         adminOut(String(e.message || e));
         toast(e.message || "Falha ao liberar");
@@ -1246,7 +1376,7 @@ function wireForms() {
   if (btnAdminListAccess) {
     btnAdminListAccess.onclick = async () => {
       try {
-        const data = await api("/api/admin/access");
+        const data = await loadAccessList();
         adminOut(data);
         const n = (data.access || []).length;
         toast(data.ok ? `${n} acesso(s)` : (data.message || "Falha"));
@@ -1272,6 +1402,7 @@ function wireForms() {
         });
         adminOut(data);
         toast(data.ok ? (data.message || "Revogado") : (data.message || "Falha"));
+        if (data.ok) await loadAccessList();
       } catch (e) {
         adminOut(String(e.message || e));
         toast(e.message || "Falha ao revogar");
@@ -1533,6 +1664,9 @@ async function loadLicenca() {
     renderLicense(lic);
   } catch { /* ignore */ }
   await refreshAuthUi().catch(() => {});
+  if (state.auth && state.auth.isAdmin) {
+    await loadAccessList().catch(() => {});
+  }
 }
 
 async function loadSistema() {

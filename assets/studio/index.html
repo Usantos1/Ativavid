@@ -183,7 +183,7 @@
                 <header class="keys-block-head">
                   <div>
                     <h4 id="keysAiTitle">1. Sessão do navegador (IA principal)</h4>
-                    <p class="hint">Usa o Gemini ou ChatGPT em que você já está logado — sem pagar API de chat. Cookies ficam só neste PC.</p>
+                    <p class="hint">Usa o Gemini ou ChatGPT em que você já está logado — sem pagar API de chat. Cookies ficam em <code>%USERPROFILE%\ATIVAVID\sessions.json</code> e <strong>continuam</strong> ao fechar o app (o X manda o ATIVAVID para a bandeja).</p>
                   </div>
                 </header>
 
@@ -191,9 +191,10 @@
                   <li>
                     <span class="keys-step-n">1</span>
                     <div>
-                      <strong>Instale a extensão</strong>
-                      <p>Chrome ou Edge → <code>chrome://extensions</code> → ative <em>Modo do desenvolvedor</em> → <em>Carregar sem compactação</em> → pasta <code>extension/llm-session</code>.</p>
+                      <strong>Instale a extensão (uma vez)</strong>
+                      <p>Chrome ou Edge → <code>chrome://extensions</code> → <em>Modo do desenvolvedor</em> → <em>Carregar sem compactação</em> → use a pasta que o botão abre (<code>%USERPROFILE%\ATIVAVID\extension\llm-session</code>). Essa pasta <strong>não some</strong> ao atualizar o ATIVAVID — só clique em Recarregar na extensão se pedir.</p>
                       <button type="button" class="ghost-btn" id="btnOpenExt">Abrir pasta da extensão</button>
+                      <p class="hint" id="extPathHint" hidden></p>
                     </div>
                   </li>
                   <li>
@@ -376,7 +377,7 @@
                     <input type="number" id="adminLicMaxDev" value="1" min="1" max="10">
                   </label>
                 </div>
-                <div class="panel-actions admin-day-presets" id="adminDayPresets">
+                <div class="admin-day-presets" id="adminDayPresets">
                   <button type="button" class="ghost-btn" data-days="7">7d</button>
                   <button type="button" class="ghost-btn" data-days="14">14d</button>
                   <button type="button" class="ghost-btn" data-days="30">30d</button>
@@ -385,10 +386,14 @@
                 <label class="ia-form">Observação
                   <input type="text" id="adminLicNotes" placeholder="teste, parceiro, …" autocomplete="off">
                 </label>
-                <div class="panel-actions">
+                <div class="panel-actions admin-access-actions">
                   <button type="button" class="export-btn" id="btnAdminGrantAccess">Liberar acesso</button>
-                  <button type="button" class="ghost-btn" id="btnAdminListAccess">Listar acessos</button>
-                  <button type="button" class="ghost-btn" id="btnAdminRevokeAccess">Revogar</button>
+                  <button type="button" class="ghost-btn" id="btnAdminListAccess">Atualizar lista</button>
+                  <button type="button" class="ghost-btn" id="btnAdminRevokeAccess">Revogar e-mail</button>
+                </div>
+                <div class="admin-access-list" id="adminAccessList">
+                  <div class="admin-access-empty hint" id="adminAccessEmpty">Carregando acessos…</div>
+                  <div class="admin-access-table wrap" id="adminAccessTable" hidden></div>
                 </div>
                 <details class="lic-adv">
                   <summary>Chave ATIV- (legado) e devices</summary>
@@ -407,8 +412,8 @@
                   <div class="panel-actions">
                     <button type="button" class="ghost-btn" id="btnAdminDeviceRelease">Liberar PC</button>
                   </div>
+                  <pre class="admin-lic-out" id="adminLicOut">Pronto.</pre>
                 </details>
-                <pre class="admin-lic-out" id="adminLicOut">Pronto.</pre>
               </div>
             </div>
           </div>
@@ -597,11 +602,19 @@
         <input type="email" id="authEmail" placeholder="voce@email.com" autocomplete="username" required>
       </label>
       <label class="ia-form">Senha
-        <input type="password" id="authPassword" placeholder="mín. 6 caracteres" autocomplete="current-password" required>
+        <div class="key-row">
+          <input type="password" id="authPassword" placeholder="mín. 6 caracteres" autocomplete="current-password" required>
+          <button type="button" class="icon-btn" id="btnAuthPassToggle" data-key-toggle="authPassword" title="Mostrar/ocultar senha" aria-label="Mostrar senha">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+      </label>
+      <label class="dlg-login-remember" id="authRememberWrap">
+        <input type="checkbox" id="authRemember" checked>
+        <span>Manter sessão neste PC (não precisa entrar de novo)</span>
       </label>
       <p class="hint dlg-login-err" id="loginErr" hidden></p>
       <div class="dlg-actions dlg-login-actions">
-        <button type="button" class="ghost-btn" id="btnLoginCancel">Cancelar</button>
         <button type="submit" class="export-btn" id="btnAuthLogin">Entrar</button>
       </div>
     </form>

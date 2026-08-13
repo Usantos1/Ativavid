@@ -1689,7 +1689,9 @@ class StudioHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/llm-proxy/open-extension":
-            folder = REPO / "extension" / "llm-session"
+            from app.extension_sync import extension_dir
+
+            folder = extension_dir()
             folder.mkdir(parents=True, exist_ok=True)
             if sys.platform == "win32":
                 subprocess.Popen(["explorer", str(folder)])

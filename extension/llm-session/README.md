@@ -1,25 +1,31 @@
 # ATIVAVID Session (extensão)
 
-Captura cookies da **sua** sessão nos sites de LLM e envia ao ATIVAVID local (`http://127.0.0.1:4850`).
+Mantém cookies do Gemini/ChatGPT sincronizados com o ATIVAVID local (`http://127.0.0.1:4850`).
 
-## Instalar / atualizar no Chrome ou Edge
+## Pasta correta (não some no update)
 
-1. Abra `chrome://extensions` (ou `edge://extensions`)
-2. Ative **Modo do desenvolvedor**
-3. **Carregar sem compactação** → pasta `extension/llm-session`
-   - Se já estava instalada: **Atualizar** (ícone de reload) ou remova e carregue de novo
-4. Deixe o **ATIVAVID aberto** (atalho da Área de Trabalho)
-5. Abra Gemini / ChatGPT **já logado** na mesma janela do navegador
-6. Clique no ícone da extensão → capture o provedor
+`%USERPROFILE%\ATIVAVID\extension\llm-session`
 
-### Se der “sessão incompleta”
+No app: **Chaves & IA** → **Abrir pasta da extensão**.
 
-- Use o **mesmo Chrome/Edge** onde a extensão está (não outro perfil)
-- Aba do Gemini/ChatGPT precisa estar aberta e logada
-- Clique Capturar de novo depois da página carregar
-- A v0.1.1 lê cookies **particionados** (Chrome novo) — atualize a pasta se ainda for 0.1.0
+## Instalar / atualizar
+
+1. `chrome://extensions` → Modo do desenvolvedor
+2. **Carregar sem compactação** → pasta acima  
+   (se já tinha apontando para Program Files: remova e carregue de novo)
+3. Clique em **Recarregar** na extensão após cada update do ATIVAVID
+4. **Fixe o ícone** na barra (quebra-cabeça → pin) para não “sumir”
+5. Deixe o ATIVAVID no ar (o **X** manda para a bandeja — não encerra o servidor)
+
+## Como funciona (v0.1.3+)
+
+- Worker em segundo plano captura sozinho ao abrir ChatGPT/Gemini logado
+- Reenvia a cada ~2 minutos
+- Se o ATIVAVID estiver fechado, **guarda na fila** e manda quando o app voltar
+- Badge **ON** = última sincronização ok
+- Cookies salvos no PC: `%USERPROFILE%\ATIVAVID\sessions.json`
 
 ## Privacidade
 
-- Cookies só vão para `127.0.0.1` (app local)
-- **Não compartilhe** `.ativavid-sessions.json` nem cookies entre PCs — cada máquina captura a própria conta
+- Cookies só vão para `127.0.0.1`
+- Não compartilhe `sessions.json` entre PCs

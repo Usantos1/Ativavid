@@ -263,7 +263,11 @@ begin
     return json_build_object('ok', true, 'message', 'Device liberado: ' || trim(p_device_id));
   end if;
 
-  return json_build_object('ok', false, 'error', 'unknown_action');
+  return json_build_object(
+    'ok', false,
+    'error', 'unknown_action',
+    'message', 'RPC admin desatualizado. No Supabase SQL Editor, rode de novo o arquivo supabase/rpc_admin.sql completo.'
+  );
 end;
 $$;
 

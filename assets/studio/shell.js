@@ -1,4 +1,4 @@
-/* Shared hub shell wiring for editor pages (preview). */
+/* Shared hub shell wiring for editor pages (preview) + window chrome. */
 (function () {
   const $ = (s, el = document) => el.querySelector(s);
 
@@ -56,17 +56,96 @@
     }
   }
 
+  function pyApi() {
+    try {
+      return window.pywebview && window.pywebview.api;
+    } catch {
+      return null;
+    }
+  }
+
+  function setMaximizedUi(on) {
+    document.body.classList.toggle("maximized", !!on);
+  }
+
+  async function wireWindowChrome() {
+    if (!$("#titlebar") || !$("#btnWinMin")) return;
+    document.body.classList.add("desktop-app");
+
+    const label = $("#tbVersionLabel");
+    if (label) {
+      try {
+        const res = await fetch("/api/health");
+        const h = await res.json();
+        label.textContent = `v${String(h.version || "?").replace(/^v/i, "")}`;
+      } catch {
+        label.textContent = "v…";
+      }
+    }
+
+    const cfg = $("#btnTbConfig");
+    if (cfg && !cfg.dataset.wired) {
+      cfg.dataset.wired = "1";
+      cfg.onclick = () => {
+        location.href = "/?view=sistema";
+      };
+    }
+
+    const drag = document.querySelector(".titlebar-drag");
+    if (drag) {
+      drag.addEventListener("dblclick", async () => {
+        try {
+          const maxed = await pyApi()?.toggle_maximize?.();
+          setMaximizedUi(maxed);
+        } catch { /* ignore */ }
+      });
+    }
+
+    const min = $("#btnWinMin");
+    const max = $("#btnWinMax");
+    const close = $("#btnWinClose");
+    if (min) {
+      min.onclick = async () => {
+        try { await pyApi()?.minimize?.(); } catch { /* ignore */ }
+      };
+    }
+    if (max) {
+      max.onclick = async () => {
+        try {
+          const maxed = await pyApi()?.toggle_maximize?.();
+          setMaximizedUi(maxed);
+        } catch { /* ignore */ }
+      };
+    }
+    if (close) {
+      close.onclick = async () => {
+        try { await pyApi()?.close?.(); } catch { window.close(); }
+      };
+    }
+
+    for (let i = 0; i < 60; i++) {
+      const apiw = pyApi();
+      if (apiw) {
+        try {
+          if (apiw.is_maximized) setMaximizedUi(await apiw.is_maximized());
+        } catch { /* ignore */ }
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 50));
+    }
+  }
+
   if (document.documentElement.classList.contains("hub-embed")) return;
   syncCollapse();
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", () => {
-      wireCollapse();
-      wireNav();
-      refreshHint();
-    });
-  } else {
+  const boot = () => {
     wireCollapse();
     wireNav();
     refreshHint();
+    wireWindowChrome();
+  };
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", boot);
+  } else {
+    boot();
   }
 })();

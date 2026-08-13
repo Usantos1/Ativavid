@@ -73,7 +73,24 @@ try:
 except Exception:  # noqa: BLE001 — missing deps must not break the server
     pexels_search = None
 
-APP_DIR = Path(__file__).resolve().parent.parent / "assets" / "preview"
+# Repo root on path so we can reuse the Windows "no CMD flash" helper.
+_REPO = Path(__file__).resolve().parent.parent
+if str(_REPO) not in sys.path:
+    sys.path.insert(0, str(_REPO))
+try:
+    from app.win_process import hide_console_kwargs
+except Exception:  # noqa: BLE001 — helpers can run outside the app package
+    def hide_console_kwargs() -> dict:  # type: ignore[misc]
+        return {}
+
+
+def _run(cmd, **kwargs):
+    """subprocess.run without flashing a CMD window on Windows."""
+    kwargs = {**hide_console_kwargs(), **kwargs}
+    return subprocess.run(cmd, **kwargs)
+
+
+APP_DIR = _REPO / "assets" / "preview"
 STUDIO_DIR = APP_DIR.parent / "studio"
 
 # A running server holds the Python it was STARTED with, while the browser is
@@ -106,7 +123,7 @@ _thumb_state: dict[str, float] = {}  # video path -> mtime generated
 
 
 def probe_duration(path: Path) -> float:
-    out = subprocess.run(
+    out = _run(
         ["ffprobe", "-v", "error", "-show_entries", "format=duration",
          "-of", "csv=p=0", str(path)],
         capture_output=True, text=True,
@@ -120,7 +137,7 @@ def probe_duration(path: Path) -> float:
 def gen_waveform(video: Path, out_json: Path) -> None:
     """Decode audio to mono s16 and store min/max peak pairs per bucket (0-100)."""
     rate = 8000
-    raw = subprocess.run(
+    raw = _run(
         ["ffmpeg", "-v", "error", "-i", str(video), "-vn",
          "-ac", "1", "-ar", str(rate), "-f", "s16le", "-"],
         capture_output=True,
@@ -153,7 +170,7 @@ def gen_thumbs(video: Path, out_dir: Path) -> None:
     if out_dir.exists():
         shutil.rmtree(out_dir, ignore_errors=True)
     out_dir.mkdir(parents=True, exist_ok=True)
-    subprocess.run(
+    _run(
         ["ffmpeg", "-v", "error", "-i", str(video),
          "-vf", f"fps=1/{THUMB_EVERY_S},scale=-2:{THUMB_HEIGHT}",
          "-q:v", "6", str(out_dir / "%04d.jpg")],
@@ -260,7 +277,7 @@ def running_ativavid_processes() -> list[str]:
         return list(_proc_cache["lines"])  # type: ignore[arg-type]
     lines: list[str] = []
     try:
-        out = subprocess.run(
+        out = _run(
             ["powershell", "-NoProfile", "-Command",
              "Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | "
              "Where-Object { $_.CommandLine -match 'preview_server|watch_edits' } | "
@@ -732,9 +749,9 @@ class Handler(BaseHTTPRequestHandler):
                 f"'{str(proj).replace(chr(39), chr(39) * 2)}', "
                 "'OnlyErrorDialogs', 'SendToRecycleBin')"
             )
-            r = subprocess.run(["powershell", "-NoProfile", "-Command", ps],
-                               capture_output=True, text=True, timeout=120,
-                               stdin=subprocess.DEVNULL, encoding="utf-8", errors="replace")
+            r = _run(["powershell", "-NoProfile", "-Command", ps],
+                     capture_output=True, text=True, timeout=120,
+                     stdin=subprocess.DEVNULL, encoding="utf-8", errors="replace")
             if r.returncode != 0 or proj.exists():
                 self._json({"ok": False,
                             "error": (r.stderr or "falhou ao mover para a Lixeira").strip()[:200]}, 500)
@@ -752,8 +769,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"ok": False, "error": "projeto sem pasta remotion/"}, 404)
                 return
             script = Path(__file__).resolve().parent / "check_template_integrity.py"
-            p = subprocess.run([sys.executable, str(script), str(rem), "--fix"],
-                               capture_output=True, text=True)
+            p = _run([sys.executable, str(script), str(rem), "--fix"],
+                     capture_output=True, text=True)
             state = template_state(edit)
             if state != "ok":
                 tail = (p.stderr or p.stdout or "").strip().splitlines()
@@ -995,11 +1012,15 @@ class Handler(BaseHTTPRequestHandler):
                 pass
         edits_p = self.root / "preview_edits.json"
         video = self._current_video()
+        dur = 0.0
+        if video:
+            cached = probe_duration_cached(video)
+            dur = float(cached) if cached is not None else 0.0
         self._json({
             "state": state,
             "edl": edl,
             "mtimes": mtimes,
-            "videoDuration": probe_duration(video) if video else 0,
+            "videoDuration": dur,
             "hasPendingEdits": edits_p.exists(),
             "now": time.time(),
         })

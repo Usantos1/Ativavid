@@ -1,4 +1,9 @@
-"""Login e-mail/senha via Supabase Auth (sessão local)."""
+"""Login e-mail/senha via Supabase Auth — sessão local persistente.
+
+A sessão fica em %USERPROFILE%/ATIVAVID/auth.json e sobrevive a fechar/abrir
+o app. Só some com Sair explícito ou refresh_token inválido de verdade
+(não em falha de rede).
+"""
 from __future__ import annotations
 
 import json
@@ -11,6 +16,13 @@ from urllib.parse import urlencode
 from app import settings_store as ss
 
 AUTH_PATH = Path.home() / "ATIVAVID" / "auth.json"
+
+# Access JWT do Supabase costuma durar ~1h; refresh cobre semanas/meses.
+# Margem para renovar antes de expirar.
+_REFRESH_SKEW_S = 120
+# Se a rede falhar, ainda consideramos “logado” na UI por este prazo
+# depois do expires_at (até conseguir renovar).
+_STALE_GRACE_S = 7 * 24 * 3600
 
 
 def _cfg() -> dict[str, str]:
@@ -34,7 +46,12 @@ def _load() -> dict[str, Any]:
 
 def _save(data: dict[str, Any]) -> None:
     AUTH_PATH.parent.mkdir(parents=True, exist_ok=True)
-    AUTH_PATH.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    data = dict(data)
+    data["remember"] = True
+    data["saved_at"] = int(time.time())
+    tmp = AUTH_PATH.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(AUTH_PATH)
 
 
 def clear_session() -> None:
@@ -61,6 +78,33 @@ def _http(method: str, url: str, headers: dict[str, str], body: dict[str, Any] |
         return e.code, parsed
     except Exception as e:  # noqa: BLE001
         return 502, {"error": "offline", "message": str(e)}
+
+
+def _apply_token_response(blob: dict[str, Any], data: dict[str, Any], *, email_fallback: str = "") -> dict[str, Any]:
+    expires_in = int(data.get("expires_in") or 3600)
+    blob["access_token"] = data["access_token"]
+    # Supabase pode rotacionar o refresh; se não vier, mantém o anterior.
+    if data.get("refresh_token"):
+        blob["refresh_token"] = data["refresh_token"]
+    blob["expires_at"] = int(time.time()) + max(60, expires_in - 60)
+    blob["remember"] = True
+    if data.get("user"):
+        blob["user"] = data["user"]
+        blob["email"] = data["user"].get("email") or blob.get("email") or email_fallback
+    elif email_fallback and not blob.get("email"):
+        blob["email"] = email_fallback
+    _save(blob)
+    return blob
+
+
+def _session_from_password_grant(data: dict[str, Any], email: str) -> dict[str, Any]:
+    session: dict[str, Any] = {
+        "remember": True,
+        "email": ((data.get("user") or {}).get("email") or email),
+        "user": data.get("user") or {},
+        "is_admin": False,
+    }
+    return _apply_token_response(session, data, email_fallback=email)
 
 
 def login(email: str, password: str) -> dict[str, Any]:
@@ -93,24 +137,17 @@ def login(email: str, password: str) -> dict[str, Any]:
             "status": code,
         }
 
-    expires_in = int(data.get("expires_in") or 3600)
-    session = {
-        "access_token": data["access_token"],
-        "refresh_token": data.get("refresh_token"),
-        "expires_at": int(time.time()) + max(60, expires_in - 60),
-        "user": data.get("user") or {},
-        "email": ((data.get("user") or {}).get("email") or email),
-    }
-    _save(session)
+    session = _session_from_password_grant(data, email)
     admin = check_admin(force=True)
     is_admin = bool(admin.get("admin"))
     session["is_admin"] = is_admin
     _save(session)
     return {
         "ok": True,
-        "email": session["email"],
+        "email": session.get("email") or email,
         "isAdmin": is_admin,
-        "message": "Login OK" + (" · admin" if is_admin else ""),
+        "loggedIn": True,
+        "message": "Login OK" + (" · admin" if is_admin else "") + " · sessão salva neste PC",
     }
 
 
@@ -156,30 +193,20 @@ def signup(email: str, password: str) -> dict[str, Any]:
             "status": code,
         }
 
-    # Se o projeto exige confirm e-mail, signup pode não devolver access_token
     if data.get("access_token"):
-        expires_in = int(data.get("expires_in") or 3600)
-        session = {
-            "access_token": data["access_token"],
-            "refresh_token": data.get("refresh_token"),
-            "expires_at": int(time.time()) + max(60, expires_in - 60),
-            "user": data.get("user") or {},
-            "email": ((data.get("user") or {}).get("email") or email),
-        }
-        _save(session)
+        session = _session_from_password_grant(data, email)
         admin = check_admin(force=True)
         is_admin = bool(admin.get("admin"))
         session["is_admin"] = is_admin
         _save(session)
         return {
             "ok": True,
-            "email": session["email"],
+            "email": session.get("email") or email,
             "isAdmin": is_admin,
             "loggedIn": True,
             "message": "Conta criada. Peça ao admin para liberar os dias de acesso.",
         }
 
-    # Fallback: tenta login imediato (Confirm email off)
     logged = login(email, password)
     if logged.get("ok"):
         logged["message"] = "Conta criada e logada. Peça ao admin para liberar os dias de acesso."
@@ -200,21 +227,52 @@ def logout() -> dict[str, Any]:
     return {"ok": True, "message": "Saiu da conta."}
 
 
-def _refresh_if_needed() -> dict[str, Any]:
+def _is_fatal_refresh_error(code: int, data: Any) -> bool:
+    """Só apaga sessão em rejeição definitiva do refresh_token."""
+    if code in (401, 403):
+        return True
+    if code == 400 and isinstance(data, dict):
+        blob = " ".join(
+            str(data.get(k) or "")
+            for k in ("error", "error_description", "msg", "message")
+        ).lower()
+        fatal_hints = (
+            "invalid_grant",
+            "invalid refresh",
+            "refresh_token",
+            "already used",
+            "not found",
+            "expired",
+            "revoked",
+        )
+        # "expired" sozinho em access token às vezes aparece; se for refresh inválido, limpa.
+        if any(h in blob for h in fatal_hints):
+            return True
+    return False
+
+
+def _refresh_if_needed(*, force: bool = False) -> dict[str, Any]:
     blob = _load()
     token = str(blob.get("access_token") or "")
     if not token:
         return {}
     exp = int(blob.get("expires_at") or 0)
-    if exp > int(time.time()) + 30:
+    now = int(time.time())
+    if not force and exp > now + _REFRESH_SKEW_S:
         return blob
+
     refresh = str(blob.get("refresh_token") or "")
     if not refresh:
+        # Sem refresh: mantém enquanto o access token ainda vale; depois some.
+        if exp > now:
+            return blob
         clear_session()
         return {}
+
     c = _cfg()
     if not c["url"] or not c["anon"]:
         return blob
+
     code, data = _http(
         "POST",
         f"{c['url']}/auth/v1/token?{urlencode({'grant_type': 'refresh_token'})}",
@@ -225,25 +283,51 @@ def _refresh_if_needed() -> dict[str, Any]:
         },
         {"refresh_token": refresh},
     )
-    if code >= 400 or not isinstance(data, dict) or not data.get("access_token"):
+
+    if code < 400 and isinstance(data, dict) and data.get("access_token"):
+        return _apply_token_response(blob, data)
+
+    # Rede / 5xx / timeout: NÃO desloga — tenta de novo na próxima abertura.
+    if code >= 500 or code == 502 or (isinstance(data, dict) and data.get("error") == "offline"):
+        return blob
+
+    if _is_fatal_refresh_error(code, data):
         clear_session()
         return {}
-    expires_in = int(data.get("expires_in") or 3600)
-    blob["access_token"] = data["access_token"]
-    if data.get("refresh_token"):
-        blob["refresh_token"] = data["refresh_token"]
-    blob["expires_at"] = int(time.time()) + max(60, expires_in - 60)
-    if data.get("user"):
-        blob["user"] = data["user"]
-        blob["email"] = data["user"].get("email") or blob.get("email")
-    _save(blob)
+
+    # Outros erros: conserva sessão local (usuário continua “logado” na UI).
     return blob
 
 
 def access_token() -> str | None:
     blob = _refresh_if_needed()
     tok = str(blob.get("access_token") or "").strip()
-    return tok or None
+    if not tok:
+        return None
+    # Token já expirado e refresh falhou de forma não-fatal: ainda devolve
+    # para tentativas autenticadas (API pode 401; UI permanece logada).
+    return tok
+
+
+def ensure_session() -> dict[str, Any]:
+    """Chamado no boot / GET /api/auth — renova se precisar, sem apagar por rede."""
+    blob = _refresh_if_needed(force=False)
+    if not blob.get("access_token"):
+        return {"ok": True, "loggedIn": False, "isAdmin": False, "email": None}
+    exp = int(blob.get("expires_at") or 0)
+    now = int(time.time())
+    # Se está muito velho sem conseguir renovar, aí sim considera deslogado.
+    if exp and exp < now - _STALE_GRACE_S and not blob.get("refresh_token"):
+        clear_session()
+        return {"ok": True, "loggedIn": False, "isAdmin": False, "email": None}
+    return {
+        "ok": True,
+        "loggedIn": True,
+        "isAdmin": bool(blob.get("is_admin")),
+        "email": blob.get("email"),
+        "expiresAt": exp or None,
+        "remember": True,
+    }
 
 
 def check_admin(*, force: bool = False) -> dict[str, Any]:
@@ -253,7 +337,6 @@ def check_admin(*, force: bool = False) -> dict[str, Any]:
     if not c["url"] or not c["anon"] or not tok:
         return {"ok": True, "loggedIn": False, "admin": False, "email": None}
 
-    # whoami via admin RPC (exige grant authenticated)
     payload = {
         "p_action": "whoami",
         "p_email": None,
@@ -276,7 +359,6 @@ def check_admin(*, force: bool = False) -> dict[str, Any]:
     )
     email = (_load().get("email") if _load() else None)
     if code >= 400:
-        # fallback: só is_admin boolean
         code2, data2 = _http(
             "POST",
             f"{c['url']}/rest/v1/rpc/ativavid_is_admin",
@@ -309,17 +391,8 @@ def check_admin(*, force: bool = False) -> dict[str, Any]:
 
 
 def public_status() -> dict[str, Any]:
-    """Status rápido só do arquivo local — sem RPC (evita 'Failed to fetch' no sidebar)."""
-    blob = _load()
-    if not str(blob.get("access_token") or "").strip():
-        return {"ok": True, "loggedIn": False, "isAdmin": False, "email": None}
-    # Sessão antiga sem flag: ainda conta como logado; admin exige novo login (ou require_admin)
-    return {
-        "ok": True,
-        "loggedIn": True,
-        "isAdmin": bool(blob.get("is_admin")),
-        "email": blob.get("email"),
-    }
+    """Status da sessão: tenta renovar; não desloga por falha de rede."""
+    return ensure_session()
 
 
 def require_admin() -> dict[str, Any]:
