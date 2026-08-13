@@ -906,26 +906,26 @@ def remux_final(edit_dir: Path, with_music: bool, duration: float) -> Path:
     return final
 
 
-def _npm_cmd() -> str:
+def _npm_cmd() -> list[str]:
+    """Argv prefix for npm (node + npm-cli.js on Windows)."""
     try:
-        from app.win_process import refresh_path_env  # type: ignore
-        refresh_path_env()
+        from app.win_process import resolve_npm_argv  # type: ignore
+        return resolve_npm_argv()
     except Exception:
-        pass
-    if os.name == "nt":
-        return shutil.which("npm.cmd") or shutil.which("npm") or "npm.cmd"
-    return shutil.which("npm") or "npm"
+        if os.name == "nt":
+            return [shutil.which("npm.cmd") or "npm.cmd"]
+        return [shutil.which("npm") or "npm"]
 
 
-def _npx_cmd() -> str:
+def _remotion_cmd(remotion_dir: Path, *args: str) -> list[str]:
+    """Argv for Remotion CLI without npx.cmd."""
     try:
-        from app.win_process import refresh_path_env  # type: ignore
-        refresh_path_env()
+        from app.win_process import resolve_remotion_argv  # type: ignore
+        return resolve_remotion_argv(remotion_dir, *args)
     except Exception:
-        pass
-    if os.name == "nt":
-        return shutil.which("npx.cmd") or shutil.which("npx") or "npx.cmd"
-    return shutil.which("npx") or "npx"
+        npx = shutil.which("npx.cmd") or shutil.which("npx") or "npx"
+        return [npx, "remotion", *args]
+
 
 
 
@@ -1014,7 +1014,7 @@ def scaffold_remotion(edit_dir: Path, *, track: str = "shortform") -> Path:
     shutil.copytree(src, dest)
     try:
         proc = _run_tool(
-            [_npm_cmd(), "install"],
+            [*_npm_cmd(), "install"],
             cwd=dest,
             capture_output=True,
             text=True,
@@ -1024,7 +1024,7 @@ def scaffold_remotion(edit_dir: Path, *, track: str = "shortform") -> Path:
         )
     except FileNotFoundError as e:
         raise RuntimeError(
-            f"npm não encontrado no PATH do app (Node LTS). "
+            f"Node/npm não encontrado no PATH do app. "
             f"Instale: winget install OpenJS.NodeJS.LTS — detalhe: {e}"
         ) from e
     if proc.returncode != 0:
@@ -1407,11 +1407,14 @@ def run(
     with remotion_slot():
         try:
             rend = _run_tool(
-                [
-                    _npx_cmd(), "remotion", "render", comp_id, "out/render.mp4",
+                _remotion_cmd(
+                    remotion,
+                    "render",
+                    comp_id,
+                    "out/render.mp4",
                     f"--concurrency={conc}",
                     f"--offthreadvideo-cache-size-in-bytes={cache_b}",
-                ],
+                ),
                 cwd=remotion,
                 capture_output=True,
                 text=True,
@@ -1421,7 +1424,7 @@ def run(
             )
         except FileNotFoundError as e:
             raise RuntimeError(
-                f"npx/Node não encontrado ao renderizar Remotion. "
+                f"Node/Remotion não encontrado ao renderizar. "
                 f"Instale: winget install OpenJS.NodeJS.LTS — detalhe: {e}"
             ) from e
     if rend.returncode != 0:

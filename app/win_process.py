@@ -109,6 +109,86 @@ def run_hidden(argv: list[str], **kwargs):
         ) from e
 
 
+def _node_candidate_dirs() -> list[Path]:
+    local = Path(os.environ.get("LOCALAPPDATA") or "")
+    pf = Path(os.environ.get("ProgramFiles") or r"C:\Program Files")
+    pf86 = Path(os.environ.get("ProgramFiles(x86)") or r"C:\Program Files (x86)")
+    home = Path.home()
+    return [
+        pf / "nodejs",
+        pf86 / "nodejs",
+        local / "Programs" / "nodejs",
+        local / "Programs" / "node",
+        home / "scoop" / "apps" / "nodejs" / "current",
+        home / "AppData" / "Roaming" / "nvm",
+        Path(r"C:\nodejs"),
+    ]
+
+
+def resolve_node_exe() -> str:
+    """Absolute path to node.exe — GUI PATH often misses winget installs."""
+    refresh_path_env()
+    found = shutil.which("node") or shutil.which("node.exe")
+    if found and Path(found).exists():
+        return str(Path(found).resolve())
+    for d in _node_candidate_dirs():
+        p = d / "node.exe"
+        if p.exists():
+            # Put node dir first so child tools can find peers
+            try:
+                os.environ["PATH"] = str(d) + os.pathsep + os.environ.get("PATH", "")
+            except Exception:
+                pass
+            return str(p.resolve())
+    raise FileNotFoundError(
+        "node.exe não encontrado. Instale: winget install OpenJS.NodeJS.LTS "
+        "e reabra o ATIVAVID."
+    )
+
+
+def resolve_npm_argv() -> list[str]:
+    """npm as [node, npm-cli.js] — evita npm.cmd (WinError 2 / 'não é reconhecido')."""
+    node = resolve_node_exe()
+    node_dir = Path(node).resolve().parent
+    npm_cli = node_dir / "node_modules" / "npm" / "bin" / "npm-cli.js"
+    if npm_cli.exists():
+        return [node, str(npm_cli)]
+    # nvm / portable layouts
+    for d in _node_candidate_dirs():
+        cand = d / "node_modules" / "npm" / "bin" / "npm-cli.js"
+        if cand.exists():
+            return [resolve_node_exe() if (d / "node.exe").exists() else node, str(cand)]
+    npm = shutil.which("npm.cmd") or shutil.which("npm")
+    if npm:
+        return [npm]
+    raise FileNotFoundError(
+        "npm não encontrado junto do Node. Reinstale: winget install OpenJS.NodeJS.LTS"
+    )
+
+
+def resolve_remotion_argv(remotion_dir: Path, *args: str) -> list[str]:
+    """Remotion CLI via node + local package — sem npx.cmd no PATH."""
+    node = resolve_node_exe()
+    root = Path(remotion_dir)
+    candidates = [
+        root / "node_modules" / "@remotion" / "cli" / "remotion-cli.js",
+        root / "node_modules" / "@remotion" / "cli" / "dist" / "remotion-cli.js",
+        root / "node_modules" / "remotion" / "cli.js",
+    ]
+    for cli in candidates:
+        if cli.exists():
+            return [node, str(cli), *args]
+    # Último recurso: npx-cli.js do Node (ainda sem .cmd)
+    node_dir = Path(node).resolve().parent
+    npx_cli = node_dir / "node_modules" / "npm" / "bin" / "npx-cli.js"
+    if npx_cli.exists():
+        return [node, str(npx_cli), "--no-install", "remotion", *args]
+    raise FileNotFoundError(
+        f"CLI Remotion ausente em {root / 'node_modules'} "
+        "(rode npm install no scaffold) e npx também não achou."
+    )
+
+
 def resolve_python_cmd(repo: Path | None = None) -> list[str]:
     """Argv prefix to run Python after install — prefer .venv, never require `uv` on PATH.
 
