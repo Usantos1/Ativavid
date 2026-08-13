@@ -151,6 +151,8 @@ def save_brand(body: dict[str, Any]) -> dict[str, Any]:
     name = str(body.get("brandName") or body.get("name") or "Marca").strip() or "Marca"
     bid = _slug(str(body.get("brandId") or body.get("id") or name))
     data = dict(body)
+    data.pop("activate", None)
+    data.pop("action", None)
     data["brandId"] = bid
     data["brandName"] = name
     if not data.get("exportPreset"):

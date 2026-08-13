@@ -995,7 +995,6 @@ class StudioHandler(BaseHTTPRequestHandler):
         if path == "/api/admin/devices":
             from app import auth as au
             from app import license_admin as la
-            from urllib.parse import parse_qs, urlparse
 
             st = au.require_admin()
             if not st.get("isAdmin"):
@@ -1569,6 +1568,8 @@ class StudioHandler(BaseHTTPRequestHandler):
                     self._json({"ok": True, "brand": saved})
             except ValueError as e:
                 self._json({"error": str(e)}, 400)
+            except OSError as e:
+                self._json({"error": f"Não consegui gravar a marca: {e}"}, 500)
             return
 
         if path == "/api/library/add":

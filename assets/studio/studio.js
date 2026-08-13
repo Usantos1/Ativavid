@@ -1558,36 +1558,52 @@ function wireForms() {
   const btnBrandAct = $("#btnBrandActivate");
   if (btnBrandAct) {
     btnBrandAct.onclick = async () => {
-      const id = $("#brandSelect").value;
-      await api("/api/brands", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "activate", id }),
-      });
-      toast("Marca ativada");
-      loadBrandsUi().catch(() => {});
+      try {
+        const id = $("#brandSelect").value;
+        if (!id) {
+          toast("Escolha uma marca na lista");
+          return;
+        }
+        await api("/api/brands", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "activate", id }),
+        });
+        toast("Marca ativada");
+        await loadBrandsUi();
+      } catch (e) {
+        toast(e.message || "Falha ao ativar marca");
+      }
     };
   }
   const btnBrandSave = $("#btnBrandSave");
   if (btnBrandSave) {
     btnBrandSave.onclick = async () => {
-      const name = ($("#brandNewName").value || "").trim() || ($("#brandSelect").selectedOptions[0]?.text || "Marca");
-      const exportPreset = $("#exportPresetSelect").value || "reels";
-      // carrega preset atual e grava como marca
-      const preset = await api("/api/preset");
-      await api("/api/brands", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...preset,
-          brandName: name,
-          exportPreset,
-          activate: true,
-        }),
-      });
-      toast("Marca salva e ativada");
-      $("#brandNewName").value = "";
-      loadBrandsUi().catch(() => {});
+      try {
+        const name = ($("#brandNewName").value || "").trim();
+        if (!name) {
+          toast("Digite o nome da marca");
+          $("#brandNewName")?.focus();
+          return;
+        }
+        const exportPreset = $("#exportPresetSelect").value || "reels";
+        const preset = await api("/api/preset");
+        await api("/api/brands", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...preset,
+            brandName: name,
+            exportPreset,
+            activate: true,
+          }),
+        });
+        toast("Marca salva e ativada");
+        $("#brandNewName").value = "";
+        await loadBrandsUi();
+      } catch (e) {
+        toast(e.message || "Falha ao salvar marca");
+      }
     };
   }
   const btnLib = $("#btnLibraryRefresh");
@@ -1797,21 +1813,25 @@ async function loadBrandsUi() {
   if (!sel) return;
   const brands = data.brands || [];
   sel.innerHTML = brands.map((b) =>
-    `<option value="${escapeHtml(b.id)}" ${b.active ? "selected" : ""}>${escapeHtml(b.name)}</option>`
+    `<option value="${escapeHtml(b.id)}" ${b.active ? "selected" : ""}>${escapeHtml(b.name || b.id)}</option>`
   ).join("") || `<option value="padrao">Padrão</option>`;
   const active = brands.find((b) => b.active) || brands[0];
   if ($("#exportPresetSelect") && active) {
     $("#exportPresetSelect").value = active.exportPreset || "reels";
   }
-  $("#brandHint").textContent = active
-    ? `Ativa: ${active.name} · export ${active.exportPreset || "reels"}`
-    : "";
+  if ($("#brandHint")) {
+    $("#brandHint").textContent = active
+      ? `Ativa: ${active.name || active.id} · export ${active.exportPreset || "reels"}`
+      : "";
+  }
   try {
     const lib = await api("/api/library");
-    $("#libraryHint").textContent =
-      `Biblioteca: ${lib.items?.length || 0} arquivo(s) em ${lib.root || "%USERPROFILE%\\\\ATIVAVID\\\\Biblioteca"}`;
+    if ($("#libraryHint")) {
+      $("#libraryHint").textContent =
+        `Biblioteca: ${lib.items?.length || 0} arquivo(s) em ${lib.root || "%USERPROFILE%\\\\ATIVAVID\\\\Biblioteca"}`;
+    }
   } catch {
-    $("#libraryHint").textContent = "Biblioteca: —";
+    if ($("#libraryHint")) $("#libraryHint").textContent = "Biblioteca: —";
   }
 }
 
