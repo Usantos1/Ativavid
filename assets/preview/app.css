@@ -136,34 +136,18 @@ body {
   user-select: none;
 }
 
-/* A soft signature glow around the whole window edge — same idea as the
-   orange ring Chrome itself draws around a tab it's automating, which is
-   what this was asked to echo. Fixed + pointer-events:none so it sits on
-   top of literally everything (even the help modal) as a pure frame, never
-   intercepting a click. */
-body::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  z-index: 200;
-  pointer-events: none;
-  box-shadow: inset 0 0 0 1px rgba(255, 119, 19, 0.35), inset 0 0 44px rgba(255, 119, 19, 0.14);
+/* Shell CapCut (sidebar + titlebar): mesmo chrome do hub — sem anel laranja
+   e sem o fundo/gradiente do preview vazando na barra/sidebar. */
+body.editor-shell {
+  font-family: Outfit, "Segoe UI", sans-serif;
+  color: var(--text);
+  background: var(--chrome-bg, #0c0c0e);
+  min-height: 100%;
+  display: block;
 }
 
-.glass {
-  background: var(--glass);
-  backdrop-filter: blur(18px) saturate(1.2);
-  -webkit-backdrop-filter: blur(18px) saturate(1.2);
-  border: 1px solid var(--stroke);
-  border-radius: var(--radius);
-}
-
-.hidden { display: none !important; }
-.dim { color: var(--dim); }
-.small { font-size: 11px; }
-
-/* ---------- header (app bar: menu à esquerda · nome no centro · ações) ---------- */
-header {
+/* ---------- app bar do editor (NÃO a titlebar CapCut) ---------- */
+header.glass {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -178,7 +162,7 @@ header {
 /* Neutral spotlight behind the mark — white fading to grey, the way a pro
    NLE (Resolve, Premiere) lights its own logo: a highlight, not a colour
    wash. The brand's colour lives in the signature strip below instead. */
-header::before {
+header.glass::before {
   content: '';
   position: absolute;
   left: -60px;
@@ -191,7 +175,7 @@ header::before {
 }
 
 /* Signature strip — hairline brand mark under the app bar */
-header::after {
+header.glass::after {
   content: '';
   position: absolute;
   left: 0;
@@ -200,6 +184,18 @@ header::after {
   height: 2px;
   background: linear-gradient(90deg, #a855f7, var(--orange), var(--teal), var(--olive));
 }
+
+.glass {
+  background: var(--glass);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+}
+
+.hidden { display: none !important; }
+.dim { color: var(--dim); }
+.small { font-size: 11px; }
 
 .logo-chip { display: flex; align-items: center; position: relative; z-index: 1; flex: 0 0 auto; }
 .logo-chip img {
@@ -291,29 +287,34 @@ a.btn { text-decoration: none; color: var(--text); display: inline-flex; align-i
 .btn.icon svg { width: 13px; height: 13px; display: block; fill: currentColor; }
 .btn.small { padding: 5px 10px; font-size: 11px; }
 
-.editor-pane .theme-toggle,
-.theme-toggle {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  border: 1px solid var(--stroke);
-  background: var(--glass-strong);
-  color: var(--dim);
+/* Titlebar CapCut: tema flush (studio.css). Não virar card 34px — isso
+   desalinhava sol/engrenagem vs min/max/X e vazava no appbar. */
+.titlebar .theme-toggle {
+  width: 40px;
+  height: 100%;
+  min-height: 0;
+  border-radius: 0;
+  border: 0;
+  background: transparent;
+  color: color-mix(in srgb, var(--text) 72%, var(--dim));
   display: grid;
   place-items: center;
   padding: 0;
+  margin: 0;
   flex: 0 0 auto;
   cursor: pointer;
+  align-self: stretch;
 }
-.editor-pane .theme-toggle:hover,
-.theme-toggle:hover { color: var(--text); }
-.editor-pane .theme-toggle svg,
-.theme-toggle svg {
-  width: 15px;
-  height: 15px;
+.titlebar .theme-toggle:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+.titlebar .theme-toggle svg {
+  width: 16px;
+  height: 16px;
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.7;
+  stroke-width: 1.6;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -2519,10 +2520,40 @@ body.editor-shell {
   min-height: 100%;
   overflow: hidden;
   margin: 0;
+  /* reforça: chrome do hub, não o canvas do preview */
+  font-family: Outfit, "Segoe UI", sans-serif;
+  background: var(--chrome-bg, #0c0c0e);
 }
 body.editor-shell .app-shell {
   height: 100vh;
   height: 100dvh;
+  background: var(--chrome-bg, #0c0c0e);
+}
+/* Titlebar CapCut: nunca herdar padding/min-height/faixa do app bar */
+body.editor-shell header.titlebar,
+body.editor-shell .editor-pane > .titlebar {
+  flex: 0 0 var(--tb-h, 40px);
+  height: var(--tb-h, 40px);
+  min-height: var(--tb-h, 40px);
+  margin: 0;
+  padding: 0;
+  gap: 0;
+  border: 0;
+  border-radius: 0;
+  background: var(--chrome-bg, #0c0c0e);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+  overflow: hidden;
+}
+body.editor-shell header.titlebar::before {
+  content: none;
+  display: none;
+}
+body.editor-shell .titlebar .tb-btn svg,
+body.editor-shell .titlebar .theme-toggle svg {
+  width: 16px;
+  height: 16px;
 }
 body.editor-shell .editor-pane {
   min-width: 0;
@@ -2535,9 +2566,6 @@ body.editor-shell .editor-pane {
   margin: 0;
   border: 0;
   border-radius: 0;
-}
-body.editor-shell .editor-pane > .titlebar {
-  flex: 0 0 auto;
 }
 body.editor-shell .editor-pane > header.glass {
   margin: 0 12px 0 0;

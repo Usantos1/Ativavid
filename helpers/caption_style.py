@@ -310,7 +310,7 @@ def line_styles(lines: list[list[dict]], offset: int):
     return styles, boost, emph
 
 
-def build_cues(words: list[dict]) -> list[dict]:
+def build_cues(words: list[dict], max_sec: float | None = None) -> list[dict]:
     groups = group_cues(words)
     out: list[dict] = []
     solo_alt = 0
@@ -346,7 +346,10 @@ def build_cues(words: list[dict]) -> list[dict]:
             gap = nxt - lastto
             out[k]["endMs"] = nxt if gap <= 700 else min(lastto + 400, nxt)
         else:
-            out[k]["endMs"] = lastto + 500
+            hold = lastto + 500
+            if max_sec and max_sec > 0:
+                hold = min(hold, int(round(max_sec * 1000)))
+            out[k]["endMs"] = max(lastto + 80, hold)
     return out
 
 
@@ -357,6 +360,8 @@ def main() -> None:
                     help="captions.json already on the cut timeline (preferred when EDL-remapped)")
     ap.add_argument("-o", "--output", type=Path, required=True, help="Output caption-cues.json path")
     ap.add_argument("--lang", default="pt", help="Language hint for accent/negation lists (default pt)")
+    ap.add_argument("--max-sec", type=float, default=None,
+                    help="Clamp last cue endMs to cut duration")
     args = ap.parse_args()
 
     if args.captions:
@@ -366,7 +371,7 @@ def main() -> None:
     else:
         ap.error("provide --captions or --transcript")
 
-    cues = build_cues(words)
+    cues = build_cues(words, max_sec=args.max_sec)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(cues, ensure_ascii=False), encoding="utf-8")
     solos = sum(1 for c in cues if c["preset"] != "STACK_MIXED")

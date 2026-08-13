@@ -216,9 +216,10 @@ def main() -> None:
         rows.append((i + 1, j, pres[i], jcts[i], posts[i], v))
 
     # silences not at the very head/tail, annotated with the nearest junction
+    # (ignore only the first/last ~120ms — leftover dead air past that is a real cut bug)
     sil_rows = []
     for s, e in silences:
-        if e < 0.4 or s > actual - 0.4:
+        if e < 0.12 or s > actual - 0.12:
             continue
         near = min(junctions, key=lambda j: abs(j - (s + e) / 2)) if junctions else None
         near_i = junctions.index(near) + 1 if near is not None and abs(near - (s + e) / 2) < 1.5 else None

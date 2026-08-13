@@ -114,6 +114,7 @@ a { color: inherit; text-decoration: none; }
   background: var(--chrome-bg);
   border-bottom: 0;
   position: relative;
+  overflow: hidden;
   user-select: none;
   z-index: 100;
 }
@@ -645,8 +646,8 @@ html:not([data-theme="light"]) .sb-item.active .sb-count {
 }
 .theme-toggle {
   width: 40px;
-  height: auto;
-  min-height: 100%;
+  height: 100%;
+  min-height: 0;
   border-radius: 0;
   border: 0;
   background: transparent;
@@ -654,6 +655,8 @@ html:not([data-theme="light"]) .sb-item.active .sb-count {
   display: grid;
   place-items: center;
   padding: 0;
+  margin: 0;
+  align-self: stretch;
   transition: color .15s, background .15s;
 }
 .theme-toggle:hover {

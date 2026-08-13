@@ -296,6 +296,15 @@ def resolve_path(maybe_path: str, base: Path) -> Path:
     return (base / p).resolve()
 
 
+def probe_duration(video: Path) -> float:
+    r = _run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+         "-of", "default=noprint_wrappers=1:nokey=1", str(video)],
+        capture_output=True, text=True,
+    )
+    return float((r.stdout or "").strip() or 0.0)
+
+
 # -------- HDR → SDR tone mapping (HLG / PQ sources) --------------------------
 #
 # iPhone defaults to HLG HDR in Rec.2020 (and many mirrorless cameras ship PQ).
@@ -833,13 +842,12 @@ def jcut_settings(edl: dict, fps: int) -> dict | None:
     }
 
 
-def trailing_silence(source: Path, start: float, end: float,
-                     noise_db: int = -35) -> float:
-    """Seconds of silence at the END of a source range. 0.0 if it ends in speech.
-
-    This is what bounds the tail trim: we only ever remove what is already silent.
-    """
-    dur = end - start
+def _silence_edges(source: Path, start: float, end: float,
+                   noise_db: int = -35) -> tuple[list[float], list[float], float]:
+    """Return (silence_starts, silence_ends, clip_dur) relative to the extract."""
+    dur = max(0.0, end - start)
+    if dur <= 0.02:
+        return [], [], dur
     r = _run(
         ["ffmpeg", "-hide_banner", "-nostats", "-ss", f"{start:.6f}",
          "-t", f"{dur:.6f}", "-i", str(source), "-vn",
@@ -858,6 +866,16 @@ def trailing_silence(source: Path, start: float, end: float,
                 ends.append(float(line.rsplit("silence_end:", 1)[1].split()[0]))
             except (ValueError, IndexError):
                 pass
+    return starts, ends, dur
+
+
+def trailing_silence(source: Path, start: float, end: float,
+                     noise_db: int = -35) -> float:
+    """Seconds of silence at the END of a source range. 0.0 if it ends in speech.
+
+    This is what bounds the tail trim: we only ever remove what is already silent.
+    """
+    starts, ends, dur = _silence_edges(source, start, end, noise_db=noise_db)
     if not starts:
         return 0.0
     last = starts[-1]
@@ -865,6 +883,68 @@ def trailing_silence(source: Path, start: float, end: float,
     if any(e > last + 1e-6 and e < dur - 0.02 for e in ends):
         return 0.0
     return max(0.0, dur - last)
+
+
+def leading_silence(source: Path, start: float, end: float,
+                    noise_db: int = -35) -> float:
+    """Seconds of silence at the START of a source range. 0.0 if it starts in speech."""
+    starts, ends, dur = _silence_edges(source, start, end, noise_db=noise_db)
+    if dur <= 0.02:
+        return 0.0
+    # Silence that begins at (or before) t=0 of the extract.
+    head_starts = [s for s in starts if s <= 0.04]
+    if not head_starts:
+        # No silence_start near 0 — maybe the clip opens already mid-silence
+        # without a detect event; if first silence_end is early, use that.
+        if ends and ends[0] < min(0.55, dur * 0.5) and (not starts or starts[0] > ends[0]):
+            return max(0.0, ends[0])
+        return 0.0
+    # First silence block from the head: ends at first silence_end after 0.
+    for e in ends:
+        if e > 0.01:
+            return max(0.0, min(e, dur))
+    return max(0.0, dur)
+
+
+def polish_edl_edges(edl: dict, edit_dir: Path) -> None:
+    """In-place: clamp ranges to source duration; strip dead air at head/tail.
+
+    Fixes leftover silence / false-start pads on the first and last takes —
+    including single-range edits that never enter the J-cut path.
+    """
+    sources = edl.get("sources") or {}
+    ranges = edl.get("ranges") or []
+    n = len(ranges)
+    for i, r in enumerate(ranges):
+        key = r.get("source")
+        if key not in sources:
+            continue
+        try:
+            src = resolve_path(sources[key], edit_dir)
+        except Exception:
+            continue
+        start, end = float(r["start"]), float(r["end"])
+        try:
+            src_dur = probe_duration(src)
+        except Exception:
+            src_dur = None
+        if src_dur and src_dur > 0:
+            end = min(end, src_dur)
+            start = max(0.0, min(start, max(0.0, end - 0.08)))
+
+        if i == 0 and end - start > 0.25:
+            head = leading_silence(src, start, end)
+            if head > 0.06:
+                start = min(end - 0.12, start + head - 0.040)
+
+        if i == n - 1 and end - start > 0.25:
+            avail = trailing_silence(src, start, end)
+            if avail > 0.06:
+                end = max(start + 0.12, end - (avail - 0.040))
+
+        if end - start >= 0.12:
+            r["start"] = round(start, 3)
+            r["end"] = round(end, 3)
 
 
 def plan_jcut(edl: dict, edit_dir: Path, cfg: dict) -> list[dict]:
@@ -881,6 +961,7 @@ def plan_jcut(edl: dict, edit_dir: Path, cfg: dict) -> list[dict]:
         src = resolve_path(sources[r["source"]], edit_dir)
         start, end = float(r["start"]), float(r["end"])
 
+        # Mid-take only: head/tail of the whole cut were already polished on the EDL.
         tail = 0.0
         avail = trailing_silence(src, start, end) if i < n - 1 else None
         if avail is not None and cfg["tail_trim_frames"]:
@@ -1439,6 +1520,14 @@ def main() -> None:
     edit_dir = edl_path.parent
     out_path = args.output.resolve()
     acquire_render_lock(out_path)
+
+    # Strip measurable dead air at the first head / last tail, and clamp past EOF.
+    before = [(float(r["start"]), float(r["end"])) for r in edl.get("ranges") or []]
+    polish_edl_edges(edl, edit_dir)
+    after = [(float(r["start"]), float(r["end"])) for r in edl.get("ranges") or []]
+    if before != after:
+        edl_path.write_text(json.dumps(edl, ensure_ascii=False, indent=2), encoding="utf-8")
+        print("  polished head/tail silence on EDL ranges", flush=True)
 
     # Frame-align every range BEFORE extraction, and persist it: the EDL, the
     # preview timeline and segments.json must all describe the same cut as the

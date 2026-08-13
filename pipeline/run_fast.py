@@ -30,8 +30,8 @@ SHORTFORM = REPO / "assets" / "shortform"
 LONGFORM = REPO / "assets" / "longform"
 DEFAULT_PRESET = REPO / "assets" / "preview" / "default-style.json"
 
-LEAD_S = 0.03
-TRAIL_S = 0.06
+LEAD_S = 0.05
+TRAIL_S = 0.12
 MIN_SILENCE_DROP = 0.40  # keep speech regions; gaps longer than this are cuts
 ZOOM_CYCLE = [1.14, 1.2, 1.12, 1.22, 1.16, 1.1, 1.18]
 
@@ -305,6 +305,7 @@ def build_edl_ranges(
     regions: list[tuple[float, float]],
     voice: dict,
     quote: str,
+    source_dur: float | None = None,
 ) -> list[dict]:
     if not regions:
         raise NeedsReview("no_speech", "speech_regions found no speech")
@@ -318,12 +319,24 @@ def build_edl_ranges(
         else:
             merged.append((a, b))
 
+    # Drop leading micro "false starts" (éé… / hum) when a real island follows.
+    while len(merged) >= 2 and (merged[0][1] - merged[0][0]) < 0.55:
+        gap = merged[1][0] - merged[0][1]
+        if gap < 1.5:
+            merged.pop(0)
+        else:
+            break
+
     # Map low-run gains onto ranges (worst run overlapping each range)
     low_runs = voice.get("low_runs") or []
     ranges: list[dict] = []
     for i, (a, b) in enumerate(merged):
         start = max(0.0, a - LEAD_S)
         end = b + TRAIL_S
+        if source_dur and source_dur > 0:
+            end = min(end, source_dur)
+            if end - start < 0.12:
+                continue
         gain = 0.0
         worst = 0.0
         for run in low_runs:
@@ -353,6 +366,8 @@ def build_edl_ranges(
             "reason": "auto speech region",
             "gain_db": round(min(gain, 12.0), 1),
         })
+    if not ranges:
+        raise NeedsReview("no_speech", "speech regions collapsed after polish")
     return ranges
 
 
@@ -1015,6 +1030,15 @@ def run(
     set_stage(edit_dir, "transcribing", "Transcrevendo o áudio…", 12)
     _helper("transcribe.py", str(source), "--edit-dir", str(edit_dir), "--language", language)
     _helper("pack_transcripts.py", "--edit-dir", str(edit_dir))
+    # EDL source_key may differ from video.stem (accents/spaces) — alias so
+    # captions_for_remotion EDL remap finds the words.
+    stem_tr = edit_dir / "transcripts" / f"{stem}.json"
+    key_tr = edit_dir / "transcripts" / f"{source_key}.json"
+    if stem_tr.exists() and stem != source_key and not key_tr.exists():
+        try:
+            shutil.copy2(stem_tr, key_tr)
+        except OSError:
+            pass
     spoken = transcript_text(edit_dir, stem)
     if transcript_looks_bad(spoken):
         raise NeedsReview("bad_transcript", spoken[:200] or "(empty)")
@@ -1080,7 +1104,7 @@ def run(
                 f"[ia] fallback heurístico ({llm_meta.get('error') or 'sem plano'})",
                 flush=True,
             )
-            ranges = build_edl_ranges(source_key, regions, voice, spoken)
+            ranges = build_edl_ranges(source_key, regions, voice, spoken, source_dur=dur)
 
     edl = {
         "version": 1,
@@ -1178,38 +1202,72 @@ def run(
     else:
         cut_tr = edit_dir / "transcripts" / "cut.json"
         edl_path = edit_dir / "edl.json"
-        # Groq/Whisper often stretches word times past the real cut duration —
-        # that desyncs karaoke. Prefer EDL remap from the source transcript then.
+        # Groq/Whisper often stretches OR truncates word times vs the real cut —
+        # either breaks full-video karaoke. Prefer EDL remap from the source then.
         use_edl_caps = False
+        timing_issue = None
         if cut_tr.exists() and duration > 0:
             try:
                 sys.path.insert(0, str(HELPERS))
-                from captions_for_remotion import transcript_overruns  # type: ignore
+                from captions_for_remotion import transcript_timing_issue  # type: ignore
 
-                if transcript_overruns(cut_tr, duration):
+                timing_issue = transcript_timing_issue(cut_tr, duration)
+                if timing_issue in ("overrun", "underrun", "empty"):
                     use_edl_caps = True
                     print(
-                        "[warn] transcript do cut esticou além do vídeo — "
+                        f"[warn] transcript do cut ({timing_issue}) — "
                         "legendas via EDL (fonte)",
                         flush=True,
                     )
             except Exception as e:  # noqa: BLE001
                 print(f"[warn] caption mode check: {e}", flush=True)
 
-        if use_edl_caps and edl_path.exists():
+        def _write_caps_from_edl() -> None:
             _helper(
                 "captions_for_remotion.py",
                 str(edl_path),
                 "-o", str(public / "captions.json"),
                 "--max-sec", f"{duration:.6f}",
             )
-        else:
+
+        def _write_caps_from_cut() -> None:
             _helper(
                 "captions_for_remotion.py",
                 "--transcript", str(cut_tr),
                 "-o", str(public / "captions.json"),
                 "--max-sec", f"{duration:.6f}",
             )
+
+        if use_edl_caps and edl_path.exists():
+            _write_caps_from_edl()
+        else:
+            _write_caps_from_cut()
+
+        # If captions still stop early, force EDL remap once.
+        try:
+            sys.path.insert(0, str(HELPERS))
+            from captions_for_remotion import captions_coverage_ok  # type: ignore
+
+            caps_path = public / "captions.json"
+            caps_data = json.loads(caps_path.read_text(encoding="utf-8")) if caps_path.exists() else []
+            if duration > 1 and not captions_coverage_ok(caps_data, duration):
+                if edl_path.exists() and not use_edl_caps:
+                    print(
+                        "[warn] legendas cobrem só o começo — regenerando via EDL",
+                        flush=True,
+                    )
+                    _write_caps_from_edl()
+                    caps_data = json.loads(caps_path.read_text(encoding="utf-8"))
+                if not captions_coverage_ok(caps_data, duration):
+                    last = max((c.get("endMs") or 0) for c in caps_data) / 1000 if caps_data else 0
+                    print(
+                        f"[warn] cobertura de legendas fraca "
+                        f"(última palavra {last:.1f}s / cut {duration:.1f}s)",
+                        flush=True,
+                    )
+        except Exception as e:  # noqa: BLE001
+            print(f"[warn] caption coverage check: {e}", flush=True)
+
         cap_style = preset.get("captions") or "karaoke"
         if cap_style == "stacked":
             # Prefer captions.json timings (already clamped / EDL-mapped) over a
@@ -1219,6 +1277,7 @@ def run(
                 "--captions", str(public / "captions.json"),
                 "-o", str(public / "caption-cues.json"),
                 "--lang", language,
+                "--max-sec", f"{duration:.6f}",
             )
         else:
             cues = public / "caption-cues.json"

@@ -16,8 +16,8 @@ REPO = Path(__file__).resolve().parent.parent
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
-LEAD_S = 0.03
-TRAIL_S = 0.06
+LEAD_S = 0.05
+TRAIL_S = 0.12
 MAX_PACKED_CHARS = 14000
 
 
@@ -164,11 +164,15 @@ def _snap_to_regions(
     start: float,
     end: float,
     regions: list[tuple[float, float]],
+    source_dur: float | None = None,
 ) -> tuple[float, float] | None:
     if end <= start:
         return None
     if not regions:
-        return (max(0.0, start - LEAD_S), end + TRAIL_S)
+        s, e = max(0.0, start - LEAD_S), end + TRAIL_S
+        if source_dur and source_dur > 0:
+            e = min(e, source_dur)
+        return (s, e) if e - s >= 0.12 else None
 
     # Merge speech islands across short gaps so a multi-phrase AI beat
     # (e.g. 40.0→45.3 with three regions) is not crushed into the first island.
@@ -195,7 +199,10 @@ def _snap_to_regions(
     e = min(b, max(end, a + 0.15))
     if e - s < 0.25:
         s, e = a, b
-    return (max(0.0, s - LEAD_S), e + TRAIL_S)
+    s, e = max(0.0, s - LEAD_S), e + TRAIL_S
+    if source_dur and source_dur > 0:
+        e = min(e, source_dur)
+    return (s, e) if e - s >= 0.12 else None
 
 
 def _apply_gain(start: float, end: float, voice: dict) -> float:
@@ -216,6 +223,7 @@ def _normalize_ranges(
     source_key: str,
     regions: list[tuple[float, float]],
     voice: dict,
+    source_dur: float | None = None,
 ) -> list[dict]:
     if isinstance(data, list):
         items = data
@@ -233,7 +241,7 @@ def _normalize_ranges(
             end = float(item.get("end"))
         except (TypeError, ValueError):
             continue
-        snapped = _snap_to_regions(start, end, regions)
+        snapped = _snap_to_regions(start, end, regions, source_dur=source_dur)
         if not snapped:
             continue
         s, e = snapped
@@ -294,7 +302,11 @@ def plan_cut(
     text, backend = chat(messages, model="gemini-web/default")
     parsed = _extract_json(text)
     ranges = _normalize_ranges(
-        parsed, source_key=source_key, regions=regions, voice=voice
+        parsed,
+        source_key=source_key,
+        regions=regions,
+        voice=voice,
+        source_dur=duration_s,
     )
     meta = {
         "backend": backend,
