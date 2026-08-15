@@ -135,6 +135,10 @@
               <div class="hero-cta-row">
                 <button type="button" class="export-btn" id="btnPick">✨ Escolher e editar com IA</button>
               </div>
+              <label class="merge-takes" title="Vários arquivos viram um único projeto e um final">
+                <input type="checkbox" id="mergeTakes">
+                <span>Juntar seleção em um único vídeo</span>
+              </label>
             </div>
           </div>
           <div class="section-block">
@@ -324,98 +328,61 @@
 
         <!-- LICENÇA / CONTA -->
         <section class="view hidden" id="view-licenca" data-view-panel="licenca">
-          <div class="lic-shell">
-            <div class="lic-hero">
-              <div class="lic-status-card" id="licenseStatusCard">
-                <div class="lic-status-top">
-                  <span class="lic-badge" id="licenseBadge">—</span>
-                  <button type="button" class="ghost-btn" id="btnLicenseRefresh">Atualizar</button>
+          <div class="lic-shell lic-pro">
+            <div class="lic-status" id="licenseStatusCard" data-tone="neutral">
+              <div class="lic-status-main">
+                <span class="lic-badge" id="licenseBadge">—</span>
+                <div class="lic-status-copy">
+                  <p class="lic-status-title" id="licenseHint">Carregando…</p>
+                  <p class="lic-status-sub" id="authEmailLabel">—</p>
                 </div>
-                <h3 class="lic-status-title" id="licenseHint">Carregando status…</h3>
-                <p class="hint mono" id="licenseDevice" hidden></p>
-                <div class="lic-account-strip" id="licAccountStrip">
-                  <div>
-                    <div class="panel-kicker">Conta</div>
-                    <p class="hint" id="authEmailLabel">Não logado</p>
-                  </div>
-                  <div class="panel-actions" style="margin:0">
-                    <button type="button" class="ghost-btn" id="btnOpenLogin">Entrar</button>
-                    <button type="button" class="ghost-btn" id="btnAuthLogout" hidden>Sair</button>
-                  </div>
-                </div>
+              </div>
+              <div class="lic-status-tools">
+                <button type="button" class="ghost-btn" id="btnLicenseRefresh">Atualizar</button>
+                <button type="button" class="ghost-btn" id="btnOpenLogin" hidden>Entrar</button>
+                <button type="button" class="ghost-btn" id="btnAuthLogout" hidden>Sair</button>
+              </div>
+              <p class="mono" id="licenseDevice" hidden></p>
+            </div>
+
+            <div class="lic-pay" id="licAccountStrip" hidden>
+              <div class="lic-pay-copy">
+                <strong id="licPayTitle">Assinatura anual</strong>
+                <span class="hint" id="licPayHint">Desbloqueie o ATIVAVID neste PC.</span>
+              </div>
+              <div class="lic-pay-actions">
+                <button type="button" class="export-btn" id="btnLicenseCheckout">Assinar</button>
+                <button type="button" class="ghost-btn" id="btnLicenseActivate">Tenho uma chave</button>
               </div>
             </div>
 
-            <div class="lic-grid">
-              <div class="lic-block">
-                <div class="keys-block-head">
-                  <h4>Ativar chave (legado)</h4>
-                  <p class="hint">Opcional. Preferência: criar conta e o admin libera os dias.</p>
-                </div>
-                <label class="ia-form">Chave de ativação
+            <div class="lic-client-key" id="licClientKeyCard" hidden>
+              <label class="ia-form">Chave de ativação
+                <div class="lic-key-row">
                   <input type="text" id="licenseKeyInput" placeholder="ATIV-XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false">
-                </label>
-                <div class="panel-actions">
-                  <button type="button" class="export-btn" id="btnLicenseActivate">Ativar chave</button>
-                  <button type="button" class="ghost-btn" id="btnLicenseCheckout">Assinar R$ 399/ano</button>
+                  <button type="button" class="export-btn export-btn--sm" id="btnLicenseActivateInline">Ativar</button>
                 </div>
-              </div>
-
-              <div class="lic-block" id="licenseAdminPanel" hidden>
-                <div class="keys-block-head">
-                  <h4>Liberar acesso (conta)</h4>
-                  <p class="hint">Cliente cria conta com este e-mail; você libera X dias. Pode liberar antes do cadastro.</p>
-                </div>
-                <label class="ia-form">E-mail do cliente
-                  <input type="email" id="adminLicEmail" placeholder="cliente@email.com">
-                </label>
-                <div class="admin-lic-row">
-                  <label class="ia-form">Dias
-                    <input type="number" id="adminLicDays" value="7" min="1" max="3650">
-                  </label>
-                  <label class="ia-form">PCs
-                    <input type="number" id="adminLicMaxDev" value="1" min="1" max="10">
-                  </label>
-                </div>
-                <div class="admin-day-presets" id="adminDayPresets">
-                  <button type="button" class="ghost-btn" data-days="7">7d</button>
-                  <button type="button" class="ghost-btn" data-days="14">14d</button>
-                  <button type="button" class="ghost-btn" data-days="30">30d</button>
-                  <button type="button" class="ghost-btn" data-days="365">365d</button>
-                </div>
-                <label class="ia-form">Observação
-                  <input type="text" id="adminLicNotes" placeholder="teste, parceiro, …" autocomplete="off">
-                </label>
-                <div class="panel-actions admin-access-actions">
-                  <button type="button" class="export-btn" id="btnAdminGrantAccess">Liberar acesso</button>
-                  <button type="button" class="ghost-btn" id="btnAdminListAccess">Atualizar lista</button>
-                  <button type="button" class="ghost-btn" id="btnAdminRevokeAccess">Revogar e-mail</button>
-                </div>
-                <div class="admin-access-list" id="adminAccessList">
-                  <div class="admin-access-empty hint" id="adminAccessEmpty">Carregando acessos…</div>
-                  <div class="admin-access-table wrap" id="adminAccessTable" hidden></div>
-                </div>
-                <details class="lic-adv">
-                  <summary>Chave ATIV- (legado) e devices</summary>
-                  <label class="ia-form">Service role key (opcional / legado)
-                    <input type="password" id="supabaseServiceInput" placeholder="só se o RPC admin ainda não existir">
-                  </label>
-                  <p class="hint" id="adminServiceHint" hidden></p>
-                  <div class="panel-actions">
-                    <button type="button" class="ghost-btn" id="btnAdminLicCreate">Criar chave ATIV-</button>
-                    <button type="button" class="ghost-btn" id="btnAdminLicList">Listar chaves</button>
-                    <button type="button" class="ghost-btn" id="btnAdminLicSaveSrv">Salvar service role</button>
-                  </div>
-                  <label class="ia-form">Liberar device (Device ID)
-                    <input type="text" id="adminDeviceId" placeholder="win-…" autocomplete="off" spellcheck="false">
-                  </label>
-                  <div class="panel-actions">
-                    <button type="button" class="ghost-btn" id="btnAdminDeviceRelease">Liberar PC</button>
-                  </div>
-                  <pre class="admin-lic-out" id="adminLicOut">Pronto.</pre>
-                </details>
-              </div>
+              </label>
             </div>
+
+            <section class="lic-admin" id="licenseAdminPanel" hidden>
+              <header class="lic-admin-head">
+                <div>
+                  <h4>Contas</h4>
+                  <p class="hint">Acesso de clientes — validade e PCs.</p>
+                </div>
+                <div class="lic-admin-head-actions">
+                  <button type="button" class="export-btn export-btn--sm" id="btnLicAccountOpen">Nova conta</button>
+                  <button type="button" class="ghost-btn" id="btnAdminListAccess">Atualizar</button>
+                  <button type="button" class="lic-adv-link" id="btnLicAdvOpen" title="Service role, ATIV- e devices">Avançado</button>
+                </div>
+              </header>
+
+              <div class="lic-admin-list" id="adminAccessList">
+                <div class="admin-access-empty hint" id="adminAccessEmpty">Nenhuma conta ainda.</div>
+                <div class="admin-access-table wrap" id="adminAccessTable" hidden></div>
+              </div>
+            </section>
           </div>
         </section>
 
@@ -428,7 +395,7 @@
               </div>
               <div class="sys-metrics" id="sysMetrics" aria-label="Resumo">
                 <div class="sys-metric"><span class="sys-m-lab">Perfil</span><strong id="sysMetricProfile">—</strong></div>
-                <div class="sys-metric"><span class="sys-m-lab">Jobs</span><strong id="sysMetricJobs">—</strong></div>
+                <div class="sys-metric"><span class="sys-m-lab">Leve</span><strong id="sysMetricJobs">—</strong></div>
                 <div class="sys-metric"><span class="sys-m-lab">Proxy</span><strong id="sysMetricProxy">—</strong></div>
                 <div class="sys-metric"><span class="sys-m-lab">Cache</span><strong id="sysMetricCache">—</strong></div>
               </div>
@@ -437,8 +404,9 @@
             <div class="sys-grid">
               <div class="sys-card">
                 <h4>Desempenho</h4>
-                <p class="hint" id="sysPerfHint">Como o app usa CPU/GPU nesta máquina.</p>
-                <label class="ia-form">Modo
+                <p class="hint" id="sysPerfHint">Motor de render: Automático. O app escolhe o caminho de cada vídeo.</p>
+                <p class="hint" id="sysLaneHint">Acompanhe o processamento dos seus vídeos.</p>
+                <label class="ia-form">Perfil da máquina
                   <select id="perfProfile">
                     <option value="auto">Automático</option>
                     <option value="eco">Econômico</option>
@@ -448,6 +416,15 @@
                 </label>
                 <div class="panel-actions">
                   <button type="button" class="export-btn" id="btnSavePerf">Aplicar</button>
+                </div>
+              </div>
+
+              <div class="sys-card">
+                <h4>Aceleração de hardware</h4>
+                <p class="hint" id="hwAccelHint">Detectando GPU e encoder…</p>
+                <p class="hint" id="hwAccelDetail"></p>
+                <div class="panel-actions">
+                  <button type="button" class="ghost-btn" id="btnHwBench">Refazer teste de desempenho</button>
                 </div>
               </div>
 
@@ -611,6 +588,94 @@
         <button type="submit" class="export-btn" id="btnAuthLogin">Entrar</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="dlgLicAccount" class="dlg dlg-lic-account">
+    <div class="dlg-lic-adv-head">
+      <div>
+        <div class="panel-kicker">Contas</div>
+        <h3 id="licAccountDlgTitle">Nova conta</h3>
+      </div>
+      <button type="button" class="ghost-btn" id="btnLicAccountClose">Fechar</button>
+    </div>
+    <form class="lic-admin-form" id="adminAccessForm" onsubmit="return false;">
+      <label class="ia-form">E-mail
+        <input type="email" id="adminLicEmail" placeholder="cliente@email.com" autocomplete="off">
+      </label>
+      <label class="ia-form">Senha <span class="hint-inline">(opcional)</span>
+        <input type="text" id="adminLicPassword" placeholder="Gerar automaticamente" autocomplete="off" spellcheck="false">
+      </label>
+      <div class="admin-lic-row">
+        <label class="ia-form">Validade (dias)
+          <input type="number" id="adminLicDays" value="365" min="1" max="3650">
+        </label>
+        <label class="ia-form">PCs
+          <input type="number" id="adminLicMaxDev" value="1" min="1" max="10">
+        </label>
+      </div>
+      <div class="admin-day-presets" id="adminDayPresets" role="group" aria-label="Atalhos de dias">
+        <button type="button" class="ghost-btn" data-days="7">7d</button>
+        <button type="button" class="ghost-btn" data-days="14">14d</button>
+        <button type="button" class="ghost-btn" data-days="30">30d</button>
+        <button type="button" class="ghost-btn" data-days="365">1 ano</button>
+      </div>
+      <label class="ia-form">Observação
+        <input type="text" id="adminLicNotes" placeholder="Opcional" autocomplete="off">
+      </label>
+      <p class="hint" id="adminFormMsg" hidden></p>
+      <div class="lic-admin-form-actions">
+        <button type="button" class="export-btn" id="btnAdminCreateAccount">Criar e liberar</button>
+        <button type="button" class="ghost-btn" id="btnAdminGrantAccess">Só liberar</button>
+        <button type="button" class="ghost-btn" id="btnAdminRevokeAccess">Revogar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlgLicAdv" class="dlg dlg-lic-adv">
+    <div class="dlg-lic-adv-head">
+      <div>
+        <div class="panel-kicker">Interno</div>
+        <h3>Avançado</h3>
+      </div>
+      <button type="button" class="ghost-btn" id="btnLicAdvClose">Fechar</button>
+    </div>
+    <p class="hint">Service role, chaves ATIV- e devices — só quando precisar.</p>
+
+    <div class="dlg-lic-adv-section" id="adminSrvBox">
+      <h4>Service role</h4>
+      <p class="hint" id="adminCreateHint">Uma vez neste PC para criar contas Auth.</p>
+      <label class="ia-form">Chave service_role
+        <input type="password" id="supabaseServiceInput" placeholder="Supabase → Settings → API → service_role" autocomplete="off" spellcheck="false">
+      </label>
+      <p class="hint" id="adminServiceHint" hidden></p>
+      <div class="panel-actions">
+        <button type="button" class="export-btn" id="btnAdminLicSaveSrv">Salvar</button>
+      </div>
+    </div>
+
+    <div class="dlg-lic-adv-section">
+      <h4>Chave ATIV- (legado)</h4>
+      <div class="panel-actions">
+        <button type="button" class="ghost-btn" id="btnAdminLicCreate">Criar chave</button>
+        <button type="button" class="ghost-btn" id="btnAdminLicList">Listar</button>
+      </div>
+    </div>
+
+    <div class="dlg-lic-adv-section">
+      <h4>Devices</h4>
+      <p class="hint mono" id="licAdvDeviceHint" hidden></p>
+      <label class="ia-form">Device ID
+        <input type="text" id="adminDeviceId" placeholder="win-…" autocomplete="off" spellcheck="false">
+      </label>
+      <div class="panel-actions">
+        <button type="button" class="ghost-btn" id="btnAdminDeviceRelease">Liberar PC</button>
+      </div>
+    </div>
+
+    <div class="dlg-lic-adv-section">
+      <h4>Log</h4>
+      <pre class="admin-lic-out" id="adminLicOut">—</pre>
+    </div>
   </dialog>
 
   <dialog id="dlgLicense" class="dlg dlg-license">

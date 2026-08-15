@@ -90,6 +90,15 @@ PRESETS: dict[str, str] = {
 
     # Flat — no grade. Useful as a sentinel for "skip grading this source".
     "none": "",
+
+    # Look de marca (modo rápido / Reels). Contraste + saturação leves, pele
+    # um pouco mais viva, sem teal/orange. Aplicado em Rec.709; LOG usa o
+    # grade do detect_color.py (já traz o punch da expansão).
+    "marca": (
+        "eq=contrast=1.14:saturation=1.18:gamma=0.96:brightness=0.012,"
+        "colorbalance=rs=0.025:rm=0.02:rh=0.012:bs=-0.02:bm=-0.012:bh=-0.008,"
+        "hue=h=-3"
+    ),
 }
 
 

@@ -71,52 +71,29 @@ def friendly_error(raw: str) -> str:
     """Short UI label; keep the raw string in `detail` for diagnostics."""
     text = strip_ansi((raw or "").strip())
     if not text:
-        return "Não foi possível concluir este vídeo"
+        return "Não foi possível concluir este vídeo."
     low = text.lower()
     if "cancel" in low:
-        return "Edição cancelada"
-    if "winerror 2" in low or "cannot find the file" in low or "não pode encontrar o arquivo" in low:
-        return "Falta ferramenta no PC (Python/FFmpeg/Node) — reinstale ou rode o setup"
-    if "uv" in low and ("not found" in low or "winerror" in low or "enoent" in low):
-        return "Instalação incompleta — rode de novo o instalador ATIVAVID"
-    if "segments sum" in low or "!= cut.mp4" in low:
-        return "Falha ao sincronizar o corte — tente de novo"
-    if "no frame found at position" in low or "could not extract frame" in low:
-        return "Falha ao montar o visual (Remotion) — tente de novo"
-    if "cmd failed" in low or "render.py" in low or "remotion" in low:
-        return "Não foi possível montar o vídeo final"
-    if "ffmpeg" in low or "ffprobe" in low:
-        return "FFmpeg não encontrado — reinstale o ATIVAVID"
-    if "groq" in low or "api key" in low or "401" in low or "403" in low:
-        return "Problema de conexão com a IA/transcrição"
-    if "transcrib" in low or "whisper" in low:
-        return "Não foi possível transcrever o áudio"
-    if "npm" in low or "node" in low:
-        return "Falta Node.js — reinstale o ATIVAVID"
-    # first meaningful line, no path dump
-    line = text.splitlines()[0].strip()
-    line = re.sub(r"[A-Za-z]:\\[^\s]+", "", line).strip(" :-")
-    line = re.sub(r"\s+", " ", line)
-    if len(line) > 90 or "traceback" in low or "exception" in low:
-        return "Não foi possível concluir este vídeo"
-    return (line[:110] + "…") if len(line) > 110 else (line or "Não foi possível concluir este vídeo")
+        return "Cancelado pelo usuário"
+    return "Não foi possível concluir este vídeo."
 
 
 STAGE_LABELS = {
     "queued": "Aguardando",
-    "analyzing": "Analisando",
-    "transcribing": "Transcrevendo",
-    "planning": "Criando edição",
-    "cutting": "Criando edição",
-    "visuals": "Preparando preview",
-    "preview": "Preparando preview",
-    "rendering": "Renderizando",
-    "exporting": "Finalizando",
-    "done": "Concluído",
-    "error": "Erro",
+    "analyzing": "Preparando vídeo...",
+    "transcribing": "Preparando vídeo...",
+    "planning": "Preparando vídeo...",
+    "cutting": "Preparando vídeo...",
+    "visuals": "Aplicando legendas e efeitos...",
+    "preview": "Aplicando legendas e efeitos...",
+    "waiting_render": "Aplicando edição...",
+    "rendering": "Aplicando edição...",
+    "exporting": "Finalizando vídeo...",
+    "done": "Vídeo concluído",
+    "error": "Não foi possível concluir este vídeo.",
     "cancelled": "Cancelado",
-    "needs_review": "Revisar",
-    "processing": "Editando",
+    "needs_review": "Não foi possível concluir este vídeo.",
+    "processing": "Preparando vídeo...",
 }
 
 def ensure_job_thumb(job: dict) -> Path | None:
@@ -364,6 +341,135 @@ def _safe_name(name: str) -> str:
     return (stem or "video")[:60]
 
 
+_OPAQUE_NAME = re.compile(
+    r"^(?:"
+    r"IMG|DSC|VID|MOV|MVI|PXL|WA|GX|Screenshot|screen|copy"
+    r")[_-]?",
+    re.I,
+)
+
+
+def _is_opaque_title(name: str) -> bool:
+    """Camera codes / UUIDs — ruim como título na UI."""
+    raw = (name or "").strip()
+    if not raw:
+        return True
+    base = re.sub(r"\s*\(\+\d+\)\s*$", "", raw).strip()
+    stem = Path(base).stem if "." in base else base
+    if _OPAQUE_NAME.match(stem):
+        return True
+    if re.search(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}", stem, re.I):
+        return True
+    if re.fullmatch(r"[A-Za-z]{0,4}_?\d{3,}", stem):
+        return True
+    return False
+
+
+def _fmt_job_when(iso: str | None) -> str:
+    """Data/hora local pt-BR a partir de ISO UTC."""
+    if not iso:
+        return ""
+    try:
+        raw = str(iso).strip().replace("Z", "+00:00")
+        dt = datetime.fromisoformat(raw)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        local = dt.astimezone()
+        return local.strftime("%d/%m/%Y · %H:%M")
+    except Exception:
+        return str(iso)[:16]
+
+
+def enrich_job_display(job: dict, edit_dir: Path | None = None) -> dict:
+    """Campos de UI: título amigável + início/fim formatados."""
+    edit = edit_dir or Path(job.get("editDir") or ".")
+    created = job.get("createdAt") or job.get("startedAt")
+    finished = job.get("finishedAt")
+    if not finished and job.get("status") == "done":
+        finished = job.get("updatedAt")
+    job["createdAtLabel"] = _fmt_job_when(created)
+    job["startedAtLabel"] = job["createdAtLabel"]
+    job["finishedAtLabel"] = _fmt_job_when(finished) if finished else ""
+    job["title"] = _resolve_job_title(job, edit)
+    return job
+
+
+def _humanize_stem(stem: str) -> str:
+    t = re.sub(r"[_\-]+", " ", (stem or "").strip())
+    t = re.sub(r"\s+", " ", t).strip()
+    if not t:
+        return "Vídeo"
+    return t[:1].upper() + t[1:]
+
+
+def _default_job_title(name: str, created_at: str | None = None, extra_takes: int = 0) -> str:
+    when = _fmt_job_when(created_at)
+    base = re.sub(r"\s*\(\+\d+\)\s*$", "", (name or "").strip())
+    stem = Path(base).stem if base else "video"
+    if _is_opaque_title(stem):
+        title = f"Vídeo · {when}" if when else "Vídeo"
+    else:
+        title = _humanize_stem(stem)
+    if extra_takes > 0:
+        title = f"{title} (+{extra_takes})"
+    return title[:80]
+
+
+def _suggest_title_from_edit(edit_dir: Path) -> str | None:
+    """Primeira linha útil da legenda ou gancho do edit-data."""
+    leg = edit_dir / "legenda.txt"
+    if leg.exists():
+        try:
+            for line in leg.read_text(encoding="utf-8-sig").splitlines():
+                s = line.strip().strip('"').strip("'")
+                if len(s) >= 8 and not s.startswith("#"):
+                    # corta hashtags no fim
+                    s = re.split(r"\s+#", s, maxsplit=1)[0].strip()
+                    if len(s) >= 8:
+                        return (s[:72] + ("…" if len(s) > 72 else ""))
+        except OSError:
+            pass
+    ed = edit_dir / "remotion" / "public" / "edit-data.json"
+    if ed.exists():
+        try:
+            data = json.loads(ed.read_text(encoding="utf-8-sig"))
+            hook = data.get("hook") or {}
+            lines = hook.get("lines") or hook.get("text") or []
+            if isinstance(lines, str):
+                lines = [lines]
+            for ln in lines:
+                s = str(ln or "").strip()
+                if len(s) >= 6:
+                    return s[:72] + ("…" if len(s) > 72 else "")
+            hl = (data.get("headline") or data.get("aiHeadline") or "").strip()
+            if len(hl) >= 6:
+                return hl[:72]
+        except (OSError, json.JSONDecodeError, TypeError):
+            pass
+    return None
+
+
+def _resolve_job_title(job: dict, edit_dir: Path | None = None) -> str:
+    """Título para a UI: manual > legenda/gancho > nome humanizado."""
+    if job.get("titleLocked") and (job.get("title") or "").strip():
+        return str(job["title"]).strip()[:80]
+    edit = edit_dir or Path(job.get("editDir") or ".")
+    name = str(job.get("name") or "")
+    stored = str(job.get("title") or "").strip()
+    # Legenda/gancho quando o nome é código de câmera ou o título ainda é genérico
+    if _is_opaque_title(name) or not stored or stored.startswith("Vídeo ·"):
+        suggested = _suggest_title_from_edit(edit)
+        if suggested:
+            return suggested
+    if stored:
+        return stored[:80]
+    extra = 0
+    m = re.search(r"\(\+(\d+)\)\s*$", name)
+    if m:
+        extra = int(m.group(1))
+    return _default_job_title(name, job.get("createdAt"), extra_takes=extra)
+
+
 def load_env_keys() -> dict[str, str]:
     keys: dict[str, str] = {}
     path = ENV_PATH if ENV_PATH.exists() else (_LEGACY_ENV if _LEGACY_ENV.exists() else None)
@@ -429,6 +535,7 @@ def load_preset() -> dict:
         "captionChunk": "frase_curta",
         "smartEmphasis": True,
         "endCardType": "seguir",
+        "colorGrade": "marca",
         "elements": {
             "tracking": False,
             "zoomAuto": True,
@@ -543,6 +650,7 @@ class Worker:
         self._proc: subprocess.Popen | None = None  # compat cancel legado
         self._proc_lock = threading.Lock()
         self._cancel_ids: set[str] = set()
+        self._queued: set[str] = set()
         self.recovered_ids: list[str] = []
         self.parallel_jobs = 1
 
@@ -567,6 +675,8 @@ class Worker:
                     recovered=True,
                 )
                 recovered.append(j["id"])
+                with self._proc_lock:
+                    self._queued.add(j["id"])
                 self.q.put(j["id"])
         self.recovered_ids = recovered
 
@@ -579,6 +689,11 @@ class Worker:
 
     def enqueue(self, job_id: str) -> None:
         self._cancel_ids.discard(job_id)
+        # Evita 2+ run_fast no mesmo projeto (trava remotion no Windows).
+        with self._proc_lock:
+            if job_id in self._busy or job_id in self._queued:
+                return
+            self._queued.add(job_id)
         self.q.put(job_id)
 
     def cancel(self, job_id: str) -> dict:
@@ -632,6 +747,8 @@ class Worker:
     def _loop(self) -> None:
         while True:
             job_id = self.q.get()
+            with self._proc_lock:
+                self._queued.discard(job_id)
             try:
                 if job_id in self._cancel_ids:
                     self._cancel_ids.discard(job_id)
@@ -644,6 +761,10 @@ class Worker:
                             reason="cancelled",
                         )
                     continue
+                # Já tem worker neste job (enqueue duplicado antigo / race)
+                with self._proc_lock:
+                    if job_id in self._busy:
+                        continue
                 self._run_one(job_id)
             except Exception as e:  # noqa: BLE001
                 self.store.update(
@@ -698,21 +819,33 @@ class Worker:
         env = os.environ.copy()
         env.update(load_env_keys())
         try:
-            from app.win_process import refresh_path_env
+            from app.win_process import child_env
 
-            env = refresh_path_env(env)
+            env = child_env(env)
         except Exception:
-            pass
+            try:
+                from app.win_process import refresh_path_env
+
+                env = refresh_path_env(env)
+            except Exception:
+                pass
         # helpers + repo (app.llm_session usado pelo plano de corte IA)
-        env["PYTHONPATH"] = (
-            str(HELPERS) + os.pathsep + str(REPO) + os.pathsep + env.get("PYTHONPATH", "")
-        )
+        # Dedupa PYTHONPATH também — jobs paralelos não podem inflar sem limite.
+        py_parts = [str(HELPERS), str(REPO)]
+        for p in (env.get("PYTHONPATH") or "").split(os.pathsep):
+            p = p.strip()
+            if p and p not in py_parts:
+                py_parts.append(p)
+        env["PYTHONPATH"] = os.pathsep.join(py_parts)
+        env["PYTHONIOENCODING"] = "utf-8"
+        env["PYTHONUTF8"] = "1"
         try:
             from app.ffmpeg_tools import ensure_ffmpeg_on_path
+            from app.win_process import dedupe_path
 
             vend = ensure_ffmpeg_on_path()
             if vend:
-                env["PATH"] = str(vend) + os.pathsep + env.get("PATH", "")
+                env["PATH"] = dedupe_path(env.get("PATH", ""), prefer=[str(vend)])
         except Exception:
             pass
         try:
@@ -722,9 +855,19 @@ class Worker:
             perf = profile_settings(load_settings().get("performanceProfile"))
             env["ATIVAVID_PROXY"] = "1" if perf.get("proxyEnabled") else "0"
             env["ATIVAVID_PROXY_HEIGHT"] = str(perf.get("proxyHeight") or 540)
-            env["ATIVAVID_ENCODER"] = str(perf.get("encoder") or "libx264")
+            try:
+                from app.render_engine import ensure_profile
+
+                env["ATIVAVID_ENCODER"] = str(
+                    (ensure_profile() or {}).get("recommendedEncoder")
+                    or perf.get("encoder")
+                    or "libx264"
+                )
+            except Exception:
+                env["ATIVAVID_ENCODER"] = str(perf.get("encoder") or "libx264")
             env["ATIVAVID_EXTRACT_JOBS"] = str(perf.get("extractJobs") or 1)
             env["ATIVAVID_PARALLEL_JOBS"] = str(self.parallel_jobs)
+            env["ATIVAVID_RENDER_SLOTS"] = str(max(1, int(perf.get("renderSlots") or 1)))
             env["ATIVAVID_REMOTION_LOCK"] = str(
                 self.store.root / ".ativavid" / "remotion.lock"
             )
@@ -732,14 +875,20 @@ class Worker:
             pass
 
         from app.win_process import hide_console_kwargs, resolve_python_cmd
+        import tempfile
+
+        # Nunca use PIPE sem drain: npm/ffmpeg enchem o buffer (~64KB) e no
+        # Windows o filho morre com [Errno 22] Invalid argument na fase visuals.
+        # Arquivos binários — text=True + file handle no Popen também gera Errno 22.
+        out_fd, out_name = tempfile.mkstemp(suffix=".out", prefix=f"ativavid_job_{job_id}_")
+        err_fd, err_name = tempfile.mkstemp(suffix=".err", prefix=f"ativavid_job_{job_id}_")
+        out_path_tmp = Path(out_name)
+        err_path_tmp = Path(err_name)
 
         popen_kwargs: dict = {
             "cwd": str(REPO),
-            "stdout": subprocess.PIPE,
-            "stderr": subprocess.PIPE,
-            "text": True,
-            "encoding": "utf-8",
-            "errors": "replace",
+            "stdout": out_fd,
+            "stderr": err_fd,
             "env": env,
             **hide_console_kwargs(),
         }
@@ -753,11 +902,28 @@ class Worker:
             "--preset", str(preset_path),
             "--json",
         ]
+        for extra in job.get("sources") or []:
+            ep = Path(extra)
+            if ep.exists() and ep.resolve() != source.resolve():
+                cmd.extend(["--also", str(ep)])
 
         with self._proc_lock:
             try:
                 proc = subprocess.Popen(cmd, **popen_kwargs)
             except FileNotFoundError as e:
+                try:
+                    os.close(out_fd)
+                except OSError:
+                    pass
+                try:
+                    os.close(err_fd)
+                except OSError:
+                    pass
+                for p in (out_path_tmp, err_path_tmp):
+                    try:
+                        p.unlink(missing_ok=True)
+                    except OSError:
+                        pass
                 self.store.update(
                     job_id,
                     status="error",
@@ -773,8 +939,29 @@ class Worker:
             self._procs[job_id] = proc
             self._proc = proc
 
-        stdout, stderr = proc.communicate()
-        returncode = proc.returncode
+        returncode = proc.wait()
+        # fds inherited by child; close our copies after wait
+        try:
+            os.close(out_fd)
+        except OSError:
+            pass
+        try:
+            os.close(err_fd)
+        except OSError:
+            pass
+        try:
+            stdout = out_path_tmp.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            stdout = ""
+        try:
+            stderr = err_path_tmp.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            stderr = ""
+        for p in (out_path_tmp, err_path_tmp):
+            try:
+                p.unlink(missing_ok=True)
+            except OSError:
+                pass
 
         if job_id in self._cancel_ids:
             self._cancel_ids.discard(job_id)
@@ -816,6 +1003,7 @@ class Worker:
                 final=str(edit_dir / "final.mp4"),
                 legenda=legenda,
                 durationSec=result.get("durationSec"),
+                finishedAt=_utc(),
             )
             ensure_job_thumb(self.store.get(job_id) or job)
             return
@@ -1068,6 +1256,7 @@ class StudioHandler(BaseHTTPRequestHandler):
                         j["score"] = json.loads(score_path.read_text(encoding="utf-8-sig"))
                     except (OSError, json.JSONDecodeError):
                         pass
+                enrich_job_display(j, edit)
             self._json({"jobs": jobs, "busy": self.worker.busy_id})
             return
         if path == "/api/system":
@@ -1357,6 +1546,17 @@ class StudioHandler(BaseHTTPRequestHandler):
                 return
             body = self._read_json() or {}
             action = str(body.get("action") or "grant").strip().lower()
+            if action in ("create", "create_account", "provision"):
+                self._json(
+                    la.create_account_and_grant(
+                        email=str(body.get("email") or ""),
+                        password=str(body.get("password") or "") or None,
+                        days=int(body.get("days") or 7),
+                        max_devices=int(body.get("maxDevices") or body.get("max_devices") or 1),
+                        notes=str(body.get("notes") or "") or None,
+                    )
+                )
+                return
             if action == "grant":
                 self._json(
                     la.grant_access(
@@ -1785,6 +1985,27 @@ class StudioHandler(BaseHTTPRequestHandler):
             self._json({"ok": True, "path": str(folder)})
             return
 
+        if path == "/api/jobs/rename":
+            body = self._read_json() or {}
+            job = self.store.get(body.get("id", ""))
+            if not job:
+                self._json({"error": "job not found"}, 404)
+                return
+            title = re.sub(r"\s+", " ", str(body.get("title") or "").strip())
+            if not title:
+                self._json({"error": "título vazio"}, 400)
+                return
+            if len(title) > 80:
+                title = title[:80]
+            updated = self.store.update(
+                job["id"],
+                title=title,
+                titleLocked=True,
+                updatedAt=_utc(),
+            )
+            self._json({"ok": True, "job": updated})
+            return
+
         if path == "/api/jobs/retry":
             from app import license as lic
 
@@ -1886,45 +2107,95 @@ class StudioHandler(BaseHTTPRequestHandler):
             if not st.get("entitled"):
                 self._json({"error": lic.deny_reason(st), "license": lic.public_status()}, 403)
                 return
+            qs = parse_qs(parsed.query)
+            merge = (qs.get("merge") or ["0"])[0].lower() in ("1", "true", "yes")
             ctype = self.headers.get("Content-Type", "")
             created: list[dict] = []
             if "multipart/form-data" in ctype:
-                created = self._ingest_multipart()
+                created = self._ingest_multipart(merge=merge)
             else:
                 body = self._read_json()
                 paths = body.get("paths") or []
-                created = self._ingest_paths(paths)
-            self._json({"ok": True, "jobs": created})
+                merge = merge or bool(body.get("merge"))
+                created = self._ingest_paths(paths, merge=merge)
+            self._json({"ok": True, "jobs": created, "merged": bool(merge and len(created) == 1)})
             return
 
         self._json({"error": "unknown route"}, 404)
 
-    def _ingest_paths(self, paths: list[str]) -> list[dict]:
-        out: list[dict] = []
+    def _ingest_paths(self, paths: list[str], merge: bool = False) -> list[dict]:
+        files: list[Path] = []
         for p in paths:
             src = Path(p)
-            if not src.exists():
-                continue
-            out.append(self._create_job_from_file(src, copy=True))
-        return out
+            if src.exists():
+                files.append(src)
+        if not files:
+            return []
+        if merge and len(files) > 1:
+            return [self._create_job_from_many_files(files)]
+        return [self._create_job_from_file(src, copy=True) for src in files]
 
-    def _ingest_multipart(self) -> list[dict]:
+    def _ingest_multipart(self, merge: bool = False) -> list[dict]:
         n = int(self.headers.get("Content-Length") or 0)
         body = self.rfile.read(n) if n else b""
         ctype = self.headers.get("Content-Type", "")
         if "boundary=" not in ctype:
             return []
-        # Rebuild a MIME message so we can parse without cgi
         raw = b"Content-Type: " + ctype.encode("ascii", "ignore") + b"\r\nMIME-Version: 1.0\r\n\r\n" + body
         msg = BytesParser(policy=policy.default).parsebytes(raw)
-        out: list[dict] = []
+        parts: list[tuple[str, bytes]] = []
         for part in msg.iter_parts():
             filename = part.get_filename()
             if not filename:
                 continue
             payload = part.get_payload(decode=True) or b""
-            out.append(self._create_job_from_bytes(filename, payload))
-        return out
+            parts.append((filename, payload))
+        if not parts:
+            return []
+        if merge and len(parts) > 1:
+            return [self._create_job_from_many_bytes(parts)]
+        return [self._create_job_from_bytes(name, data) for name, data in parts]
+
+    def _create_job_from_many_files(self, files: list[Path]) -> dict:
+        job_id = uuid.uuid4().hex[:10]
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        label = _safe_name(files[0].stem)[:40] or "takes"
+        project = self.projects_root / f"{stamp}_{label}_x{len(files)}_{job_id}"
+        project.mkdir(parents=True, exist_ok=True)
+        copied: list[Path] = []
+        for src in files:
+            dest = project / src.name
+            # Avoid clobber if same basename
+            if dest.exists():
+                dest = project / f"{src.stem}_{len(copied)}{src.suffix}"
+            shutil.copy2(src, dest)
+            copied.append(dest)
+        primary = copied[0]
+        name = f"{label} (+{len(copied) - 1})" if len(copied) > 1 else label
+        return self._register_job(
+            job_id, name, primary, project / "edit", sources=[str(p) for p in copied]
+        )
+
+    def _create_job_from_many_bytes(self, parts: list[tuple[str, bytes]]) -> dict:
+        job_id = uuid.uuid4().hex[:10]
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        label = _safe_name(Path(parts[0][0]).stem)[:40] or "takes"
+        project = self.projects_root / f"{stamp}_{label}_x{len(parts)}_{job_id}"
+        project.mkdir(parents=True, exist_ok=True)
+        copied: list[Path] = []
+        for filename, data in parts:
+            name = _safe_name(filename)
+            ext = Path(filename).suffix or ".mp4"
+            dest = project / f"{name}{ext}"
+            if dest.exists():
+                dest = project / f"{name}_{len(copied)}{ext}"
+            dest.write_bytes(data)
+            copied.append(dest)
+        primary = copied[0]
+        display = f"{label} (+{len(copied) - 1})" if len(copied) > 1 else label
+        return self._register_job(
+            job_id, display, primary, project / "edit", sources=[str(p) for p in copied]
+        )
 
     def _create_job_from_bytes(self, filename: str, data: bytes) -> dict:
         job_id = uuid.uuid4().hex[:10]
@@ -1953,7 +2224,14 @@ class StudioHandler(BaseHTTPRequestHandler):
             shutil.move(str(src), str(dest))
         return self._register_job(job_id, name, dest, project / "edit")
 
-    def _register_job(self, job_id: str, name: str, source: Path, edit_dir: Path) -> dict:
+    def _register_job(
+        self,
+        job_id: str,
+        name: str,
+        source: Path,
+        edit_dir: Path,
+        sources: list[str] | None = None,
+    ) -> dict:
         edit_dir.mkdir(parents=True, exist_ok=True)
         # So /p/<pasta>/fase1 always resolves to a real editor session
         state_p = edit_dir / "state.json"
@@ -1968,17 +2246,23 @@ class StudioHandler(BaseHTTPRequestHandler):
                 }, indent=2, ensure_ascii=False),
                 encoding="utf-8",
             )
+        src_list = sources or [str(source)]
+        created = _utc()
+        extra = max(0, len(src_list) - 1)
         job = {
             "id": job_id,
             "name": name,
+            "title": _default_job_title(name, created, extra_takes=extra),
+            "titleLocked": False,
             "source": str(source),
+            "sources": src_list,
             "editDir": str(edit_dir),
             "projectDir": str(source.parent),
             "status": "queued",
-            "message": "Na fila",
+            "message": "Na fila" + (f" · {len(src_list)} takes" if len(src_list) > 1 else ""),
             "phase": 0,
-            "createdAt": _utc(),
-            "updatedAt": _utc(),
+            "createdAt": created,
+            "updatedAt": created,
         }
         self.store.upsert(job)
         self.worker.enqueue(job_id)

@@ -57,6 +57,26 @@
     }
   }
 
+  async function refreshJobCounts() {
+    const filaEl = $("#countFila");
+    const doneEl = $("#countDone");
+    if (!filaEl && !doneEl) return;
+    try {
+      const res = await fetch("/api/jobs", { cache: "no-store" });
+      if (!res.ok) return;
+      const data = await res.json();
+      const jobs = Array.isArray(data.jobs) ? data.jobs : [];
+      const fila = jobs.filter((j) =>
+        ["queued", "processing", "needs_review", "error"].includes(j.status)
+      ).length;
+      const done = jobs.filter((j) => j.status === "done").length;
+      if (filaEl) filaEl.textContent = String(fila);
+      if (doneEl) doneEl.textContent = String(done);
+    } catch {
+      /* ignore — hub poll continues */
+    }
+  }
+
   function pyApi() {
     try {
       return window.pywebview && window.pywebview.api;
@@ -134,7 +154,12 @@
     wireCollapse();
     wireNav();
     refreshHint();
+    refreshJobCounts();
     wireWindowChrome();
+    setInterval(() => {
+      refreshJobCounts().catch(() => {});
+      refreshHint().catch(() => {});
+    }, 2500);
   };
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", boot);

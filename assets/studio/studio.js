@@ -10,20 +10,22 @@ const state = {
 
 const STATUS_LABEL = {
   queued: "Aguardando",
-  processing: "Editando",
+  processing: "Processando",
   done: "Concluído",
   needs_review: "Revisar",
   error: "Erro",
 };
 
+const TECH_LEAK = /overlay|remotion|ffmpeg|ffprobe|nvenc|nvdec|prores|loudnorm|compose|render_engine|fallback_full|full.?remotion|h264|libx264|qsv|amf|tonemap|cpu cut|working.?master|single.?pass|encoder|node\.js|\bnode\b|python|traceback|file ".+?", line \d+|helpers\\|cmd \/c |cmd failed|exception|uv run|render\.py|\\\\|\/helpers\//i;
+
 const VIEW_COPY = {
-  import: ["Início", "Comece por aqui — arraste verticais 9:16 e edite em 1 clique."],
-  fila: ["Fila", "Acompanhe a edição automática — a IA corta, legenda e prepara o final."],
+  import: ["Início", "Arraste takes — um Reels cada, ou junte vários em um único vídeo."],
+  fila: ["Fila", "Acompanhe o processamento dos seus vídeos."],
   done: ["Concluídos", "Vídeos prontos para abrir, ajustar ou exportar."],
   estilo: ["Estilos", "Visual padrão da marca — a IA usa isso no corte e na Fase 2."],
   keys: ["Chaves & IA", "Passo a passo da sessão + links para Groq, ElevenLabs e Pexels."],
-  licenca: ["Licença", "Status da assinatura, ativação de chave e conta ATIVAVID."],
-  sistema: ["Sistema", "Desempenho, pastas, marcas e atualizações."],
+  licenca: ["Licença", "Status da assinatura e contas."],
+  sistema: ["Sistema", "Desempenho em faixas, pastas, marcas e atualizações."],
   // aliases antigos → redirecionados em setView
   ia: ["Chaves & IA", "Sessão do navegador e chaves de API."],
   doutor: ["Sistema", "Desempenho e pastas."],
@@ -46,35 +48,49 @@ function escapeHtml(s) {
 }
 
 function looksTechnical(s) {
-  return /cmd failed|traceback|exception|uv run|\\\\|\/helpers\/|render\.py/i.test(s);
+  return TECH_LEAK.test(String(s || ""));
+}
+
+function queueCopy(j) {
+  const status = String(j.status || "");
+  const stage = String(j.stage || "");
+  const raw = `${j.message || ""} ${j.stageLabel || ""} ${stage} ${j.reason || ""}`;
+  const blob = raw.toLowerCase();
+
+  if (status === "done" || stage === "done") {
+    return { badge: "CONCLUÍDO", text: "Vídeo concluído" };
+  }
+  if (status === "error" || status === "needs_review" || stage === "error") {
+    if (/cancel/i.test(raw) || stage === "cancelled" || j.reason === "cancelled") {
+      return { badge: "CANCELADO", text: "Cancelado pelo usuário" };
+    }
+    return { badge: "ERRO", text: "Não foi possível concluir este vídeo." };
+  }
+  if (status === "queued" || stage === "queued") {
+    return { badge: "NA FILA", text: "Aguardando na fila" };
+  }
+
+  const finishing = stage === "exporting"
+    || /export|encode|loudnorm|compose|mux|cleanup|valid|finaliz/i.test(blob);
+  const captions = stage === "visuals" || stage === "preview"
+    || /caption|legenda|overlay|hook|end.?card|zoom|efeito|insert/i.test(blob);
+  const editing = stage === "rendering" || stage === "waiting_render"
+    || /renderiz|remotion|visual/i.test(blob);
+  const preparing = ["transcribing", "analyzing", "planning", "cutting"].includes(stage)
+    || /transcrib|analis|planning|cut|corte|prepar/i.test(blob);
+
+  if (finishing) return { badge: "PROCESSANDO", text: "Finalizando vídeo..." };
+  if (captions) return { badge: "PROCESSANDO", text: "Aplicando legendas e efeitos..." };
+  if (editing) return { badge: "PROCESSANDO", text: "Aplicando edição..." };
+  if (preparing) return { badge: "PROCESSANDO", text: "Preparando vídeo..." };
+  return { badge: "PROCESSANDO", text: "Preparando vídeo..." };
 }
 
 function jobHeadline(j) {
-  if (j.status === "processing") {
-    return j.message || j.stageLabel || "Editando com IA…";
-  }
-  if (j.status === "queued") return j.message || "Aguardando na fila";
-  if (j.status === "error") {
-    if (/cancel/i.test(j.message || "") || j.reason === "cancelled") {
-      return "Edição cancelada — pode reiniciar ou apagar";
-    }
-    return j.message || "Não foi possível concluir este vídeo";
-  }
-  if (j.status === "needs_review") return j.message || "Precisa de revisão";
-  if (j.status === "done") {
-    const sc = j.score && j.score.overall;
-    return sc ? `Pronto · análise estrutural ${sc}/100` : (j.message || "Pronto para revisar");
-  }
-  const msg = (j.message || "").trim();
-  if (msg && !looksTechnical(msg)) return msg;
-  return STATUS_LABEL[j.status] || "";
+  return queueCopy(j).text;
 }
 
-function jobDetail(j) {
-  const d = (j.detail || "").trim();
-  const m = (j.message || "").trim();
-  if (d && d !== m) return d;
-  if (looksTechnical(m)) return m;
+function jobDetail() {
   return "";
 }
 
@@ -143,6 +159,14 @@ function cardHtml(j) {
   const busy = j.status === "processing" || j.status === "queued";
   const headline = jobHeadline(j);
   const detail = jobDetail(j);
+  const title = j.title || j.name || "Vídeo";
+  const startLabel = j.startedAtLabel || j.createdAtLabel || "";
+  const endLabel = j.finishedAtLabel || "";
+  const whenBits = [];
+  if (startLabel) whenBits.push(`Início ${startLabel}`);
+  if (endLabel) whenBits.push(`Fim ${endLabel}`);
+  else if (j.status === "processing" || j.status === "queued") whenBits.push("Em andamento");
+  const when = whenBits.join(" · ");
   const progress = (j.status === "processing" && j.progress != null)
     ? `<div class="pc-progress"><span style="width:${Math.max(5, Math.min(100, j.progress))}%"></span></div>`
     : "";
@@ -150,7 +174,7 @@ function cardHtml(j) {
     ? `<button type="button" class="pc-detail-btn" data-act="detail" data-id="${j.id}">Ver detalhes</button>`
     : "";
   const thumb = j.thumbUrl || `/api/jobs/${j.id}/thumb`;
-  const chipLabel = j.stageLabel || STATUS_LABEL[j.status] || j.status;
+  const chipLabel = queueCopy(j).badge;
   const footLeft = [];
   if (busy) {
     footLeft.push(`<button type="button" class="chip-btn" data-act="cancel" data-id="${j.id}">Cancelar</button>`);
@@ -167,7 +191,11 @@ function cardHtml(j) {
     </div>
     <div class="pc-body">
       <div class="pc-top">
-        <div class="pc-name">${escapeHtml(j.name)}</div>
+        <div class="pc-title-block">
+          <button type="button" class="pc-name pc-name-btn" data-act="rename" data-id="${j.id}"
+            data-title="${escapeHtml(title)}" title="Clique para renomear">${escapeHtml(title)}</button>
+          ${when ? `<div class="pc-when">${escapeHtml(when)}</div>` : ""}
+        </div>
         <span class="chip ${j.status}">${escapeHtml(chipLabel)}</span>
       </div>
       <div class="pc-msg">${escapeHtml(headline)}</div>
@@ -184,7 +212,7 @@ function cardHtml(j) {
       <div class="pc-foot">
         <div class="pc-foot-left">${footLeft.join("")}</div>
         <button type="button" class="chip-btn danger-outline" data-act="delete" data-id="${j.id}"
-          data-name="${escapeHtml(j.name)}" title="Apagar projeto e pasta">Apagar</button>
+          data-name="${escapeHtml(title)}" title="Apagar projeto e pasta">Apagar</button>
       </div>
     </div>
   </article>`;
@@ -255,6 +283,45 @@ function applyAppVersion(ver) {
   if (label) label.textContent = `v${v}`;
 }
 
+function fmtValidUntil(v) {
+  if (!v) return "—";
+  const raw = String(v).slice(0, 10);
+  try {
+    const d = new Date(v);
+    if (!Number.isNaN(d.getTime())) return d.toLocaleDateString("pt-BR");
+  } catch { /* ignore */ }
+  return raw;
+}
+
+function syncLicenseChrome() {
+  const lic = state.license || {};
+  const auth = state.auth || {};
+  const logged = !!auth.loggedIn;
+  const isAdmin = !!(logged && auth.isAdmin);
+  const entitled = !!lic.entitled || ["licensed", "account", "trial", "open"].includes(lic.mode);
+  const needsPay = !isAdmin && lic.configured && !lic.entitled && lic.mode !== "open";
+  const showKey = !isAdmin && (needsPay || lic.mode === "trial" || lic.mode === "blocked" || (!lic.entitled && lic.configured));
+
+  const panel = $("#licenseAdminPanel");
+  if (panel) {
+    const justOpened = isAdmin && panel.hidden;
+    panel.hidden = !isAdmin;
+    if (justOpened) loadAccessList().catch(() => {});
+  }
+  const pay = $("#licAccountStrip");
+  if (pay) pay.hidden = !needsPay;
+  const clientKey = $("#licClientKeyCard");
+  if (clientKey) clientKey.hidden = !showKey;
+  if (needsPay) {
+    const title = $("#licPayTitle");
+    const hint = $("#licPayHint");
+    if (title) title.textContent = lic.priceLabel || "Assinatura anual";
+    if (hint) {
+      hint.textContent = lic.message || "Assine ou ative uma chave neste PC.";
+    }
+  }
+}
+
 function renderLicense(lic) {
   const hint = $("#licenseHint");
   const device = $("#licenseDevice");
@@ -263,54 +330,61 @@ function renderLicense(lic) {
   if (!hint) return;
   const mode = lic.mode || "open";
   const upd = lic.update || {};
+  const until = fmtValidUntil(lic.validUntil);
   let badgeText = "—";
   let tone = "neutral";
+  let title = "Carregando…";
   if (mode === "update_required" || upd.force) {
-    hint.textContent = upd.message || lic.message || "Atualize o ATIVAVID para continuar.";
+    title = upd.message || lic.message || "Atualize o ATIVAVID para continuar.";
     badgeText = "Atualizar";
     tone = "bad";
   } else if (mode === "account") {
-    const until = lic.validUntil ? String(lic.validUntil).slice(0, 10) : "—";
-    const mail = lic.accountEmail || "";
-    hint.textContent = `Conta ativa${mail ? " · " + mail : ""} · válida até ${until}.`;
-    badgeText = "Conta";
+    title = `Assinatura ativa até ${until}`;
+    badgeText = "Ativa";
     tone = "ok";
-    if (upd.updateAvailable && !upd.force) {
-      hint.textContent += ` · nova versão ${upd.latestVersion || ""} disponível.`;
-    }
   } else if (mode === "open" || !lic.configured) {
-    hint.textContent = "Modo aberto — configure o Supabase nesta página para ligar trial/licença.";
+    title = "Modo aberto — licença não exigida neste PC.";
     badgeText = "Aberto";
     tone = "neutral";
   } else if (mode === "error") {
-    hint.textContent = lic.message || lic.error || "Erro ao falar com o Supabase.";
+    title = lic.message || lic.error || "Não foi possível verificar a licença.";
     badgeText = "Erro";
     tone = "bad";
   } else if (mode === "trial") {
-    hint.textContent = `Trial ativo · ${lic.trialDaysLeft ?? "?"} dia(s) restante(s) de ${lic.trialDaysTotal || 7}.`;
+    title = `Trial · ${lic.trialDaysLeft ?? "?"} dia(s) restantes`;
     badgeText = "Trial";
     tone = "warn";
   } else if (mode === "licensed") {
-    const until = lic.validUntil ? String(lic.validUntil).slice(0, 10) : "—";
-    hint.textContent = `Licença ativa${lic.licenseKeyHint ? " · " + lic.licenseKeyHint : ""} · válida até ${until}.`;
+    title = `Licença ativa até ${until}`;
     badgeText = "Ativa";
     tone = "ok";
-    if (upd.updateAvailable && !upd.force) {
-      hint.textContent += ` · nova versão ${upd.latestVersion || ""} disponível.`;
-    }
   } else {
-    hint.textContent = lic.message || "Trial encerrado — ative uma chave ou assine.";
+    title = lic.message || "Sem licença ativa";
     badgeText = "Bloqueada";
     tone = "bad";
   }
+  if (upd.updateAvailable && !upd.force && (tone === "ok" || tone === "warn")) {
+    title += ` · v${String(upd.latestVersion || "").replace(/^v/i, "")} disponível`;
+  }
+  hint.textContent = title;
   if (badge) badge.textContent = badgeText;
   if (card) card.dataset.tone = tone;
-  if (device && lic.deviceId) {
-    device.hidden = false;
-    device.textContent = `Device: ${lic.deviceId}`;
+  if (device) {
+    device.hidden = true;
+    device.textContent = "";
+  }
+  const advDev = $("#licAdvDeviceHint");
+  if (advDev && lic.deviceId) {
+    advDev.hidden = false;
+    advDev.textContent = `Este PC: ${lic.deviceId}`;
+  }
+  const deviceInput = $("#adminDeviceId");
+  if (deviceInput && lic.deviceId && !deviceInput.value) {
+    deviceInput.placeholder = lic.deviceId;
   }
   state.license = lic;
   if (state.auth) applyAccountChrome(state.auth);
+  else syncLicenseChrome();
   const soft = $("#updateSoftHint");
   if (soft) {
     if (upd.updateAvailable && !upd.force) {
@@ -425,10 +499,11 @@ async function uploadFiles(fileList) {
       return;
     }
   } catch { /* ignore — servidor decide */ }
+  const merge = !!(files.length > 1 && $("#mergeTakes")?.checked);
   const fd = new FormData();
   for (const f of files) fd.append("files", f, f.name);
-  toast(`Importando ${files.length}…`);
-  const res = await fetch("/api/jobs", { method: "POST", body: fd });
+  toast(merge ? `Juntando ${files.length} takes em 1 vídeo…` : `Importando ${files.length}…`);
+  const res = await fetch(`/api/jobs${merge ? "?merge=1" : ""}`, { method: "POST", body: fd });
   const data = await res.json();
   if (res.status === 403 && (data.error === "license_required" || data.error === "update_required")) {
     renderLicense(data.license || {});
@@ -442,7 +517,12 @@ async function uploadFiles(fileList) {
     return;
   }
   if (!res.ok) throw new Error(data.error || "falha no upload");
-  toast(`${(data.jobs || []).length} na fila — editando com IA`);
+  const n = (data.jobs || []).length;
+  toast(
+    data.merged
+      ? `1 projeto com ${files.length} takes na fila`
+      : `${n} na fila — editando com IA`
+  );
   setView("fila");
   await refreshJobs();
 }
@@ -483,12 +563,12 @@ function wireDrop() {
 function showJobDetail(id) {
   const j = state.jobs.find((x) => x.id === id);
   if (!j) return;
-  const text = jobDetail(j) || (j.message || "").trim() || "Sem detalhes técnicos.";
+  const text = queueCopy(j).text;
   const title = $("#detailTitle");
   const body = $("#detailBody");
   const dlg = $("#dlgJobDetail");
   if (!dlg || !body) return;
-  if (title) title.textContent = j.name || "Detalhes do erro";
+  if (title) title.textContent = j.title || j.name || "Detalhes do erro";
   body.textContent = text;
   try {
     dlg.showModal();
@@ -555,6 +635,19 @@ function wireList() {
         await refreshJobs();
       } else if (act === "detail") {
         showJobDetail(id);
+      } else if (act === "rename") {
+        const current = btn.dataset.title || "";
+        const next = window.prompt("Novo nome do vídeo:", current);
+        if (next == null) return;
+        const title = next.trim();
+        if (!title || title === current) return;
+        await api("/api/jobs/rename", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id, title }),
+        });
+        toast("Nome atualizado");
+        await refreshJobs();
       } else if (act === "delete") {
         askDelete(id, btn.dataset.name || "");
       }
@@ -826,6 +919,33 @@ function displayNameFromEmail(email) {
     .join(" ") || "Conta";
 }
 
+function openLicAccountDialog(email) {
+  const dlg = $("#dlgLicAccount");
+  if (!dlg) return;
+  const title = $("#licAccountDlgTitle");
+  if (title) title.textContent = email ? "Editar acesso" : "Nova conta";
+  if ($("#adminLicEmail")) $("#adminLicEmail").value = email || "";
+  if (!email) {
+    if ($("#adminLicPassword")) $("#adminLicPassword").value = "";
+    if ($("#adminLicNotes")) $("#adminLicNotes").value = "";
+  }
+  const msg = $("#adminFormMsg");
+  if (msg) {
+    msg.hidden = true;
+    msg.textContent = "";
+  }
+  if (!dlg.open) dlg.showModal();
+  setTimeout(() => {
+    if (email) $("#adminLicDays")?.focus();
+    else $("#adminLicEmail")?.focus();
+  }, 30);
+}
+
+function closeLicAccountDialog() {
+  const dlg = $("#dlgLicAccount");
+  if (dlg?.open) dlg.close();
+}
+
 function adminOut(x) {
   const el = $("#adminLicOut");
   if (!el) return;
@@ -855,24 +975,17 @@ function applyAccountChrome(st) {
   }
   const openBtn = $("#btnOpenLogin");
   const logoutBtn = $("#btnAuthLogout");
-  if (openBtn) openBtn.hidden = true;
+  if (openBtn) openBtn.hidden = logged;
   if (logoutBtn) logoutBtn.hidden = !logged;
   const label = $("#authEmailLabel");
   if (label) {
     if (logged) {
-      label.textContent = st.isAdmin
-        ? `Admin: ${email || "—"}`
-        : (email || "—");
+      label.textContent = st.isAdmin ? email || "Admin" : email || "—";
     } else {
-      label.textContent = "Não logado — use Entrar na barra lateral.";
+      label.textContent = "Entre pela barra lateral para gerenciar a conta.";
     }
   }
-  const panel = $("#licenseAdminPanel");
-  if (panel) {
-    const show = !!(logged && st.isAdmin);
-    panel.hidden = !show;
-    if (show) loadAccessList().catch(() => {});
-  }
+  syncLicenseChrome();
 }
 
 function fmtAccessUntil(v) {
@@ -900,7 +1013,9 @@ function renderAccessList(data) {
   if (!rows.length) {
     empty.hidden = false;
     table.hidden = true;
-    empty.textContent = "Nenhuma conta liberada ainda — use o formulário acima.";
+    empty.innerHTML = `Nenhuma conta ainda. <button type="button" class="export-btn export-btn--sm" id="btnLicAccountEmpty">Nova conta</button>`;
+    const b = $("#btnLicAccountEmpty");
+    if (b) b.onclick = () => openLicAccountDialog("");
     return;
   }
   empty.hidden = true;
@@ -917,8 +1032,9 @@ function renderAccessList(data) {
           const until = escapeHtml(fmtAccessUntil(r.valid_until));
           const pcs = escapeHtml(String(r.max_devices ?? "—"));
           const rawEmail = String(r.email || "").replace(/"/g, "&quot;");
-          return `<tr>
-            <td title="${email}">${email}</td>
+          const pending = r.user_id ? "" : " <span class=\"hint\">(sem login ainda)</span>";
+          return `<tr class="access-row" data-email="${rawEmail}" title="Abrir para editar">
+            <td title="${email}">${email}${pending}</td>
             <td><span class="access-st ${st}">${st}</span></td>
             <td>${until}</td>
             <td>${pcs}</td>
@@ -927,6 +1043,13 @@ function renderAccessList(data) {
         }).join("")}
       </tbody>
     </table>`;
+  table.querySelectorAll(".access-row").forEach((row) => {
+    row.onclick = (ev) => {
+      if (ev.target.closest(".access-revoke")) return;
+      const email = row.getAttribute("data-email") || "";
+      openLicAccountDialog(email);
+    };
+  });
   table.querySelectorAll(".access-revoke").forEach((btn) => {
     btn.onclick = async () => {
       const email = btn.getAttribute("data-email") || "";
@@ -950,7 +1073,10 @@ function renderAccessList(data) {
 
 async function loadAccessList() {
   const empty = $("#adminAccessEmpty");
-  if (empty) {
+  const table = $("#adminAccessTable");
+  const hasTable = !!(table && !table.hidden && table.querySelector("table"));
+  // Evita piscar: só mostra "Carregando…" na 1ª carga (sem tabela ainda).
+  if (empty && !hasTable) {
     empty.hidden = false;
     empty.textContent = "Carregando acessos…";
   }
@@ -1114,8 +1240,25 @@ function wireForms() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ performanceProfile }),
       });
-      toast("Perfil salvo");
+      toast("Perfil salvo — reinicie o ATIVAVID para aplicar os workers leves");
       loadSistema().catch(() => {});
+    };
+  }
+  const btnHwBench = $("#btnHwBench");
+  if (btnHwBench) {
+    btnHwBench.onclick = async () => {
+      btnHwBench.disabled = true;
+      const prev = $("#hwAccelHint");
+      if (prev) prev.textContent = "Testando encoders (uns 10s)…";
+      try {
+        const data = await api("/api/hardware/bench", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+        if (data && data.public) applyHardwareCard(data.public);
+        toast(data && data.public && data.public.friendly ? data.public.friendly : "Teste concluído");
+      } catch (e) {
+        toast(e.message || "Falha no teste de hardware");
+      } finally {
+        btnHwBench.disabled = false;
+      }
     };
   }
   const btnClearCache = $("#btnClearCache");
@@ -1139,13 +1282,45 @@ function wireForms() {
     };
   }
   const btnLicAct = $("#btnLicenseActivate");
+  const activateFromInput = async () => {
+    try {
+      await activateLicenseKey(($("#licenseKeyInput")?.value || "").trim());
+    } catch (e) {
+      toast(e.message || "Falha ao ativar");
+    }
+  };
   if (btnLicAct) {
-    btnLicAct.onclick = async () => {
-      try {
-        await activateLicenseKey(($("#licenseKeyInput")?.value || "").trim());
-      } catch (e) {
-        toast(e.message || "Falha ao ativar");
+    btnLicAct.onclick = () => {
+      const card = $("#licClientKeyCard");
+      if (card && !card.hidden) {
+        $("#licenseKeyInput")?.focus();
+        return activateFromInput();
       }
+      return activateFromInput();
+    };
+  }
+  const btnLicActInline = $("#btnLicenseActivateInline");
+  if (btnLicActInline) btnLicActInline.onclick = activateFromInput;
+  const btnLicAdvOpen = $("#btnLicAdvOpen");
+  if (btnLicAdvOpen) {
+    btnLicAdvOpen.onclick = () => {
+      const dlg = $("#dlgLicAdv");
+      try { dlg?.showModal(); } catch { /* ignore */ }
+    };
+  }
+  const btnLicAccountOpen = $("#btnLicAccountOpen");
+  if (btnLicAccountOpen) {
+    btnLicAccountOpen.onclick = () => openLicAccountDialog("");
+  }
+  const btnLicAccountClose = $("#btnLicAccountClose");
+  if (btnLicAccountClose) {
+    btnLicAccountClose.onclick = () => closeLicAccountDialog();
+  }
+  const btnLicAdvClose = $("#btnLicAdvClose");
+  if (btnLicAdvClose) {
+    btnLicAdvClose.onclick = () => {
+      const dlg = $("#dlgLicAdv");
+      try { dlg?.close(); } catch { /* ignore */ }
     };
   }
   const btnLicPay = $("#btnLicenseCheckout");
@@ -1322,27 +1497,35 @@ function wireForms() {
   if (btnAdminSaveSrv) {
     btnAdminSaveSrv.onclick = async () => {
       try {
-        const patch = {};
         const srv = ($("#supabaseServiceInput")?.value || "").trim();
         if (!srv) {
-          toast("Cole a service role (ou ela já está salva)");
+          toast("Cole a service_role do Supabase (Settings → API)");
+          $("#supabaseServiceInput")?.focus();
           return;
         }
-        patch.supabaseServiceRoleKey = srv;
+        if (!srv.startsWith("eyJ") && !srv.startsWith("sb_")) {
+          toast("Isso não parece uma service_role (começa com eyJ…)");
+          return;
+        }
         const res = await api("/api/settings", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(patch),
+          body: JSON.stringify({ supabaseServiceRoleKey: srv }),
         });
         if ($("#supabaseServiceInput")) $("#supabaseServiceInput").value = "";
         const hint = $("#adminServiceHint");
         if (hint) {
           hint.hidden = false;
-          hint.textContent = "Service role já salva neste PC (deixe em branco para manter).";
+          hint.textContent = "Salva neste PC.";
+        }
+        const createHint = $("#adminCreateHint");
+        if (createHint) {
+          createHint.textContent = "Service role ok — pode criar contas Auth.";
         }
         adminOut(res.settings ? { ok: true, hasServiceRole: !!res.settings.hasServiceRole } : res);
         toast("Service role salva");
-      } catch (e) {
+        const dlg = $("#dlgLicAdv");
+        try { dlg?.close(); } catch { /* ignore */ }      } catch (e) {
         toast(e.message || "Falha ao salvar");
       }
     };
@@ -1352,6 +1535,54 @@ function wireForms() {
       if ($("#adminLicDays")) $("#adminLicDays").value = btn.dataset.days || "7";
     };
   });
+  const btnAdminCreateAccount = $("#btnAdminCreateAccount");
+  if (btnAdminCreateAccount) {
+    btnAdminCreateAccount.onclick = async () => {
+      try {
+        const email = ($("#adminLicEmail")?.value || "").trim();
+        if (!email) {
+          toast("Informe o e-mail do cliente");
+          return;
+        }
+        const password = ($("#adminLicPassword")?.value || "").trim();
+        const data = await api("/api/admin/access", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "create",
+            email,
+            password: password || undefined,
+            days: Number($("#adminLicDays")?.value || 7),
+            maxDevices: Number($("#adminLicMaxDev")?.value || 1),
+            notes: ($("#adminLicNotes")?.value || "").trim(),
+          }),
+        });
+        adminOut(data);
+        if (data.error === "service_role_required") {
+          const dlg = $("#dlgLicAdv");
+          const box = $("#adminSrvBox");
+          if (box) box.hidden = false;
+          try { dlg?.showModal(); } catch { /* ignore */ }
+          $("#supabaseServiceInput")?.focus();
+          toast("Cole e salve a service_role em Avançado");
+          return;
+        }
+        if (data.ok && data.password) {
+          toast(`Conta criada — senha: ${data.password}`);
+        } else {
+          toast(data.ok ? (data.message || "Conta pronta") : (data.message || "Falha"));
+        }
+        if (data.ok) {
+          if ($("#adminLicPassword")) $("#adminLicPassword").value = "";
+          await loadAccessList();
+          closeLicAccountDialog();
+        }
+      } catch (e) {
+        adminOut(String(e.message || e));
+        toast(e.message || "Falha ao criar conta");
+      }
+    };
+  }
   const btnAdminGrant = $("#btnAdminGrantAccess");
   if (btnAdminGrant) {
     btnAdminGrant.onclick = async () => {
@@ -1374,7 +1605,10 @@ function wireForms() {
         });
         adminOut(data);
         toast(data.ok ? (data.message || "Acesso liberado") : (data.message || "Falha"));
-        if (data.ok) await loadAccessList();
+        if (data.ok) {
+          await loadAccessList();
+          closeLicAccountDialog();
+        }
       } catch (e) {
         adminOut(String(e.message || e));
         toast(e.message || "Falha ao liberar");
@@ -1411,7 +1645,10 @@ function wireForms() {
         });
         adminOut(data);
         toast(data.ok ? (data.message || "Revogado") : (data.message || "Falha"));
-        if (data.ok) await loadAccessList();
+        if (data.ok) {
+          await loadAccessList();
+          closeLicAccountDialog();
+        }
       } catch (e) {
         adminOut(String(e.message || e));
         toast(e.message || "Falha ao revogar");
@@ -1665,6 +1902,26 @@ async function loadLicenca() {
     renderLicense(lic);
   } catch { /* ignore */ }
   await refreshAuthUi().catch(() => {});
+  try {
+    const s = await api("/api/settings");
+    const box = $("#adminSrvBox");
+    if (box) box.hidden = false;
+    const createHint = $("#adminCreateHint");
+    if (createHint) {
+      createHint.textContent = s.hasServiceRole
+        ? "Service role já configurada neste PC."
+        : "Cole a service_role uma vez para criar contas Auth.";
+    }
+    const srvHint = $("#adminServiceHint");
+    if (srvHint) {
+      if (s.hasServiceRole) {
+        srvHint.hidden = false;
+        srvHint.textContent = "Já salva neste PC (cole outra para substituir).";
+      } else {
+        srvHint.hidden = true;
+      }
+    }
+  } catch { /* ignore */ }
   if (state.auth && state.auth.isAdmin) {
     await loadAccessList().catch(() => {});
   }
@@ -1682,8 +1939,10 @@ function applySistemaData(data) {
     hint.textContent = m.error ? `${base} (aviso: ${m.error})` : base;
   }
   if ($("#sysPerfHint")) {
-    $("#sysPerfHint").textContent =
-      `Perfil ${perf.label || "—"} · jobs=${perf.parallelJobs} · proxy=${perf.proxyEnabled ? perf.proxyHeight + "p" : "off"}`;
+    $("#sysPerfHint").textContent = "Motor de render: Automático.";
+  }
+  if ($("#sysLaneHint")) {
+    $("#sysLaneHint").textContent = "Acompanhe o processamento dos seus vídeos.";
   }
   if ($("#sysMetricProfile")) $("#sysMetricProfile").textContent = perf.label || "—";
   if ($("#sysMetricJobs")) $("#sysMetricJobs").textContent = String(perf.parallelJobs ?? "—");
@@ -1691,6 +1950,7 @@ function applySistemaData(data) {
     $("#sysMetricProxy").textContent = perf.proxyEnabled ? `${perf.proxyHeight}p` : "off";
   }
   if ($("#perfProfile") && s.performanceProfile) $("#perfProfile").value = s.performanceProfile || "auto";
+  loadHardwareCard().catch(() => {});
   if ($("#projectsRootHint") && m.projectsRoot) {
     $("#projectsRootHint").textContent = m.projectsRoot || "";
   }
@@ -1704,10 +1964,16 @@ function applySistemaData(data) {
   if (srvHint) {
     if (s.hasServiceRole) {
       srvHint.hidden = false;
-      srvHint.textContent = "Service role já salva neste PC (deixe em branco para manter).";
+      srvHint.textContent = "Já salva neste PC (cole outra para substituir).";
     } else {
       srvHint.hidden = true;
     }
+  }
+  const createHint = $("#adminCreateHint");
+  if (createHint) {
+    createHint.textContent = s.hasServiceRole
+      ? "Service role já configurada neste PC."
+      : "Cole a service_role uma vez para criar contas Auth.";
   }
 }
 
@@ -1763,6 +2029,30 @@ async function loadSistemaFromDoutor() {
     },
     settings: settings || {},
   });
+}
+
+function applyHardwareCard(pub) {
+  const hint = $("#hwAccelHint");
+  const det = $("#hwAccelDetail");
+  if (!hint) return;
+  const gpu = pub.gpu || "GPU não detectada";
+  const enc = pub.encoder || "libx264";
+  const on = pub.acceleration === "on";
+  hint.textContent = on
+    ? `${pub.friendly || "Aceleração de hardware ativada"} · ${gpu}`
+    : `${pub.friendly || "Renderização pela CPU"} · ${gpu}`;
+  if (det) {
+    const fps = pub.benchmarkFps != null ? ` · ${pub.benchmarkFps} FPS no teste` : "";
+    det.textContent = `Encoder: ${enc} · Concurrency: ${pub.concurrency ?? "—"} · Modo: ${pub.mode || "auto"}${fps}`;
+  }
+}
+
+async function loadHardwareCard() {
+  try {
+    const res = await fetch("/api/hardware");
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.public) applyHardwareCard(data.public);
+  } catch { /* ignore */ }
 }
 
 async function loadSistema() {
@@ -1845,7 +2135,7 @@ async function checkCrashRecovery() {
     toast(`${jobs.length} edição(ões) retomada(s) na fila`);
     return;
   }
-  list.textContent = jobs.map((j) => j.name || j.id).join(", ");
+  list.textContent = jobs.map((j) => j.title || j.name || j.id).join(", ");
   const close = () => { try { dlg.close(); } catch { /* ignore */ } };
   $("#btnRecoveryOk").onclick = () => {
     close();

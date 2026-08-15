@@ -71,7 +71,7 @@ def _encoder_opens(name: str) -> bool:
     }.get(name, [])
     cmd = [
         _ffmpeg_cmd(), "-hide_banner", "-loglevel", "error", "-f", "lavfi",
-        "-i", "color=c=black:s=64x64:d=0.04", "-frames:v", "1", "-an",
+        "-i", "color=c=black:s=1280x720:d=0.04", "-frames:v", "1", "-an",
         "-c:v", name, *extras, "-f", "null", "-",
     ]
     try:

@@ -52,6 +52,11 @@ $$;
 revoke all on function public.ativavid_is_admin() from public;
 grant execute on function public.ativavid_is_admin() to authenticated, anon, service_role;
 
+-- Evita overload antigo (PostgREST / PGRST202) que faz o app achar a RPC “desatualizada”
+drop function if exists public.ativavid_admin_license(text, text, int, int, text, text, text);
+drop function if exists public.ativavid_admin_license(text, text, int, int, text);
+drop function if exists public.ativavid_admin_license(text);
+
 create or replace function public.ativavid_admin_license(
   p_action text,
   p_email text default null,

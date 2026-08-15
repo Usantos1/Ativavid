@@ -66,9 +66,28 @@ def _rhythm_rules(preset: dict) -> str:
     clean = (preset.get("speechClean") or "medio").lower()
     goal = (preset.get("videoGoal") or "reels").lower()
 
+    # Aliases da UI (Estilos) → chaves do prompt
+    rhythm_alias = {
+        "calmo": "natural",
+        "rapido": "viral",
+        "rápido": "viral",
+        "muito_rapido": "muito_rapido",
+    }
+    goal_alias = {
+        "tutorial": "educativo",
+        "shorts": "shorts",
+        "tiktok": "tiktok",
+    }
+    rhythm = rhythm_alias.get(rhythm, rhythm)
+    goal = goal_alias.get(goal, goal)
+
     rhythm_map = {
-        "natural": "Poucos cortes; cenas 3–6s; pausas naturais curtas ok.",
-        "dinamico": "Ritmo comercial; cenas 1.5–4s; silêncios longos fora.",
+        "natural": (
+            "Poucos cortes; cenas 3–8s; preserve o fio da conversa. "
+            "NÃO pule frases do meio só para encurtar. "
+            "Só corte silêncio longo, falso começo e repetição óbvia."
+        ),
+        "dinamico": "Ritmo comercial; cenas 1.5–4s; silêncios longos fora; mantenha contexto entre beats.",
         "viral": "Muitos cortes; cenas 0.8–2.5s; energia alta; hook agressivo.",
         "muito_rapido": "Corte máximo; cenas ≤2s; quase sem pausa; só o essencial.",
     }
@@ -79,43 +98,64 @@ def _rhythm_rules(preset: dict) -> str:
     }
     clean_map = {
         "desativado": "Não remova fillers agressivamente — só silêncios longos óbvios.",
-        "leve": "Remova silêncios >0.8s e falsos começos claros.",
-        "medio": "Remova silêncios longos, gaguejos e retomadas óbvias; preserve naturalidade.",
+        "leve": "Remova só silêncios >0.8s e falsos começos claros. Preserve hesitações naturais e o contexto.",
+        "medio": "Remova silêncios longos, gaguejos e retomadas óbvias; preserve naturalidade e o sentido da fala.",
         "agressivo": "Compacte ao máximo, mas NUNCA corte no meio da palavra; se duvidar, mantenha.",
     }
     goal_map = {
-        "reels": "Objetivo Reels: retenção + curiosidade + CTA leve.",
+        "reels": "Objetivo Reels: retenção + curiosidade + CTA leve — sem apagar o raciocínio.",
         "tiktok": "Objetivo TikTok: hook imediato + ritmo alto.",
         "shorts": "Objetivo Shorts: clareza + ritmo + CTA.",
         "anuncio": "Objetivo anúncio: HOOK → problema → benefício → CTA claro.",
-        "educativo": "Objetivo educativo: clareza didática; menos flash.",
+        "educativo": "Objetivo educativo/tutorial: clareza didática; preserve passos e explicação; menos flash.",
         "venda": "Objetivo venda: benefício + prova + CTA forte.",
         "depoimento": "Objetivo depoimento: edição limpa; preserve autenticidade.",
+        "vlog": "Objetivo vlog: tom natural; poucos cortes; preserve contexto e personalidade.",
         "institucional": "Objetivo institucional: sóbrio; poucos efeitos.",
     }
+    keep_ctx = (
+        "PRIORIDADE: não tire do contexto. Se uma frase depende da anterior, mantenha as duas. "
+        "Prefira um corte um pouco mais longo a um highlight confuso.\n"
+        "HUMOR: se houver piada, punchline, ironia ou 'reação engraçada', NÃO corte o setup "
+        "nem a queda — sem isso o vídeo perde o sentido cômico. Melhor 3s a mais do que matar a piada.\n"
+    )
     return (
-        f"RITMO={rhythm}: {rhythm_map.get(rhythm, rhythm_map['dinamico'])}\n"
-        f"INTENSIDADE={intensity}: {intensity_map.get(intensity, intensity_map['medio'])}\n"
-        f"LIMPEZA_FALA={clean}: {clean_map.get(clean, clean_map['medio'])}\n"
-        f"OBJETIVO={goal}: {goal_map.get(goal, goal_map['reels'])}\n"
+        keep_ctx
+        + f"RITMO={rhythm}: {rhythm_map.get(rhythm, rhythm_map['dinamico'])}\n"
+        + f"INTENSIDADE={intensity}: {intensity_map.get(intensity, intensity_map['medio'])}\n"
+        + f"LIMPEZA_FALA={clean}: {clean_map.get(clean, clean_map['medio'])}\n"
+        + f"OBJETIVO={goal}: {goal_map.get(goal, goal_map['reels'])}\n"
     )
 
 
 def _system_prompt(preset: dict | None = None) -> str:
     extra = _rhythm_rules(preset or {})
+    rhythm = ((preset or {}).get("rhythm") or "dinamico").lower()
+    if rhythm in ("calmo", "natural"):
+        target = (
+            "- Alvo: preserve o conteúdo falado; encurte só o que for silêncio/"
+            "falso começo/repetição. Pode passar de 45s se o material pedir.\n"
+        )
+    else:
+        target = (
+            "- Alvo típico: 15–45s se o material permitir; senão o melhor compacto "
+            "(ajuste ao RITMO) — sem apagar o raciocínio central.\n"
+        )
     return (
         "Você é o editor-chefe do ATIVAVID (Reels/TikTok/Shorts vertical 9:16).\n"
         "Recebe a transcrição empacotada e o estilo da marca. Monte um corte "
-        "profissional, ritmado e comercial.\n\n"
+        "profissional, ritmado e comercial — mas FIEL ao que a pessoa disse.\n\n"
         "REGRAS:\n"
         "- Ordem cronológica no mesmo source.\n"
         "- Comece com HOOK forte nos primeiros 1–3s.\n"
-        "- Remova silêncios longos, gaguejos, falsos começos e trechos sem valor "
-        "(respeitando LIMPEZA_FALA).\n"
+        "- Remova silêncios longos, gaguejos e falsos começos "
+        "(respeitando LIMPEZA_FALA). NÃO remova frases só porque 'encurtam'.\n"
+        "- HUMOR/COMÉDIA: preserve setup + punchline + reação. Nunca deixe só o começo "
+        "da piada nem corte a frase que faz a graça.\n"
         "- Prefira bordas em silêncio / fim de frase; pad ~30–200ms implícito.\n"
-        "- Alvo típico: 15–45s se o material permitir; senão o melhor compacto "
-        "(ajuste ao RITMO).\n"
-        "- Beats úteis: HOOK, PROBLEM, SOLUTION, BENEFIT, PROOF, CTA (pule o que não existir).\n"
+        f"{target}"
+        "- Beats úteis: HOOK, PROBLEM, SOLUTION, BENEFIT, PROOF, CTA "
+        "(pule o que não existir — mas não pule o miolo que liga um beat ao outro).\n"
         "- start/end em segundos no vídeo ORIGINAL (não invente timestamps fora da fala).\n"
         "- Também devolva headline curta (máx 6 palavras) em \"headline\".\n"
         "- Responda SOMENTE JSON válido (sem markdown, sem prosa).\n\n"

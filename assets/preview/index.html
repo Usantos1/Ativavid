@@ -46,10 +46,12 @@
       <button type="button" class="sb-item" data-hub-view="fila">
         <span class="sb-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="4" rx="1.2"/><rect x="4" y="10.5" width="16" height="4" rx="1.2"/><rect x="4" y="16" width="11" height="4" rx="1.2"/></svg></span>
         <span>Fila</span>
+        <span class="sb-count" id="countFila">0</span>
       </button>
       <button type="button" class="sb-item" data-hub-view="done">
         <span class="sb-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="m8.8 12.2 2.2 2.2 4.4-4.6"/></svg></span>
         <span>Concluídos</span>
+        <span class="sb-count" id="countDone">0</span>
       </button>
       <p class="sb-label">Marca</p>
       <button type="button" class="sb-item" data-hub-view="estilo">
@@ -230,6 +232,16 @@
               <option value="sutil">Sutil</option>
               <option value="medio" selected>Médio</option>
               <option value="forte">Forte</option>
+            </select>
+          </label>
+          <label class="auto-field">Cor
+            <select id="autoColorGrade" title="Look de cor no corte (Rec.709). LOG usa a detecção automática.">
+              <option value="marca" selected>Marca (punch)</option>
+              <option value="neutral_punch">Neutro</option>
+              <option value="subtle">Sutil</option>
+              <option value="warm_cinematic">Cinemático</option>
+              <option value="auto">Auto (por take)</option>
+              <option value="none">Sem correção</option>
             </select>
           </label>
           <label class="auto-field">Limpeza da fala

@@ -127,6 +127,7 @@ _API_REF: WindowApi | None = None
 _SHOW_REQUEST = Path.home() / "ATIVAVID" / "show.request"
 _RELOAD_REQUEST = Path.home() / "ATIVAVID" / "reload.request"
 _HTTP_PORT = 4850
+_SINGLE_INSTANCE_HANDLE = None
 
 
 def _hide_to_tray(api: WindowApi) -> None:
@@ -361,12 +362,15 @@ def _handoff_if_running(port: int) -> bool:
         except OSError:
             pass
         return True
-    try:
-        _SHOW_REQUEST.parent.mkdir(parents=True, exist_ok=True)
-        _SHOW_REQUEST.write_text("1", encoding="utf-8")
-    except OSError:
-        pass
-    return True
+
+    # Servidor na porta sem janela (ex.: ficou preso em --browser) — mata e sobe GUI.
+    print(
+        "ATIVAVID na porta sem janela nativa — reiniciando com interface…",
+        flush=True,
+    )
+    _kill_listeners_on_port(port)
+    time.sleep(0.8)
+    return False
 
 
 _MAXIMIZED = False
@@ -761,6 +765,141 @@ def _install_edge_to_edge_hook() -> None:
         pass
 
 
+def _venv_python() -> Path | None:
+    scripts = REPO / ".venv" / "Scripts"
+    for name in ("pythonw.exe", "python.exe"):
+        p = scripts / name
+        if p.exists():
+            return p
+    return None
+
+
+def _reexec_under_venv_if_needed() -> None:
+    """Se abriu com o Python do sistema, troca pro .venv e sai."""
+    target = _venv_python()
+    if target is None:
+        return
+    try:
+        cur = Path(sys.executable).resolve()
+        want = target.resolve()
+    except OSError:
+        return
+    # Já no .venv (stub Scripts\python*.exe). O processo "filho" em
+    # Local\Programs\Python é o interpretador real do stub — não trocar.
+    cur_s = str(cur).lower().replace("/", "\\")
+    if "\\.venv\\scripts\\" in cur_s or cur.parent == want.parent:
+        return
+    # Preferir o mesmo flavor (console vs windowed)
+    if cur.name.lower() == "python.exe":
+        alt = want.with_name("python.exe")
+        if alt.exists():
+            want = alt
+    argv = [str(want), "-X", "utf8", str(Path(__file__).resolve()), *sys.argv[1:]]
+    try:
+        kwargs: dict = {}
+        if sys.platform == "win32":
+            kwargs["creationflags"] = (
+                subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
+            )
+            kwargs["close_fds"] = True
+        subprocess.Popen(argv, cwd=str(REPO), **kwargs)
+    except Exception as e:
+        print(f"[warn] não consegui trocar pro .venv ({e}) — seguindo assim", flush=True)
+        return
+    print(f"Reiniciando com {want.name} do .venv…", flush=True)
+    raise SystemExit(0)
+
+
+def _kill_other_launchers() -> None:
+    """Mata outros stubs .venv\\Scripts\\python* deste install.
+
+    No Windows o launcher do venv aparece DUAS vezes (stub em .venv + python
+    base em Local\\Programs\\Python). Matar o stub-pai do processo atual
+    suicida o app (taskkill /T) — por isso ignoramos nosso PID e o ppid.
+    """
+    if sys.platform != "win32":
+        return
+    me = os.getpid()
+    try:
+        parent = os.getppid()
+    except Exception:
+        parent = 0
+    needle = str((REPO / "app" / "launcher.py").resolve()).lower().replace("/", "\\")
+    venv_scripts = str((REPO / ".venv" / "Scripts").resolve()).lower().replace("/", "\\")
+    try:
+        from app.win_process import hide_console_kwargs
+
+        hide = hide_console_kwargs()
+    except Exception:
+        hide = {}
+    try:
+        out = subprocess.check_output(
+            [
+                "powershell",
+                "-NoProfile",
+                "-Command",
+                "Get-CimInstance Win32_Process | "
+                "Where-Object { $_.CommandLine -and $_.CommandLine -like '*launcher.py*' } | "
+                "ForEach-Object { \"$($_.ProcessId)`t$($_.ParentProcessId)`t$($_.ExecutablePath)`t$($_.CommandLine)\" }",
+            ],
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=12,
+            **hide,
+        )
+    except Exception:
+        return
+    for line in out.splitlines():
+        parts = line.split("\t", 3)
+        if len(parts) < 4:
+            continue
+        pid_s, ppid_s, exe_path, cmd = parts[0], parts[1], parts[2], parts[3]
+        if not pid_s.isdigit():
+            continue
+        pid = int(pid_s)
+        ppid = int(ppid_s) if ppid_s.isdigit() else 0
+        # nunca mate a si, o stub-pai, nem um filho direto
+        if pid in (me, parent) or ppid == me:
+            continue
+        if needle not in cmd.lower().replace("/", "\\"):
+            continue
+        exe_l = (exe_path or "").lower().replace("/", "\\")
+        # só stubs do nosso .venv — nunca o python base (filho do stub)
+        if venv_scripts not in exe_l:
+            continue
+        try:
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(pid)],
+                capture_output=True,
+                timeout=8,
+                **hide,
+            )
+            print(f"[warn] encerrei launcher duplicado pid {pid}", flush=True)
+        except Exception:
+            pass
+
+
+def _try_claim_single_instance() -> tuple[bool, object | None]:
+    """Garante um único ATIVAVID por máquina (Windows named mutex)."""
+    if sys.platform != "win32":
+        return True, None
+    try:
+        import ctypes
+
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.CreateMutexW(None, False, "Global\\ATIVAVID.SingleInstance.v1")
+        if not handle:
+            return True, None
+        ERROR_ALREADY_EXISTS = 183
+        if kernel32.GetLastError() == ERROR_ALREADY_EXISTS:
+            kernel32.CloseHandle(handle)
+            return False, None
+        return True, handle
+    except Exception:
+        return True, None
+
+
 def main() -> None:
     for k, v in ls.load_env_keys().items():
         os.environ.setdefault(k, v)
@@ -782,9 +921,25 @@ def main() -> None:
     except Exception:
         pass
 
-    if not args.browser and _handoff_if_running(args.port):
-        print("ATIVAVID já estava aberto — janela restaurada.", flush=True)
-        return
+    if not args.browser:
+        _reexec_under_venv_if_needed()
+        if _handoff_if_running(args.port):
+            print("ATIVAVID já estava aberto — janela restaurada.", flush=True)
+            return
+        ok_single, handle = _try_claim_single_instance()
+        if not ok_single:
+            time.sleep(0.6)
+            if _handoff_if_running(args.port):
+                print("ATIVAVID já estava aberto — janela restaurada.", flush=True)
+                return
+            print(
+                "ATIVAVID já está em execução. Feche pela bandeja ou abra de novo.",
+                flush=True,
+            )
+            return
+        global _SINGLE_INSTANCE_HANDLE
+        _SINGLE_INSTANCE_HANDLE = handle
+        _kill_other_launchers()
 
     global _HTTP_PORT
     _HTTP_PORT = int(args.port)

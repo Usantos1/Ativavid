@@ -24,11 +24,27 @@ def ensure_ffmpeg_on_path() -> Path | None:
             break
     if chosen is None:
         return None
-    path = os.environ.get("PATH", "")
     vend = str(chosen.resolve())
-    parts = [p for p in path.split(os.pathsep) if p] if path else []
-    if not parts or Path(parts[0]).resolve() != chosen.resolve():
-        os.environ["PATH"] = vend + os.pathsep + path
+    path = os.environ.get("PATH", "")
+    # Já está no PATH? só promove para o início sem duplicar.
+    try:
+        from app.win_process import dedupe_path  # type: ignore
+
+        os.environ["PATH"] = dedupe_path(path, prefer=[vend])
+    except Exception:
+        parts = [p for p in path.split(os.pathsep) if p]
+        keys = {os.path.normcase(os.path.normpath(p)) for p in parts}
+        if os.path.normcase(os.path.normpath(vend)) not in keys:
+            os.environ["PATH"] = vend + os.pathsep + path
+        elif parts and os.path.normcase(os.path.normpath(parts[0])) != os.path.normcase(
+            os.path.normpath(vend)
+        ):
+            rest = [
+                p
+                for p in parts
+                if os.path.normcase(os.path.normpath(p)) != os.path.normcase(os.path.normpath(vend))
+            ]
+            os.environ["PATH"] = os.pathsep.join([vend, *rest])
     return chosen
 
 

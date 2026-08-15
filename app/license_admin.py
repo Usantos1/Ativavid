@@ -201,6 +201,133 @@ def list_devices(license_key: str | None = None, limit: int = 50) -> dict[str, A
     return {"ok": True, "devices": data if isinstance(data, list) else [], "via": "service_role"}
 
 
+def create_auth_user(*, email: str, password: str) -> dict[str, Any]:
+    """Cria usuário no Supabase Auth (service role). Confirma e-mail automaticamente."""
+    c = _cfg()
+    mail = (email or "").strip().lower()
+    pwd = (password or "").strip()
+    if not mail or "@" not in mail:
+        return {"ok": False, "error": "email_required", "message": "Informe o e-mail do cliente."}
+    if len(pwd) < 6:
+        return {"ok": False, "error": "password_short", "message": "Senha com pelo menos 6 caracteres."}
+    if not c["url"] or not c["service"]:
+        return {
+            "ok": False,
+            "error": "service_role_required",
+            "message": "Para criar conta, cole a Service role key em Licença → Chave ATIV- (legado) → Salvar service role.",
+        }
+    payload = {
+        "email": mail,
+        "password": pwd,
+        "email_confirm": True,
+        "user_metadata": {"created_by": "ativavid_admin"},
+    }
+    raw = json.dumps(payload).encode("utf-8")
+    req = request.Request(
+        f"{c['url']}/auth/v1/admin/users",
+        data=raw,
+        method="POST",
+        headers={
+            "apikey": c["service"],
+            "Authorization": f"Bearer {c['service']}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+    )
+    try:
+        with request.urlopen(req, timeout=25) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            uid = None
+            if isinstance(data, dict):
+                uid = data.get("id") or (data.get("user") or {}).get("id")
+            return {
+                "ok": True,
+                "created": True,
+                "userId": uid,
+                "email": mail,
+                "message": f"Conta criada: {mail}",
+            }
+    except error.HTTPError as e:
+        text = e.read().decode("utf-8", errors="replace")
+        low = text.lower()
+        # Já existe → ok para seguir no grant
+        if e.code in (422, 400) and (
+            "already" in low or "registered" in low or "exists" in low or "duplicate" in low
+        ):
+            return {
+                "ok": True,
+                "created": False,
+                "exists": True,
+                "email": mail,
+                "message": f"Conta já existia: {mail} — liberando acesso.",
+            }
+        try:
+            parsed = json.loads(text) if text else {}
+        except json.JSONDecodeError:
+            parsed = {}
+        msg = ""
+        if isinstance(parsed, dict):
+            msg = str(parsed.get("msg") or parsed.get("message") or parsed.get("error_description") or "")
+        return {
+            "ok": False,
+            "error": "auth_admin_failed",
+            "status": e.code,
+            "message": msg or text[:280] or f"HTTP {e.code}",
+        }
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": "offline", "message": str(e)}
+
+
+def create_account_and_grant(
+    *,
+    email: str,
+    password: str | None = None,
+    days: int = 7,
+    max_devices: int = 1,
+    notes: str | None = None,
+) -> dict[str, Any]:
+    """Cria (ou reusa) conta Auth + libera dias no account_access."""
+    mail = (email or "").strip().lower()
+    pwd = (password or "").strip()
+    generated = False
+    if not pwd:
+        pwd = secrets.token_urlsafe(10)
+        generated = True
+
+    created = create_auth_user(email=mail, password=pwd)
+    if not created.get("ok"):
+        return created
+
+    granted = grant_access(
+        email=mail,
+        days=days,
+        max_devices=max_devices,
+        notes=notes,
+    )
+    out: dict[str, Any] = {
+        "ok": bool(granted.get("ok")),
+        "email": mail,
+        "account": created,
+        "access": granted,
+        "passwordGenerated": generated,
+        "message": granted.get("message") or created.get("message"),
+    }
+    if generated and created.get("created"):
+        out["password"] = pwd
+        out["message"] = (
+            f"Conta criada e liberada ({days}d). Senha gerada: {pwd} — envie ao cliente."
+        )
+    elif created.get("created") and granted.get("ok"):
+        out["message"] = f"Conta criada e liberada: {mail} ({days} dia(s))."
+    elif created.get("exists") and granted.get("ok"):
+        out["message"] = f"Conta já existia — acesso liberado: {mail} ({days} dia(s))."
+    if not granted.get("ok"):
+        out["ok"] = False
+        out["message"] = granted.get("message") or "Conta ok, mas falhou ao liberar dias."
+        out["error"] = granted.get("error") or "grant_failed"
+    return out
+
+
 def grant_access(
     *,
     email: str,

@@ -250,6 +250,11 @@ class DesktopHandler(ps.Handler):
                 }
             self._json({"machine": m, "settings": pub, "performance": perf})
             return
+        if raw == "/api/hardware":
+            from app.render_engine import public_profile, load_profile
+
+            self._json({"ok": True, "public": public_profile(), "profile": load_profile()})
+            return
         if raw in (
             "/api/settings",
             "/api/cache",
@@ -323,6 +328,7 @@ class DesktopHandler(ps.Handler):
                         j["score"] = json.loads(score_path.read_text(encoding="utf-8-sig"))
                     except (OSError, json.JSONDecodeError):
                         pass
+                ls.enrich_job_display(j, edit)
                 # Ensure editor can open even after a needs_review stop
                 if not (edit / "state.json").exists():
                     edit.mkdir(parents=True, exist_ok=True)
@@ -400,6 +406,12 @@ class DesktopHandler(ps.Handler):
             self._json(payload, code)
             return
 
+        if raw == "/api/hardware/bench":
+            from app.render_engine import build_profile, public_profile
+
+            p = build_profile(force_bench=True)
+            self._json({"ok": True, "public": public_profile(), "encoder": p.get("recommendedEncoder")})
+            return
         if raw in (
             "/api/preset",
             "/api/keys",
@@ -429,6 +441,7 @@ class DesktopHandler(ps.Handler):
             "/api/admin/devices",
             "/api/jobs",
             "/api/jobs/open-folder",
+            "/api/jobs/rename",
             "/api/jobs/retry",
             "/api/jobs/cancel",
             "/api/jobs/requeue-folder",

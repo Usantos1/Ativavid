@@ -1,4 +1,11 @@
-"""Perfis de desempenho + concorrência da fila."""
+"""Perfis de desempenho + concorrência da fila.
+
+Dois conceitos:
+  parallelJobs  — quantos vídeos fazem a fase LEVE ao mesmo tempo
+                  (transcrever, analisar, cortar, preparar). Remotion espera
+                  no lock quando a fase pesada chega.
+  renderSlots   — quantos Remotion/npm pesados podem rodar juntos (1–2).
+"""
 from __future__ import annotations
 
 from typing import Any
@@ -27,32 +34,33 @@ def profile_settings(name: str | None = None, machine: dict[str, Any] | None = N
     m = machine or detect_machine()
     profile = resolve_profile(name, m)
     enc = (m.get("accel") or {}).get("preferredEncoder") or "libx264"
+    ram = float(m.get("ramGb") or 0)
+    cores = int(m.get("cores") or 4)
 
     if profile == "eco":
         return {
             "profile": profile,
             "label": "Econômico",
             "parallelJobs": 1,
+            "renderSlots": 1,
             "extractJobs": 1,
             "proxyHeight": 540,
             "proxyEnabled": True,
             "thumbEager": False,
-            "encoder": "libx264",  # eco: always CPU for stability
+            "encoder": "libx264",
             "renderTier": "preview",
             "previewFps": 24,
+            "hint": "1 video por vez — leve + Remotion no mesmo ritmo.",
         }
     if profile == "performance":
-        ram = float(m.get("ramGb") or 0)
-        cores = int(m.get("cores") or 4)
-        parallel = 1
-        if ram >= 16 and cores >= 6:
-            parallel = 2
-        if ram >= 32 and cores >= 10:
-            parallel = 3
+        # Fase leve em paralelo; Remotion limitado (slot).
+        parallel = min(6, max(3, cores // 2))
+        render_slots = 2 if ram >= 24 and cores >= 8 else 1
         return {
             "profile": profile,
             "label": "Desempenho",
             "parallelJobs": parallel,
+            "renderSlots": render_slots,
             "extractJobs": min(4, max(2, cores // 2)),
             "proxyHeight": 720,
             "proxyEnabled": ram < 32,
@@ -60,14 +68,17 @@ def profile_settings(name: str | None = None, machine: dict[str, Any] | None = N
             "encoder": enc,
             "renderTier": "final",
             "previewFps": 30,
+            "hint": (
+                f"{parallel} em fase leve / Remotion {render_slots} por vez."
+            ),
         }
     # balanced
-    ram = float(m.get("ramGb") or 0)
-    cores = int(m.get("cores") or 4)
+    parallel = min(4, max(2, cores // 3)) if ram >= 12 else 2
     return {
         "profile": profile,
         "label": "Balanceado",
-        "parallelJobs": 2 if ram >= 16 and cores >= 6 else 1,
+        "parallelJobs": parallel,
+        "renderSlots": 1,
         "extractJobs": min(3, max(1, cores // 3)),
         "proxyHeight": 540,
         "proxyEnabled": True,
@@ -75,4 +86,5 @@ def profile_settings(name: str | None = None, machine: dict[str, Any] | None = N
         "encoder": enc,
         "renderTier": "final",
         "previewFps": 30,
+        "hint": f"{parallel} em fase leve / Remotion 1 por vez.",
     }

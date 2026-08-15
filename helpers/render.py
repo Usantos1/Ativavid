@@ -64,11 +64,51 @@ def _run(cmd, **kwargs):
     return subprocess.run(cmd, **kwargs)
 
 
+def _run_ffmpeg(cmd: list[str], *, label: str = "ffmpeg") -> None:
+    """Roda ffmpeg com stderr em arquivo (binário), não em PIPE de texto.
+
+    O deadlock clássico é Popen(stdout=PIPE, stderr=PIPE) + wait() sem ler.
+    subprocess.run(..., capture_output=True) usa communicate() e não trava
+    por buffer cheio. O incidente real aqui foi outro: HDR/tonemap gera
+    megabytes de log; stderr=PIPE + text mode no Windows chegou a [Errno 22]
+    e o worker matou o filho com stderr vazio. Arquivo binário evita isso
+    e guarda o log se o processo for morto.
+    """
+    import tempfile
+
+    fd, err_name = tempfile.mkstemp(suffix=".fferr", prefix="ativavid_")
+    err_path = Path(err_name)
+    try:
+        # Binary: ffmpeg escreve bytes; text mode no Windows → Errno 22.
+        with os.fdopen(fd, "wb") as errf:
+            proc = _run(cmd, check=False, stdout=subprocess.DEVNULL, stderr=errf)
+        if proc.returncode != 0:
+            raise RuntimeError(
+                f"{label} falhou (exit {proc.returncode}):\n{_ffmpeg_err_tail(err_path)}"
+            )
+    finally:
+        try:
+            err_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def _ffmpeg_err_tail(err_path: Path) -> str:
+    try:
+        raw = err_path.read_bytes()
+    except OSError:
+        return "(sem stderr)"
+    err = raw.decode("utf-8", errors="replace").strip()
+    if not err:
+        return "(sem stderr)"
+    return "\n".join(err.splitlines()[-16:])
+
+
 def _encoder_works(name: str, extra: list[str]) -> bool:
     """Real open-encoder probe — `-encoders` lists nvenc even when the driver is too old."""
     cmd = [
         "ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "lavfi",
-        "-i", "color=c=black:s=64x64:d=0.04",
+        "-i", "color=c=black:s=1280x720:d=0.04",
         "-frames:v", "1", "-an",
         "-c:v", name, *extra,
         "-f", "null", "-",
@@ -86,9 +126,17 @@ def _encoder_works(name: str, extra: list[str]) -> bool:
 def pick_video_encoder() -> tuple[str, list[str]]:
     """Prefer a GPU encoder that actually opens; else libx264.
 
-    Returns (name, extra_args_after_-c:v).
+    Returns (name, extra_args_after_-c:v). Decisão centralizada em render_engine.
     """
     global _ENCODER_CACHE
+    try:
+        from app.render_engine import encoder_args
+
+        name, extra = encoder_args()
+        _ENCODER_CACHE = name
+        return name, extra
+    except Exception:
+        pass
     if _ENCODER_CACHE is None:
         try:
             r = _run(
@@ -204,6 +252,48 @@ def _pid_alive(pid: int) -> bool:
     return True
 
 
+def _pid_owns_render(pid: int, out_path: Path) -> bool:
+    """True só se o PID vivo for um render.py deste cut (evita PID reusado)."""
+    if not _pid_alive(pid):
+        return False
+    if os.name != "nt":
+        return True
+    try:
+        import subprocess
+
+        kw = {}
+        try:
+            from app.win_process import hide_console_kwargs  # type: ignore
+
+            kw = hide_console_kwargs()
+        except Exception:
+            pass
+        r = subprocess.run(
+            [
+                "powershell",
+                "-NoProfile",
+                "-Command",
+                f"(Get-CimInstance Win32_Process -Filter \"ProcessId={int(pid)}\").CommandLine",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            **kw,
+        )
+        cmd = (r.stdout or "").strip().lower()
+        if not cmd:
+            return False
+        if "render.py" not in cmd:
+            return False
+        # mesmo cut / mesma pasta edit
+        needle = str(out_path).lower().replace("/", "\\")
+        stem = out_path.stem.lower()  # cut
+        return needle in cmd.replace("/", "\\") or f"\\{stem}.mp4" in cmd.replace("/", "\\")
+    except Exception:
+        # se não der pra inspecionar, assume dono (seguro: evita corrida)
+        return True
+
+
 def _terminate_pid(pid: int) -> None:
     """Best-effort kill of a hung render owner (never raises)."""
     if pid <= 0 or pid == os.getpid():
@@ -228,35 +318,12 @@ def acquire_render_lock(out_path: Path) -> None:
     """Claim `<out_path>.lock`, or exit with a clear message if another live
     render.py already owns this output. A stale lock (dead PID or hung past
     ``_RENDER_LOCK_STALE_S``) is reclaimed automatically; the lock is released
-    on interpreter exit either way."""
+    on interpreter exit either way.
+
+    Creation is atomic (O_CREAT|O_EXCL) so two launches in the same second
+    cannot both pass a non-atomic exists()+write race.
+    """
     lock_path = out_path.with_name(out_path.name + ".lock")
-    if lock_path.exists():
-        try:
-            old_pid = int(lock_path.read_text(encoding="utf-8").strip())
-        except (OSError, ValueError):
-            old_pid = None
-        try:
-            age_s = max(0.0, time.time() - lock_path.stat().st_mtime)
-        except OSError:
-            age_s = 0.0
-        if old_pid and old_pid != os.getpid() and _pid_alive(old_pid):
-            if age_s < _RENDER_LOCK_STALE_S:
-                sys.exit(
-                    f"render.py já está rodando para {out_path.name} (pid {old_pid}) — "
-                    "recusando iniciar um segundo render duplicado. Se esse processo "
-                    f"já morreu sem limpar o lock, apague {lock_path} e rode de novo."
-                )
-            print(
-                f"[warn] lock de {out_path.name} travado há {int(age_s // 60)} min "
-                f"(pid {old_pid}) — encerrando e reclamando",
-                flush=True,
-            )
-            _terminate_pid(old_pid)
-            try:
-                lock_path.unlink(missing_ok=True)
-            except OSError:
-                pass
-    lock_path.write_text(str(os.getpid()), encoding="utf-8")
 
     def _release() -> None:
         try:
@@ -265,7 +332,59 @@ def acquire_render_lock(out_path: Path) -> None:
         except OSError:
             pass
 
-    atexit.register(_release)
+    def _try_create() -> bool:
+        flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
+        if hasattr(os, "O_BINARY"):
+            flags |= os.O_BINARY
+        try:
+            fd = os.open(str(lock_path), flags, 0o644)
+        except FileExistsError:
+            return False
+        try:
+            os.write(fd, str(os.getpid()).encode("utf-8"))
+        finally:
+            os.close(fd)
+        return True
+
+    for _attempt in range(4):
+        if _try_create():
+            atexit.register(_release)
+            return
+        try:
+            old_pid = int(lock_path.read_text(encoding="utf-8").strip())
+        except (OSError, ValueError):
+            old_pid = None
+        try:
+            age_s = max(0.0, time.time() - lock_path.stat().st_mtime)
+        except OSError:
+            age_s = 0.0
+        owns = bool(
+            old_pid
+            and old_pid != os.getpid()
+            and _pid_owns_render(old_pid, out_path)
+        )
+        if owns and age_s < _RENDER_LOCK_STALE_S:
+            sys.exit(
+                f"render.py já está rodando para {out_path.name} (pid {old_pid}) — "
+                "recusando iniciar um segundo render duplicado. Cancele na Fila "
+                "ou espere o corte atual terminar."
+            )
+        if owns:
+            print(
+                f"[warn] lock de {out_path.name} travado há {int(age_s // 60)} min "
+                f"(pid {old_pid}) — encerrando e reclamando",
+                flush=True,
+            )
+            _terminate_pid(old_pid)
+        try:
+            lock_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        time.sleep(0.05)
+
+    sys.exit(
+        f"não consegui o lock de {out_path.name} — outro render ainda está disputando o arquivo"
+    )
 
 
 def resolve_grade_filter(grade_field: str | None) -> str:
@@ -471,6 +590,7 @@ def extract_segment(
     gain_windows: list | None = None,
     bleep_windows: list | None = None,
     streams: str = "av",
+    zoom: dict | None = None,
 ) -> None:
     """Extract a cut range as its own MP4 with grade + 30ms audio fades baked in.
 
@@ -529,6 +649,19 @@ def extract_segment(
         # `grade.py --candidates` montage.
         vf_parts.append("format=yuv420p")
         vf_parts.append(grade_filter)
+    # Zoom no mesmo encode do extract — nunca cut.mp4 → zoomed.mp4.
+    # fps= antes do crop para `n` ser o frame de saída (não o da fonte 60fps).
+    if zoom and streams != "a" and not keep_resolution:
+        fps_s = shortform_target_fps(source)
+        n_frames = max(1, int(round(float(duration) * float(fps_s))))
+        try:
+            from app.ffmpeg_zoom import zoom_vf
+        except ImportError:
+            _repo = Path(__file__).resolve().parent.parent
+            if str(_repo) not in sys.path:
+                sys.path.insert(0, str(_repo))
+            from app.ffmpeg_zoom import zoom_vf
+        vf_parts.append(zoom_vf(zoom, n_frames=n_frames, fps=float(fps_s)))
     vf = ",".join(vf_parts)
 
     # Per-segment level match (whisper/mumble rescue). Applied BEFORE the fades
@@ -638,6 +771,8 @@ def extract_segment(
             # short-form fps: 30 if the source is 30fps+ (natural motion, matches
             # IG/TikTok/Shorts capture), else the 24 standard; longform keeps source.
             cmd += ["-r", shortform_target_fps(source)]
+            if zoom:
+                cmd += ["-fps_mode", "cfr"]
     else:
         cmd += ["-vn"]
 
@@ -656,14 +791,9 @@ def extract_segment(
         cmd += ["-movflags", "+faststart"]
     cmd += [str(out_path)]
     try:
-        _run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-    except subprocess.CalledProcessError as e:
-        err = (e.stderr or b"").decode("utf-8", errors="replace").strip()
-        # Last lines are usually the real reason (nvenc driver, filter, etc.)
-        tail = "\n".join(err.splitlines()[-12:]) if err else "(sem stderr)"
-        raise RuntimeError(
-            f"ffmpeg extract falhou (exit {e.returncode}) em {out_path.name}:\n{tail}"
-        ) from None
+        _run_ffmpeg(cmd, label=f"ffmpeg extract ({out_path.name})")
+    except RuntimeError:
+        raise
 
 
 def snap_ranges_to_frames(edl: dict, fps: int) -> int:
@@ -733,6 +863,13 @@ def extract_all_segments(
     if jobs <= 0:
         jobs = max(1, min(4, (os.cpu_count() or 4) // 3))
     print(f"extracting {len(ranges)} segment(s) → {clips_dir.name}/  ({jobs} parallel)")
+    try:
+        from app.ffmpeg_zoom import zoom_enabled, zoom_for_index
+    except ImportError:
+        zoom_enabled = lambda _edl: False  # noqa: E731
+        zoom_for_index = lambda _edl, _i: None  # noqa: E731
+    if zoom_enabled(edl):
+        print("  zoom FFmpeg no extract (crop/scale, sem zoompan)", flush=True)
     if is_auto:
         print("  (auto-grade per segment: analyzing each range)")
 
@@ -766,6 +903,7 @@ def extract_all_segments(
             preview=preview, draft=draft, keep_resolution=keep_resolution,
             gain_db=gain_db, gain_windows=gain_windows,
             bleep_windows=bleep_windows,
+            zoom=zoom_for_index(edl, i),
         )
         return out_path
 
@@ -793,7 +931,7 @@ def concat_segments(segment_paths: list[Path], out_path: Path, edit_dir: Path) -
         str(out_path),
     ]
     print(f"concat → {out_path.name}")
-    _run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    _run_ffmpeg(cmd, label=f"ffmpeg concat ({out_path.name})")
     concat_list.unlink(missing_ok=True)
 
 
@@ -1051,6 +1189,13 @@ def extract_and_assemble_jcut(
     lead_ms = round(cfg["lead_frames"] / cfg["fps"] * 1000)
     print(f"J-cut: áudio entra {cfg['lead_frames']}f ({lead_ms}ms) antes da imagem"
           f"  ({len(plan)} takes, {jobs} paralelos)")
+    try:
+        from app.ffmpeg_zoom import zoom_enabled, zoom_for_index
+    except ImportError:
+        zoom_enabled = lambda _edl: False  # noqa: E731
+        zoom_for_index = lambda _edl, _i: None  # noqa: E731
+    if zoom_enabled(edl):
+        print("  zoom FFmpeg no extract de vídeo (crop/scale, sem zoompan)", flush=True)
 
     def work(p: dict) -> dict:
         i, r = p["i"], p["range"]
@@ -1065,7 +1210,8 @@ def extract_and_assemble_jcut(
         apath = clips_dir / f"seg_{i:02d}_{r['source']}_a.wav"
         extract_segment(p["src"], p["v_in"], p["v_out"] - p["v_in"], seg_filter,
                         vpath, preview=preview, draft=draft,
-                        keep_resolution=keep_resolution, streams="v")
+                        keep_resolution=keep_resolution, streams="v",
+                        zoom=zoom_for_index(edl, i))
         extract_segment(p["src"], p["a_in"], p["a_out"] - p["a_in"], "",
                         apath, preview=preview, draft=draft,
                         keep_resolution=keep_resolution, gain_db=gain_db,
@@ -1285,7 +1431,7 @@ def apply_voice_master(input_path: Path, output_path: Path) -> None:
         str(output_path),
     ]
     print(f"  voice master: EQ + compression + de-ess → {output_path.name}")
-    _run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    _run_ffmpeg(cmd, label=f"ffmpeg voice-master ({output_path.name})")
 
 
 def apply_loudnorm_two_pass(
@@ -1317,7 +1463,7 @@ def apply_loudnorm_two_pass(
             str(output_path),
         ]
         print(f"  loudnorm (1-pass preview) → {output_path.name}")
-        _run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        _run_ffmpeg(cmd, label=f"ffmpeg loudnorm-preview ({output_path.name})")
         return True
 
     # Full two-pass
@@ -1352,7 +1498,7 @@ def apply_loudnorm_two_pass(
         str(output_path),
     ]
     print(f"  loudnorm pass 2: normalizing → {output_path.name}")
-    _run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    _run_ffmpeg(cmd, label=f"ffmpeg loudnorm ({output_path.name})")
     return True
 
 
@@ -1435,7 +1581,7 @@ def build_final_composite(
     ]
     print(f"compositing → {out_path.name}")
     print(f"  overlays: {len(overlays)}, subtitles: {'yes' if has_subs else 'no'}")
-    _run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    _run_ffmpeg(cmd, label=f"ffmpeg composite ({out_path.name})")
 
 
 # -------- Main ---------------------------------------------------------------
@@ -1498,6 +1644,11 @@ def main() -> None:
              'disabled by EDL field "jcut": false.',
     )
     ap.add_argument(
+        "--no-polish",
+        action="store_true",
+        help="Não mexer nos ranges (proto/benchmark: compara o mesmo EDL).",
+    )
+    ap.add_argument(
         "--jcut-lead",
         type=int,
         default=None,
@@ -1522,12 +1673,13 @@ def main() -> None:
     acquire_render_lock(out_path)
 
     # Strip measurable dead air at the first head / last tail, and clamp past EOF.
-    before = [(float(r["start"]), float(r["end"])) for r in edl.get("ranges") or []]
-    polish_edl_edges(edl, edit_dir)
-    after = [(float(r["start"]), float(r["end"])) for r in edl.get("ranges") or []]
-    if before != after:
-        edl_path.write_text(json.dumps(edl, ensure_ascii=False, indent=2), encoding="utf-8")
-        print("  polished head/tail silence on EDL ranges", flush=True)
+    if not args.no_polish:
+        before = [(float(r["start"]), float(r["end"])) for r in edl.get("ranges") or []]
+        polish_edl_edges(edl, edit_dir)
+        after = [(float(r["start"]), float(r["end"])) for r in edl.get("ranges") or []]
+        if before != after:
+            edl_path.write_text(json.dumps(edl, ensure_ascii=False, indent=2), encoding="utf-8")
+            print("  polished head/tail silence on EDL ranges", flush=True)
 
     # Frame-align every range BEFORE extraction, and persist it: the EDL, the
     # preview timeline and segments.json must all describe the same cut as the

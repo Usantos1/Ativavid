@@ -17,6 +17,14 @@ SETTINGS_PATH = USER_DIR / "settings.json"
 
 DEFAULTS: dict[str, Any] = {
     "performanceProfile": "auto",
+    "renderMode": "auto",  # auto | turbo | quality — motor de render
+    # Interno. O cliente só vê "Motor de render: Automático".
+    # default = OVERLAY se elegível; off = sempre FULL (desliga rápido).
+    "overlayRollout": "default",  # default | off  (canary só em validação)
+    "canaryAttempt": 0,  # tentativas OVERLAY no canary (persiste)
+    "canaryLimit": 5,  # teto rígido do canary
+    "experimentalOverlay": False,  # força OVERLAY (dev). Preferir overlayRollout.
+    "experimentalFfmpegZoom": False,  # zoomCuts+pushIn no extract — off em produção
     "projectsRoot": None,  # None → %USERPROFILE%/ATIVAVID/Projetos
     "llmFallback": True,  # Gemini → ChatGPT se explícito no gateway
     "oneClickDefault": True,

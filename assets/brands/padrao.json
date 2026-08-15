@@ -16,13 +16,14 @@
   },
   "fastMode": true,
   "oneClick": true,
-  "rhythm": "dinamico",
+  "rhythm": "calmo",
   "intensity": "medio",
-  "speechClean": "medio",
+  "speechClean": "leve",
   "videoGoal": "reels",
   "brollMode": "quando_necessario",
   "captionChunk": "frase_curta",
   "exportPreset": "reels",
+  "colorGrade": "marca",
   "endCardCopy": {
     "line1": "Segue @lojaprimecamp",
     "line2": "ou me chama no direct"

@@ -2101,6 +2101,7 @@ $('setupGo').addEventListener('click', async () => {
       brollMode: S.style.brollMode || 'quando_necessario',
       captionChunk: S.style.captionChunk || 'frase_curta',
       exportPreset: S.style.exportPreset || 'reels',
+      colorGrade: S.style.colorGrade || 'marca',
       endCardCopy: S.endCardCopy || null,
       note: S.style.note || '',
     };
@@ -2175,6 +2176,7 @@ $('setupGo').addEventListener('click', async () => {
     brollMode: S.style.brollMode || 'quando_necessario',
     captionChunk: S.style.captionChunk || 'frase_curta',
     exportPreset: S.style.exportPreset || 'reels',
+    colorGrade: S.style.colorGrade || 'marca',
   };
   const res = await fetch(`${BASE}/api/save`, {
     method: 'POST',
@@ -2275,6 +2277,7 @@ $('setupSaveDefault').addEventListener('click', async () => {
     brollMode: S.style.brollMode || 'quando_necessario',
     captionChunk: S.style.captionChunk || 'frase_curta',
     exportPreset: S.style.exportPreset || 'reels',
+    colorGrade: S.style.colorGrade || 'marca',
     smartEmphasis: S.style.smartEmphasis !== false,
     endCardCopy: S.endCardCopy || null,
   };
@@ -3458,6 +3461,7 @@ function refreshAutoControls() {
   const map = [
     ['autoRhythm', 'rhythm', 'dinamico'],
     ['autoIntensity', 'intensity', 'medio'],
+    ['autoColorGrade', 'colorGrade', 'marca'],
     ['autoSpeech', 'speechClean', 'medio'],
     ['autoGoal', 'videoGoal', 'reels'],
     ['autoBroll', 'brollMode', 'quando_necessario'],
@@ -3476,6 +3480,7 @@ function wireAutoControls() {
   const map = [
     ['autoRhythm', 'rhythm'],
     ['autoIntensity', 'intensity'],
+    ['autoColorGrade', 'colorGrade'],
     ['autoSpeech', 'speechClean'],
     ['autoGoal', 'videoGoal'],
     ['autoBroll', 'brollMode'],

@@ -6,7 +6,7 @@
 ; Atalho → ATIVAVID.vbs (sem janela CMD).
 
 #define MyAppName "ATIVAVID"
-#define MyAppVersion "0.1.40"
+#define MyAppVersion "0.1.66"
 #define MyAppPublisher "ATIVAVID"
 #define MyAppURL "https://github.com/fillrochaa/edvid"
 #define MyAppExeName "ATIVAVID.vbs"
@@ -68,4 +68,7 @@ function InitializeSetup(): Boolean;
 begin
   Result := True;
 end;
+
+
+
 
