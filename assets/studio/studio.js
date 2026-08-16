@@ -6,6 +6,9 @@ const state = {
   jobs: [],
   view: "import",
   pendingDeleteId: null,
+  pendingFiles: null,
+  pendingDuration: null,
+  pendingRecommended: null,
 };
 
 const STATUS_LABEL = {
@@ -19,10 +22,10 @@ const STATUS_LABEL = {
 const TECH_LEAK = /overlay|remotion|ffmpeg|ffprobe|nvenc|nvdec|prores|loudnorm|compose|render_engine|fallback_full|full.?remotion|h264|libx264|qsv|amf|tonemap|cpu cut|working.?master|single.?pass|encoder|node\.js|\bnode\b|python|traceback|file ".+?", line \d+|helpers\\|cmd \/c |cmd failed|exception|uv run|render\.py|\\\\|\/helpers\//i;
 
 const VIEW_COPY = {
-  import: ["Início", "Arraste takes — um Reels cada, ou junte vários em um único vídeo."],
+  import: ["Início", "Escolha os vídeos e diga o que fazer com cada um."],
   fila: ["Fila", "Acompanhe o processamento dos seus vídeos."],
   done: ["Concluídos", "Vídeos prontos para abrir, ajustar ou exportar."],
-  estilo: ["Estilos", "Visual padrão da marca — a IA usa isso no corte e na Fase 2."],
+  estilo: ["Estilos", "Como os vídeos da sua marca normalmente devem parecer."],
   keys: ["Chaves & IA", "Passo a passo da sessão + links para Groq, ElevenLabs e Pexels."],
   licenca: ["Licença", "Status da assinatura e contas."],
   sistema: ["Sistema", "Desempenho em faixas, pastas, marcas e atualizações."],
@@ -151,38 +154,39 @@ function filterJobs(kind) {
   return state.jobs.slice(0, 6); // recent
 }
 
-function cardHtml(j) {
+function cardHtml(j, opts) {
+  const compact = !!(opts && opts.compact);
   const canFinal = j.hasFinal || j.status === "done";
   const editor = j.editorUrl || "#";
   const estilo = j.estiloUrl || "#";
   const finalu = j.finalUrl || "#";
   const busy = j.status === "processing" || j.status === "queued";
-  const headline = jobHeadline(j);
-  const detail = jobDetail(j);
+  const headline = compact ? "" : jobHeadline(j);
   const title = j.title || j.name || "Vídeo";
-  const startLabel = j.startedAtLabel || j.createdAtLabel || "";
-  const endLabel = j.finishedAtLabel || "";
-  const whenBits = [];
-  if (startLabel) whenBits.push(`Início ${startLabel}`);
-  if (endLabel) whenBits.push(`Fim ${endLabel}`);
-  else if (j.status === "processing" || j.status === "queued") whenBits.push("Em andamento");
-  const when = whenBits.join(" · ");
+  const fmt = j.formatLabel || (canFinal || j.hasCut ? "9:16" : "");
+  const dur = j.durationLabel || "";
+  const metaBits = [dur, fmt].filter(Boolean);
+  const chipLabel = queueCopy(j).badge;
+  const thumb = j.thumbUrl || `/api/jobs/${j.id}/thumb`;
   const progress = (j.status === "processing" && j.progress != null)
     ? `<div class="pc-progress"><span style="width:${Math.max(5, Math.min(100, j.progress))}%"></span></div>`
     : "";
-  const detailBlock = detail
-    ? `<button type="button" class="pc-detail-btn" data-act="detail" data-id="${j.id}">Ver detalhes</button>`
-    : "";
-  const thumb = j.thumbUrl || `/api/jobs/${j.id}/thumb`;
-  const chipLabel = queueCopy(j).badge;
-  const footLeft = [];
-  if (busy) {
-    footLeft.push(`<button type="button" class="chip-btn" data-act="cancel" data-id="${j.id}">Cancelar</button>`);
-    footLeft.push(`<button type="button" class="chip-btn" data-act="retry" data-id="${j.id}">Reiniciar</button>`);
-  } else if (j.status === "needs_review" || j.status === "error") {
-    footLeft.push(`<button type="button" class="chip-btn" data-act="retry" data-id="${j.id}">Tentar novamente</button>`);
-  }
-  return `<article class="project-card ${j.status}">
+  const primary = j.status === "done"
+    ? `<a class="chip-btn primary" href="${editor}">Revisar</a>`
+    : busy
+      ? `<button type="button" class="chip-btn" data-act="cancel" data-id="${j.id}">Cancelar</button>`
+      : `<button type="button" class="chip-btn" data-act="retry" data-id="${j.id}">Tentar novamente</button>`;
+  const menu = `<div class="pc-more">
+      <button type="button" class="chip-btn ghostish pc-more-btn" data-act="menu" data-id="${j.id}" aria-label="Mais ações">⋯</button>
+      <div class="pc-menu hidden" data-menu="${j.id}">
+        <a href="${estilo}">Alterar estilo</a>
+        <a class="${canFinal ? "" : "disabled"}" href="${canFinal ? finalu : "#"}">Ver final</a>
+        <button type="button" data-act="folder" data-id="${j.id}">Abrir pasta</button>
+        <button type="button" data-act="rename" data-id="${j.id}" data-title="${escapeHtml(title)}">Renomear</button>
+        <button type="button" class="danger" data-act="delete" data-id="${j.id}" data-name="${escapeHtml(title)}">Apagar</button>
+      </div>
+    </div>`;
+  return `<article class="project-card ${j.status}${compact ? " compact" : ""}">
     <div class="pc-thumb">
       <div class="pc-thumb-fallback">9:16</div>
       <img src="${thumb}?t=${encodeURIComponent(j.updatedAt || j.id)}" alt="" loading="lazy"
@@ -194,31 +198,21 @@ function cardHtml(j) {
         <div class="pc-title-block">
           <button type="button" class="pc-name pc-name-btn" data-act="rename" data-id="${j.id}"
             data-title="${escapeHtml(title)}" title="Clique para renomear">${escapeHtml(title)}</button>
-          ${when ? `<div class="pc-when">${escapeHtml(when)}</div>` : ""}
+          ${metaBits.length ? `<div class="pc-when">${escapeHtml(metaBits.join(" · "))}</div>` : ""}
         </div>
         <span class="chip ${j.status}">${escapeHtml(chipLabel)}</span>
       </div>
-      <div class="pc-msg">${escapeHtml(headline)}</div>
+      ${headline ? `<div class="pc-msg">${escapeHtml(headline)}</div>` : ""}
       ${progress}
-      ${detailBlock}
       <div class="pc-actions">
-        <a class="chip-btn primary" href="${editor}">${j.status === "done" ? "Revisar" : "Abrir editor"}</a>
-        <div class="pc-links">
-          <a class="chip-btn" href="${estilo}">Estilo</a>
-          <a class="chip-btn ${canFinal ? "" : "disabled"}" href="${canFinal ? finalu : "#"}">Final</a>
-          <button type="button" class="chip-btn ghostish" data-act="folder" data-id="${j.id}">Pasta</button>
-        </div>
-      </div>
-      <div class="pc-foot">
-        <div class="pc-foot-left">${footLeft.join("")}</div>
-        <button type="button" class="chip-btn danger-outline" data-act="delete" data-id="${j.id}"
-          data-name="${escapeHtml(title)}" title="Apagar projeto e pasta">Apagar</button>
+        ${primary}
+        ${menu}
       </div>
     </div>
   </article>`;
 }
 
-function renderInto(boxId, emptyId, jobs) {
+function renderInto(boxId, emptyId, jobs, opts) {
   const box = $(`#${boxId}`);
   if (!box) return;
   const empty = emptyId ? $(`#${emptyId}`) : null;
@@ -228,7 +222,7 @@ function renderInto(boxId, emptyId, jobs) {
     return;
   }
   if (empty) empty.classList.add("hidden");
-  box.innerHTML = jobs.map(cardHtml).join("");
+  box.innerHTML = jobs.map((j) => cardHtml(j, opts)).join("");
 }
 
 function renderJobs() {
@@ -250,7 +244,7 @@ function renderJobs() {
       : "Nenhum projeto";
   }
 
-  renderInto("jobListRecent", null, filterJobs("recent"));
+  renderInto("jobListRecent", null, filterJobs("recent"), { compact: true });
   renderInto("jobListFila", "emptyFila", fila);
   renderInto("jobListDone", "emptyDone", done);
 }
@@ -482,7 +476,94 @@ function openCheckout(url) {
   window.open(u, "_blank", "noopener");
 }
 
-async function uploadFiles(fileList) {
+function parseProtectedRanges(text) {
+  const out = [];
+  const chunks = String(text || "").split(/[,;\n]+/);
+  for (const chunk of chunks) {
+    const m = chunk.trim().match(/(\d{1,2}):(\d{2})(?:\.(\d+))?\s*[-–]\s*(\d{1,2}):(\d{2})(?:\.(\d+))?/);
+    if (!m) continue;
+    const toSec = (mm, ss, frac) => Number(mm) * 60 + Number(ss) + (frac ? Number(`0.${frac}`) : 0);
+    const start = toSec(m[1], m[2], m[3]);
+    const end = toSec(m[4], m[5], m[6]);
+    if (end > start) out.push({ start, end });
+  }
+  return out;
+}
+
+function collectImportIntent() {
+  const mode = document.querySelector(".intent-card.on")?.dataset.intent || "dynamic";
+  return {
+    editingIntent: mode,
+    preserveHook: !!$("#protHook")?.checked,
+    preserveCTA: !!$("#protCta")?.checked,
+    preserveCompleteSentences: !!$("#protSentence")?.checked,
+    preserveContext: !!$("#protContext")?.checked,
+    protectedRanges: parseProtectedRanges($("#protRanges")?.value || ""),
+    brandStyleSource: $("#useBrandStyle")?.checked ? "default" : "custom",
+    sourceDurationSec: state.pendingDuration || null,
+  };
+}
+
+function applyIntentDefaults(mode, recommended) {
+  const rec = $("#importRecommend");
+  if (rec) {
+    rec.classList.toggle("hidden", !recommended || recommended !== mode);
+    rec.textContent = recommended === mode ? "Recomendado para este vídeo" : "";
+  }
+  $$(".intent-card").forEach((c) => c.classList.toggle("on", c.dataset.intent === mode));
+  const shorts = mode === "shorts";
+  if ($("#protHook")) $("#protHook").checked = !shorts;
+  if ($("#protCta")) $("#protCta").checked = !shorts;
+  if ($("#protSentence")) $("#protSentence").checked = true;
+  if ($("#protContext")) $("#protContext").checked = true;
+}
+
+function probeVideoDuration(file) {
+  return new Promise((resolve) => {
+    try {
+      const url = URL.createObjectURL(file);
+      const v = document.createElement("video");
+      v.preload = "metadata";
+      v.onloadedmetadata = () => {
+        const d = Number(v.duration);
+        URL.revokeObjectURL(url);
+        resolve(Number.isFinite(d) ? d : null);
+      };
+      v.onerror = () => {
+        URL.revokeObjectURL(url);
+        resolve(null);
+      };
+      v.src = url;
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+async function openImportDialog(fileList) {
+  const files = [...fileList];
+  if (!files.length) return;
+  state.pendingFiles = files;
+  state.pendingDuration = files.length === 1 ? await probeVideoDuration(files[0]) : null;
+  const recommended = (state.pendingDuration || 0) >= 90 ? "complete" : "dynamic";
+  state.pendingRecommended = recommended;
+  const hint = $("#importHint");
+  if (hint) {
+    const names = files.map((f) => f.name).slice(0, 3).join(", ");
+    const extra = files.length > 3 ? ` +${files.length - 3}` : "";
+    hint.textContent = `${files.length} arquivo${files.length > 1 ? "s" : ""}: ${names}${extra}`;
+  }
+  const mergeWrap = $("#mergeTakesWrap");
+  if (mergeWrap) mergeWrap.classList.toggle("hidden", files.length < 2);
+  applyIntentDefaults(recommended, recommended);
+  try {
+    $("#dlgImport").showModal();
+  } catch {
+    await uploadFiles(files, collectImportIntent());
+  }
+}
+
+async function uploadFiles(fileList, intent) {
   const files = [...fileList];
   if (!files.length) return;
   try {
@@ -502,6 +583,7 @@ async function uploadFiles(fileList) {
   const merge = !!(files.length > 1 && $("#mergeTakes")?.checked);
   const fd = new FormData();
   for (const f of files) fd.append("files", f, f.name);
+  if (intent) fd.append("intent", JSON.stringify(intent));
   toast(merge ? `Juntando ${files.length} takes em 1 vídeo…` : `Importando ${files.length}…`);
   const res = await fetch(`/api/jobs${merge ? "?merge=1" : ""}`, { method: "POST", body: fd });
   const data = await res.json();
@@ -552,12 +634,43 @@ function wireDrop() {
     })
   );
   zone.addEventListener("drop", (e) => {
-    uploadFiles(e.dataTransfer.files).catch((err) => toast(err.message));
+    openImportDialog(e.dataTransfer.files).catch((err) => toast(err.message));
   });
   input.addEventListener("change", () => {
-    uploadFiles(input.files).catch((err) => toast(err.message));
+    openImportDialog(input.files).catch((err) => toast(err.message));
     input.value = "";
   });
+  $$(".intent-card").forEach((card) => {
+    card.addEventListener("click", () => applyIntentDefaults(card.dataset.intent, state.pendingRecommended));
+  });
+  const btnGo = $("#btnImportGo");
+  if (btnGo) {
+    btnGo.onclick = async () => {
+      const files = state.pendingFiles || [];
+      $("#dlgImport")?.close();
+      try {
+        await uploadFiles(files, collectImportIntent());
+      } catch (err) {
+        toast(err.message);
+      } finally {
+        state.pendingFiles = null;
+      }
+    };
+  }
+  const btnCancel = $("#btnImportCancel");
+  if (btnCancel) {
+    btnCancel.onclick = () => {
+      state.pendingFiles = null;
+      $("#dlgImport")?.close();
+    };
+  }
+  const btnStyle = $("#btnImportStyle");
+  if (btnStyle) {
+    btnStyle.onclick = () => {
+      if ($("#useBrandStyle")) $("#useBrandStyle").checked = false;
+      toast("Depois de importar, abra Estilo neste vídeo para ajustar só ele.");
+    };
+  }
 }
 
 function showJobDetail(id) {
@@ -606,9 +719,21 @@ function wireList() {
       return;
     }
     const btn = e.target.closest("[data-act]");
-    if (!btn) return;
+    if (!btn) {
+      $$(".pc-menu").forEach((m) => m.classList.add("hidden"));
+      return;
+    }
     const id = btn.dataset.id;
     const act = btn.dataset.act;
+    if (act === "menu") {
+      e.preventDefault();
+      const menu = document.querySelector(`[data-menu="${id}"]`);
+      const open = menu && !menu.classList.contains("hidden");
+      $$(".pc-menu").forEach((m) => m.classList.add("hidden"));
+      if (menu && !open) menu.classList.remove("hidden");
+      return;
+    }
+    $$(".pc-menu").forEach((m) => m.classList.add("hidden"));
     try {
       if (act === "folder") {
         await api("/api/jobs/open-folder", {

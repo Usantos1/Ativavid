@@ -93,7 +93,7 @@ const STYLE_CATALOG = {
       // default for every new project — a clean full-frame cut, with inserts as
       // something the user opts into.
       id: 'limpa',
-      name: 'Limpa',
+      name: 'Limpo',
       mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
         <rect x=".5" y=".5" width="65" height="117" rx="7" fill="#0b0e13" stroke="rgba(255,255,255,.12)"/>
         <rect x="3" y="3" width="60" height="112" rx="5" fill="rgba(255,255,255,.05)"/>
@@ -127,7 +127,7 @@ const STYLE_CATALOG = {
     },
     {
       id: 'split2',
-      name: 'Tela dividida 2',
+      name: 'Tela dividida com mídia',
       mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
         <rect x=".5" y=".5" width="65" height="117" rx="7" fill="#0b0e13" stroke="rgba(255,255,255,.12)"/>
         <rect x="3" y="3" width="60" height="65" rx="5" fill="rgba(255,255,255,.05)"/>
@@ -3471,9 +3471,27 @@ function refreshAutoControls() {
   for (const [id, key, def] of map) {
     const el = $(id);
     if (!el) continue;
-    const v = st[key] || (SHARED_DEFAULT_STYLE && SHARED_DEFAULT_STYLE[key]) || def;
+    let v = st[key] || (SHARED_DEFAULT_STYLE && SHARED_DEFAULT_STYLE[key]) || def;
+    if (key === 'videoGoal' && v === 'tutorial') v = 'educativo';
     el.value = v;
   }
+}
+
+const RHYTHM_PRESETS = {
+  natural: { rhythm: 'calmo', intensity: 'sutil', speechClean: 'leve' },
+  dinamico: { rhythm: 'dinamico', intensity: 'medio', speechClean: 'medio' },
+  intenso: { rhythm: 'rapido', intensity: 'forte', speechClean: 'agressivo' },
+};
+
+function applyRhythmPreset(id) {
+  const p = RHYTHM_PRESETS[id];
+  if (!p) return;
+  if (!S.style) S.style = defaultStyle();
+  Object.assign(S.style, p);
+  refreshAutoControls();
+  document.querySelectorAll('.rhythm-preset').forEach((b) => {
+    b.classList.toggle('on', b.dataset.preset === id);
+  });
 }
 
 function wireAutoControls() {
@@ -3493,6 +3511,18 @@ function wireAutoControls() {
     el.addEventListener('change', () => {
       if (!S.style) S.style = defaultStyle();
       S.style[key] = el.value;
+    });
+  }
+  document.querySelectorAll('.rhythm-preset').forEach((b) => {
+    b.addEventListener('click', () => applyRhythmPreset(b.dataset.preset));
+  });
+  const custom = $('btnAutoCustomize');
+  const grid = $('autoControls');
+  if (custom && grid) {
+    grid.classList.add('is-collapsed');
+    custom.addEventListener('click', () => {
+      grid.classList.toggle('is-collapsed');
+      custom.textContent = grid.classList.contains('is-collapsed') ? 'Personalizar' : 'Ocultar detalhes';
     });
   }
 }

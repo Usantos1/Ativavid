@@ -138,11 +138,14 @@
   <section id="styleSetup" class="setup hidden">
     <div class="setup-inner">
       <div class="setup-head">
-        <h2>Estilos deste vídeo</h2>
+        <h2>Como os vídeos da marca devem parecer</h2>
       </div>
 
+      <details class="style-block" open>
+      <summary class="style-block-sum">Visual</summary>
+      <div class="style-block-body">
       <div class="setup-group setup-group--wide">
-        <div class="group-head"><span class="group-title">Tipo de edição</span></div>
+        <div class="group-head"><span class="group-title">Layout do vídeo</span></div>
         <div id="optEdit" class="opt-grid"></div>
       </div>
 
@@ -216,9 +219,20 @@
         <div class="group-head"><span class="group-title">Estilo de legenda</span></div>
         <div id="optCaptions" class="opt-grid"></div>
       </div>
+      </div>
+      </details>
 
+      <details class="style-block" open>
+      <summary class="style-block-sum">Ritmo e cortes</summary>
+      <div class="style-block-body">
       <div class="setup-group setup-group--wide">
-        <div class="group-head"><span class="group-title">Automação do 1 clique</span></div>
+        <div class="group-head"><span class="group-title">Preset de ritmo</span></div>
+        <div class="rhythm-presets" id="rhythmPresets">
+          <button type="button" class="rhythm-preset" data-preset="natural">Natural<span>Mais conservador · menos cortes e zooms</span></button>
+          <button type="button" class="rhythm-preset on" data-preset="dinamico">Dinâmico<span>Recomendado para Reels e Shorts</span></button>
+          <button type="button" class="rhythm-preset" data-preset="intenso">Intenso<span>Mais cortes, zooms e retenção</span></button>
+        </div>
+        <button type="button" class="btn ghost small" id="btnAutoCustomize">Personalizar</button>
         <div class="auto-grid" id="autoControls">
           <label class="auto-field">Ritmo
             <select id="autoRhythm">
@@ -251,12 +265,32 @@
               <option value="agressivo">Agressiva</option>
             </select>
           </label>
-          <label class="auto-field">Objetivo
+        </div>
+      </div>
+      </div>
+      </details>
+
+      <details class="style-block" open>
+      <summary class="style-block-sum">Conteúdo</summary>
+      <div class="style-block-body">
+      <div class="setup-group setup-group--wide">
+        <div class="group-head"><span class="group-title">Tipo de conteúdo e formato</span></div>
+        <div class="auto-grid">
+          <label class="auto-field">Tipo de conteúdo
             <select id="autoGoal">
               <option value="reels" selected>Reels / Shorts</option>
-              <option value="anuncio">Anúncio</option>
-              <option value="tutorial">Tutorial</option>
-              <option value="vlog">Vlog</option>
+              <option value="educativo">Educativo</option>
+              <option value="venda">Vendas</option>
+              <option value="institucional">Institucional</option>
+              <option value="humor">Humor</option>
+              <option value="informativo">Informativo</option>
+            </select>
+          </label>
+          <label class="auto-field">Formato de saída
+            <select id="autoExport">
+              <option value="reels" selected>Vertical 9:16</option>
+              <option value="youtube">Horizontal 16:9</option>
+              <option value="square">Quadrado 1:1</option>
             </select>
           </label>
           <label class="auto-field">B-roll
@@ -265,13 +299,6 @@
               <option value="quando_necessario" selected>Quando necessário</option>
               <option value="sempre">Sempre</option>
               <option value="raro">Raro</option>
-            </select>
-          </label>
-          <label class="auto-field">Export
-            <select id="autoExport">
-              <option value="reels" selected>Reels / Shorts</option>
-              <option value="youtube">YouTube 16:9</option>
-              <option value="square">Quadrado 1:1</option>
             </select>
           </label>
           <label class="auto-field">Legenda
@@ -283,9 +310,14 @@
           </label>
         </div>
       </div>
+      </div>
+      </details>
 
+      <details class="style-block" open>
+      <summary class="style-block-sum">Marca e finalização</summary>
+      <div class="style-block-body">
       <div class="setup-group setup-group--wide">
-        <div class="group-head"><span class="group-title">Elementos da edição</span></div>
+        <div class="group-head"><span class="group-title">Elementos da marca</span></div>
         <div id="optElements" class="check-row"></div>
         <!-- Only shown when the end card is on. Lives with the PRESET, not with
              this one video: the skill is told never to invent brand identity,
@@ -303,6 +335,8 @@
           <span class="ec-hint">salvo com “Salvar como padrão” — vale para os próximos vídeos</span>
         </div>
       </div>
+      </div>
+      </details>
 
       <div class="setup-footer">
         <div class="setup-actions">

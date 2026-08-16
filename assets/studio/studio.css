@@ -2001,6 +2001,90 @@ body.view-estilo-on .ws-head {
   accent-color: var(--accent);
 }
 .merge-takes:hover { color: var(--text); }
+
+.dlg-import { max-width: min(760px, calc(100% - 2rem)); }
+.intent-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 14px 0 8px;
+}
+.intent-card {
+  text-align: left;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 13px;
+  color: var(--text);
+  cursor: pointer;
+  display: grid;
+  gap: 6px;
+}
+.intent-card strong { font-family: Sora, Outfit, sans-serif; font-size: 14px; }
+.intent-card span { color: var(--muted); font-size: 12px; line-height: 1.4; }
+.intent-card.on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 50%, transparent);
+}
+.import-block { margin-top: 14px; display: grid; gap: 8px; }
+.import-block h4 {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.import-chk {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+}
+.import-chk input { margin-top: 2px; accent-color: var(--accent); }
+.import-field { display: grid; gap: 4px; font-size: 13px; }
+.import-field input {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+.muted { color: var(--muted); font-weight: 400; }
+.pc-more { position: relative; }
+.pc-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  min-width: 160px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 6px;
+  z-index: 8;
+  display: grid;
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--text) 12%, transparent);
+}
+.pc-menu a, .pc-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  color: var(--text);
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  text-decoration: none;
+  cursor: pointer;
+}
+.pc-menu a:hover, .pc-menu button:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
+.pc-menu .danger { color: var(--bad); }
+.pc-menu a.disabled { opacity: 0.4; pointer-events: none; }
+.project-card.compact .pc-actions { margin-top: 2px; }
+@media (max-width: 800px) {
+  .intent-grid { grid-template-columns: 1fr; }
+}
 .hero-login-btn {
   height: 40px;
   padding: 0 16px;

@@ -61,10 +61,22 @@ def _preset_brief(preset: dict) -> str:
 
 
 def _rhythm_rules(preset: dict) -> str:
+    from app.editing_intent import prompt_rules
+
+    if (preset.get("editingIntent") or "").lower() == "complete":
+        return (
+            prompt_rules(preset)
+            + "RITMO/INTENSIDADE/TIPO do preset NÃO autorizam cortar fala. "
+            "Ignore punchline, retenção, ritmo ou 'deixar mais rápido' como motivo.\n"
+            "LIMPEZA_FALA=complete: só silêncio excessivo, erro+recomeço, "
+            "frase abandonada/refeita, repetição literal, ruído sem fala, "
+            "preparação de gravação descartável.\n"
+        )
+
     rhythm = (preset.get("rhythm") or "dinamico").lower()
     intensity = (preset.get("intensity") or "medio").lower()
     clean = (preset.get("speechClean") or "medio").lower()
-    goal = (preset.get("videoGoal") or "reels").lower()
+    goal = (preset.get("videoGoal") or preset.get("contentType") or "reels").lower()
 
     # Aliases da UI (Estilos) → chaves do prompt
     rhythm_alias = {
@@ -75,8 +87,10 @@ def _rhythm_rules(preset: dict) -> str:
     }
     goal_alias = {
         "tutorial": "educativo",
+        "educativo": "educativo",
         "shorts": "shorts",
         "tiktok": "tiktok",
+        "vendas": "venda",
     }
     rhythm = rhythm_alias.get(rhythm, rhythm)
     goal = goal_alias.get(goal, goal)
@@ -112,6 +126,9 @@ def _rhythm_rules(preset: dict) -> str:
         "depoimento": "Objetivo depoimento: edição limpa; preserve autenticidade.",
         "vlog": "Objetivo vlog: tom natural; poucos cortes; preserve contexto e personalidade.",
         "institucional": "Objetivo institucional: sóbrio; poucos efeitos.",
+        "humor": "Objetivo humor: preserve setup + punchline + reação; não corte a graça.",
+        "informativo": "Objetivo informativo: clareza; preserve dados e conclusão.",
+        "vendas": "Objetivo venda: benefício + prova + CTA forte.",
     }
     keep_ctx = (
         "PRIORIDADE: não tire do contexto. Se uma frase depende da anterior, mantenha as duas. "
@@ -120,36 +137,72 @@ def _rhythm_rules(preset: dict) -> str:
         "nem a queda — sem isso o vídeo perde o sentido cômico. Melhor 3s a mais do que matar a piada.\n"
     )
     return (
-        keep_ctx
+        prompt_rules(preset)
+        + keep_ctx
         + f"RITMO={rhythm}: {rhythm_map.get(rhythm, rhythm_map['dinamico'])}\n"
         + f"INTENSIDADE={intensity}: {intensity_map.get(intensity, intensity_map['medio'])}\n"
         + f"LIMPEZA_FALA={clean}: {clean_map.get(clean, clean_map['medio'])}\n"
-        + f"OBJETIVO={goal}: {goal_map.get(goal, goal_map['reels'])}\n"
+        + f"TIPO_CONTEUDO={goal}: {goal_map.get(goal, goal_map['reels'])}\n"
     )
 
 
 def _system_prompt(preset: dict | None = None) -> str:
     extra = _rhythm_rules(preset or {})
-    rhythm = ((preset or {}).get("rhythm") or "dinamico").lower()
-    if rhythm in ("calmo", "natural"):
+    intent = ((preset or {}).get("editingIntent") or "dynamic").lower()
+    if intent == "complete":
+        role = (
+            "Você é o editor-chefe do ATIVAVID. Este job é EDITAR O VÍDEO COMPLETO: "
+            "o objetivo NÃO é encurtar. Mantenha o conteúdo e só limpe o que "
+            "claramente não deveria estar no vídeo.\n"
+        )
+        hook_rule = (
+            "- Preserve o PRIMEIRO bloco packed INTEIRO. Não corte falas internas "
+            "da abertura só para melhorar ritmo (ex.: pergunta/resposta, reação).\n"
+        )
         target = (
-            "- Alvo: preserve o conteúdo falado; encurte só o que for silêncio/"
-            "falso começo/repetição. Pode passar de 45s se o material pedir.\n"
+            "- Não há alvo de duração. Um vídeo bem gravado fica quase do mesmo tamanho. "
+            "PROIBIDO remover fala por ritmo, punchline, retenção ou 'parte mais forte'.\n"
+            "- Se remover um trecho, liste em \"drops\" com class exatamente um de: "
+            "silence | false_start | repetition | abandoned_take | non_content.\n"
+        )
+    elif intent == "shorts":
+        role = (
+            "Você é o editor-chefe do ATIVAVID. Este job é CRIAR REELS/SHORTS: "
+            "escolha trechos independentes e fortes do material.\n"
+        )
+        hook_rule = (
+            "- Cada short precisa de um gancho próprio no começo do TRECHO escolhido.\n"
+        )
+        target = (
+            "- Alvo: 20–60s por trecho. Pode ignorar o restante do original.\n"
         )
     else:
-        target = (
-            "- Alvo típico: 15–45s se o material permitir; senão o melhor compacto "
-            "(ajuste ao RITMO) — sem apagar o raciocínio central.\n"
+        role = (
+            "Você é o editor-chefe do ATIVAVID. Este job é DEIXAR MAIS DINÂMICO: "
+            "acelere o ritmo sem apagar informação nem CTA.\n"
         )
+        hook_rule = (
+            "- Preserve o gancho inicial. Pode limpar respiração, não a intenção da abertura.\n"
+        )
+        target = (
+            "- Alvo típico: mais curto que o original, sem apagar o raciocínio central.\n"
+        )
+    cut_rule = (
+        "- Remova SOMENTE silêncio excessivo, erro+recomeço, take abandonada, "
+        "repetição literal ou ruído sem fala. Na dúvida, PRESERVE a fala.\n"
+        if intent == "complete"
+        else
+        "- Remova silêncios longos, gaguejos e falsos começos "
+        "(respeitando LIMPEZA_FALA e a INTENÇÃO). NÃO remova frases só porque 'encurtam'.\n"
+    )
     return (
-        "Você é o editor-chefe do ATIVAVID (Reels/TikTok/Shorts vertical 9:16).\n"
-        "Recebe a transcrição empacotada e o estilo da marca. Monte um corte "
-        "profissional, ritmado e comercial — mas FIEL ao que a pessoa disse.\n\n"
+        role
+        + "Recebe a transcrição empacotada e o estilo da marca. Monte um corte "
+        "fiel ao que a pessoa disse.\n\n"
         "REGRAS:\n"
         "- Ordem cronológica no mesmo source.\n"
-        "- Comece com HOOK forte nos primeiros 1–3s.\n"
-        "- Remova silêncios longos, gaguejos e falsos começos "
-        "(respeitando LIMPEZA_FALA). NÃO remova frases só porque 'encurtam'.\n"
+        f"{hook_rule}"
+        f"{cut_rule}"
         "- HUMOR/COMÉDIA: preserve setup + punchline + reação. Nunca deixe só o começo "
         "da piada nem corte a frase que faz a graça.\n"
         "- Prefira bordas em silêncio / fim de frase; pad ~30–200ms implícito.\n"
@@ -176,10 +229,16 @@ def _user_prompt(
 ) -> str:
     reg_lines = "\n".join(f"- {a:.2f} → {b:.2f}" for a, b in regions[:80])
     dur = f"{duration_hint:.1f}s" if duration_hint else "desconhecida"
+    intent = (preset.get("editingIntent") or "dynamic").lower()
+    tipo = (
+        "vídeo completo (preservar conteúdo; NÃO é highlight/Reels)"
+        if intent == "complete"
+        else "short-form vertical (Reels/TikTok)"
+    )
     return (
         f"SOURCE_KEY={source_key}\n"
         f"DURAÇÃO≈{dur}\n"
-        f"TIPO=short-form vertical (Reels/TikTok)\n\n"
+        f"TIPO={tipo}\n\n"
         f"## Estilo / marca\n{_preset_brief(preset)}\n\n"
         f"## Regiões de fala detectadas (ancore os cortes nelas)\n{reg_lines}\n\n"
         f"## Transcrição (takes_packed)\n{packed or '(vazia)'}\n"
@@ -348,6 +407,21 @@ def plan_cut(
         voice=voice,
         source_dur=duration_s,
     )
+    try:
+        from app.editing_intent import guard_ranges
+
+        ranges = guard_ranges(
+            ranges,
+            preset=preset,
+            regions=regions,
+            duration_s=duration_s,
+            edit_dir=edit_dir,
+            source_stem=source_key,
+            drops=parsed.get("drops") if isinstance(parsed, dict) else None,
+        )
+    except Exception:
+        pass
+    drops = parsed.get("drops") if isinstance(parsed, dict) else None
     meta = {
         "backend": backend,
         "hook": (parsed.get("hook") if isinstance(parsed, dict) else None),
@@ -358,7 +432,11 @@ def plan_cut(
     }
     # Persist for editor / doutor
     (edit_dir / "llm_cut_plan.json").write_text(
-        json.dumps({"ranges": ranges, "meta": meta, "raw": text[:8000]}, ensure_ascii=False, indent=2),
+        json.dumps(
+            {"ranges": ranges, "meta": meta, "drops": drops, "raw": text[:8000]},
+            ensure_ascii=False,
+            indent=2,
+        ),
         encoding="utf-8",
     )
     return ranges, meta

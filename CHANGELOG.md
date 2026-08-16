@@ -1,5 +1,10 @@
 # Changelog interno
 
+## 0.1.67
+
+Estilos volta a abrir o catálogo em `/estilo-padrao` (sem `unknown route`).
+Complete preserva fala; só limpa silêncio, erro, repetição e take abandonada.
+
 ## 0.1.66
 
 Fila sem jargão técnico: o cliente vê Preparando → Editando → Finalizando → Concluído.

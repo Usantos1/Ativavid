@@ -706,6 +706,7 @@ def build_edl_ranges(
     voice: dict,
     quote: str,
     source_dur: float | None = None,
+    preserve_hook: bool = False,
 ) -> list[dict]:
     if not regions:
         raise NeedsReview("no_speech", "speech_regions found no speech")
@@ -719,13 +720,14 @@ def build_edl_ranges(
         else:
             merged.append((a, b))
 
-    # Drop leading micro "false starts" (éé… / hum) when a real island follows.
-    while len(merged) >= 2 and (merged[0][1] - merged[0][0]) < 0.55:
-        gap = merged[1][0] - merged[0][1]
-        if gap < 1.5:
-            merged.pop(0)
-        else:
-            break
+    # Drop leading micro "false starts" only when the job does not protect the hook.
+    if not preserve_hook:
+        while len(merged) >= 2 and (merged[0][1] - merged[0][0]) < 0.55:
+            gap = merged[1][0] - merged[0][1]
+            if gap < 1.5:
+                merged.pop(0)
+            else:
+                break
 
     # Map low-run gains onto ranges (worst run overlapping each range)
     low_runs = voice.get("low_runs") or []
@@ -1662,7 +1664,23 @@ def run(
 
     export_id = str(preset.get("exportPreset") or preset.get("videoGoal") or "reels").lower()
     allow_landscape = export_id in ("youtube", "longform", "horizontal", "16:9", "16x9")
-    max_dur = 1800 if allow_landscape else 180
+    try:
+        from app.editing_intent import load as load_intent, merge_into_preset
+
+        _intent = load_intent(edit_dir)
+        if _intent:
+            preset = merge_into_preset(preset, _intent)
+    except Exception:
+        _intent = None
+    intent_mode = str((preset or {}).get("editingIntent") or "").lower()
+    if allow_landscape:
+        max_dur = 1800
+    elif intent_mode == "complete":
+        max_dur = 1800
+    elif intent_mode == "dynamic":
+        max_dur = 600
+    else:
+        max_dur = 180
     is_longform = bool(allow_landscape)
     status["format"] = "youtube" if allow_landscape else "reels"
 
@@ -1744,7 +1762,10 @@ def run(
             source_key = key
 
         if len(sources) > 1:
-            all_ranges.extend(build_edl_ranges(key, regions_i, voice_i, spoken_i, source_dur=dur_i))
+            all_ranges.extend(build_edl_ranges(
+                key, regions_i, voice_i, spoken_i, source_dur=dur_i,
+                preserve_hook=bool(preset.get("preserveHook")),
+            ))
 
     _helper("pack_transcripts.py", "--edit-dir", str(edit_dir))
     cut_spoken_join = "\n".join(spoken_parts).strip()
@@ -1787,7 +1808,10 @@ def run(
                     f"[ia] fallback heurístico ({llm_meta.get('error') or 'sem plano'})",
                     flush=True,
                 )
-                ranges = build_edl_ranges(source_key, regions, voice, spoken, source_dur=dur)
+                ranges = build_edl_ranges(
+                    source_key, regions, voice, spoken, source_dur=dur,
+                    preserve_hook=bool(preset.get("preserveHook")),
+                )
     else:
         ranges = all_ranges
         llm_meta = {"ok": True, "backend": "multi_take_concat", "takes": len(sources)}
@@ -1797,10 +1821,26 @@ def run(
     if not ranges:
         raise NeedsReview("no_speech", "nenhum trecho de fala para cortar")
 
+    try:
+        from app.editing_intent import guard_ranges
+
+        ranges = guard_ranges(
+            ranges,
+            preset=preset,
+            regions=regions,
+            duration_s=dur,
+            edit_dir=edit_dir,
+            source_stem=primary.stem,
+        )
+    except Exception:
+        pass
+
     for i, r in enumerate(ranges):
+        if str(r.get("beat") or "").upper() in ("HOOK", "CTA", "KEEP"):
+            continue
         r["beat"] = "HOOK" if i == 0 else ("CTA" if i == len(ranges) - 1 and len(ranges) > 2 else f"B{i}")
 
-    if not allow_landscape:
+    if not allow_landscape and intent_mode != "complete":
         total_keep = sum(max(0.0, float(r["end"]) - float(r["start"])) for r in ranges)
         if total_keep > max_dur:
             raise NeedsReview(

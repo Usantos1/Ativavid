@@ -130,15 +130,11 @@
               <div class="hero-ico" aria-hidden="true">+</div>
               <div class="hero-copy">
                 <h2>Importar e editar com IA</h2>
-                <p>Arraste MP4 9:16 — o ATIVAVID analisa, corta, legenda e entrega. Você só revisa.</p>
+                <p>Arraste seus vídeos ou escolha os arquivos para começar.</p>
               </div>
               <div class="hero-cta-row">
-                <button type="button" class="export-btn" id="btnPick">✨ Escolher e editar com IA</button>
+                <button type="button" class="export-btn" id="btnPick">Escolher vídeos</button>
               </div>
-              <label class="merge-takes" title="Vários arquivos viram um único projeto e um final">
-                <input type="checkbox" id="mergeTakes">
-                <span>Juntar seleção em um único vídeo</span>
-              </label>
             </div>
           </div>
           <div class="section-block">
@@ -528,6 +524,49 @@
     <div class="dlg-actions">
       <button type="button" class="export-btn" id="btnRecoveryOk">Retomar</button>
       <button type="button" class="ghost-btn" id="btnRecoverySkip">Deixar na fila</button>
+    </div>
+  </dialog>
+
+  <dialog id="dlgImport" class="dlg dlg-import">
+    <h3>O que você quer fazer com este vídeo?</h3>
+    <p class="hint" id="importHint">Depois de escolher, o ATIVAVID processa automaticamente.</p>
+    <p class="hint hidden" id="importRecommend"></p>
+    <div class="intent-grid" id="intentGrid">
+      <button type="button" class="intent-card" data-intent="complete">
+        <strong>Editar vídeo completo</strong>
+        <span>Mantém a estrutura e a mensagem do vídeo. A IA remove apenas erros, repetições e pausas desnecessárias.</span>
+      </button>
+      <button type="button" class="intent-card on" data-intent="dynamic">
+        <strong>Deixar mais dinâmico</strong>
+        <span>Mantém o conteúdo principal, mas acelera o ritmo com cortes de pausas, erros e momentos sem informação.</span>
+      </button>
+      <button type="button" class="intent-card" data-intent="shorts">
+        <strong>Criar Reels / Shorts</strong>
+        <span>A IA procura os melhores trechos do vídeo e cria conteúdos curtos independentes.</span>
+      </button>
+    </div>
+    <div class="import-block">
+      <h4>Proteção de conteúdo</h4>
+      <label class="import-chk"><input type="checkbox" id="protHook" checked> Preservar abertura / gancho</label>
+      <label class="import-chk"><input type="checkbox" id="protCta" checked> Preservar conclusão / CTA</label>
+      <label class="import-chk"><input type="checkbox" id="protSentence" checked> Nunca cortar frase pela metade</label>
+      <label class="import-chk"><input type="checkbox" id="protContext" checked> Preservar contexto da fala</label>
+      <label class="import-field">Trechos protegidos <span class="muted">(opcional, ex. 0:00-0:08, 1:42-1:55)</span>
+        <input type="text" id="protRanges" placeholder="00:00-00:08">
+      </label>
+    </div>
+    <div class="import-block">
+      <h4>Estilo</h4>
+      <label class="import-chk"><input type="checkbox" id="useBrandStyle" checked> Usar padrão da marca</label>
+      <button type="button" class="ghost-btn" id="btnImportStyle">Alterar para este vídeo</button>
+    </div>
+    <label class="import-chk" id="mergeTakesWrap">
+      <input type="checkbox" id="mergeTakes">
+      <span><strong>Juntar arquivos em um único vídeo</strong><br><span class="muted">Use quando gravou o mesmo conteúdo em vários takes. Desmarcado: cada arquivo vira um job.</span></span>
+    </label>
+    <div class="dlg-actions">
+      <button type="button" class="ghost-btn" id="btnImportCancel">Cancelar</button>
+      <button type="button" class="export-btn" id="btnImportGo">Editar com IA</button>
     </div>
   </dialog>
 

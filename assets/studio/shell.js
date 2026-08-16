@@ -27,7 +27,8 @@
       btn.addEventListener("click", (e) => {
         e.preventDefault();
         const view = btn.getAttribute("data-hub-view") || "import";
-        location.href = view === "import" ? "/" : `/?view=${encodeURIComponent(view)}`;
+        const target = view === "import" ? "/" : `/?view=${encodeURIComponent(view)}`;
+        (window.top || window).location.href = target;
       });
     });
     const home = $("#btnHome");

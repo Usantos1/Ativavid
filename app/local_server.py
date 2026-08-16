@@ -314,6 +314,7 @@ def preset_from_style_payload(body: dict, base: dict | None = None) -> dict:
         "rhythm", "intensity", "speechClean", "videoGoal",
         "brollMode", "captionChunk", "smartEmphasis", "endCardType",
         "exportPreset", "brandId", "brandName",
+        "contentType", "outputFormat",
     ):
         if k in body and body[k] is not None:
             out[k] = body[k]
@@ -814,6 +815,12 @@ class Worker:
                 save_preset_snap = load_preset()
         else:
             save_preset_snap = load_preset()
+        try:
+            from app.editing_intent import load as load_intent, merge_into_preset
+
+            save_preset_snap = merge_into_preset(save_preset_snap, load_intent(edit_dir))
+        except Exception:
+            pass
         preset_path.write_text(json.dumps(save_preset_snap, ensure_ascii=False, indent=2), encoding="utf-8")
 
         env = os.environ.copy()
@@ -1118,6 +1125,27 @@ class StudioHandler(BaseHTTPRequestHandler):
         if path in ("/", "/studio"):
             self._file(STUDIO / "index.html", "text/html; charset=utf-8")
             return
+        # Mesmas rotas do desktop/preview: catálogo de Estilos no iframe do hub.
+        if path in ("/estilo-padrao", "/estilo", "/fase1", "/fase2"):
+            self._file(PREVIEW / "index.html", "text/html; charset=utf-8")
+            return
+        if path == "/api/state":
+            preset = load_preset()
+            self._json({
+                "state": {
+                    "project": "Estilo padrão da marca",
+                    "phase": 1,
+                    "message": "Escolha o visual padrão",
+                    "fps": 30,
+                    "awaitingStyle": True,
+                    "style": preset,
+                },
+                "edl": None,
+                "mtimes": {},
+                "videoDuration": 0.0,
+                "hasPendingEdits": False,
+            })
+            return
         if path.startswith("/assets/studio/"):
             rel = path[len("/assets/studio/"):]
             self._file(STUDIO / rel)
@@ -1414,6 +1442,15 @@ class StudioHandler(BaseHTTPRequestHandler):
             body = self._read_json()
             if not body:
                 self._json({"error": "preset vazio"}, 400)
+                return
+            save_preset(body)
+            self._json({"ok": True, "preset": load_preset()})
+            return
+
+        if path == "/api/default-style":
+            body = self._read_json()
+            if not body:
+                self._json({"error": "estilo vazio"}, 400)
                 return
             save_preset(body)
             self._json({"ok": True, "preset": load_preset()})
@@ -2117,13 +2154,13 @@ class StudioHandler(BaseHTTPRequestHandler):
                 body = self._read_json()
                 paths = body.get("paths") or []
                 merge = merge or bool(body.get("merge"))
-                created = self._ingest_paths(paths, merge=merge)
+                created = self._ingest_paths(paths, merge=merge, intent=body.get("intent"))
             self._json({"ok": True, "jobs": created, "merged": bool(merge and len(created) == 1)})
             return
 
         self._json({"error": "unknown route"}, 404)
 
-    def _ingest_paths(self, paths: list[str], merge: bool = False) -> list[dict]:
+    def _ingest_paths(self, paths: list[str], merge: bool = False, intent: dict | None = None) -> list[dict]:
         files: list[Path] = []
         for p in paths:
             src = Path(p)
@@ -2132,8 +2169,8 @@ class StudioHandler(BaseHTTPRequestHandler):
         if not files:
             return []
         if merge and len(files) > 1:
-            return [self._create_job_from_many_files(files)]
-        return [self._create_job_from_file(src, copy=True) for src in files]
+            return [self._create_job_from_many_files(files, intent=intent)]
+        return [self._create_job_from_file(src, copy=True, intent=intent) for src in files]
 
     def _ingest_multipart(self, merge: bool = False) -> list[dict]:
         n = int(self.headers.get("Content-Length") or 0)
@@ -2144,19 +2181,31 @@ class StudioHandler(BaseHTTPRequestHandler):
         raw = b"Content-Type: " + ctype.encode("ascii", "ignore") + b"\r\nMIME-Version: 1.0\r\n\r\n" + body
         msg = BytesParser(policy=policy.default).parsebytes(raw)
         parts: list[tuple[str, bytes]] = []
+        intent: dict | None = None
         for part in msg.iter_parts():
             filename = part.get_filename()
+            disp = str(part.get("Content-Disposition") or "")
+            field = (part.get_param("name", header="content-disposition") or "").strip()
+            if not field and "name=" in disp.lower():
+                m = re.search(r'name="?([^";]+)"?', disp, flags=re.I)
+                field = (m.group(1) if m else "").strip()
+            payload = part.get_payload(decode=True) or b""
+            if field == "intent" or (not filename and field in ("intent", "jobIntent")):
+                try:
+                    intent = json.loads(payload.decode("utf-8", errors="replace") or "{}")
+                except json.JSONDecodeError:
+                    intent = None
+                continue
             if not filename:
                 continue
-            payload = part.get_payload(decode=True) or b""
             parts.append((filename, payload))
         if not parts:
             return []
         if merge and len(parts) > 1:
-            return [self._create_job_from_many_bytes(parts)]
-        return [self._create_job_from_bytes(name, data) for name, data in parts]
+            return [self._create_job_from_many_bytes(parts, intent=intent)]
+        return [self._create_job_from_bytes(name, data, intent=intent) for name, data in parts]
 
-    def _create_job_from_many_files(self, files: list[Path]) -> dict:
+    def _create_job_from_many_files(self, files: list[Path], intent: dict | None = None) -> dict:
         job_id = uuid.uuid4().hex[:10]
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         label = _safe_name(files[0].stem)[:40] or "takes"
@@ -2173,10 +2222,10 @@ class StudioHandler(BaseHTTPRequestHandler):
         primary = copied[0]
         name = f"{label} (+{len(copied) - 1})" if len(copied) > 1 else label
         return self._register_job(
-            job_id, name, primary, project / "edit", sources=[str(p) for p in copied]
+            job_id, name, primary, project / "edit", sources=[str(p) for p in copied], intent=intent
         )
 
-    def _create_job_from_many_bytes(self, parts: list[tuple[str, bytes]]) -> dict:
+    def _create_job_from_many_bytes(self, parts: list[tuple[str, bytes]], intent: dict | None = None) -> dict:
         job_id = uuid.uuid4().hex[:10]
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         label = _safe_name(Path(parts[0][0]).stem)[:40] or "takes"
@@ -2194,10 +2243,10 @@ class StudioHandler(BaseHTTPRequestHandler):
         primary = copied[0]
         display = f"{label} (+{len(copied) - 1})" if len(copied) > 1 else label
         return self._register_job(
-            job_id, display, primary, project / "edit", sources=[str(p) for p in copied]
+            job_id, display, primary, project / "edit", sources=[str(p) for p in copied], intent=intent
         )
 
-    def _create_job_from_bytes(self, filename: str, data: bytes) -> dict:
+    def _create_job_from_bytes(self, filename: str, data: bytes, intent: dict | None = None) -> dict:
         job_id = uuid.uuid4().hex[:10]
         name = _safe_name(filename)
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -2206,12 +2255,12 @@ class StudioHandler(BaseHTTPRequestHandler):
         ext = Path(filename).suffix or ".mp4"
         source = project / f"{name}{ext}"
         source.write_bytes(data)
-        return self._register_job(job_id, name, source, project / "edit")
+        return self._register_job(job_id, name, source, project / "edit", intent=intent)
 
     def _create_job_from_upload(self, filename: str, data: bytes) -> dict:
         return self._create_job_from_bytes(filename, data)
 
-    def _create_job_from_file(self, src: Path, copy: bool = True) -> dict:
+    def _create_job_from_file(self, src: Path, copy: bool = True, intent: dict | None = None) -> dict:
         job_id = uuid.uuid4().hex[:10]
         name = _safe_name(src.name)
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -2222,7 +2271,7 @@ class StudioHandler(BaseHTTPRequestHandler):
             shutil.copy2(src, dest)
         else:
             shutil.move(str(src), str(dest))
-        return self._register_job(job_id, name, dest, project / "edit")
+        return self._register_job(job_id, name, dest, project / "edit", intent=intent)
 
     def _register_job(
         self,
@@ -2231,8 +2280,16 @@ class StudioHandler(BaseHTTPRequestHandler):
         source: Path,
         edit_dir: Path,
         sources: list[str] | None = None,
+        intent: dict | None = None,
     ) -> dict:
         edit_dir.mkdir(parents=True, exist_ok=True)
+        if intent:
+            try:
+                from app.editing_intent import save as save_intent
+
+                save_intent(edit_dir, intent)
+            except Exception:
+                pass
         # So /p/<pasta>/fase1 always resolves to a real editor session
         state_p = edit_dir / "state.json"
         if not state_p.exists():
