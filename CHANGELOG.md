@@ -1,5 +1,9 @@
 # Changelog interno
 
+## 0.1.68
+
+Menu ⋯ dos cards em Concluídos abre as ações do vídeo certo: abrir pasta, ver final, alterar estilo e apagar.
+
 ## 0.1.67
 
 Estilos volta a abrir o catálogo em `/estilo-padrao` (sem `unknown route`).

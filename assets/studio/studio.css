@@ -972,8 +972,9 @@ body.view-estilo-on .ws-head {
   text-decoration-color: currentColor;
 }
 .project-card.error .pc-detail-btn { color: var(--bad); }
-.pc-actions { display: grid; gap: 8px; }
-.pc-actions .chip-btn.primary { width: 100%; }
+.pc-actions { display: flex; gap: 8px; align-items: center; }
+.pc-actions .chip-btn.primary { flex: 1 1 auto; width: auto; min-width: 0; }
+.pc-actions .pc-more { flex: 0 0 auto; }
 .pc-links {
   display: flex;
   flex-wrap: wrap;
@@ -2051,20 +2052,21 @@ body.view-estilo-on .ws-head {
   padding: 8px 10px;
 }
 .muted { color: var(--muted); font-weight: 400; }
-.pc-more { position: relative; }
+.pc-more { position: relative; z-index: 2; }
+.pc-more-btn { position: relative; z-index: 3; }
 .pc-menu {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 4px);
-  min-width: 160px;
+  position: fixed;
+  min-width: 176px;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 6px;
-  z-index: 8;
+  z-index: 80;
   display: grid;
-  box-shadow: 0 10px 24px color-mix(in srgb, var(--text) 12%, transparent);
+  pointer-events: auto;
+  box-shadow: 0 14px 36px color-mix(in srgb, var(--text) 18%, transparent);
 }
+.pc-menu.pc-menu-open { z-index: 80; }
 .pc-menu a, .pc-menu button {
   display: block;
   width: 100%;
@@ -2079,7 +2081,12 @@ body.view-estilo-on .ws-head {
   cursor: pointer;
 }
 .pc-menu a:hover, .pc-menu button:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
-.pc-menu .danger { color: var(--bad); }
+.pc-menu .danger {
+  color: var(--bad);
+  margin-top: 4px;
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 8px 8px;
+}
 .pc-menu a.disabled { opacity: 0.4; pointer-events: none; }
 .project-card.compact .pc-actions { margin-top: 2px; }
 @media (max-width: 800px) {

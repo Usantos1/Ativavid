@@ -154,12 +154,37 @@ function filterJobs(kind) {
   return state.jobs.slice(0, 6); // recent
 }
 
+function jobFolderName(j) {
+  const raw = String(j.projectDir || j.editDir || j.name || j.id || "").replace(/[\\/]+$/, "");
+  const parts = raw.split(/[/\\]/).filter(Boolean);
+  return parts[parts.length - 1] || String(j.id || "");
+}
+
+function jobLinks(j) {
+  const folder = encodeURIComponent(jobFolderName(j));
+  return {
+    editor: j.editorUrl || `/p/${folder}/fase1`,
+    estilo: j.estiloUrl || `/p/${folder}/estilo`,
+    final: j.finalUrl || `/p/${folder}/fase2`,
+  };
+}
+
+function cardSig(j, opts) {
+  const links = jobLinks(j);
+  return [
+    j.id, j.status, j.title || j.name, j.progress, j.hasFinal, j.updatedAt,
+    j.durationLabel, j.formatLabel, j.thumbUrl, links.editor, links.estilo, links.final,
+    opts && opts.compact ? "1" : "0",
+  ].join("\t");
+}
+
 function cardHtml(j, opts) {
   const compact = !!(opts && opts.compact);
   const canFinal = j.hasFinal || j.status === "done";
-  const editor = j.editorUrl || "#";
-  const estilo = j.estiloUrl || "#";
-  const finalu = j.finalUrl || "#";
+  const links = jobLinks(j);
+  const editor = links.editor;
+  const estilo = links.estilo;
+  const finalu = links.final;
   const busy = j.status === "processing" || j.status === "queued";
   const headline = compact ? "" : jobHeadline(j);
   const title = j.title || j.name || "Vídeo";
@@ -171,19 +196,20 @@ function cardHtml(j, opts) {
   const progress = (j.status === "processing" && j.progress != null)
     ? `<div class="pc-progress"><span style="width:${Math.max(5, Math.min(100, j.progress))}%"></span></div>`
     : "";
+  const safeId = escapeHtml(j.id);
+  const menuKey = escapeHtml(`${j.id}:${compact ? "c" : "f"}`);
   const primary = j.status === "done"
-    ? `<a class="chip-btn primary" href="${editor}">Revisar</a>`
+    ? `<a class="chip-btn primary" href="${escapeHtml(editor)}">Revisar</a>`
     : busy
-      ? `<button type="button" class="chip-btn" data-act="cancel" data-id="${j.id}">Cancelar</button>`
-      : `<button type="button" class="chip-btn" data-act="retry" data-id="${j.id}">Tentar novamente</button>`;
-  const menu = `<div class="pc-more">
-      <button type="button" class="chip-btn ghostish pc-more-btn" data-act="menu" data-id="${j.id}" aria-label="Mais ações">⋯</button>
-      <div class="pc-menu hidden" data-menu="${j.id}">
-        <a href="${estilo}">Alterar estilo</a>
-        <a class="${canFinal ? "" : "disabled"}" href="${canFinal ? finalu : "#"}">Ver final</a>
-        <button type="button" data-act="folder" data-id="${j.id}">Abrir pasta</button>
-        <button type="button" data-act="rename" data-id="${j.id}" data-title="${escapeHtml(title)}">Renomear</button>
-        <button type="button" class="danger" data-act="delete" data-id="${j.id}" data-name="${escapeHtml(title)}">Apagar</button>
+      ? `<button type="button" class="chip-btn" data-act="cancel" data-id="${safeId}">Cancelar</button>`
+      : `<button type="button" class="chip-btn" data-act="retry" data-id="${safeId}">Tentar novamente</button>`;
+  const menu = `<div class="pc-more" data-menu-host="${menuKey}">
+      <button type="button" class="chip-btn ghostish pc-more-btn" data-act="menu" data-id="${safeId}" data-menu-key="${menuKey}" aria-label="Mais ações" aria-expanded="false" aria-haspopup="menu">⋯</button>
+      <div class="pc-menu hidden" data-menu="${menuKey}" role="menu">
+        <button type="button" role="menuitem" data-act="folder" data-id="${safeId}">Abrir pasta</button>
+        <a role="menuitem" class="${canFinal ? "" : "disabled"}" href="${canFinal ? escapeHtml(finalu) : "#"}" data-id="${safeId}">Ver vídeo final</a>
+        <a role="menuitem" href="${escapeHtml(estilo)}" data-id="${safeId}">Alterar estilo</a>
+        <button type="button" role="menuitem" class="danger" data-act="delete" data-id="${safeId}" data-name="${escapeHtml(title)}">Apagar</button>
       </div>
     </div>`;
   return `<article class="project-card ${j.status}${compact ? " compact" : ""}">
@@ -196,7 +222,7 @@ function cardHtml(j, opts) {
     <div class="pc-body">
       <div class="pc-top">
         <div class="pc-title-block">
-          <button type="button" class="pc-name pc-name-btn" data-act="rename" data-id="${j.id}"
+          <button type="button" class="pc-name pc-name-btn" data-act="rename" data-id="${safeId}"
             data-title="${escapeHtml(title)}" title="Clique para renomear">${escapeHtml(title)}</button>
           ${metaBits.length ? `<div class="pc-when">${escapeHtml(metaBits.join(" · "))}</div>` : ""}
         </div>
@@ -212,17 +238,77 @@ function cardHtml(j, opts) {
   </article>`;
 }
 
+function closeCardMenus(scope) {
+  const hosts = scope ? $$("[data-menu-host]", scope) : $$("[data-menu-host]");
+  const ids = scope ? new Set(hosts.map((h) => h.dataset.menuHost)) : null;
+  $$(".pc-menu").forEach((m) => {
+    const id = m.dataset.menu || "";
+    if (ids && !ids.has(id)) return;
+    m.classList.add("hidden");
+    m.classList.remove("pc-menu-open");
+    m.style.top = "";
+    m.style.left = "";
+    if (m.dataset.parked === "1") {
+      const host = document.querySelector(`[data-menu-host="${CSS.escape(id)}"]`);
+      if (host) host.appendChild(m);
+      delete m.dataset.parked;
+    }
+  });
+  const btns = scope ? $$(".pc-more-btn[aria-expanded='true']", scope) : $$(".pc-more-btn[aria-expanded='true']");
+  btns.forEach((b) => b.setAttribute("aria-expanded", "false"));
+}
+
+function openCardMenu(btn) {
+  const id = btn.dataset.id;
+  const key = btn.dataset.menuKey || id;
+  if (!id || !key) return;
+  const host = btn.closest(".pc-more") || document.querySelector(`[data-menu-host="${CSS.escape(key)}"]`);
+  const menu = (host && host.querySelector(".pc-menu"))
+    || document.querySelector(`.pc-menu[data-menu="${CSS.escape(key)}"]`);
+  if (!menu) return;
+  const alreadyOpen = menu.dataset.parked === "1" && !menu.classList.contains("hidden");
+  closeCardMenus();
+  if (alreadyOpen) return;
+
+  document.body.appendChild(menu);
+  menu.dataset.parked = "1";
+  menu.classList.remove("hidden");
+  menu.classList.add("pc-menu-open");
+  btn.setAttribute("aria-expanded", "true");
+
+  const r = btn.getBoundingClientRect();
+  const mw = Math.max(menu.offsetWidth || 0, 176);
+  const mh = menu.offsetHeight || 168;
+  const pad = 8;
+  let top = r.bottom + 6;
+  let left = r.right - mw;
+  if (top + mh > window.innerHeight - pad) top = r.top - mh - 6;
+  if (left < pad) left = pad;
+  if (left + mw > window.innerWidth - pad) left = window.innerWidth - pad - mw;
+  top = Math.min(Math.max(pad, top), Math.max(pad, window.innerHeight - pad - mh));
+  left = Math.min(Math.max(pad, left), Math.max(pad, window.innerWidth - pad - mw));
+  menu.style.top = `${Math.round(top)}px`;
+  menu.style.left = `${Math.round(left)}px`;
+}
+
 function renderInto(boxId, emptyId, jobs, opts) {
   const box = $(`#${boxId}`);
   if (!box) return;
   const empty = emptyId ? $(`#${emptyId}`) : null;
+  const sig = jobs.map((j) => cardSig(j, opts)).join("\n");
   if (!jobs.length) {
+    if (box.dataset.cardSig === "empty") return;
+    closeCardMenus(box);
     box.innerHTML = "";
+    box.dataset.cardSig = "empty";
     if (empty) empty.classList.remove("hidden");
     return;
   }
   if (empty) empty.classList.add("hidden");
+  if (box.dataset.cardSig === sig) return;
+  closeCardMenus(box);
   box.innerHTML = jobs.map((j) => cardHtml(j, opts)).join("");
+  box.dataset.cardSig = sig;
 }
 
 function renderJobs() {
@@ -715,25 +801,25 @@ function wireList() {
     const nav = e.target.closest("[data-view]");
     if (nav && nav.dataset.view) {
       e.preventDefault();
+      closeCardMenus();
       setView(nav.dataset.view);
       return;
     }
     const btn = e.target.closest("[data-act]");
     if (!btn) {
-      $$(".pc-menu").forEach((m) => m.classList.add("hidden"));
+      if (!e.target.closest(".pc-menu")) closeCardMenus();
       return;
     }
     const id = btn.dataset.id;
     const act = btn.dataset.act;
     if (act === "menu") {
       e.preventDefault();
-      const menu = document.querySelector(`[data-menu="${id}"]`);
-      const open = menu && !menu.classList.contains("hidden");
-      $$(".pc-menu").forEach((m) => m.classList.add("hidden"));
-      if (menu && !open) menu.classList.remove("hidden");
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      openCardMenu(btn);
       return;
     }
-    $$(".pc-menu").forEach((m) => m.classList.add("hidden"));
+    closeCardMenus();
     try {
       if (act === "folder") {
         await api("/api/jobs/open-folder", {
@@ -780,6 +866,12 @@ function wireList() {
       toast(err.message);
     }
   });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeCardMenus();
+  });
+  window.addEventListener("resize", closeCardMenus);
+  window.addEventListener("scroll", closeCardMenus, true);
 
   $("#btnDeleteConfirm").onclick = () => confirmDelete().catch((err) => toast(err.message));
   $("#btnDeleteCancel").onclick = () => {
