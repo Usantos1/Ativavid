@@ -19,8 +19,9 @@
  *  - Zoom: the slider is anchored on the needle, trackpad pinch (wheel+ctrlKey)
  *    on the pointer. Both go through applyZoom(pps, t, anchorX) — never on scroll 0.
  *  - Layout follows the SOURCE aspect: portrait clips get body.portrait (player
- *    right at full column height, transport+timeline left), landscape keeps the
- *    stacked layout. #stage keeps the split from swallowing anything below it.
+ *    right at full column height up to the appbar; transport stays on the
+ *    timeline column and stops at the preview). Landscape keeps the stacked
+ *    layout. #stage keeps the split from swallowing anything below it.
  *  - Timecode uses a MONOSPACE stack: Poppins ships no tabular figures, so
  *    `font-variant-numeric: tabular-nums` silently does nothing and every digit
  *    change resized the readout, shoving the whole transport row sideways.
@@ -73,6 +74,9 @@ const ICON = {
   imgSearch: '<svg viewBox="0 0 16 16"><rect x="1.2" y="2.6" width="13.6" height="10.8" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="5.4" cy="6.2" r="1.2"/><path d="M2.4 12.2l3.2-3.1a1 1 0 011.35-.05l1.9 1.62 1.5-1.25a1 1 0 011.3.02l2 1.75" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   // a frame with a corner folded down — "this single frame", not "a photo"
   cover: '<svg viewBox="0 0 16 16"><path d="M2.6 1.6h6.6l4.2 4.2v8.6a.6.6 0 0 1-.6.6H2.6a.6.6 0 0 1-.6-.6V2.2a.6.6 0 0 1 .6-.6z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M9.2 1.6v4.2h4.2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><circle cx="5.6" cy="9.2" r="1.15"/><path d="M3.2 13l2.5-2.4a.9.9 0 0 1 1.2 0l1.5 1.3 1.2-1a.9.9 0 0 1 1.15.02l1.5 1.3" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  trash: '<svg viewBox="0 0 16 16"><path d="M3.2 4.2h9.6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M6.1 4.1V2.8c0-.4.32-.7.7-.7h2.4c.38 0 .7.3.7.7v1.3" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M4.4 4.2 5 13.1c.06.7.64 1.2 1.34 1.2h3.32c.7 0 1.28-.5 1.34-1.2l.6-8.9" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>',
+  appendCta: '<svg viewBox="0 0 16 16"><rect x="1" y="3" width="14" height="10" rx="2.4" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 5.4v5.2M5.4 8h5.2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
+  lock: '<svg viewBox="0 0 16 16"><rect x="3.2" y="7.2" width="9.6" height="7" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5.2 7.2V5.4a2.8 2.8 0 0 1 5.6 0v1.8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
 };
 
 // the "Nenhuma" card's mark — a plain slash-circle, not a rendered look (there
@@ -652,6 +656,11 @@ const THUMB_EVERY = 2.0;
  * exactly the old behaviour.
  */
 const BASE = (location.pathname.match(/^\/p\/[^/]+/) || [''])[0];
+function mediaHref(rel) {
+  const encoded = String(rel || '').replace(/\\/g, '/').split('/').filter(Boolean)
+    .map(encodeURIComponent).join('/');
+  return `${BASE}/media/${encoded}`;
+}
 // Desktop hub "Estilo padrão" — full visual STYLE_CATALOG, saves house preset only
 const HOUSE_STYLE = location.pathname === '/estilo-padrao';
 // Hub embeds the catalog inside sidebar/appbar — hide preview chrome
@@ -714,6 +723,11 @@ let S = {
   // The UI never rewrites captions.json — it records the intent and the skill
   // re-runs the caption pipeline, which is what owns word timings.
   captionFixes: {},
+  pendingEdit: null, // {projectId, edlRevision, operations, timestamp, ...}
+  finalFailed: false,
+  protectedRanges: [],
+  contentType: null,
+  lastMarkRange: null,
 };
 
 // The "house style" — every catalog default above is the FALLBACK, used
@@ -934,6 +948,25 @@ function nudgeTakeEdge(i, side, dir) {
 const LEGENDA_STUB = '(a legenda do post entra aqui';
 const HASHTAG_MAX = 5;   // teto da casa — ver SKILL.md
 
+function formatReelCaption(txt) {
+  const raw = String(txt || '').replace(/\r\n/g, '\n').trim();
+  if (!raw) return '';
+  const tags = raw.match(/#[\wÀ-ÿ]+/g) || [];
+  const paras = raw
+    .split(/\n+/)
+    .map((p) => p.replace(/(?:^|\s)#[\wÀ-ÿ]+/g, ' ').replace(/[ \t]+/g, ' ').trim())
+    .filter(Boolean);
+  let lines = paras.length ? paras : [raw.replace(/(?:^|\s)#[\wÀ-ÿ]+/g, ' ').replace(/\s+/g, ' ').trim()].filter(Boolean);
+  if (lines.length === 1) {
+    const one = lines[0];
+    const m = one.match(/^(.{12,90}?[.!?…😂🙏✨])\s+(.+)$/s);
+    if (m) lines = [m[1].trim(), m[2].trim()];
+  }
+  const tagLine = [...new Set(tags)].slice(0, HASHTAG_MAX).join(' ');
+  const body = lines.filter((l) => !/^#/.test(l)).join('\n\n');
+  return tagLine ? `${body}\n\n${tagLine}` : body;
+}
+
 async function loadPostCaption() {
   const panel = $('postPanel');
   panel.classList.toggle('hidden', S.tab !== 2);
@@ -945,27 +978,29 @@ async function loadPostCaption() {
   // escrita" over a caption that exists.
   for (const path of ['legenda.txt', 'post/legenda.txt']) {
     try {
-      const r = await fetch(`${BASE}/media/${path}?v=${Date.now()}`, {cache: 'no-store'});
+      const r = await fetch(`${mediaHref(path)}?v=${Date.now()}`, {cache: 'no-store'});
       if (r.ok) { txt = (await r.text()).trim(); if (txt) break; }
     } catch (e) { /* not written yet */ }
   }
 
   const box = $('postText');
   const written = txt && !txt.startsWith(LEGENDA_STUB);
+  const shown = written ? formatReelCaption(txt) : '';
   box.classList.toggle('empty', !written);
   box.textContent = written
-    ? txt
+    ? shown
     : 'Ainda não escrita — a legenda aparece aqui depois da edição.';
   $('postCopy').disabled = !written;
-  const tags = written ? (txt.match(/#[\wÀ-ÿ]+/g) || []).length : 0;
+  const tags = written ? (shown.match(/#[\wÀ-ÿ]+/g) || []).length : 0;
   // 5 is the house ceiling (see SKILL.md). Counting by eye is exactly how
   // "no máximo 5" quietly became eleven, so the count says when it is over.
   const over = tags > HASHTAG_MAX;
   $('postHint').classList.toggle('over', over);
   $('postHint').textContent = written
-    ? `${txt.length} caracteres · ${tags} hashtag${tags === 1 ? '' : 's'}`
+    ? `${shown.length} caracteres · ${tags} hashtag${tags === 1 ? '' : 's'}`
       + (over ? ` — acima do limite de ${HASHTAG_MAX}` : '')
-    : '';
+    : 'ainda não escrita';
+  refreshProjectChrome();
 }
 
 
@@ -1120,7 +1155,7 @@ function redo() {
 
 // ---------- dirty tracking ----------
 function edlDirty() {
-  return S.draft.some((r) => r.removed || r.start !== r.orig.start || r.end !== r.orig.end);
+  return S.draft.some((r) => r.added || r.removed || r.start !== r.orig.start || r.end !== r.orig.end);
 }
 function insertsDirty() {
   // isNew: added from the image picker this session, so there is no orig to
@@ -1128,7 +1163,7 @@ function insertsDirty() {
   return S.insertsDraft.some((c) => c.isNew || c.start !== c.orig.start || c.end !== c.orig.end);
 }
 function dirtyCount() {
-  let n = S.draft.filter((r) => r.removed || r.start !== r.orig.start || r.end !== r.orig.end).length;
+  let n = S.draft.filter((r) => r.added || r.removed || r.start !== r.orig.start || r.end !== r.orig.end).length;
   n += S.insertsDraft.filter((c) => c.isNew || c.start !== c.orig.start || c.end !== c.orig.end).length;
   n += S.notes.length; // each correction marker is an unsaved adjustment too
   n += Object.keys(S.captionFixes).length; // and each caption text fix
@@ -1148,6 +1183,109 @@ function refreshHeader() {
   save.title = n === 0 ? 'Nada para salvar' : 'Salvar ajustes';
   discard.title = n === 0 ? 'Nada para descartar' : 'Descartar ajustes';
   $('savedPill').classList.toggle('hidden', !(S.savedPending && n === 0));
+  refreshFinalButton();
+  refreshProjectChrome();
+}
+
+function hasFinalVideo() {
+  return !!(S.state && S.state.finalVideo);
+}
+
+function refreshFinalButton() {
+  const btn = $('btnOpenFinal');
+  if (!btn) return;
+  const ok = hasFinalVideo();
+  btn.disabled = !ok;
+  btn.title = ok ? 'Abrir o vídeo final no player do Windows' : 'O vídeo final ainda não está pronto';
+}
+
+function friendlyBeatLabel(beat, fallback) {
+  const raw = String(beat || '').trim();
+  if (!raw) return fallback || '';
+  const up = raw.toUpperCase();
+  if (up === 'HOOK') return 'Gancho';
+  if (up === 'KEEP') return 'Mantido';
+  if (up === 'CTA') return 'CTA';
+  const scene = up.match(/^B(\d+)$/);
+  if (scene) return `Cena ${Number(scene[1])}`;
+  return raw;
+}
+
+function fmtClock(sec) {
+  const s = Math.max(0, Math.round(Number(sec) || 0));
+  const m = Math.floor(s / 60);
+  return `${m}:${String(s % 60).padStart(2, '0')}`;
+}
+
+function videoAspectLabel() {
+  const w = video.videoWidth || 0;
+  const h = video.videoHeight || 0;
+  if (!w || !h) return '';
+  const r = w / h;
+  if (r < 0.72) return '9:16';
+  if (r > 1.5) return '16:9';
+  if (Math.abs(r - 1) < 0.08) return '1:1';
+  return `${w}×${h}`;
+}
+
+function generatedProjectTitle() {
+  const ed = S.editData || {};
+  const hook = ed.hook || {};
+  const lines = hook.lines || hook.text || [];
+  const arr = Array.isArray(lines) ? lines : [lines];
+  for (const ln of arr) {
+    const s = String(ln || '').trim();
+    if (s.length >= 6) return s;
+  }
+  const hl = String(ed.headline || ed.aiHeadline || '').trim();
+  if (hl.length >= 6) return hl;
+  const post = $('postText')?.textContent || '';
+  if (post && !post.startsWith('Ainda não')) {
+    const line = post.split('\n').find((l) => {
+      const t = l.trim();
+      return t.length >= 8 && !t.startsWith('#');
+    });
+    if (line) return line.replace(/\s+#.*$/, '').trim().slice(0, 72);
+  }
+  return '';
+}
+
+function projectFileLabel() {
+  const raw = String(S.state.project || S.state.video || '').trim();
+  if (!raw) return '';
+  return raw.split(/[/\\]/).pop();
+}
+
+function refreshProjectChrome() {
+  const pn = $('projectName');
+  const meta = $('projectMeta');
+  if (!pn) return;
+  if (HOUSE_STYLE) {
+    pn.textContent = 'Estilo padrão da marca';
+    if (meta) meta.classList.add('hidden');
+    return;
+  }
+  const file = projectFileLabel();
+  const title = generatedProjectTitle();
+  const bits = [file];
+  const dur = S.videoDuration || video.duration || 0;
+  if (dur) bits.push(fmtClock(dur));
+  const aspect = videoAspectLabel();
+  if (aspect) bits.push(aspect);
+  if (title && file && title.toLowerCase() !== file.toLowerCase()) {
+    pn.textContent = title;
+    if (meta) {
+      meta.textContent = bits.filter(Boolean).join(' · ');
+      meta.classList.toggle('hidden', bits.filter(Boolean).length === 0);
+    }
+  } else {
+    pn.textContent = file || 'ATIVAVID';
+    if (meta) {
+      const extra = bits.slice(1);
+      meta.textContent = extra.join(' · ');
+      meta.classList.toggle('hidden', extra.length === 0);
+    }
+  }
 }
 
 // ---------- data loading ----------
@@ -1170,7 +1308,9 @@ async function poll() {
 }
 
 async function applyState(data) {
-  S.state = data.state || {};
+  const next = data.state || {};
+  if ((next.finalVideo || '') !== (S.state.finalVideo || '')) S.finalFailed = false;
+  S.state = next;
   S.mtimes = data.mtimes || {};
   S.videoDuration = data.videoDuration || 0;
   S.fps = S.state.fps || 24;
@@ -1212,6 +1352,12 @@ async function applyState(data) {
   // splitAtPlayhead/deleteClipRange) — there's no real per-piece geometry
   // for those until the skill re-renders and writes a fresh jcut_timeline.
   S.draft = S.rendered.map((r, srcIdx) => ({ ...r, removed: false, srcIdx, orig: { start: r.start, end: r.end } }));
+  if (data.intent) {
+    S.protectedRanges = Array.isArray(data.intent.protectedRanges) ? data.intent.protectedRanges : [];
+    S.contentType = data.intent.contentType || S.contentType;
+    const ct = $('autoContentType');
+    if (ct && S.contentType) ct.value = S.contentType;
+  }
   S.selected = -1;
   S.history = []; S.future = []; refreshUndoRedoButtons(); // fresh server data — old snapshots no longer apply
   // Caption fixes are keyed by index into S.captions, so they only go stale if
@@ -1241,12 +1387,14 @@ async function applyState(data) {
   const hasVideo = S.videoDuration > 0;
   $('playerWrap').classList.toggle('hidden', !hasVideo || HOUSE_STYLE);
   $('editorCol').classList.toggle('hidden', !hasVideo || HOUSE_STYLE);
+  $('transportBar')?.classList.toggle('hidden', !hasVideo || HOUSE_STYLE);
 
   if (hasVideo && !HOUSE_STYLE) {
     detectProxy().then(() => updateVideoSrc());
     loadWave();
     loadThumbsMeta();
     refreshScorePill();
+    ensureInitialVersion();
   }
 
   // phase 2 data
@@ -1291,13 +1439,13 @@ async function applyState(data) {
   if ((S.state.phase || 1) >= 2) {
     if (S.state.captions) {
       try {
-        const caps = await (await fetch(`${BASE}/media/${S.state.captions}?v=${Date.now()}`)).json();
+        const caps = await (await fetch(`${mediaHref(S.state.captions)}?v=${Date.now()}`)).json();
         S.captions = groupCaptions(caps);
       } catch (e) { /* absent yet */ }
     }
     if (S.state.editData) {
       try {
-        S.editData = await (await fetch(`${BASE}/media/${S.state.editData}?v=${Date.now()}`)).json();
+        S.editData = await (await fetch(`${mediaHref(S.state.editData)}?v=${Date.now()}`)).json();
         buildInsertsDraft();
       } catch (e) { /* absent yet */ }
     }
@@ -1320,17 +1468,23 @@ async function applyState(data) {
 // Fase 1 plays the clean cut; Fase 2 plays the Phase-2 render (state.finalVideo)
 // when it exists, so captions/inserts are visible. Keeps the playback position.
 function updateVideoSrc() {
-  let rel = (S.tab === 2 && S.state.finalVideo) ? S.state.finalVideo : (S.state.video || 'cut.mp4');
+  const wantFinal = S.tab === 2 && S.state.finalVideo && !S.finalFailed;
+  let rel = wantFinal ? S.state.finalVideo : (S.state.video || 'cut.mp4');
   // proxy leve no corte (Fase 1) quando existir — scrub mais fluido
   if (S.tab !== 2 && S.hasProxy && !S.proxyFailed && rel === 'cut.mp4') rel = 'cut_proxy.mp4';
-  const vsrc = `${BASE}/media/${rel}?v=${(S.mtimes && (S.mtimes.finalVideo || S.mtimes.video)) || Date.now()}`;
+  const vsrc = `${mediaHref(rel)}?v=${(S.mtimes && (S.mtimes.finalVideo || S.mtimes.video)) || Date.now()}`;
   if (video.dataset.src === vsrc) return;
-  const t = video.currentTime;
+  const t = wantFinal ? 0 : video.currentTime;
   const wasPlaying = !video.paused && !video.ended;
   video.dataset.src = vsrc;
   video.dataset.rel = rel;
   video.src = vsrc;
-  video.currentTime = t;
+  const applyT = () => {
+    if (wantFinal) video.currentTime = 0;
+    else if (t) video.currentTime = t;
+  };
+  if (video.readyState >= 1) applyT();
+  else video.addEventListener('loadedmetadata', applyT, { once: true });
   if (wasPlaying) video.play().catch(() => {});
 }
 
@@ -1368,6 +1522,13 @@ function wireProxyFallback() {
         rebuilding = true;
         rebuildProxy().finally(() => { rebuilding = false; });
       }
+      return;
+    }
+    if (S.tab === 2 && rel && rel !== 'cut.mp4' && !S.finalFailed) {
+      S.finalFailed = true;
+      video.dataset.src = '';
+      updateVideoSrc();
+      toast('Não achei o vídeo final — mostrando o corte', 2800);
     }
   });
 }
@@ -1471,7 +1632,7 @@ function buildInsertsDraft() {
   stripAutoInsertsIfLimpa();
   const list = [];
   if (d.hook && d.hook.enabled) {
-    list.push({ kind: 'hook', label: `HOOK — ${(d.hook.lines || []).join(' / ')}`, start: 0, end: d.hook.endSec || 4 });
+    list.push({ kind: 'hook', label: `Gancho — ${(d.hook.lines || []).join(' / ')}`, start: 0, end: d.hook.endSec || 4 });
   }
   (d.inserts || []).forEach((it, i) => {
     list.push({
@@ -1635,6 +1796,7 @@ function toggleMark() {
     return;
   }
   S.pendingIn = null;
+  S.lastMarkRange = { start, end, draftStart: start, draftEnd: end };
   const note = { id: `n${Date.now()}`, start, end, text: '' };
   S.notes.push(note);
   S.notes.sort((a, b) => a.start - b.start);
@@ -2103,6 +2265,7 @@ $('setupGo').addEventListener('click', async () => {
       exportPreset: S.style.exportPreset || 'reels',
       colorGrade: S.style.colorGrade || 'marca',
       endCardCopy: S.endCardCopy || null,
+      contentType: S.contentType || $('autoContentType')?.value || null,
       note: S.style.note || '',
     };
     const res = await fetch('/api/default-style', {
@@ -2112,6 +2275,18 @@ $('setupGo').addEventListener('click', async () => {
     });
     if ((await res.json()).ok) {
       SHARED_DEFAULT_STYLE = house;
+      if (S.brandPresets && S.brandPresets.activeId) {
+        fetch('/api/brand-presets', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'update',
+            brandId: S.brandPresets.brandId || 'padrao',
+            id: S.brandPresets.activeId,
+            style: house,
+          }),
+        }).catch(() => {});
+      }
       toast('✓ Estilo padrão salvo', 2000);
       // Com embed=1 NÃO navegar o iframe para "/" — isso duplicava a sidebar.
       if (HUB_EMBED) {
@@ -2331,8 +2506,14 @@ function renderClips() {
       }
     }
     const lab = el('div', 'clip-label', c);
-    lab.textContent = `${r.beat || r.source} `;
+    lab.textContent = `${friendlyBeatLabel(r.beat, r.source)} `;
     if (String(r.beat || '').toUpperCase() === 'HOOK') c.classList.add('hook-beat');
+    if (clipIsProtected(r)) {
+      c.classList.add('protected');
+      const lk = el('div', 'clip-lock', c);
+      lk.textContent = '🔒';
+      c.title = 'Trecho protegido — a IA não pode cortar este conteúdo';
+    }
     const dur = el('div', 'clip-dur', c);
     dur.textContent = `${r.dur.toFixed(2)}s`;
 
@@ -2341,6 +2522,13 @@ function renderClips() {
       el('div', 'handle r', c).dataset.i = i;
     }
   });
+  for (const span of protectedDraftSpans()) {
+    const ov = el('div', 'prot-range', laneVideo);
+    ov.style.left = `${span.start * S.pps}px`;
+    ov.style.width = `${Math.max((span.end - span.start) * S.pps, 6)}px`;
+    ov.title = 'Trecho protegido — a IA não pode cortar este conteúdo';
+  }
+  refreshTransportActions();
 }
 
 /* J-cut audio lanes.
@@ -2378,7 +2566,7 @@ function renderJcutAudio() {
     const b = el('div', 'ablock', lane);
     b.style.left = `${r.aout * S.pps}px`;
     b.style.width = `${Math.max(r.adur * S.pps, 6)}px`;
-    el('div', 'ablock-label', b).textContent = r.beat || r.source || '';
+    el('div', 'ablock-label', b).textContent = friendlyBeatLabel(r.beat, r.source);
 
     // the lead: sound already playing while the previous take is still on screen
     if (r.lead > 1e-6) {
@@ -2569,7 +2757,10 @@ function applyOrientation() {
   // the timeline's width just changed — re-fit after layout settles
   requestAnimationFrame(() => { fitZoom(); renderAll(); });
 }
-video.addEventListener('loadedmetadata', applyOrientation);
+video.addEventListener('loadedmetadata', () => {
+  applyOrientation();
+  refreshProjectChrome();
+});
 
 // ---------- needle / playback sync ----------
 function positionNeedle() {
@@ -2837,7 +3028,7 @@ document.addEventListener('keydown', (e) => {
   }
   if (e.code === 'Space') {
     e.preventDefault();
-    video.paused ? video.play() : video.pause();
+    togglePlay();
   } else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && e.altKey && S.selected >= 0 && S.tab === 1) {
     // Alt+arrows nudge the SELECTED take's edge instead of the playhead.
     // A drag cannot land a single frame reliably at any useful zoom — this is
@@ -2850,10 +3041,7 @@ document.addEventListener('keydown', (e) => {
     const step = e.shiftKey ? 1 : 1 / S.fps;
     seekDraft(renderedToDraft(video.currentTime) + (e.key === 'ArrowRight' ? step : -step));
   } else if ((e.key === 'Delete' || e.key === 'Backspace') && S.selected >= 0 && S.tab === 1) {
-    pushHistory();
-    const r = S.draft[S.selected];
-    r.removed = !r.removed;
-    renderAll(); refreshHeader();
+    toggleSelectedTake();
   } else if ((e.key === 's' || e.key === 'S') && !e.ctrlKey && !e.metaKey) {
     e.preventDefault();
     splitAtPlayhead();
@@ -2867,10 +3055,17 @@ document.addEventListener('keydown', (e) => {
 });
 
 // transport
+function togglePlay() {
+  if (!video || !video.src) return;
+  if (video.paused) video.play().catch(() => {});
+  else video.pause();
+}
 $('btnPlay').innerHTML = ICON.play;
 $('btnMute').innerHTML = ICON.vol;
-$('btnPlay').addEventListener('click', () => {
-  video.paused ? video.play() : video.pause();
+$('btnPlay').addEventListener('click', togglePlay);
+document.querySelector('.player-frame')?.addEventListener('click', (e) => {
+  if (e.target.closest('button')) return;
+  togglePlay();
 });
 video.addEventListener('play', () => { $('btnPlay').innerHTML = ICON.pause; });
 video.addEventListener('pause', () => { $('btnPlay').innerHTML = ICON.play; });
@@ -2887,6 +3082,173 @@ $('btnUndo').addEventListener('click', undo);
 $('btnRedo').addEventListener('click', redo);
 $('btnSplit').innerHTML = ICON.razor;
 $('btnSplit').addEventListener('click', splitAtPlayhead);
+$('btnDeleteTake').innerHTML = ICON.trash;
+$('btnDeleteTake').addEventListener('click', toggleSelectedTake);
+$('coverIcon').innerHTML = ICON.cover;
+$('btnCover').addEventListener('click', saveCoverFromPlayhead);
+if ($('appendCtaIcon')) $('appendCtaIcon').innerHTML = ICON.appendCta;
+if ($('btnAppendCta')) {
+  $('btnAppendCta').addEventListener('click', () => {
+    if (!$('appendCtaFile')) return;
+    $('appendCtaFile').click();
+  });
+}
+if ($('appendCtaFile')) {
+  $('appendCtaFile').addEventListener('change', () => {
+    appendCtaFromFile($('appendCtaFile').files && $('appendCtaFile').files[0]);
+    $('appendCtaFile').value = '';
+  });
+}
+
+function projectFolder() {
+  if (!BASE || !BASE.startsWith('/p/')) return '';
+  return decodeURIComponent(BASE.slice('/p/'.length).split('/')[0]);
+}
+
+function probeLocalDuration(file) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (d) => {
+      if (settled) return;
+      settled = true;
+      resolve(Number.isFinite(d) ? d : 0);
+    };
+    const timer = setTimeout(() => finish(0), 2500);
+    try {
+      const url = URL.createObjectURL(file);
+      const v = document.createElement('video');
+      v.preload = 'metadata';
+      v.onloadedmetadata = () => {
+        clearTimeout(timer);
+        const d = Number(v.duration) || 0;
+        URL.revokeObjectURL(url);
+        finish(d);
+      };
+      v.onerror = () => {
+        clearTimeout(timer);
+        URL.revokeObjectURL(url);
+        finish(0);
+      };
+      v.src = url;
+    } catch {
+      clearTimeout(timer);
+      finish(0);
+    }
+  });
+}
+
+async function appendCtaFromFile(file) {
+  if (!file) return;
+  const folder = projectFolder();
+  if (!folder && !BASE) {
+    toast('Abra o vídeo pelo app para acrescentar um take no fim', 2800);
+    return;
+  }
+  const btn = $('btnAppendCta');
+  if (btn) btn.disabled = true;
+  toast('Colocando o vídeo no fim…', 1600);
+  try {
+    const duration = await probeLocalDuration(file);
+    const localPath = String(file.path || '').trim();
+    const url = BASE ? `${BASE}/api/append-cta` : '/api/jobs/append-cta';
+    let res;
+    if (localPath && /^[A-Za-z]:[\\/]/.test(localPath)) {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folder, path: localPath, duration }),
+      });
+    } else {
+      const fd = new FormData();
+      fd.append('file', file, file.name);
+      if (folder) fd.append('folder', folder);
+      if (duration) fd.append('duration', String(duration));
+      res = await fetch(url, { method: 'POST', body: fd });
+    }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) {
+      toast(data.error || data.message || `Não deu para acrescentar esse vídeo (${res.status})`, 4200);
+      return;
+    }
+    const dur = Math.max(0.4, Number(data.duration) || 0);
+    pushHistory();
+    const last = [...S.draft].reverse().find((r) => !r.removed);
+    if (last && String(last.beat || '').toUpperCase() === 'CTA') {
+      last.beat = 'KEEP';
+    }
+    S.state.sourceDurations = S.state.sourceDurations || {};
+    S.state.sourceDurations[data.source] = dur;
+    S.draft.push({
+      source: data.source,
+      start: 0,
+      end: dur,
+      beat: 'CTA',
+      removed: false,
+      added: true,
+      filePath: data.path,
+      srcIdx: null,
+      orig: { start: 0, end: dur },
+    });
+    S.selected = S.draft.length - 1;
+    renderAll();
+    refreshHeader();
+    toast('CTA no fim — clique em Salvar para renderizar', 3200);
+  } catch (err) {
+    toast((err && err.message) || 'Não deu para acrescentar esse vídeo', 3200);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function toggleSelectedTake() {
+  if (S.tab !== 1 || S.selected < 0) {
+    toast('Selecione um take pra apagar', 1600);
+    return;
+  }
+  const r = S.draft[S.selected];
+  if (!r) return;
+  pushHistory();
+  r.removed = !r.removed;
+  renderAll();
+  refreshHeader();
+}
+
+function refreshTransportActions() {
+  const btn = $('btnDeleteTake');
+  if (!btn) return;
+  const r = S.selected >= 0 ? S.draft[S.selected] : null;
+  const can = S.tab === 1 && !!r;
+  btn.disabled = !can;
+  btn.classList.toggle('danger-on', !!(r && r.removed));
+  btn.title = !can
+    ? 'Selecione um take para apagar'
+    : (r.removed ? 'Restaurar o take selecionado (Delete)' : 'Apagar o take selecionado (Delete)');
+}
+
+async function saveCoverFromPlayhead() {
+  const btn = $('btnCover');
+  if (!btn || btn.disabled) return;
+  const t = Number(video.currentTime) || 0;
+  btn.disabled = true;
+  try {
+    const res = await fetch(`${BASE}/api/cover`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ t }),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      toast(data.error || 'Não consegui salvar a capa', 3000);
+      return;
+    }
+    const where = data.pack ? ` ao lado da legenda em ${data.pack}` : '';
+    toast(`Imagem da capa salva${where} · ${fmtClock(data.t != null ? data.t : t)}`, 3200);
+  } catch (e) {
+    toast('Não consegui salvar a capa — servidor fora do ar?', 3500);
+  } finally {
+    btn.disabled = false;
+  }
+}
 
 function refreshCapToggle() {
   const btn = $('btnCapPreview');
@@ -3117,7 +3479,7 @@ async function pickImage(query, r) {
   toast('✓ Imagem inserida — arraste pra ajustar, depois Salvar', 4000);
 }
 
-// header — open-folder vive no hub (botão Pasta dos cards); tema global abaixo
+// header — pasta do projeto, vídeo final, foco e menu •••
 const openFolderBtn = $('btnOpenFolder');
 const openFolderIcon = $('openFolderIcon');
 if (openFolderIcon && typeof ICON !== 'undefined' && ICON.folder) {
@@ -3132,7 +3494,55 @@ if (openFolderBtn) {
     } catch (e) { toast('Não consegui abrir a pasta — servidor fora do ar?', 3500); }
   });
 }
+const openFinalBtn = $('btnOpenFinal');
+if (openFinalBtn) {
+  openFinalBtn.addEventListener('click', async () => {
+    if (openFinalBtn.disabled) return;
+    const tab2 = document.querySelector('[data-tab="2"]');
+    if (tab2 && !tab2.disabled) goToTab(tab2);
+    try { video.play().catch(() => {}); } catch { /* ignore */ }
+    try {
+      const res = await fetch(`${BASE}/api/open-final`, { method: 'POST' });
+      const data = await res.json();
+      if (!data.ok) toast(data.error || 'Não consegui abrir o vídeo final', 3000);
+    } catch (e) { toast('Não consegui abrir o vídeo final', 3500); }
+  });
+}
 
+function setPostCollapsed(collapsed) {
+  const panel = $('postPanel');
+  if (!panel) return;
+  panel.classList.toggle('collapsed', collapsed);
+  $('postToggle')?.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+  try { sessionStorage.setItem('ativavid-post-open', collapsed ? '0' : '1'); } catch { /* ignore */ }
+}
+try {
+  setPostCollapsed(sessionStorage.getItem('ativavid-post-open') === '0');
+} catch {
+  setPostCollapsed(false);
+}
+$('postToggle')?.addEventListener('click', () => {
+  const panel = $('postPanel');
+  if (!panel) return;
+  setPostCollapsed(!panel.classList.contains('collapsed'));
+});
+
+function closeHeadMore() {
+  $('headMoreMenu')?.classList.add('hidden');
+  $('btnHeadMore')?.setAttribute('aria-expanded', 'false');
+}
+$('btnHeadMore')?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const menu = $('headMoreMenu');
+  if (!menu) return;
+  const open = menu.classList.contains('hidden');
+  menu.classList.toggle('hidden', !open);
+  $('btnHeadMore').setAttribute('aria-expanded', open ? 'true' : 'false');
+});
+document.addEventListener('click', (e) => {
+  if (e.target.closest?.('#headMore')) return;
+  closeHeadMore();
+});
 // header — light/dark theme (padrão global: localStorage ativavid-theme)
 function applyTheme(next) {
   document.documentElement.setAttribute('data-theme', next);
@@ -3218,6 +3628,8 @@ function removeDraftTimeRange(tStart, tEnd) {
 
 async function saveEditsAndReturnToQueue() {
   const payload = { type: 'timeline-edits' };
+  const extraSources = S.draft.filter((r) => r.added && r.filePath).map((r) => r.filePath);
+  if (extraSources.length) payload.extraSources = extraSources;
   if (edlDirty()) {
     payload.edl = {
       ranges: S.draft.filter((r) => !r.removed).map((r) => ({
@@ -3278,7 +3690,7 @@ async function saveEditsAndReturnToQueue() {
       renderedEnd: +f.end.toFixed(3),
     }));
   }
-  if (!payload.edl && !payload.editData && !payload.notes && !payload.captionFixes) {
+  if (!payload.edl && !payload.editData && !payload.notes && !payload.captionFixes && !payload.extraSources) {
     toast('Nada para salvar', 2000);
     return false;
   }
@@ -3298,6 +3710,7 @@ async function saveEditsAndReturnToQueue() {
   S.pendingIn = null;
   S.draft.forEach((r) => {
     r.orig = { start: r.start, end: r.end };
+    r.added = false;
     if (r.removed) r.hardRemoved = true;
   });
   S.draft = S.draft.filter((r) => !r.removed);
@@ -3308,17 +3721,30 @@ async function saveEditsAndReturnToQueue() {
   renderAll();
   refreshHeader();
 
-  if (BASE && BASE.startsWith('/p/')) {
-    const folder = decodeURIComponent(BASE.slice('/p/'.length).split('/')[0]);
+  const captionOnly = !!(payload.captionFixes && !payload.edl && !payload.editData && !payload.extraSources);
+  if (BASE && BASE.startsWith('/p/') && !captionOnly) {
+    const folder = projectFolder() || decodeURIComponent(BASE.slice('/p/'.length).split('/')[0]);
     try {
       await fetch('/api/jobs/requeue-folder', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ folder }),
+        body: JSON.stringify({ folder, extraSources }),
       });
     } catch { /* ignore */ }
     toast('✓ Enviado à fila de edição', 2800);
     setTimeout(() => { location.href = '/?view=fila'; }, 500);
+    return true;
+  }
+  if (captionOnly) {
+    try {
+      const r = await fetch(`${BASE}/media/${S.state.captions || 'remotion/public/captions.json'}?v=${Date.now()}`);
+      if (r.ok) {
+        const caps = await r.json();
+        if (Array.isArray(caps) && caps.length) S.captions = groupCaptions(caps);
+      }
+    } catch { /* chips já mostram o fix */ }
+    renderAll();
+    toast('✓ Legenda corrigida', 2800);
     return true;
   }
   toast('✓ Ajustes salvos neste projeto', 4000);
@@ -3467,12 +3893,14 @@ function refreshAutoControls() {
     ['autoBroll', 'brollMode', 'quando_necessario'],
     ['autoExport', 'exportPreset', 'reels'],
     ['autoCaptionChunk', 'captionChunk', 'frase_curta'],
+    ['autoContentType', 'contentType', 'informational'],
   ];
   for (const [id, key, def] of map) {
     const el = $(id);
     if (!el) continue;
     let v = st[key] || (SHARED_DEFAULT_STYLE && SHARED_DEFAULT_STYLE[key]) || def;
     if (key === 'videoGoal' && v === 'tutorial') v = 'educativo';
+    if (key === 'contentType') v = S.contentType || v;
     el.value = v;
   }
 }
@@ -3504,6 +3932,7 @@ function wireAutoControls() {
     ['autoBroll', 'brollMode'],
     ['autoExport', 'exportPreset'],
     ['autoCaptionChunk', 'captionChunk'],
+    ['autoContentType', 'contentType'],
   ];
   for (const [id, key] of map) {
     const el = $(id);
@@ -3511,6 +3940,10 @@ function wireAutoControls() {
     el.addEventListener('change', () => {
       if (!S.style) S.style = defaultStyle();
       S.style[key] = el.value;
+      if (key === 'contentType') {
+        S.contentType = el.value;
+        persistIntent();
+      }
     });
   }
   document.querySelectorAll('.rhythm-preset').forEach((b) => {
@@ -3544,6 +3977,105 @@ async function detectProxy() {
 }
 
 const AI_UNDO = [];
+const AI_CONFIRM_EXACT = new Set([
+  'ok', 'sim', 'isso', 'vai', 'pode', 'blz', 'beleza', 'fechou',
+  'aplica', 'aplicar', 'faz', 'faz isso', 'manda ver',
+  'ok pode aplicar', 'pode aplicar', 'ok aplicar', 'ok aplica',
+  'pode mandar', 'pode fazer', 'pode sim', 'confirma', 'confirmar',
+  'aplica isso', 'aplicar isso',
+]);
+const AI_CONFIRM_RE = /^(ok|sim|blz|beleza|fechou)?\s*(pode\s+)?(aplicar|aplica|fazer|faz(\s+isso)?|mandar|manda\s+ver|confirmar|confirma)(\s+isso)?\s*$/i;
+
+function isAiConfirm(text) {
+  const t = String(text || '').trim().toLowerCase().replace(/[.!,…]+$/, '').replace(/\s+/g, ' ');
+  if (!t) return false;
+  return AI_CONFIRM_EXACT.has(t) || AI_CONFIRM_RE.test(t);
+}
+
+function pendingKey() {
+  return `ativa-vid.pendingEdit:${projectId()}`;
+}
+
+function projectId() {
+  return projectFolder() || BASE || 'house';
+}
+
+function edlFingerprint(list) {
+  const rows = (list || S.draft || []).map((r) => ([
+    String(r.source || ''),
+    Number((+r.start || 0).toFixed(3)),
+    Number((+r.end || 0).toFixed(3)),
+    !!r.removed,
+  ]));
+  return JSON.stringify(rows);
+}
+
+function pendingOpCount(p) {
+  if (!p) return 0;
+  const ops = p.operations || [];
+  if (ops.length) return ops.length;
+  return (p.actions || []).filter((a) => a && a.action && a.action !== 'noop').length;
+}
+
+function hasPendingOps() {
+  return pendingOpCount(S.pendingEdit) > 0;
+}
+
+function pendingIsStale(p) {
+  if (!p || pendingOpCount(p) === 0) return false;
+  if (String(p.projectId || '') !== String(projectId())) return true;
+  if (p.edlFingerprint && p.edlFingerprint !== edlFingerprint()) return true;
+  return false;
+}
+
+function setPendingEdit(p) {
+  S.pendingEdit = p && pendingOpCount(p) > 0 ? p : null;
+  try {
+    if (S.pendingEdit) localStorage.setItem(pendingKey(), JSON.stringify(S.pendingEdit));
+    else localStorage.removeItem(pendingKey());
+  } catch { /* quota */ }
+  refreshAiApplyBtn();
+}
+
+function loadPendingEdit() {
+  try {
+    const raw = localStorage.getItem(pendingKey());
+    if (!raw) return;
+    const p = JSON.parse(raw);
+    if (p && pendingOpCount(p) > 0 && String(p.projectId || '') === String(projectId())) {
+      S.pendingEdit = p;
+    } else {
+      S.pendingEdit = null;
+    }
+  } catch { S.pendingEdit = null; }
+  refreshAiApplyBtn();
+}
+
+function refreshAiApplyBtn() {
+  const btn = $('aiGo');
+  const banner = $('aiPending');
+  const n = pendingOpCount(S.pendingEdit);
+  if (banner) banner.classList.toggle('hidden', n === 0);
+  if (!btn) return;
+  btn.disabled = false;
+  btn.textContent = n ? `Aplicar (${n})` : 'Aplicar';
+}
+
+function sourceDurationSec() {
+  const durs = S.state.sourceDurations || {};
+  const vals = Object.values(durs).map(Number).filter((n) => n > 0);
+  if (vals.length) return Math.max(...vals);
+  const ends = (S.draft || []).map((r) => Number(r.end) || 0);
+  const origEnds = (S.draft || []).map((r) => Number(r.orig && r.orig.end) || 0);
+  const maxEnd = Math.max(0, ...ends, ...origEnds);
+  return maxEnd || S.videoDuration || null;
+}
+
+function primarySource() {
+  if (S.draft && S.draft[0] && S.draft[0].source) return S.draft[0].source;
+  const keys = Object.keys(S.state.sourceDurations || {});
+  return keys[0] || 'SRC';
+}
 
 function aiAppendMsg(text, kind = 'bot') {
   const thread = $('aiThread');
@@ -3561,10 +4093,55 @@ function openAiPanel() {
   if (!panel) return;
   panel.classList.add('solid-float');
   panel.classList.remove('hidden');
+  loadPendingEdit();
   $('aiPrompt')?.focus();
 }
 function closeAiPanel() {
   $('aiPanel')?.classList.add('hidden');
+}
+
+function applyRestoreRange(start, end) {
+  const src = primarySource();
+  const srcDur = sourceDurationSec();
+  const a = Math.max(0, +start);
+  const b = Math.min(+end, srcDur || +end);
+  if (!(b > a + 0.04)) return false;
+  const span = b - a;
+  const full = !srcDur || span >= 0.9 * srcDur;
+  if (full) {
+    const orig = (S.draft[0] && S.draft[0].orig) || { start: a, end: b };
+    S.draft = [{
+      source: src, start: a, end: b, beat: 'KEEP',
+      removed: false, srcIdx: S.draft[0] ? S.draft[0].srcIdx : 0, orig,
+    }];
+    return true;
+  }
+  let touched = false;
+  for (const r of S.draft) {
+    if (r.source !== src) continue;
+    if (r.start < b && r.end > a) {
+      if (r.removed) { r.removed = false; touched = true; }
+      const ns = Math.min(r.start, a);
+      const ne = Math.max(r.end, b);
+      if (ns !== r.start || ne !== r.end) {
+        r.start = ns;
+        r.end = ne;
+        touched = true;
+      }
+    }
+  }
+  const covered = S.draft.some((r) => (
+    !r.removed && r.source === src && r.start <= a + 0.05 && r.end >= b - 0.05
+  ));
+  if (!covered) {
+    S.draft.push({
+      source: src, start: a, end: b, beat: 'KEEP',
+      removed: false, srcIdx: null, orig: { start: a, end: b },
+    });
+    S.draft.sort((x, y) => x.start - y.start);
+    touched = true;
+  }
+  return touched;
 }
 
 function applyTimelineOps(ops) {
@@ -3573,6 +4150,8 @@ function applyTimelineOps(ops) {
     if (!op || !op.op) continue;
     if (op.op === 'remove_range') {
       removeDraftTimeRange(+op.start, +op.end);
+    } else if (op.op === 'restore_range') {
+      applyRestoreRange(+op.start, +op.end);
     } else if (op.op === 'trim_range') {
       // remove before start, then after end (draft timeline seconds)
       const total = draftTotal();
@@ -3591,13 +4170,165 @@ function applyTimelineOps(ops) {
         S.editData.hook = { ...(S.editData.hook || {}), enabled: true, endSec: end };
       }
       buildInsertsDraft();
+    } else if (op.op === 'fix_captions') {
+      applyCaptionReplacements(op.replacements || []);
     }
   }
 }
 
-async function runAiEdit() {
-  const prompt = ($('aiPrompt').value || '').trim();
-  if (prompt.length < 3) { toast('Escreva o que mudar'); return; }
+function _capFold(s) {
+  return String(s || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+}
+
+function _fixHookLines(from, to) {
+  const hook = S.editData && S.editData.hook;
+  if (!hook || !from || !to) return;
+  const lines = hook.lines || hook.text;
+  if (!Array.isArray(lines)) return;
+  const re = new RegExp(from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'ig');
+  const nxt = lines.map((ln) => String(ln || '').replace(re, to));
+  if (nxt.some((ln, i) => ln !== String(lines[i] || ''))) {
+    S.editData.hook = { ...hook, lines: nxt };
+  }
+}
+
+function applyCaptionReplacements(reps) {
+  for (const rep of reps || []) {
+    const from = String(rep.from || '').trim();
+    const to = String(rep.to || '').trim();
+    if (!from || !to) continue;
+    _fixHookLines(from, to);
+    const needle = _capFold(from);
+    S.captions.forEach((c, i) => {
+      const hay = _capFold(c.text);
+      if (!hay || !needle) return;
+      if (hay === needle || hay.includes(needle) || needle.includes(hay)) {
+        const next = c.text.replace(new RegExp(from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), to);
+        const toText = next === c.text ? to : next;
+        S.captionFixes[i] = { from: c.text, to: toText, start: c.start, end: c.end };
+        c.text = toText;
+      }
+    });
+  }
+}
+
+function logAiApply(ops) {
+  const n = (ops || []).length;
+  console.log(`AI_EDIT_APPLY operations=${n}`);
+  const lines = [`AI_EDIT_APPLY operations=${n}`];
+  for (const op of ops || []) {
+    const kind = String(op.op || op.type || op.action || '?').toUpperCase();
+    let line = kind;
+    if (op.start != null && op.end != null) {
+      line = `${kind} ${Number(op.start).toFixed(2)}-${Number(op.end).toFixed(2)}`;
+    }
+    console.log(line);
+    lines.push(line);
+  }
+  aiAppendMsg(lines.join('\n'), 'status');
+  return lines;
+}
+
+function applyPendingPatch(patch) {
+  const beforeInsertKeys = new Set(
+    ((S.editData && S.editData.inserts) || [])
+      .map((it) => `${it.src || ''}|${Number(it.start) || 0}`)
+  );
+  if (patch.style) {
+    S.style = { ...S.style, ...patch.style, elements: { ...S.style.elements, ...(patch.style.elements || {}) } };
+  }
+  if (patch.editData) S.editData = { ...(S.editData || {}), ...patch.editData };
+  if (Array.isArray(patch.notes)) S.notes = patch.notes;
+  applyTimelineOps(patch.timelineOps || []);
+  buildInsertsDraft();
+  for (const c of S.insertsDraft) {
+    if (c.kind === 'insert' && c.src && !beforeInsertKeys.has(`${c.src}|${c.start}`)) {
+      c.isNew = true;
+    }
+  }
+  renderSetup();
+  renderClips();
+  renderNotes();
+  renderAll();
+  refreshHeader();
+  if (typeof updateVideoSrc === 'function') updateVideoSrc();
+  scheduleAutosave();
+}
+
+async function applyPendingEdit(via) {
+  const pending = S.pendingEdit;
+  const ops = (pending && pending.operations) || [];
+  if (!pending || !ops.length) {
+    toast('Nenhuma alteração pendente');
+    aiAppendMsg('Nenhuma alteração pendente; mantendo o projeto no estado atual.', 'bot');
+    return false;
+  }
+  if (pendingIsStale(pending)) {
+    console.log('PENDING_EDIT_STALE');
+    aiAppendMsg('O vídeo foi alterado desde essa sugestão. Peça à IA para recalcular a edição.', 'bot');
+    toast('O vídeo foi alterado desde essa sugestão. Peça à IA para recalcular a edição.');
+    setPendingEdit(null);
+    return false;
+  }
+  const before = snapshotState();
+  const edlSnapshot = structuredClone(S.draft);
+  const rangesBefore = (S.draft || []).map((r) => ({
+    source: r.source, start: r.start, end: r.end, removed: !!r.removed,
+  }));
+  const filtered = filterProtectedOps(ops);
+  if (filtered.blocked.length) {
+    console.log(filtered.blocked.map((op) => {
+      const a = Number(op.start ?? op.maxSec ?? 0);
+      const b = Number(op.end ?? a);
+      return `PROTECTED_RANGE_BLOCKED ${String(op.op || op.action || '?').toUpperCase()} ${a.toFixed(2)}-${b.toFixed(2)}`;
+    }).join('\n'));
+  }
+  if (!filtered.kept.length) {
+    toast('Esse trecho está protegido');
+    aiAppendMsg('Esse trecho está protegido. Desproteja para a IA poder alterar.', 'bot');
+    return false;
+  }
+  pushHistory();
+  AI_UNDO.push({ ...before, edlSnapshot });
+  applyPendingPatch({ ...(pending.patch || {}), timelineOps: filtered.kept });
+  logAiApply(filtered.kept);
+  snapshotVersion('ai', 'Editar com IA');
+  try {
+    await fetch('/api/ai-edit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'apply',
+        operations: filtered.kept,
+        pendingEdit: pending,
+        currentRanges: rangesBefore,
+        folder: projectFolder(),
+        protectedRanges: S.protectedRanges,
+      }),
+    });
+  } catch { /* log local já saiu */ }
+  setPendingEdit(null);
+  $('aiUndo').disabled = AI_UNDO.length === 0;
+  if (filtered.kept.some((op) => op && op.op === 'fix_captions')) {
+    try {
+      const r = await fetch(`${BASE}/media/${S.state.captions || 'remotion/public/captions.json'}?v=${Date.now()}`);
+      if (r.ok) {
+        const caps = await r.json();
+        if (Array.isArray(caps) && caps.length) S.captions = groupCaptions(caps);
+      }
+    } catch { /* overlay já usou o texto novo */ }
+    renderAll();
+    updateCapOverlay();
+  }
+  const done = pending.summary
+    ? `Pronto. ${pending.summary.replace(/^vou\s+/i, '')}`
+    : 'Pronto. A alteração foi aplicada.';
+  aiAppendMsg(done, 'bot');
+  toast('Alteração da IA aplicada');
+  return true;
+}
+
+async function planAiEdit(prompt) {
   $('aiGo').disabled = true;
   const errBox = $('aiErr');
   if (errBox) errBox.classList.add('hidden');
@@ -3605,14 +4336,19 @@ async function runAiEdit() {
   $('aiPrompt').value = '';
   const status = aiAppendMsg('Pensando…', 'status');
   try {
-    const before = snapshotState();
     const body = {
+      mode: 'plan',
       prompt,
       durationSec: S.videoDuration || draftTotal() || null,
+      sourceDurationSec: sourceDurationSec(),
+      currentRanges: (S.draft || []).map((r) => ({
+        source: r.source, start: r.start, end: r.end, removed: !!r.removed,
+      })),
       style: S.style,
       editData: S.editData,
       notes: S.notes,
       folder: projectFolder(),
+      protectedRanges: S.protectedRanges,
     };
     const res = await fetch('/api/ai-edit', {
       method: 'POST',
@@ -3621,38 +4357,37 @@ async function runAiEdit() {
     });
     const data = await res.json();
     if (!res.ok || !data.ok) throw new Error(data.error || 'Falha na IA');
-    const patch = data.patch || {};
-    pushHistory();
-    AI_UNDO.push(before);
-    const beforeInsertKeys = new Set(
-      ((S.editData && S.editData.inserts) || [])
-        .map((it) => `${it.src || ''}|${Number(it.start) || 0}`)
-    );
-    if (patch.style) {
-      S.style = { ...S.style, ...patch.style, elements: { ...S.style.elements, ...(patch.style.elements || {}) } };
+    if (data.confirm && hasPendingOps()) {
+      if (status) status.remove();
+      return applyPendingEdit('confirm');
     }
-    if (patch.editData) S.editData = { ...(S.editData || {}), ...patch.editData };
-    if (Array.isArray(patch.notes)) S.notes = patch.notes;
-    applyTimelineOps(patch.timelineOps || []);
-    buildInsertsDraft();
-    for (const c of S.insertsDraft) {
-      if (c.kind === 'insert' && c.src && !beforeInsertKeys.has(`${c.src}|${c.start}`)) {
-        c.isNew = true;
-      }
-    }
-    renderSetup();
-    renderClips();
-    renderNotes();
-    refreshHeader();
-    $('aiUndo').disabled = AI_UNDO.length === 0;
-    const nOps = (patch.timelineOps || []).length;
-    const reply = (data.summary || 'Alterações aplicadas')
-      + (data.actions && data.actions.length ? `\n${data.actions.length} ação(ões)` : '')
-      + (nOps ? ` · ${nOps} no corte` : '');
+    const ops = data.operations || (data.patch && data.patch.timelineOps) || [];
+    const pending = {
+      ...(data.pendingEdit || {}),
+      hasPendingEdit: Boolean(ops.length || data.hasPendingEdit),
+      projectId: (data.pendingEdit && data.pendingEdit.projectId) || projectId(),
+      edlRevision: (data.pendingEdit && data.pendingEdit.edlRevision) || '',
+      edlFingerprint: edlFingerprint(),
+      timestamp: (data.pendingEdit && data.pendingEdit.timestamp) || Date.now(),
+      operations: ops,
+      actions: data.actions || [],
+      patch: data.patch || {},
+      summary: data.summary || 'Alteração planejada',
+    };
     if (status) status.remove();
-    aiAppendMsg(reply, 'bot');
-    toast(data.summary || 'Alterações aplicadas');
-    scheduleAutosave();
+    if (pendingOpCount(pending) === 0) {
+      aiAppendMsg(data.summary || 'Não consegui preparar essa alteração. Tente descrever de outra forma.', 'bot');
+      toast('Nenhuma operação gerada');
+      return false;
+    }
+    setPendingEdit(pending);
+    const n = pendingOpCount(pending);
+    aiAppendMsg(
+      `${pending.summary}\n${n} operação(ões) pronta(s) — clique em Aplicar ou escreva “ok pode aplicar”.`,
+      'bot',
+    );
+    toast('Alteração pronta — clique em Aplicar');
+    return true;
   } catch (e) {
     const msg = e.message || 'erro';
     if (status) status.remove();
@@ -3663,25 +4398,409 @@ async function runAiEdit() {
       aiAppendMsg(msg, 'bot');
     }
     toast(msg.length > 80 ? 'Sessão IA incompleta — veja Chaves & IA' : msg);
+    return false;
   } finally {
     $('aiGo').disabled = false;
+    refreshAiApplyBtn();
   }
+}
+
+async function runAiEdit() {
+  const prompt = ($('aiPrompt').value || '').trim();
+  if (isAiConfirm(prompt) && hasPendingOps()) {
+    $('aiPrompt').value = '';
+    aiAppendMsg(prompt, 'user');
+    await applyPendingEdit('confirm');
+    return;
+  }
+  if (!prompt && hasPendingOps()) {
+    await applyPendingEdit('button');
+    return;
+  }
+  if (prompt.length < 3) { toast('Escreva o que mudar'); return; }
+  await planAiEdit(prompt);
 }
 
 function undoAiEdit() {
   const snap = AI_UNDO.pop();
   if (!snap) return;
   pushHistory();
-  S.draft = snap.draft;
+  S.draft = structuredClone(snap.edlSnapshot || snap.draft);
   S.insertsDraft = snap.insertsDraft;
   S.notes = snap.notes;
   S.style = snap.style;
   S.captionFixes = snap.captionFixes || {};
   renderSetup();
   renderClips();
+  renderAll();
   refreshHeader();
   $('aiUndo').disabled = AI_UNDO.length === 0;
   toast('Desfeito');
+}
+
+function overlapsSec(a0, a1, b0, b1) {
+  return Math.max(0, Math.min(a1, b1) - Math.max(a0, b0)) >= 0.08;
+}
+
+function protectedDraftSpans() {
+  const out = [];
+  for (const pr of S.protectedRanges || []) {
+    if (pr.draftStart != null && pr.draftEnd != null) {
+      out.push({ start: +pr.draftStart, end: +pr.draftEnd });
+      continue;
+    }
+    draftLayout().forEach((r) => {
+      if (r.removed) return;
+      const a = Math.max(r.start, +pr.start || 0);
+      const b = Math.min(r.end, +pr.end || 0);
+      if (b > a) out.push({ start: r.out + (a - r.start), end: r.out + (b - r.start) });
+    });
+  }
+  return out;
+}
+
+function clipIsProtected(r) {
+  if (!r || r.removed) return false;
+  for (const pr of S.protectedRanges || []) {
+    const a0 = pr.draftStart != null ? +pr.draftStart : +pr.start;
+    const a1 = pr.draftEnd != null ? +pr.draftEnd : +pr.end;
+    const b0 = r.out != null ? r.out : r.start;
+    const b1 = r.out != null ? r.out + r.dur : r.end;
+    if (overlapsSec(a0, a1, b0, b1) || overlapsSec(+pr.start || 0, +pr.end || 0, r.start, r.end)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function filterProtectedOps(ops) {
+  const kept = [];
+  const blocked = [];
+  const spans = protectedDraftSpans();
+  for (const op of ops || []) {
+    const kind = String(op.op || op.action || '');
+    if (kind === 'restore_range') { kept.push(op); continue; }
+    let a0; let a1;
+    if (kind === 'set_duration_max' && op.maxSec != null) {
+      a0 = +op.maxSec; a1 = 1e9;
+    } else if (op.start != null && op.end != null) {
+      a0 = +op.start; a1 = +op.end;
+    } else {
+      kept.push(op);
+      continue;
+    }
+    const hit = spans.some((s) => overlapsSec(a0, a1, s.start, s.end));
+    if (hit) blocked.push({ ...op, reason: 'PROTECTED_RANGE_BLOCKED' });
+    else kept.push(op);
+  }
+  return { kept, blocked };
+}
+
+async function persistIntent(extra) {
+  try {
+    await fetch(`${BASE}/api/intent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        protectedRanges: S.protectedRanges,
+        contentType: S.contentType || undefined,
+        ...(extra || {}),
+      }),
+    });
+  } catch { /* persistência local já cobre reload curto */ }
+}
+
+function currentProtectSpan() {
+  if (S.pendingIn != null) {
+    const t = renderedToDraft(video.currentTime || 0);
+    const a = Math.min(S.pendingIn, t);
+    const b = Math.max(S.pendingIn, t);
+    if (b - a >= 0.08) return { start: a, end: b, draftStart: a, draftEnd: b, label: 'seleção' };
+  }
+  if (S.lastMarkRange && S.lastMarkRange.end > S.lastMarkRange.start) {
+    return { ...S.lastMarkRange, label: S.lastMarkRange.label || 'seleção' };
+  }
+  if (S.selected >= 0) {
+    const r = draftLayout()[S.selected];
+    if (r && !r.removed) {
+      return {
+        start: r.start, end: r.end, draftStart: r.out, draftEnd: r.out + r.dur,
+        source: r.source, label: r.beat || 'take',
+      };
+    }
+  }
+  return null;
+}
+
+function beatProtectSpan(beat) {
+  const want = String(beat || '').toUpperCase();
+  const items = draftLayout().filter((r) => !r.removed && String(r.beat || '').toUpperCase() === want);
+  const all = draftLayout().filter((r) => !r.removed);
+  const pick = (want === 'CTA' ? items[items.length - 1] : items[0])
+    || (want === 'CTA' ? all[all.length - 1] : all[0]);
+  if (!pick) return null;
+  return {
+    start: pick.start, end: pick.end,
+    draftStart: pick.out, draftEnd: pick.out + pick.dur,
+    source: pick.source, label: beat,
+  };
+}
+
+async function applyProtectAction(kind) {
+  if (kind === 'clear') {
+    const span = currentProtectSpan();
+    if (!span) { toast('Marque IN/OUT ou selecione um take'); return; }
+    S.protectedRanges = (S.protectedRanges || []).filter((pr) => {
+      const a0 = pr.draftStart != null ? +pr.draftStart : +pr.start;
+      const a1 = pr.draftEnd != null ? +pr.draftEnd : +pr.end;
+      return !overlapsSec(a0, a1, span.draftStart ?? span.start, span.draftEnd ?? span.end);
+    });
+    await persistIntent();
+    renderClips();
+    toast('Trecho desprotegido');
+    return;
+  }
+  const span = kind === 'hook' ? beatProtectSpan('HOOK')
+    : kind === 'cta' ? beatProtectSpan('CTA')
+    : currentProtectSpan();
+  if (!span) {
+    toast(kind === 'selection' ? 'Marque IN/OUT ou selecione um take' : 'Não achei esse trecho');
+    return;
+  }
+  S.protectedRanges = [...(S.protectedRanges || []), {
+    start: +span.start.toFixed(3),
+    end: +span.end.toFixed(3),
+    draftStart: +(span.draftStart ?? span.start).toFixed(3),
+    draftEnd: +(span.draftEnd ?? span.end).toFixed(3),
+    source: span.source || '',
+    label: span.label || kind,
+  }];
+  await persistIntent();
+  renderClips();
+  toast('Trecho protegido — a IA não corta este conteúdo');
+}
+
+function wireProtect() {
+  const btn = $('btnProtect');
+  const menu = $('protectMenu');
+  const ico = $('protectIcon');
+  if (ico) ico.innerHTML = ICON.lock;
+  if (!btn || !menu) return;
+  btn.onclick = (e) => {
+    e.stopPropagation();
+    menu.classList.toggle('hidden');
+    btn.setAttribute('aria-expanded', String(!menu.classList.contains('hidden')));
+  };
+  menu.querySelectorAll('[data-protect]').forEach((b) => {
+    b.onclick = () => {
+      menu.classList.add('hidden');
+      applyProtectAction(b.dataset.protect);
+    };
+  });
+  document.addEventListener('click', () => menu.classList.add('hidden'));
+}
+
+async function snapshotVersion(origin, description, extra) {
+  if (HOUSE_STYLE) return;
+  try {
+    await fetch(`${BASE}/api/versions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        origin,
+        description,
+        extra: extra || {
+          edl: { ranges: (S.draft || []).filter((r) => !r.removed).map((r) => ({
+            source: r.source, start: r.start, end: r.end, beat: r.beat,
+          })) },
+          intent: { protectedRanges: S.protectedRanges, contentType: S.contentType },
+        },
+      }),
+    });
+  } catch { /* histórico é auxiliar */ }
+}
+
+async function ensureInitialVersion() {
+  if (HOUSE_STYLE) return;
+  try {
+    const r = await fetch(`${BASE}/api/versions`);
+    const data = await r.json();
+    if ((data.versions || []).length) return;
+    await snapshotVersion('auto', 'Edição automática');
+  } catch { /* ignore */ }
+}
+
+function applyRestoredEdl(edl) {
+  const ranges = (edl && edl.ranges) || [];
+  if (!ranges.length) return;
+  pushHistory();
+  S.draft = ranges.map((r, srcIdx) => ({
+    source: r.source, start: +r.start, end: +r.end, beat: r.beat || '',
+    removed: false, srcIdx, orig: { start: +r.start, end: +r.end },
+  }));
+  renderAll();
+  refreshHeader();
+}
+
+async function openVersionsPanel() {
+  let panel = $('versionsPanel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'versionsPanel';
+    panel.className = 'versions-panel solid-float';
+    document.body.appendChild(panel);
+  }
+  let items = [];
+  try {
+    const r = await fetch(`${BASE}/api/versions`);
+    const data = await r.json();
+    items = data.versions || [];
+  } catch { items = []; }
+  panel.innerHTML = `
+    <div class="score-head"><strong>Versões</strong>
+      <button type="button" class="btn ghost small" id="verClose">✕</button></div>
+    ${items.length ? items.slice().reverse().map((v) => `
+      <div class="ver-item">
+        <div>
+          <p>v${v.n} · ${v.description || v.origin || ''}</p>
+          <span>${v.at || ''} · ${v.origin || ''}</span>
+        </div>
+        <button type="button" class="btn ghost small" data-restore="${v.id}">Restaurar esta versão</button>
+      </div>`).join('') : '<p class="hint">Ainda não há versões neste projeto.</p>'}`;
+  panel.classList.remove('hidden');
+  const c = $('verClose');
+  if (c) c.onclick = () => panel.classList.add('hidden');
+  panel.querySelectorAll('[data-restore]').forEach((b) => {
+    b.onclick = async () => {
+      try {
+        const res = await fetch(`${BASE}/api/versions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'restore', id: b.dataset.restore }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.error || 'Falha ao restaurar');
+        if (data.edl) applyRestoredEdl(data.edl);
+        if (data.intent && Array.isArray(data.intent.protectedRanges)) {
+          S.protectedRanges = data.intent.protectedRanges;
+        }
+        toast('Versão restaurada');
+        panel.classList.add('hidden');
+      } catch (e) {
+        toast(e.message || 'Não restaurei');
+      }
+    };
+  });
+}
+
+function currentStyleSnapshot() {
+  return {
+    edit: S.style?.edit,
+    headline: S.style?.headline,
+    captions: S.style?.captions,
+    accent: S.style?.accent,
+    captionAccent: S.style?.captionAccent,
+    emphasisAccent: S.style?.emphasisAccent,
+    circleAccent: S.style?.circleAccent,
+    elements: { ...(S.style?.elements || {}) },
+    rhythm: S.style?.rhythm,
+    intensity: S.style?.intensity,
+    speechClean: S.style?.speechClean,
+    videoGoal: S.style?.videoGoal,
+    brollMode: S.style?.brollMode,
+    captionChunk: S.style?.captionChunk,
+    exportPreset: S.style?.exportPreset,
+    colorGrade: S.style?.colorGrade,
+    endCardCopy: S.endCardCopy || null,
+    fastMode: !!S.fastMode,
+    oneClick: !!S.fastMode,
+    contentType: S.contentType || $('autoContentType')?.value || null,
+  };
+}
+
+async function loadBrandPresets() {
+  const sel = $('presetSelect');
+  if (!sel) return;
+  try {
+    const r = await fetch('/api/brand-presets');
+    const pack = await r.json();
+    const presets = pack.presets || [];
+    S.brandPresets = pack;
+    sel.innerHTML = presets.map((p) =>
+      `<option value="${p.id}" ${p.id === pack.activeId ? 'selected' : ''}>${p.name || p.id}</option>`
+    ).join('');
+    applyPresetToUi(presets.find((p) => p.id === sel.value) || pack.active);
+  } catch { /* hub sem rota em preview isolado */ }
+}
+
+function applyPresetToUi(preset) {
+  if (!preset) return;
+  const st = preset.style || {};
+  if (S.style) Object.assign(S.style, st);
+  if (preset.contentType) {
+    S.contentType = preset.contentType;
+    const ct = $('autoContentType');
+    if (ct) ct.value = preset.contentType;
+  }
+  if (typeof renderSetup === 'function') renderSetup();
+  refreshAutoControls();
+}
+
+async function presetAction(action) {
+  const sel = $('presetSelect');
+  const pack = S.brandPresets || {};
+  const brandId = pack.brandId || 'padrao';
+  const id = sel?.value;
+  let name = '';
+  if (action === 'create' || action === 'duplicate' || action === 'rename') {
+    name = window.prompt(action === 'rename' ? 'Novo nome do preset' : 'Nome do preset', '') || '';
+    if (!name.trim()) return;
+  }
+  try {
+    const r = await fetch('/api/brand-presets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: action === 'create' ? 'create' : action,
+        brandId,
+        id,
+        name,
+        style: currentStyleSnapshot(),
+        contentType: S.contentType || $('autoContentType')?.value,
+      }),
+    });
+    const data = await r.json();
+    if (!r.ok || data.error) throw new Error(data.error || 'Falha no preset');
+    S.brandPresets = data;
+    await loadBrandPresets();
+    toast(action === 'delete' ? 'Preset excluído' : 'Preset atualizado');
+  } catch (e) {
+    toast(e.message || 'Não deu para alterar o preset');
+  }
+}
+
+function wirePresets() {
+  const bar = $('presetBar');
+  if (!bar) return;
+  loadBrandPresets();
+  const sel = $('presetSelect');
+  if (sel) {
+    sel.onchange = () => {
+      const p = (S.brandPresets?.presets || []).find((x) => x.id === sel.value);
+      applyPresetToUi(p);
+    };
+  }
+  const map = {
+    btnPresetNew: 'create',
+    btnPresetDup: 'duplicate',
+    btnPresetRename: 'rename',
+    btnPresetDel: 'delete',
+    btnPresetDefault: 'default',
+  };
+  for (const [id, action] of Object.entries(map)) {
+    const b = $(id);
+    if (b) b.onclick = () => presetAction(action);
+  }
 }
 
 function wireAiAndSafe() {
@@ -3694,7 +4813,20 @@ function wireAiAndSafe() {
   const aiUndo = $('aiUndo');
   if (aiUndo) aiUndo.onclick = undoAiEdit;
   const aiPrompt = $('aiPrompt');
-  if (aiPrompt) aiPrompt.addEventListener('keydown', (e) => e.stopPropagation());
+  if (aiPrompt) {
+    aiPrompt.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        runAiEdit();
+      }
+    });
+  }
+  loadPendingEdit();
+  wireProtect();
+  wirePresets();
+  const btnVer = $('btnVersions');
+  if (btnVer) btnVer.onclick = () => openVersionsPanel();
   const sz = $('btnSafeZone');
   if (sz) {
     sz.onclick = () => {
@@ -3738,16 +4870,27 @@ function openScorePanel() {
   }
   panel.classList.add('solid-float');
   const tip = (s.tips || []).map((x) => `<li>${x}</li>`).join('') || '<li>Sem alertas.</li>';
+  const band = (n) => {
+    const v = Number(n);
+    if (!Number.isFinite(v)) return '';
+    if (v >= 85) return 'forte';
+    if (v >= 70) return 'boa';
+    if (v >= 55) return 'ok';
+    return 'fraca';
+  };
+  const row = (label, val) => val == null
+    ? ''
+    : `<div><span>${label}</span><b>${band(val) || val}</b></div>`;
   panel.innerHTML = `
-    <div class="score-head"><strong>Análise estrutural</strong>
+    <div class="score-head"><strong>Análise do vídeo</strong>
       <button type="button" class="btn ghost small" id="scoreClose">✕</button></div>
     <p class="score-disc">${s.disclaimer || ''}</p>
     <div class="score-grid">
-      <div><span>Geral</span><b>${s.overall ?? '—'}</b></div>
-      <div><span>Hook</span><b>${s.hook ?? '—'}</b></div>
-      <div><span>Clareza</span><b>${s.clarity ?? '—'}</b></div>
-      <div><span>Ritmo</span><b>${s.rhythm ?? '—'}</b></div>
-      <div><span>CTA</span><b>${s.cta ?? '—'}</b></div>
+      ${s.overall != null ? `<div><span>Geral</span><b>${s.overall}</b></div>` : ''}
+      ${row('Gancho', s.hook)}
+      ${row('Clareza', s.clarity)}
+      ${row('Ritmo', s.rhythm)}
+      ${row('CTA', s.cta)}
     </div>
     <ul class="score-tips">${tip}</ul>`;
   panel.classList.remove('hidden');
@@ -3768,37 +4911,78 @@ function scheduleAutosave() {
         notes: S.notes,
         style: S.style,
         captionFixes: S.captionFixes,
+        protectedRanges: S.protectedRanges,
+        contentType: S.contentType,
       };
       localStorage.setItem(key, JSON.stringify(payload));
     } catch { /* quota */ }
   }, 1200);
 }
 
+function autosaveKey() {
+  return `ativavid-autosave:${BASE || 'house'}`;
+}
+
+function clearAutosave() {
+  try { localStorage.removeItem(autosaveKey()); } catch { /* ignore */ }
+}
+
+function applyAutosaveData(data) {
+  pushHistory();
+  S.draft = data.draft;
+  S.insertsDraft = data.insertsDraft || [];
+  S.notes = data.notes || [];
+  if (data.style) S.style = data.style;
+  S.captionFixes = data.captionFixes || {};
+  if (Array.isArray(data.protectedRanges)) S.protectedRanges = data.protectedRanges;
+  if (data.contentType) S.contentType = data.contentType;
+  if ((S.style?.edit || 'limpa') === 'limpa') {
+    S.insertsDraft = (S.insertsDraft || []).filter((c) => c.kind !== 'insert');
+    if (S.editData) S.editData.inserts = [];
+  }
+  renderAll();
+  refreshHeader();
+  toast('Rascunho restaurado', 2500);
+}
+
 function restoreAutosave() {
   try {
-    const key = `ativavid-autosave:${BASE || 'house'}`;
-    const raw = localStorage.getItem(key);
+    const raw = localStorage.getItem(autosaveKey());
     if (!raw) return false;
     const data = JSON.parse(raw);
-    if (!data || !Array.isArray(data.draft) || !data.draft.length) return false;
-    if (Date.now() - (data.at || 0) > 1000 * 60 * 60 * 48) return false; // 48h
-    if (!confirm('Há um rascunho automático deste projeto. Restaurar?')) {
-      localStorage.removeItem(key);
+    if (!data || !Array.isArray(data.draft) || !data.draft.length) {
+      clearAutosave();
       return false;
     }
-    pushHistory();
-    S.draft = data.draft;
-    S.insertsDraft = data.insertsDraft || [];
-    S.notes = data.notes || [];
-    if (data.style) S.style = data.style;
-    S.captionFixes = data.captionFixes || {};
-    if ((S.style?.edit || 'limpa') === 'limpa') {
-      S.insertsDraft = (S.insertsDraft || []).filter((c) => c.kind !== 'insert');
-      if (S.editData) S.editData.inserts = [];
+    if (Date.now() - (data.at || 0) > 1000 * 60 * 60 * 48) {
+      clearAutosave();
+      return false;
     }
-    renderAll();
-    refreshHeader();
-    toast('Rascunho restaurado', 2500);
+    // Concluído = pronto. Não interrompe com rascunho velho nem confirm() do Windows.
+    if (hasFinalVideo()) {
+      clearAutosave();
+      return false;
+    }
+    const dlg = $('dlgAutosave');
+    if (!dlg || typeof dlg.showModal !== 'function') {
+      clearAutosave();
+      return false;
+    }
+    const restoreBtn = $('btnAutosaveRestore');
+    const discardBtn = $('btnAutosaveDiscard');
+    if (restoreBtn) {
+      restoreBtn.onclick = () => {
+        try { dlg.close(); } catch { /* ignore */ }
+        applyAutosaveData(data);
+      };
+    }
+    if (discardBtn) {
+      discardBtn.onclick = () => {
+        clearAutosave();
+        try { dlg.close(); } catch { /* ignore */ }
+      };
+    }
+    if (!dlg.open) dlg.showModal();
     return true;
   } catch { return false; }
 }

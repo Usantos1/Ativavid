@@ -125,22 +125,24 @@
         <!-- IMPORT -->
         <section class="view" id="view-import" data-view-panel="import">
           <div class="hero-import" id="dropZone">
-            <input type="file" id="fileInput" accept="video/*,.mp4,.mov,.m4v" multiple hidden>
+            <input type="file" id="fileInput" accept="video/*,.mp4,.mov,.m4v,.mkv,.webm,.avi" multiple hidden>
+            <input type="file" id="folderInput" webkitdirectory directory multiple hidden>
             <div class="hero-inner">
               <div class="hero-ico" aria-hidden="true">+</div>
               <div class="hero-copy">
                 <h2>Importar e editar com IA</h2>
-                <p>Arraste seus vídeos ou escolha os arquivos para começar.</p>
+                <p>Arraste vídeos ou uma pasta. Cada subpasta vira um vídeo; se tiver vários arquivos, a gente junta.</p>
               </div>
               <div class="hero-cta-row">
                 <button type="button" class="export-btn" id="btnPick">Escolher vídeos</button>
+                <button type="button" class="ghost-btn" id="btnPickFolder">Escolher pasta</button>
               </div>
             </div>
           </div>
           <div class="section-block">
             <div class="hub-list-head">
               <h3>Recentes</h3>
-              <button type="button" class="ghost-btn" data-view="fila">Ver fila</button>
+              <button type="button" class="ghost-btn" data-view="fila" id="btnVerFila">Ver fila</button>
             </div>
             <div id="jobListRecent" class="project-grid"></div>
           </div>
@@ -160,6 +162,28 @@
 
         <!-- ESTILO — catálogo no mesmo shell (appbar + sidebar) -->
         <section class="view hidden view-estilo" id="view-estilo" data-view-panel="estilo">
+          <div class="estilo-brand-bar" id="estiloBrandBar">
+            <label class="ia-form">Marca
+              <select id="brandSelect"></select>
+            </label>
+            <label class="ia-form">Export
+              <select id="exportPresetSelect">
+                <option value="reels">Reels / Shorts</option>
+                <option value="youtube">YouTube 16:9</option>
+                <option value="square">Quadrado 1:1</option>
+              </select>
+            </label>
+            <label class="ia-form">Nova marca
+              <input type="text" id="brandNewName" placeholder="Nome da loja">
+            </label>
+            <div class="panel-actions">
+              <button type="button" class="export-btn" id="btnBrandActivate">Ativar</button>
+              <button type="button" class="ghost-btn" id="btnBrandSave">Salvar</button>
+              <button type="button" class="ghost-btn" id="btnLibraryRefresh">B-roll</button>
+            </div>
+            <p class="hint" id="brandHint"></p>
+            <p class="hint" id="libraryHint"></p>
+          </div>
           <iframe
             id="estiloFrame"
             class="estilo-frame"
@@ -387,22 +411,29 @@
           <div class="sys-shell">
             <header class="sys-top">
               <div class="sys-top-copy">
-                <p class="hint" id="sysMachineHint">Detectando…</p>
+                <h3 class="sys-status-title">Status do ATIVAVID</h3>
+                <p class="hint" id="sysStatusLine">Tudo funcionando corretamente</p>
+                <p class="hint hidden" id="sysMachineHint">Detectando…</p>
               </div>
               <div class="sys-metrics" id="sysMetrics" aria-label="Resumo">
                 <div class="sys-metric"><span class="sys-m-lab">Perfil</span><strong id="sysMetricProfile">—</strong></div>
-                <div class="sys-metric"><span class="sys-m-lab">Leve</span><strong id="sysMetricJobs">—</strong></div>
-                <div class="sys-metric"><span class="sys-m-lab">Proxy</span><strong id="sysMetricProxy">—</strong></div>
                 <div class="sys-metric"><span class="sys-m-lab">Cache</span><strong id="sysMetricCache">—</strong></div>
+                <div class="sys-metric hidden" id="sysMetricJobsWrap"><span class="sys-m-lab">Leve</span><strong id="sysMetricJobs">—</strong></div>
+                <div class="sys-metric hidden" id="sysMetricProxyWrap"><span class="sys-m-lab">Proxy</span><strong id="sysMetricProxy">—</strong></div>
               </div>
             </header>
 
             <div class="sys-grid">
               <div class="sys-card">
-                <h4>Desempenho</h4>
-                <p class="hint" id="sysPerfHint">Motor de render: Automático. O app escolhe o caminho de cada vídeo.</p>
-                <p class="hint" id="sysLaneHint">Acompanhe o processamento dos seus vídeos.</p>
-                <label class="ia-form">Perfil da máquina
+                <h4>Aceleração</h4>
+                <p class="hint" id="hwAccelHint">Detectando GPU…</p>
+              </div>
+
+              <div class="sys-card">
+                <h4>Perfil</h4>
+                <p class="hint" id="sysPerfHint">Desempenho da máquina neste computador.</p>
+                <p class="hint hidden" id="sysLaneHint">Acompanhe o processamento dos seus vídeos.</p>
+                <label class="ia-form">Perfil
                   <select id="perfProfile">
                     <option value="auto">Automático</option>
                     <option value="eco">Econômico</option>
@@ -412,15 +443,6 @@
                 </label>
                 <div class="panel-actions">
                   <button type="button" class="export-btn" id="btnSavePerf">Aplicar</button>
-                </div>
-              </div>
-
-              <div class="sys-card">
-                <h4>Aceleração de hardware</h4>
-                <p class="hint" id="hwAccelHint">Detectando GPU e encoder…</p>
-                <p class="hint" id="hwAccelDetail"></p>
-                <div class="panel-actions">
-                  <button type="button" class="ghost-btn" id="btnHwBench">Refazer teste de desempenho</button>
                 </div>
               </div>
 
@@ -447,32 +469,6 @@
                 </div>
               </div>
 
-              <div class="sys-card">
-                <h4>Marcas</h4>
-                <p class="hint">Marca ativa e formato de entrega.</p>
-                <div class="brand-row brand-row--compact">
-                  <label class="ia-form">Marca
-                    <select id="brandSelect"></select>
-                  </label>
-                  <label class="ia-form">Export
-                    <select id="exportPresetSelect">
-                      <option value="reels">Reels / Shorts</option>
-                      <option value="youtube">YouTube 16:9</option>
-                      <option value="square">Quadrado 1:1</option>
-                    </select>
-                  </label>
-                </div>
-                <label class="ia-form">Nova marca
-                  <input type="text" id="brandNewName" placeholder="Nome da loja">
-                </label>
-                <div class="panel-actions">
-                  <button type="button" class="export-btn" id="btnBrandActivate">Ativar</button>
-                  <button type="button" class="ghost-btn" id="btnBrandSave">Salvar</button>
-                  <button type="button" class="ghost-btn" id="btnLibraryRefresh">B-roll</button>
-                </div>
-                <p class="hint" id="brandHint"></p>
-                <p class="hint" id="libraryHint"></p>
-              </div>
             </div>
 
             <details class="sys-support" id="sysSupport">
@@ -498,6 +494,11 @@
                     </div>
                   </div>
                   <div>
+                    <h4>Aceleração (técnico)</h4>
+                    <p class="hint" id="hwAccelDetail"></p>
+                    <div class="panel-actions">
+                      <button type="button" class="ghost-btn" id="btnHwBench">Refazer teste de desempenho</button>
+                    </div>
                     <h4>Diagnóstico</h4>
                     <p class="hint">Checagem rápida para suporte.</p>
                     <div class="panel-actions">
@@ -518,8 +519,8 @@
   </div>
 
   <dialog id="dlgRecovery" class="dlg">
-    <h3>Edição interrompida</h3>
-    <p class="hint">O app fechou no meio de uma edição. Quer retomar a fila?</p>
+    <h3>Alguns vídeos voltaram para a fila</h3>
+    <p class="hint">O app fechou enquanto processava. Pode continuar de onde parou.</p>
     <p class="delete-name" id="recoveryList"></p>
     <div class="dlg-actions">
       <button type="button" class="export-btn" id="btnRecoveryOk">Retomar</button>
@@ -530,6 +531,7 @@
   <dialog id="dlgImport" class="dlg dlg-import">
     <h3>O que você quer fazer com este vídeo?</h3>
     <p class="hint" id="importHint">Depois de escolher, o ATIVAVID processa automaticamente.</p>
+    <p class="hint hidden" id="importFolderHint"></p>
     <p class="hint hidden" id="importRecommend"></p>
     <div class="intent-grid" id="intentGrid">
       <button type="button" class="intent-card" data-intent="complete">
@@ -556,7 +558,24 @@
       </label>
     </div>
     <div class="import-block">
+      <h4>Tipo de conteúdo</h4>
+      <label class="import-field">Tipo de conteúdo
+        <select id="importContentType">
+          <option value="educational">Educativo</option>
+          <option value="humor">Humor</option>
+          <option value="sales">Venda</option>
+          <option value="review">Review</option>
+          <option value="institutional">Institucional</option>
+          <option value="informational" selected>Informativo</option>
+        </select>
+      </label>
+    </div>
+    <div class="import-block">
       <h4>Estilo</h4>
+      <p class="hint" id="importPresetHint">Usar: padrão da marca</p>
+      <label class="import-field">Preset desta marca
+        <select id="importPresetSelect"></select>
+      </label>
       <label class="import-chk"><input type="checkbox" id="useBrandStyle" checked> Usar padrão da marca</label>
       <button type="button" class="ghost-btn" id="btnImportStyle">Alterar para este vídeo</button>
     </div>
@@ -568,6 +587,20 @@
       <button type="button" class="ghost-btn" id="btnImportCancel">Cancelar</button>
       <button type="button" class="export-btn" id="btnImportGo">Editar com IA</button>
     </div>
+  </dialog>
+
+  <dialog id="dlgRename" class="dlg dlg-rename">
+    <form id="formRename">
+      <h3>Renomear vídeo</h3>
+      <p class="hint">Esse nome aparece na fila e nos concluídos.</p>
+      <label class="ia-form">Novo nome
+        <input id="renameInput" type="text" maxlength="80" autocomplete="off" required>
+      </label>
+      <div class="dlg-actions">
+        <button type="button" class="ghost-btn" id="btnRenameCancel">Cancelar</button>
+        <button type="submit" class="export-btn">Salvar</button>
+      </div>
+    </form>
   </dialog>
 
   <dialog id="dlgDelete" class="dlg">

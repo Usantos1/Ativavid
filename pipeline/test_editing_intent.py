@@ -1,9 +1,15 @@
 """Guards de intenção — sem motor de render."""
+import sys
 import tempfile
 from pathlib import Path
 
+REPO = Path(__file__).resolve().parent.parent
+if str(REPO) not in sys.path:
+    sys.path.insert(0, str(REPO))
+
 from app.editing_intent import (
     classify_complete_removal,
+    detect_semantic_units,
     enforce_complete_edl,
     guard_ranges,
     looks_like_cta,
@@ -138,6 +144,72 @@ def test_complete_rejects_rhythm_keeps_repetition_class():
     assert mid < 0.3
 
 
+def _write_packed(root: Path, stem: str, phrases: list[dict]) -> None:
+    lines = [f"## {stem}\n"]
+    for p in phrases:
+        lines.append(
+            f"  [{p['start']:06.2f}-{p['end']:06.2f}] S0 {p['text']}\n"
+        )
+    (root / "takes_packed.md").write_text("".join(lines), encoding="utf-8")
+
+
+def test_dynamic_short_joke_keeps_setup_payoff(tmp_path: Path | None = None):
+    root = tmp_path or Path(tempfile.mkdtemp(prefix="dyn_joke_"))
+    root.mkdir(parents=True, exist_ok=True)
+    phrases = [
+        {"start": 0.0, "end": 1.4, "text": "A senhora está tranquila?"},
+        {"start": 1.6, "end": 2.8, "text": "Pode deixar que a gente avisa"},
+        {"start": 3.0, "end": 4.43, "text": "Salbido, salbido"},
+    ]
+    _write_packed(root, "clip", phrases)
+    ranges = [{"source": "SRC", "start": 3.0, "end": 4.43, "beat": "HOOK"}]
+    regions = [(0.0, 1.4), (1.6, 2.8), (3.0, 4.43)]
+    units = detect_semantic_units(phrases, duration_s=4.43)
+    assert units and units[0]["preserveTogether"] is True
+    out = guard_ranges(
+        ranges,
+        preset={"editingIntent": "dynamic", "preserveHook": True, "preserveCTA": True},
+        regions=regions,
+        duration_s=4.43,
+        edit_dir=root,
+        source_stem="clip",
+    )
+    for a, b in regions:
+        cov = sum(max(0.0, min(b, float(r["end"])) - max(a, float(r["start"]))) for r in out)
+        assert cov >= 0.85 * (b - a), (a, b, cov, out)
+
+
+def test_dynamic_long_nonjoke_can_drop_middle(tmp_path: Path | None = None):
+    root = tmp_path or Path(tempfile.mkdtemp(prefix="dyn_tut_"))
+    root.mkdir(parents=True, exist_ok=True)
+    phrases = [
+        {"start": 0.0, "end": 5.0, "text": "Hoje vou ensinar o passo um do tutorial"},
+        {"start": 8.0, "end": 12.0, "text": "Isso aqui e so um aparte sem funcao"},
+        {"start": 20.0, "end": 30.0, "text": "Agora o passo dois da instalacao"},
+        {"start": 40.0, "end": 48.0, "text": "Pronto, esse foi o tutorial"},
+    ]
+    _write_packed(root, "aula", phrases)
+    ranges = [
+        {"source": "SRC", "start": 0.0, "end": 5.0, "beat": "HOOK"},
+        {"source": "SRC", "start": 20.0, "end": 30.0, "beat": "B1"},
+        {"source": "SRC", "start": 40.0, "end": 48.0, "beat": "CTA"},
+    ]
+    regions = [(0.0, 5.0), (8.0, 12.0), (20.0, 30.0), (40.0, 48.0)]
+    out = guard_ranges(
+        ranges,
+        preset={"editingIntent": "dynamic", "preserveHook": True, "preserveCTA": True},
+        regions=regions,
+        duration_s=50.0,
+        edit_dir=root,
+        source_stem="aula",
+    )
+    mid = sum(
+        max(0.0, min(12.0, float(r["end"])) - max(8.0, float(r["start"])))
+        for r in out
+    )
+    assert mid < 0.3
+
+
 def test_dynamic_does_not_restore_mid_phrase():
     regions = [(0.2, 6.0), (8.0, 20.0), (21.0, 23.0), (40.0, 48.0)]
     ranges = [
@@ -168,6 +240,8 @@ if __name__ == "__main__":
         test_complete_restores_first_packed_block,
         test_complete_rejects_rhythm_keeps_repetition_class,
         test_dynamic_does_not_restore_mid_phrase,
+        test_dynamic_short_joke_keeps_setup_payoff,
+        test_dynamic_long_nonjoke_can_drop_middle,
     ]
     for fn in tests:
         fn()

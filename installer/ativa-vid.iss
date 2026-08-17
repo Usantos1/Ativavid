@@ -6,7 +6,7 @@
 ; Atalho → ATIVAVID.vbs (sem janela CMD).
 
 #define MyAppName "ATIVAVID"
-#define MyAppVersion "0.1.68"
+#define MyAppVersion "1.86"
 #define MyAppPublisher "ATIVAVID"
 #define MyAppURL "https://github.com/fillrochaa/edvid"
 #define MyAppExeName "ATIVAVID.vbs"
@@ -39,13 +39,14 @@ VersionInfoCompany=ATIVAVID
 VersionInfoVersion={#MyAppVersion}
 InfoBeforeFile=
 UsePreviousAppDir=yes
+UsePreviousTasks=no
 
 [Languages]
 Name: "brazilianportuguese"; MessagesFile: "compiler:Languages\BrazilianPortuguese.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "Criar atalho na Area de Trabalho"; GroupDescription: "Atalhos:"; Flags: checkedonce
+Name: "desktopicon"; Description: "Criar atalho na Area de Trabalho"; GroupDescription: "Atalhos:"
 
 [Files]
 Source: "..\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; \
@@ -54,14 +55,21 @@ Source: "..\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createalls
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{sys}\wscript.exe"; Parameters: "//nologo ""{app}\{#MyAppExeName}"""; WorkingDir: "{app}"; IconFilename: "{app}\assets\preview\ativa-vid-icon.ico"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{sys}\wscript.exe"; Parameters: "//nologo ""{app}\{#MyAppExeName}"""; WorkingDir: "{app}"; IconFilename: "{app}\assets\preview\ativa-vid-icon.ico"; Tasks: desktopicon
+Name: "{app}\{#MyAppName}"; Filename: "{sys}\wscript.exe"; Parameters: "//nologo ""{app}\{#MyAppExeName}"""; WorkingDir: "{app}"; IconFilename: "{app}\assets\preview\ativa-vid-icon.ico"
 
 [Run]
 Filename: "powershell.exe"; \
   Parameters: "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File ""{app}\installer\setup.ps1"" -NoShortcut"; \
   WorkingDir: "{app}"; \
-  StatusMsg: "Instalando dependencias (FFmpeg, Node, Python)â€¦"; \
+  StatusMsg: "Instalando dependencias (FFmpeg, Node, Python)…"; \
   Flags: runhidden waituntilterminated
-Filename: "{sys}\wscript.exe"; Parameters: "//nologo ""{app}\{#MyAppExeName}"""; WorkingDir: "{app}"; Description: "Abrir ATIVAVID"; Flags: nowait postinstall skipifsilent
+; Explorer abre o .lnk na sessão do usuário (igual ao atalho). wscript/cmd
+; presos ao Setup morriam no Concluir; runasoriginaluser falhava se o exe
+; foi iniciado com "Executar como administrador".
+Filename: "{win}\explorer.exe"; \
+  Parameters: """{app}\{#MyAppName}.lnk"""; \
+  Description: "Abrir ATIVAVID"; \
+  Flags: postinstall nowait skipifsilent
 
 [Code]
 function InitializeSetup(): Boolean;

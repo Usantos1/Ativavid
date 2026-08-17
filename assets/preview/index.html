@@ -106,12 +106,15 @@
 <header class="glass">
   <div class="logo-chip"><img src="/assets/ativa-vid-logo.png" alt="ATIVAVID"></div>
   <nav id="tabs" class="tabs" role="tablist" aria-label="Etapas da edição">
-    <button type="button" class="tab active" data-tab="1" role="tab" aria-selected="true">Início</button>
-    <button type="button" class="tab" data-tab="style" role="tab" aria-selected="false">Estilos</button>
+    <button type="button" class="tab active" data-tab="1" role="tab" aria-selected="true">Edição</button>
+    <button type="button" class="tab" data-tab="style" role="tab" aria-selected="false">Estilo</button>
     <button type="button" class="tab" data-tab="2" role="tab" aria-selected="false">Visual</button>
   </nav>
   <div class="head-info">
-    <div id="projectName" class="project-name" title="">—</div>
+    <div class="project-title-block">
+      <div id="projectName" class="project-name" title="">—</div>
+      <div id="projectMeta" class="project-meta hidden"></div>
+    </div>
     <div id="stateMessage" class="state-message" hidden></div>
   </div>
   <div class="head-actions">
@@ -119,8 +122,16 @@
     <span id="savedPill" class="pill saved hidden">✓ salvo</span>
     <span id="scorePill" class="pill score hidden" title="Análise estrutural — não é previsão de alcance">score <b id="scoreVal">—</b></span>
     <button id="btnAiEdit" class="btn ghost" title="Pedir mudanças à IA">Editar com IA</button>
-    <button id="btnDiscard" class="btn ghost" disabled title="Nada para descartar">Descartar</button>
+    <button id="btnOpenFinal" class="btn ghost" disabled title="O vídeo final ainda não está pronto">Ver final</button>
+    <button id="btnOpenFolder" class="btn ghost" title="Abrir pasta do projeto">Abrir pasta</button>
     <button id="btnSave" class="btn primary" disabled title="Nada para salvar">Salvar</button>
+    <div class="head-more" id="headMore">
+      <button type="button" id="btnHeadMore" class="btn ghost head-more-btn" aria-haspopup="menu" aria-expanded="false" title="Mais ações">•••</button>
+      <div id="headMoreMenu" class="head-more-menu hidden" role="menu">
+        <button type="button" id="btnVersions" class="head-more-item" role="menuitem">Versões</button>
+        <button type="button" id="btnDiscard" class="head-more-item" disabled role="menuitem" title="Nada para descartar">Descartar alterações</button>
+      </div>
+    </div>
   </div>
 </header>
 
@@ -139,6 +150,18 @@
     <div class="setup-inner">
       <div class="setup-head">
         <h2>Como os vídeos da marca devem parecer</h2>
+        <div class="preset-bar" id="presetBar">
+          <label class="auto-field">Preset
+            <select id="presetSelect"></select>
+          </label>
+          <div class="preset-actions">
+            <button type="button" class="btn ghost small" id="btnPresetNew">Novo preset</button>
+            <button type="button" class="btn ghost small" id="btnPresetDup">Duplicar</button>
+            <button type="button" class="btn ghost small" id="btnPresetRename">Renomear</button>
+            <button type="button" class="btn ghost small" id="btnPresetDel">Excluir</button>
+            <button type="button" class="btn ghost small" id="btnPresetDefault">Definir como padrão</button>
+          </div>
+        </div>
       </div>
 
       <details class="style-block" open>
@@ -277,6 +300,16 @@
         <div class="group-head"><span class="group-title">Tipo de conteúdo e formato</span></div>
         <div class="auto-grid">
           <label class="auto-field">Tipo de conteúdo
+            <select id="autoContentType">
+              <option value="educational">Educativo</option>
+              <option value="humor">Humor</option>
+              <option value="sales">Venda</option>
+              <option value="review">Review</option>
+              <option value="institutional">Institucional</option>
+              <option value="informational" selected>Informativo</option>
+            </select>
+          </label>
+          <label class="auto-field">Canal
             <select id="autoGoal">
               <option value="reels" selected>Reels / Shorts</option>
               <option value="educativo">Educativo</option>
@@ -379,26 +412,44 @@
   </section>
 
   <div id="editorCol" class="editor-col">
-    <div class="transport glass">
-      <button id="btnPlay" class="btn icon" title="Play/Pause (espaço)"></button>
-      <button id="btnMute" class="btn icon" title="Mudo"></button>
-      <span id="timeNow" class="time">0:00.00</span>
-      <span class="time dim">/</span>
-      <span id="timeTotal" class="time dim">0:00.00</span>
-      <button id="btnMark" class="btn mark" title="Marcar IN / OUT (tecla M)">
-        <span id="markIcon"></span><span id="markText">IN</span>
+  <div id="transportBar" class="transport glass">
+    <button id="btnPlay" class="btn icon" title="Play/Pause (espaço)"></button>
+    <button id="btnMute" class="btn icon" title="Mudo"></button>
+    <span id="timeNow" class="time">0:00.00</span>
+    <span class="time dim">/</span>
+    <span id="timeTotal" class="time dim">0:00.00</span>
+    <button id="btnMark" class="btn mark" title="Marcar IN / OUT (tecla M)">
+      <span id="markIcon"></span><span id="markText">IN</span>
+    </button>
+    <button id="btnUndo" class="btn icon" title="Desfazer (Ctrl+Z)" disabled></button>
+    <button id="btnRedo" class="btn icon" title="Refazer (Ctrl+Shift+Z)" disabled></button>
+    <button id="btnSplit" class="btn icon" title="Cortar o take selecionado na agulha (tecla S)"></button>
+    <button id="btnDeleteTake" class="btn icon" title="Apagar o take selecionado (Delete)" disabled></button>
+    <button id="btnCover" class="btn cover-btn" title="Salvar o frame da agulha como capa.jpg na pasta para postar">
+      <span id="coverIcon"></span><span>Capa</span>
+    </button>
+    <button id="btnImage" class="btn icon" title="Buscar e inserir uma imagem na agulha"></button>
+    <button id="btnAppendCta" class="btn cover-btn" title="Adicionar um vídeo no fim da timeline (vira o CTA)">
+      <span id="appendCtaIcon"></span><span>Vídeo no fim</span>
+    </button>
+    <div class="protect-wrap" id="protectWrap">
+      <button id="btnProtect" class="btn cover-btn" title="Proteger trecho — a IA não corta este range" aria-haspopup="menu" aria-expanded="false">
+        <span id="protectIcon"></span><span>Proteger trecho</span>
       </button>
-      <button id="btnUndo" class="btn icon" title="Desfazer (Ctrl+Z)" disabled></button>
-      <button id="btnRedo" class="btn icon" title="Refazer (Ctrl+Shift+Z)" disabled></button>
-      <button id="btnSplit" class="btn icon" title="Cortar o take selecionado na agulha (tecla S)"></button>
-      <button id="btnImage" class="btn icon" title="Buscar e inserir uma imagem na agulha"></button>
-      <div class="spacer"></div>
-      <span class="transport-divider"></span>
-      <span class="dim small">zoom</span>
-      <input id="zoom" type="range" min="0" max="100" value="0" title="Zoom da timeline (centrado na agulha)">
-      <button id="btnFit" class="btn ghost small" title="Ajustar à janela">fit</button>
+      <div id="protectMenu" class="protect-menu hidden" role="menu">
+        <button type="button" data-protect="selection" role="menuitem">Proteger seleção</button>
+        <button type="button" data-protect="hook" role="menuitem">Proteger gancho</button>
+        <button type="button" data-protect="cta" role="menuitem">Proteger CTA</button>
+        <button type="button" data-protect="clear" role="menuitem">Desproteger trecho</button>
+      </div>
     </div>
-
+    <input id="appendCtaFile" type="file" accept="video/mp4,video/quicktime,video/x-m4v,.mp4,.mov,.m4v" hidden>
+    <div class="spacer"></div>
+    <span class="transport-divider"></span>
+    <span class="dim small">zoom</span>
+    <input id="zoom" type="range" min="0" max="100" value="0" title="Zoom da timeline (centrado na agulha)">
+    <button id="btnFit" class="btn ghost small" title="Ajustar à janela">fit</button>
+  </div>
     <section id="timelinePanel" class="timeline-panel glass">
     <div id="timeline" class="timeline">
       <div class="track ruler-track">
@@ -450,13 +501,19 @@
          panel scrolls horizontally with the zoom, and text does not belong on
          a scrolling ruler. -->
     <section id="postPanel" class="post-panel glass hidden">
-      <div class="post-head">
-        <span class="group-title">Legenda do post</span>
+      <button type="button" id="postToggle" class="post-toggle" aria-expanded="true">
+        <span class="post-toggle-title">Legenda do post</span>
         <span id="postHint" class="post-hint"></span>
-        <div class="spacer"></div>
-        <button id="postCopy" class="btn ghost small">copiar</button>
+        <span class="spacer"></span>
+        <span class="post-caret" aria-hidden="true">▾</span>
+      </button>
+      <div class="post-body">
+        <div class="post-head">
+          <div class="spacer"></div>
+          <button id="postCopy" class="btn ghost small">Copiar</button>
+        </div>
+        <div id="postText" class="post-text"></div>
       </div>
-      <div id="postText" class="post-text"></div>
     </section>
   </div>
   </div>
@@ -567,8 +624,9 @@
     <p id="aiErrText" class="ai-err-text"></p>
     <a id="aiErrLink" class="ai-err-link" href="/?view=keys">Abrir Chaves &amp; IA</a>
   </div>
+  <div id="aiPending" class="ai-pending hidden">Alteração pronta — clique em Aplicar</div>
   <div class="ai-composer">
-    <textarea id="aiPrompt" rows="2" placeholder="O que mudar neste vídeo?"></textarea>
+    <textarea id="aiPrompt" rows="2" placeholder="O que mudar neste vídeo? Enter envia; Aplicar confirma."></textarea>
     <div class="ai-actions">
       <button id="aiUndo" class="btn ghost small" disabled>Desfazer IA</button>
       <div class="spacer"></div>
@@ -576,6 +634,15 @@
     </div>
   </div>
 </div>
+
+<dialog id="dlgAutosave" class="av-dlg">
+  <h3>Continuar de onde parou?</h3>
+  <p class="av-dlg-hint">Tem um rascunho deste vídeo. Pode abrir o último salvo ou seguir com o rascunho.</p>
+  <div class="av-dlg-actions">
+    <button type="button" class="btn ghost" id="btnAutosaveDiscard">Abrir o salvo</button>
+    <button type="button" class="btn primary" id="btnAutosaveRestore">Continuar rascunho</button>
+  </div>
+</dialog>
 
 <div id="tooltip" class="tooltip hidden"></div>
 <div id="toast" class="toast hidden"></div>

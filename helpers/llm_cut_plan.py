@@ -76,7 +76,13 @@ def _rhythm_rules(preset: dict) -> str:
     rhythm = (preset.get("rhythm") or "dinamico").lower()
     intensity = (preset.get("intensity") or "medio").lower()
     clean = (preset.get("speechClean") or "medio").lower()
-    goal = (preset.get("videoGoal") or preset.get("contentType") or "reels").lower()
+    from app.content_type import CONTENT_TYPES
+
+    goal_raw = preset.get("videoGoal")
+    extra_type = str(preset.get("contentType") or "").strip().lower()
+    if not goal_raw and extra_type not in CONTENT_TYPES:
+        goal_raw = extra_type
+    goal = (goal_raw or "reels").lower()
 
     # Aliases da UI (Estilos) → chaves do prompt
     rhythm_alias = {
@@ -179,13 +185,20 @@ def _system_prompt(preset: dict | None = None) -> str:
     else:
         role = (
             "Você é o editor-chefe do ATIVAVID. Este job é DEIXAR MAIS DINÂMICO: "
-            "acelere o ritmo sem apagar informação nem CTA.\n"
+            "acelere o ritmo sem destruir a estrutura narrativa, o humor nem o CTA.\n"
+            "Dynamic NÃO é 'encurtar a qualquer custo' e NÃO é obrigado a cortar.\n"
         )
         hook_rule = (
             "- Preserve o gancho inicial. Pode limpar respiração, não a intenção da abertura.\n"
+            "- HUMOR: setup + resposta + reação + punchline/callback formam UMA unidade. "
+            "Se a frase seguinte perde o sentido ou a graça sem o trecho, PRESERVE o bloco.\n"
+            "- Punchline ≠ CTA. Uma punchline pode estar no meio e não ter palavra de CTA.\n"
         )
         target = (
-            "- Alvo típico: mais curto que o original, sem apagar o raciocínio central.\n"
+            "- Alvo: mais rápido que o original só se sobrar silêncio/erro/repetição real. "
+            "Não remova fala lenta, 'contexto' ou setup para chegar na punchline.\n"
+            "- Vídeo curto (cerca de ≤15s): quase não corte fala; só silêncio/erro/"
+            "falso começo/pausa morta. Um clipe de ~4s provavelmente já é a peça final.\n"
         )
     cut_rule = (
         "- Remova SOMENTE silêncio excessivo, erro+recomeço, take abandonada, "
@@ -233,6 +246,12 @@ def _user_prompt(
     tipo = (
         "vídeo completo (preservar conteúdo; NÃO é highlight/Reels)"
         if intent == "complete"
+        else (
+            "vídeo curto — preserve fala; só limpe silêncio/erro"
+            if (duration_hint is not None and float(duration_hint) <= 15)
+            else "deixar mais dinâmico sem destruir narrativa/humor"
+        )
+        if intent == "dynamic"
         else "short-form vertical (Reels/TikTok)"
     )
     return (

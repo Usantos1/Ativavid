@@ -15,6 +15,8 @@ INTENT_FILE = "job_intent.json"
 
 # Vídeo ≥ isto (segundos) recomenda "Editar vídeo completo"
 LONG_VIDEO_SEC = 90.0
+# Dynamic em clipes curtos: só limpa silêncio/erro — não corta fala de contexto
+SHORT_DYNAMIC_SEC = 15.0
 
 CTA_HINTS = (
     "me segue", "segue a gente", "segue o", "comenta", "compartilha",
@@ -66,14 +68,20 @@ def normalize(raw: dict | None, *, duration_s: float | None = None) -> dict:
     brand = str(src.get("brandStyleSource") or "default").strip().lower()
     if brand not in ("default", "custom"):
         brand = "default"
+    from app.content_type import normalize_content_type
+
+    content = normalize_content_type(src.get("contentType") or src.get("tipoConteudo"))
+    preset_id = str(src.get("brandPresetId") or "").strip() or None
     return {
         "editingIntent": mode,
+        "contentType": content,
         "preserveHook": flags["preserveHook"],
         "preserveCTA": flags["preserveCTA"],
         "preserveCompleteSentences": flags["preserveCompleteSentences"],
         "preserveContext": flags["preserveContext"],
         "protectedRanges": ranges,
         "brandStyleSource": brand,
+        "brandPresetId": preset_id,
         "suggestedIntent": suggest_intent(duration_s) if duration_s is not None else None,
         "sourceDurationSec": round(float(duration_s), 2) if duration_s else None,
     }
@@ -92,7 +100,18 @@ def _parse_ranges(raw: Any) -> list[dict]:
         except (TypeError, ValueError):
             continue
         if end > start >= 0:
-            out.append({"start": round(start, 3), "end": round(end, 3)})
+            item_out = {"start": round(start, 3), "end": round(end, 3)}
+            for key in ("source", "reason", "label"):
+                if item.get(key):
+                    item_out[key] = str(item[key])[:80]
+            for key in ("draftStart", "draftEnd"):
+                if item.get(key) is None:
+                    continue
+                try:
+                    item_out[key] = round(float(item[key]), 3)
+                except (TypeError, ValueError):
+                    pass
+            out.append(item_out)
     return out
 
 
@@ -127,6 +146,12 @@ def merge_into_preset(preset: dict, intent: dict | None) -> dict:
     out["preserveContext"] = data["preserveContext"]
     out["protectedRanges"] = data["protectedRanges"]
     out["brandStyleSource"] = data["brandStyleSource"]
+    if data.get("contentType"):
+        out["contentType"] = data["contentType"]
+    if data.get("brandPresetId"):
+        out["brandPresetId"] = data["brandPresetId"]
+    if data.get("sourceDurationSec") is not None:
+        out["sourceDurationSec"] = data["sourceDurationSec"]
     return out
 
 
@@ -169,11 +194,34 @@ def prompt_rules(preset: dict | None) -> str:
     else:
         intent_txt = (
             "INTENÇÃO=dynamic (Deixar mais dinâmico).\n"
-            "Prioridade: ritmo + preservação de informação.\n"
-            "Pode remover pausas menores e aproximar frases.\n"
-            "Nunca remover contexto necessário para entender a próxima fala.\n"
-            "Preserve a estrutura: abertura → desenvolvimento → conclusão.\n"
+            "Significa: deixe mais rápido SEM destruir a estrutura narrativa.\n"
+            "NÃO significa: remova qualquer coisa que deixe o vídeo mais curto.\n"
+            "PODE remover: silêncio; pausa excessiva; erro; falso começo; "
+            "repetição real; hesitação sem função; trecho morto entre frases.\n"
+            "PROIBIDO remover fala só porque: é mais lenta; não é a frase principal; "
+            "parece contexto; outra frase tem mais punch; quer melhorar retenção; "
+            "quer chegar mais rápido na punchline.\n"
+            "Antes de remover conteúdo falado, pergunte: "
+            "'A frase seguinte ainda faz sentido e continua engraçada sem isto?' "
+            "Se a resposta for incerta: PRESERVAR.\n"
+            "HUMOR: identifique setup, contexto, pergunta, resposta, reação, "
+            "escalada, contraste, callback, punchline, quebra de expectativa. "
+            "Essas partes dependem umas das outras — preserve o bloco inteiro "
+            "(setup + resposta + payoff). Punchline ≠ CTA.\n"
+            "Dynamic NÃO é obrigado a cortar. Se o bloco inteiro for necessário, mantenha.\n"
         )
+        dur = p.get("sourceDurationSec")
+        try:
+            dur_f = float(dur) if dur is not None else None
+        except (TypeError, ValueError):
+            dur_f = None
+        if dur_f is not None and dur_f <= SHORT_DYNAMIC_SEC:
+            intent_txt += (
+                f"VÍDEO CURTO (≈{dur_f:.1f}s): já está no tamanho de uma peça final. "
+                "Seja ainda mais conservador. Remova só silêncio evidente, erro, "
+                "falso começo ou pausa morta. Conteúdo falado deve ser preservado "
+                "quase integralmente. Não corte 1–2s de contexto para 'ganhar ritmo'.\n"
+            )
 
     guards = [
         "CORTES POR UNIDADE SEMÂNTICA (não só por silêncio/timestamp):",
@@ -208,7 +256,13 @@ def prompt_rules(preset: dict | None) -> str:
         bits = ", ".join(f"{r['start']:.2f}–{r['end']:.2f}s" for r in ranges[:12])
         guards.append(f"- TRECHOS PROTEGIDOS (obrigatório manter): {bits}.")
 
-    return intent_txt + "\n".join(guards) + "\n"
+    from app.content_type import prompt_rules as content_rules
+
+    extra = content_rules(p.get("contentType"))
+    body = intent_txt + "\n".join(guards) + "\n"
+    if extra:
+        body += extra + "\n"
+    return body
 
 
 def first_hook_region(regions: list[tuple[float, float]]) -> tuple[float, float] | None:
@@ -287,6 +341,9 @@ _PREP_HINTS = (
     "um dois tres", "um dois três", "testando", "mic test",
 )
 _FILLERS = {"ah", "eh", "uhm", "hum", "hmm", "tipo", "ne", "né", "ta", "tá", "ok", "e"}
+_HUMOR_HINTS = (
+    "piada", "engraçad", "risad", "hahaha", "kkkk", "punchline",
+)
 
 
 def load_packed_phrases(edit_dir: Path, stem: str | None = None) -> list[dict]:
@@ -456,6 +513,142 @@ def load_complete_drops(edit_dir: Path | None) -> list[dict]:
     return raw if isinstance(raw, list) else []
 
 
+def _looks_like_humor(phrases: list[dict]) -> bool:
+    texts = [str(p.get("text") or "") for p in phrases]
+    blob = " ".join(texts).lower()
+    if any(h in blob for h in _HUMOR_HINTS):
+        return True
+    if any(t.strip().endswith("?") for t in texts) and len(phrases) >= 2:
+        return True
+    words: list[str] = []
+    for t in texts:
+        words.extend(w for w in _norm_txt(t).split() if len(w) >= 5)
+    if not words:
+        return False
+    counts: dict[str, int] = {}
+    for w in words:
+        counts[w] = counts.get(w, 0) + 1
+    return any(c >= 3 for c in counts.values())
+
+
+def assign_joke_roles(phrases: list[dict]) -> list[str]:
+    roles = ["context"] * len(phrases)
+    if not phrases:
+        return roles
+    roles[0] = "setup"
+    last_words = _norm_txt(str(phrases[-1].get("text") or "")).split()
+    if len(last_words) <= 8:
+        roles[-1] = "punchline"
+    for i, p in enumerate(phrases):
+        text = str(p.get("text") or "")
+        low = text.lower()
+        if text.strip().endswith("?"):
+            roles[i] = "question"
+            if i + 1 < len(phrases) and roles[i + 1] == "context":
+                roles[i + 1] = "response"
+        if "pode deixar" in low or "tranquila" in low or "tranquilo" in low:
+            if roles[i] in ("context", "setup"):
+                roles[i] = "response" if i else "setup"
+    return roles
+
+
+def detect_semantic_units(
+    phrases: list[dict],
+    *,
+    duration_s: float | None = None,
+) -> list[dict]:
+    """Unidades que não podem ser julgadas isoladamente (setup+payoff)."""
+    if not phrases:
+        return []
+    short = duration_s is not None and float(duration_s) <= SHORT_DYNAMIC_SEC
+    humor = _looks_like_humor(phrases)
+    if short or humor:
+        kind = "joke" if humor else "short_clip"
+        return [{
+            "semanticUnit": kind,
+            "segments": list(range(len(phrases))),
+            "roles": assign_joke_roles(phrases),
+            "preserveTogether": True,
+        }]
+    units: list[dict] = []
+    i = 0
+    while i < len(phrases):
+        text = str(phrases[i].get("text") or "")
+        if text.strip().endswith("?") and i + 1 < len(phrases):
+            units.append({
+                "semanticUnit": "qa",
+                "segments": [i, i + 1],
+                "roles": ["question", "response"],
+                "preserveTogether": True,
+            })
+            i += 2
+            continue
+        i += 1
+    return units
+
+
+def enforce_dynamic_edl(
+    ranges: list[dict],
+    *,
+    phrases: list[dict],
+    regions: list[tuple[float, float]],
+    drops: list[dict] | None = None,
+    duration_s: float | None = None,
+) -> list[dict]:
+    """Restaura fala de humor/contexto que o dynamic não pode cortar."""
+    out = [dict(r) for r in (ranges or [])]
+    if not phrases:
+        return out
+    units = detect_semantic_units(phrases, duration_s=duration_s)
+    short = duration_s is not None and float(duration_s) <= SHORT_DYNAMIC_SEC
+    roles_by_idx: dict[int, str] = {}
+    must_keep: set[int] = set()
+    for unit in units:
+        if not unit.get("preserveTogether"):
+            continue
+        idxs = [int(x) for x in unit.get("segments") or []]
+        unit_roles = unit.get("roles") or []
+        for j, idx in enumerate(idxs):
+            if j < len(unit_roles):
+                roles_by_idx[idx] = str(unit_roles[j])
+        any_kept = any(
+            _coverage(float(phrases[i]["start"]), float(phrases[i]["end"]), out) >= 0.20
+            for i in idxs if 0 <= i < len(phrases)
+        )
+        if any_kept or short:
+            must_keep.update(i for i in idxs if 0 <= i < len(phrases))
+    if short:
+        must_keep.update(range(len(phrases)))
+
+    for i, phrase in enumerate(phrases):
+        ps, pe = float(phrase["start"]), float(phrase["end"])
+        span = max(0.01, pe - ps)
+        cov = _coverage(ps, pe, out)
+        spoken = _speech_inside(ps, pe, regions)
+        role = roles_by_idx.get(i, "context")
+        need = 0.95 if (short or i in must_keep) else 0.88
+        if 0.12 <= cov < need * span:
+            for a, b in spoken:
+                if _coverage(a, b, out) < need * (b - a):
+                    out = _insert_range(out, a, b, "KEEP", f"restore-dynamic-sentence:{role}")
+            continue
+        if i not in must_keep:
+            continue
+        cls = classify_complete_removal(phrase, phrases, drops=drops)
+        # Unidade de piada: repetição costuma ser callback/escalada — preservar.
+        if cls in ("silence", "false_start", "abandoned_take", "non_content"):
+            continue
+        for a, b in spoken:
+            if _coverage(a, b, out) < need * (b - a):
+                reason = (
+                    f"restore-dynamic-short:{role}"
+                    if short
+                    else f"restore-dynamic-joke:{role}"
+                )
+                out = _insert_range(out, a, b, "KEEP", reason)
+    return out
+
+
 def enforce_complete_edl(
     ranges: list[dict],
     *,
@@ -523,6 +716,29 @@ def guard_ranges(
         hook = first_hook_region(regions)
         if hook and not _covers(out, hook[0], hook[1]):
             out = _insert_range(out, hook[0], hook[1], "HOOK", "preserve-hook")
+
+    if mode == "dynamic":
+        phrases = load_packed_phrases(edit_dir, source_stem) if edit_dir else []
+        drop_list = list(drops or []) or load_complete_drops(edit_dir)
+        dur = duration_s if duration_s is not None else p.get("sourceDurationSec")
+        try:
+            dur_f = float(dur) if dur is not None else None
+        except (TypeError, ValueError):
+            dur_f = None
+        if phrases:
+            out = enforce_dynamic_edl(
+                out,
+                phrases=phrases,
+                regions=regions,
+                drops=drop_list,
+                duration_s=dur_f,
+            )
+        elif dur_f is not None and dur_f <= SHORT_DYNAMIC_SEC:
+            for a, b in regions or []:
+                if b - a < 0.20:
+                    continue
+                if _coverage(a, b, out) < 0.88 * (b - a):
+                    out = _insert_range(out, a, b, "KEEP", "restore-dynamic-short")
 
     if bool(p.get("preserveCTA", DEFAULTS[mode]["preserveCTA"])):
         cta = last_cta_region(regions)

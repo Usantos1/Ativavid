@@ -6,12 +6,16 @@ const state = {
   jobs: [],
   view: "import",
   pendingDeleteId: null,
+  pendingRenameId: null,
+  pendingRenameCurrent: "",
   pendingFiles: null,
   pendingDuration: null,
   pendingRecommended: null,
+  uploads: {},
 };
 
 const STATUS_LABEL = {
+  importing: "Importando",
   queued: "Aguardando",
   processing: "Processando",
   done: "Concluído",
@@ -22,13 +26,13 @@ const STATUS_LABEL = {
 const TECH_LEAK = /overlay|remotion|ffmpeg|ffprobe|nvenc|nvdec|prores|loudnorm|compose|render_engine|fallback_full|full.?remotion|h264|libx264|qsv|amf|tonemap|cpu cut|working.?master|single.?pass|encoder|node\.js|\bnode\b|python|traceback|file ".+?", line \d+|helpers\\|cmd \/c |cmd failed|exception|uv run|render\.py|\\\\|\/helpers\//i;
 
 const VIEW_COPY = {
-  import: ["Início", "Escolha os vídeos e diga o que fazer com cada um."],
+  import: ["Início", "Escolha vídeos ou uma pasta. Cada subpasta vira um vídeo."],
   fila: ["Fila", "Acompanhe o processamento dos seus vídeos."],
   done: ["Concluídos", "Vídeos prontos para abrir, ajustar ou exportar."],
   estilo: ["Estilos", "Como os vídeos da sua marca normalmente devem parecer."],
   keys: ["Chaves & IA", "Passo a passo da sessão + links para Groq, ElevenLabs e Pexels."],
   licenca: ["Licença", "Status da assinatura e contas."],
-  sistema: ["Sistema", "Desempenho em faixas, pastas, marcas e atualizações."],
+  sistema: ["Sistema", "Máquina, pastas, atualizações e diagnóstico."],
   // aliases antigos → redirecionados em setView
   ia: ["Chaves & IA", "Sessão do navegador e chaves de API."],
   doutor: ["Sistema", "Desempenho e pastas."],
@@ -63,9 +67,16 @@ function queueCopy(j) {
   if (status === "done" || stage === "done") {
     return { badge: "CONCLUÍDO", text: "Vídeo concluído" };
   }
+  if (status === "importing") {
+    const pct = Number.isFinite(Number(j.progress)) ? ` ${Math.round(Number(j.progress))}%` : "";
+    return { badge: "IMPORTANDO", text: `Importando vídeo...${pct}` };
+  }
   if (status === "error" || status === "needs_review" || stage === "error") {
     if (/cancel/i.test(raw) || stage === "cancelled" || j.reason === "cancelled") {
       return { badge: "CANCELADO", text: "Cancelado pelo usuário" };
+    }
+    if (j.reason === "missing_brand_copy" || /marca|end.?card|card final/i.test(raw)) {
+      return { badge: "REVISAR", text: "Falta o texto da marca em Estilos (card final)" };
     }
     return { badge: "ERRO", text: "Não foi possível concluir este vídeo." };
   }
@@ -82,15 +93,32 @@ function queueCopy(j) {
   const preparing = ["transcribing", "analyzing", "planning", "cutting"].includes(stage)
     || /transcrib|analis|planning|cut|corte|prepar/i.test(blob);
 
-  if (finishing) return { badge: "PROCESSANDO", text: "Finalizando vídeo..." };
-  if (captions) return { badge: "PROCESSANDO", text: "Aplicando legendas e efeitos..." };
-  if (editing) return { badge: "PROCESSANDO", text: "Aplicando edição..." };
-  if (preparing) return { badge: "PROCESSANDO", text: "Preparando vídeo..." };
-  return { badge: "PROCESSANDO", text: "Preparando vídeo..." };
+  const eta = j.etaLabel ? ` · ${j.etaLabel}` : "";
+  if (finishing) return { badge: "PROCESSANDO", text: `Finalizando vídeo...${eta}` };
+  if (captions) return { badge: "PROCESSANDO", text: `Aplicando legendas e efeitos...${eta}` };
+  if (editing) return { badge: "PROCESSANDO", text: `Aplicando edição...${eta}` };
+  if (preparing) return { badge: "PROCESSANDO", text: `Preparando vídeo...${eta}` };
+  return { badge: "PROCESSANDO", text: `Preparando vídeo...${eta}` };
+}
+
+function jobWhenLabel(j) {
+  const ready = j.finishedAtLabel || "";
+  if (ready) return ready;
+  const iso = j.finishedAt || (j.status === "done" ? j.updatedAt : "") || j.createdAt || "";
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return "";
+  const d = new Date(t);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} · ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 function jobHeadline(j) {
-  return queueCopy(j).text;
+  const text = queueCopy(j).text;
+  const when = jobWhenLabel(j);
+  if (when && (j.status === "done" || j.stage === "done")) {
+    return `${text} · ${when}`;
+  }
+  return text;
 }
 
 function jobDetail() {
@@ -124,6 +152,7 @@ function setView(name) {
     loadSistema().catch((e) => toast(e.message));
   }
   if (name === "estilo") {
+    loadBrandsUi().catch(() => {});
     const fr = $("#estiloFrame");
     if (fr && !fr.dataset.loaded) {
       fr.dataset.loaded = "1";
@@ -146,12 +175,23 @@ function setView(name) {
   } catch { /* ignore */ }
 }
 
+function jobRecency(j) {
+  const t = Date.parse(j.finishedAt || j.updatedAt || j.createdAt || 0);
+  return Number.isFinite(t) ? t : 0;
+}
+
 function filterJobs(kind) {
   if (kind === "fila") {
-    return state.jobs.filter((j) => ["queued", "processing", "needs_review", "error"].includes(j.status));
+    return state.jobs.filter((j) => ["importing", "queued", "processing", "needs_review", "error"].includes(j.status));
   }
-  if (kind === "done") return state.jobs.filter((j) => j.status === "done");
-  return state.jobs.slice(0, 6); // recent
+  if (kind === "done") {
+    return state.jobs
+      .filter((j) => j.status === "done")
+      .sort((a, b) => jobRecency(b) - jobRecency(a) || String(b.id).localeCompare(String(a.id)));
+  }
+  return [...state.jobs]
+    .sort((a, b) => jobRecency(b) - jobRecency(a) || String(b.id).localeCompare(String(a.id)))
+    .slice(0, 8);
 }
 
 function jobFolderName(j) {
@@ -172,34 +212,90 @@ function jobLinks(j) {
 function cardSig(j, opts) {
   const links = jobLinks(j);
   return [
-    j.id, j.status, j.title || j.name, j.progress, j.hasFinal, j.updatedAt,
-    j.durationLabel, j.formatLabel, j.thumbUrl, links.editor, links.estilo, links.final,
+    j.id, j.status, j.title || j.name, Math.round(Number(j.progress) || 0), j.hasFinal, j.hasThumb, j.finishedAt, j.finishedAtLabel,
+    j.stage, j.message, j.localPoster || j.thumbUrl, links.editor, links.estilo, links.final,
     opts && opts.compact ? "1" : "0",
   ].join("\t");
 }
 
+function cardProgressPct(j) {
+  const pct = Number(j.progress);
+  if (!Number.isFinite(pct)) return null;
+  if (j.status === "processing") return Math.max(1, Math.min(99, pct));
+  return Math.max(0, Math.min(100, pct));
+}
+
+function cardProgressHtml(j) {
+  if (j.status !== "importing" && j.status !== "processing") return "";
+  const pct = cardProgressPct(j);
+  if (pct == null) {
+    return `<div class="pc-progress indeterminate" aria-hidden="true"><span></span></div>`;
+  }
+  return `<div class="pc-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(pct)}"><span style="width:${pct}%"></span></div>`;
+}
+
+function patchCardProgress(el, j) {
+  const html = cardProgressHtml(j);
+  const old = el.querySelector(".pc-progress");
+  if (!html) {
+    if (old) old.remove();
+    return;
+  }
+  const pct = cardProgressPct(j);
+  if (old) {
+    const wantIndet = pct == null;
+    if (wantIndet !== old.classList.contains("indeterminate")) {
+      const wrap = document.createElement("div");
+      wrap.innerHTML = html;
+      old.replaceWith(wrap.firstElementChild);
+      return;
+    }
+    if (pct != null) {
+      old.setAttribute("aria-valuenow", String(Math.round(pct)));
+      const span = old.querySelector("span");
+      if (span) span.style.width = `${pct}%`;
+    }
+    return;
+  }
+  const wrap = document.createElement("div");
+  wrap.innerHTML = html;
+  const node = wrap.firstElementChild;
+  const anchor = el.querySelector(".pc-actions");
+  if (anchor) anchor.insertAdjacentElement("beforebegin", node);
+  else el.querySelector(".pc-body")?.appendChild(node);
+}
+
+function cardThumbSrc(j) {
+  if (j.localPoster) return j.localPoster;
+  if (j.thumbUrl && (String(j.thumbUrl).startsWith("data:") || String(j.thumbUrl).startsWith("blob:"))) {
+    return j.thumbUrl;
+  }
+  if (j.id && !String(j.id).startsWith("tmp-")) {
+    return `${j.thumbUrl || `/api/jobs/${j.id}/thumb`}?t=${encodeURIComponent(j.hasThumb || j.id)}`;
+  }
+  return "";
+}
+
 function cardHtml(j, opts) {
   const compact = !!(opts && opts.compact);
+  const enter = !!(opts && opts.enter);
   const canFinal = j.hasFinal || j.status === "done";
   const links = jobLinks(j);
   const editor = links.editor;
   const estilo = links.estilo;
-  const finalu = links.final;
-  const busy = j.status === "processing" || j.status === "queued";
-  const headline = compact ? "" : jobHeadline(j);
+  const busy = j.status === "processing" || j.status === "queued" || j.status === "importing";
+  const headline = jobHeadline(j);
   const title = j.title || j.name || "Vídeo";
   const fmt = j.formatLabel || (canFinal || j.hasCut ? "9:16" : "");
   const dur = j.durationLabel || "";
   const metaBits = [dur, fmt].filter(Boolean);
   const chipLabel = queueCopy(j).badge;
-  const thumb = j.thumbUrl || `/api/jobs/${j.id}/thumb`;
-  const progress = (j.status === "processing" && j.progress != null)
-    ? `<div class="pc-progress"><span style="width:${Math.max(5, Math.min(100, j.progress))}%"></span></div>`
-    : "";
+  const thumb = cardThumbSrc(j);
+  const progress = cardProgressHtml(j);
   const safeId = escapeHtml(j.id);
   const menuKey = escapeHtml(`${j.id}:${compact ? "c" : "f"}`);
-  const primary = j.status === "done"
-    ? `<a class="chip-btn primary" href="${escapeHtml(editor)}">Revisar</a>`
+    const primary = j.status === "done"
+    ? `<a class="chip-btn primary${canFinal ? "" : " disabled"}" href="${escapeHtml(links.final)}">Visualizar</a>`
     : busy
       ? `<button type="button" class="chip-btn" data-act="cancel" data-id="${safeId}">Cancelar</button>`
       : `<button type="button" class="chip-btn" data-act="retry" data-id="${safeId}">Tentar novamente</button>`;
@@ -207,17 +303,21 @@ function cardHtml(j, opts) {
       <button type="button" class="chip-btn ghostish pc-more-btn" data-act="menu" data-id="${safeId}" data-menu-key="${menuKey}" aria-label="Mais ações" aria-expanded="false" aria-haspopup="menu">⋯</button>
       <div class="pc-menu hidden" data-menu="${menuKey}" role="menu">
         <button type="button" role="menuitem" data-act="folder" data-id="${safeId}">Abrir pasta</button>
-        <a role="menuitem" class="${canFinal ? "" : "disabled"}" href="${canFinal ? escapeHtml(finalu) : "#"}" data-id="${safeId}">Ver vídeo final</a>
+        <a role="menuitem" href="${escapeHtml(links.final)}" ${canFinal ? "" : "class=\"disabled\""}>Ver vídeo final</a>
+        <a role="menuitem" href="${escapeHtml(editor)}">Editar</a>
         <a role="menuitem" href="${escapeHtml(estilo)}" data-id="${safeId}">Alterar estilo</a>
         <button type="button" role="menuitem" class="danger" data-act="delete" data-id="${safeId}" data-name="${escapeHtml(title)}">Apagar</button>
       </div>
     </div>`;
-  return `<article class="project-card ${j.status}${compact ? " compact" : ""}">
+  const thumbImg = thumb
+    ? `<img src="${thumb}" alt="" loading="lazy"
+        onload="this.previousElementSibling.classList.add('hidden')"
+        onerror="this.style.display='none'">`
+    : "";
+  return `<article class="project-card ${j.status}${compact ? " compact" : ""}${enter ? " pc-enter" : ""}" data-card-id="${safeId}" data-card-sig="${escapeHtml(cardSig(j, opts))}">
     <div class="pc-thumb">
-      <div class="pc-thumb-fallback">9:16</div>
-      <img src="${thumb}?t=${encodeURIComponent(j.updatedAt || j.id)}" alt="" loading="lazy"
-        onload="this.previousElementSibling.style.display='none'"
-        onerror="this.style.display='none'">
+      <div class="pc-thumb-fallback${thumb ? "" : " skeleton"}">9:16</div>
+      ${thumbImg}
     </div>
     <div class="pc-body">
       <div class="pc-top">
@@ -306,9 +406,132 @@ function renderInto(boxId, emptyId, jobs, opts) {
   }
   if (empty) empty.classList.add("hidden");
   if (box.dataset.cardSig === sig) return;
-  closeCardMenus(box);
-  box.innerHTML = jobs.map((j) => cardHtml(j, opts)).join("");
+  syncCards(box, jobs, opts);
   box.dataset.cardSig = sig;
+}
+
+function syncCards(box, jobs, opts) {
+  const existing = new Map(
+    [...box.querySelectorAll("[data-card-id]")].map((el) => [el.dataset.cardId, el])
+  );
+  const seen = new Set();
+  const nextNodes = [];
+  for (const j of jobs) {
+    seen.add(String(j.id));
+    let el = existing.get(String(j.id));
+    const nextSig = cardSig(j, opts);
+    if (!el) {
+      const wrap = document.createElement("div");
+      wrap.innerHTML = cardHtml(j, { ...opts, enter: true });
+      el = wrap.firstElementChild;
+      el.addEventListener("animationend", () => el.classList.remove("pc-enter"), { once: true });
+    } else if (el.dataset.cardSig !== nextSig) {
+      patchCard(el, j, opts);
+    }
+    nextNodes.push(el);
+  }
+  existing.forEach((el, id) => {
+    if (!seen.has(id)) {
+      closeCardMenus(el);
+      el.remove();
+    }
+  });
+  const current = [...box.querySelectorAll("[data-card-id]")];
+  const sameOrder = current.length === nextNodes.length
+    && nextNodes.every((el, i) => current[i] === el);
+  if (!sameOrder) nextNodes.forEach((el) => box.appendChild(el));
+}
+
+function patchCard(el, j, opts) {
+  const copy = queueCopy(j);
+  const compact = !!(opts && opts.compact);
+  el.classList.remove("pc-enter");
+  el.className = `project-card ${j.status}${compact ? " compact" : ""}`;
+  el.dataset.cardId = String(j.id);
+  el.dataset.cardSig = cardSig(j, opts);
+  const chip = el.querySelector(".chip");
+  if (chip) {
+    chip.className = `chip ${j.status}`;
+    chip.textContent = copy.badge;
+  }
+  const name = el.querySelector(".pc-name");
+  if (name) {
+    const title = j.title || j.name || "Vídeo";
+    name.textContent = title;
+    name.dataset.title = title;
+    name.dataset.id = j.id;
+  }
+  let msg = el.querySelector(".pc-msg");
+  if (copy.text) {
+    if (!msg) {
+      msg = document.createElement("div");
+      msg.className = "pc-msg";
+      const anchor = el.querySelector(".pc-progress") || el.querySelector(".pc-actions");
+      if (anchor) anchor.insertAdjacentElement("beforebegin", msg);
+      else el.querySelector(".pc-body")?.appendChild(msg);
+    }
+    msg.textContent = jobHeadline(j);
+  } else if (msg) {
+    msg.remove();
+  }
+  patchCardProgress(el, j);
+  const actions = el.querySelector(".pc-actions");
+  if (actions) {
+    const busy = j.status === "processing" || j.status === "queued" || j.status === "importing";
+    const links = jobLinks(j);
+    const first = actions.querySelector(":scope > a.chip-btn, :scope > button.chip-btn");
+    if (j.status === "done") {
+      const canFinal = j.hasFinal || j.status === "done";
+      const href = links.final;
+      if (!first || first.tagName !== "A" || first.dataset.viewFinal !== "1") {
+        const a = document.createElement("a");
+        a.className = "chip-btn primary";
+        a.href = href;
+        a.dataset.viewFinal = "1";
+        a.textContent = "Visualizar";
+        if (!canFinal) a.classList.add("disabled");
+        if (first) first.replaceWith(a);
+        else actions.insertBefore(a, actions.firstChild);
+      } else {
+        first.href = href;
+        first.textContent = "Visualizar";
+        first.className = "chip-btn primary";
+        first.classList.toggle("disabled", !canFinal);
+      }
+    } else if (first && (first.tagName === "A" || first.dataset.act === "open-final")) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "chip-btn";
+      b.dataset.act = busy ? "cancel" : "retry";
+      b.dataset.id = j.id;
+      b.textContent = busy ? "Cancelar" : "Tentar novamente";
+      first.replaceWith(b);
+    } else if (first) {
+      first.dataset.act = busy ? "cancel" : "retry";
+      first.dataset.id = j.id;
+      first.textContent = busy ? "Cancelar" : "Tentar novamente";
+    }
+  }
+  const img = el.querySelector(".pc-thumb img");
+  const fallback = el.querySelector(".pc-thumb-fallback");
+  const src = cardThumbSrc(j);
+  if (src) {
+    if (fallback) fallback.classList.remove("skeleton");
+    if (img) {
+      if (img.getAttribute("src") !== src) img.src = src;
+    } else {
+      const node = document.createElement("img");
+      node.alt = "";
+      node.loading = "lazy";
+      node.onload = () => fallback?.classList.add("hidden");
+      node.onerror = () => { node.style.display = "none"; };
+      node.src = src;
+      el.querySelector(".pc-thumb")?.appendChild(node);
+    }
+  } else if (fallback) {
+    fallback.classList.add("skeleton");
+    fallback.classList.remove("hidden");
+  }
 }
 
 function renderJobs() {
@@ -316,6 +539,11 @@ function renderJobs() {
   const done = filterJobs("done");
   $("#countFila").textContent = String(fila.length);
   $("#countDone").textContent = String(done.length);
+  const verFila = $("#btnVerFila");
+  if (verFila) {
+    const busy = state.jobs.filter((j) => ["importing", "queued", "processing"].includes(j.status)).length;
+    verFila.textContent = busy ? `Ver fila (${busy})` : "Ver fila";
+  }
 
   const counts = state.jobs.reduce((a, j) => {
     a[j.status] = (a[j.status] || 0) + 1;
@@ -337,7 +565,10 @@ function renderJobs() {
 
 async function refreshJobs() {
   const data = await api("/api/jobs");
-  state.jobs = data.jobs || [];
+  const incoming = data.jobs || [];
+  const locals = state.jobs.filter((j) => j.status === "importing" && String(j.id).startsWith("tmp-"));
+  const incomingIds = new Set(incoming.map((j) => j.id));
+  state.jobs = [...locals.filter((j) => !incomingIds.has(j.id)), ...incoming];
   renderJobs();
 }
 
@@ -586,6 +817,8 @@ function collectImportIntent() {
     preserveContext: !!$("#protContext")?.checked,
     protectedRanges: parseProtectedRanges($("#protRanges")?.value || ""),
     brandStyleSource: $("#useBrandStyle")?.checked ? "default" : "custom",
+    contentType: $("#importContentType")?.value || null,
+    brandPresetId: $("#importPresetSelect")?.value || null,
     sourceDurationSec: state.pendingDuration || null,
   };
 }
@@ -626,27 +859,287 @@ function probeVideoDuration(file) {
   });
 }
 
+const VIDEO_EXTS = new Set([".mp4", ".mov", ".m4v", ".mkv", ".webm", ".avi", ".3gp", ".mts", ".m2ts"]);
+const SKIP_IMPORT_DIRS = new Set(["edit", "node_modules", ".git", "__pycache__", "remotion"]);
+const SKIP_IMPORT_FILES = new Set(["cut.mp4", "final.mp4", "base.mp4", "cut_proxy.mp4"]);
+const FILE_REL = new WeakMap();
+
+function fileExt(name) {
+  const n = String(name || "").toLowerCase();
+  const i = n.lastIndexOf(".");
+  return i >= 0 ? n.slice(i) : "";
+}
+
+function isVideoFile(file) {
+  if (!file) return false;
+  const name = String(file.name || "").toLowerCase();
+  if (SKIP_IMPORT_FILES.has(name) || name.endsWith(".prenorm.mp4")) return false;
+  if (VIDEO_EXTS.has(fileExt(name))) return true;
+  return String(file.type || "").startsWith("video/");
+}
+
+function fileRelPath(file) {
+  return String(FILE_REL.get(file) || file.webkitRelativePath || file.relativePath || "").replace(/\\/g, "/");
+}
+
+function shouldSkipRel(rel) {
+  const parts = String(rel || "").split("/").filter(Boolean);
+  return parts.some((p) => SKIP_IMPORT_DIRS.has(p.toLowerCase()) || (p.startsWith(".") && p !== "."));
+}
+
+function filterImportVideos(files) {
+  return [...files].filter((f) => isVideoFile(f) && !shouldSkipRel(fileRelPath(f)));
+}
+
+function fileFolderKey(file) {
+  const rel = fileRelPath(file);
+  if (!rel || !rel.includes("/")) return "";
+  const parts = rel.split("/").filter(Boolean);
+  parts.pop();
+  return parts.join("/");
+}
+
+function folderTitle(key, files) {
+  if (key) {
+    const last = key.split("/").filter(Boolean).pop();
+    if (last) return last;
+  }
+  return friendlyFileTitle(files[0]);
+}
+
+function sortVideos(files) {
+  return [...files].sort((a, b) => {
+    const byName = String(a.name || "").localeCompare(String(b.name || ""), undefined, { numeric: true, sensitivity: "base" });
+    if (byName) return byName;
+    return (a.lastModified || 0) - (b.lastModified || 0);
+  });
+}
+
+function groupVideosByFolder(files) {
+  const map = new Map();
+  for (const f of files) {
+    const key = fileFolderKey(f);
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(f);
+  }
+  return [...map.entries()].map(([key, list]) => ({
+    key,
+    title: folderTitle(key, list),
+    files: sortVideos(list),
+  }));
+}
+
+function planImportBatches(files) {
+  const groups = groupVideosByFolder(files);
+  const mergeLoose = !!$("#mergeTakes")?.checked;
+  const batches = [];
+  for (const g of groups) {
+    if (g.key) {
+      batches.push({
+        files: g.files,
+        title: g.title,
+        merge: g.files.length > 1,
+      });
+      continue;
+    }
+    if (mergeLoose && g.files.length > 1) {
+      batches.push({
+        files: g.files,
+        title: `${friendlyFileTitle(g.files[0])} (+${g.files.length - 1})`,
+        merge: true,
+      });
+      continue;
+    }
+    for (const f of g.files) {
+      batches.push({ files: [f], title: friendlyFileTitle(f), merge: false });
+    }
+  }
+  return batches;
+}
+
+function readDirEntries(reader) {
+  return new Promise((resolve, reject) => {
+    const all = [];
+    const next = () => {
+      reader.readEntries((batch) => {
+        if (!batch.length) return resolve(all);
+        all.push(...batch);
+        next();
+      }, reject);
+    };
+    next();
+  });
+}
+
+function entryToFile(entry, rel) {
+  return new Promise((resolve, reject) => {
+    entry.file((file) => {
+      FILE_REL.set(file, rel);
+      resolve(file);
+    }, reject);
+  });
+}
+
+async function collectEntry(entry, prefix, out) {
+  const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+  if (entry.isFile) {
+    out.push(await entryToFile(entry, rel));
+    return;
+  }
+  if (!entry.isDirectory) return;
+  const name = String(entry.name || "").toLowerCase();
+  if (SKIP_IMPORT_DIRS.has(name) || name.startsWith(".")) return;
+  const children = await readDirEntries(entry.createReader());
+  for (const child of children) await collectEntry(child, rel, out);
+}
+
+async function collectDroppedFiles(dt) {
+  const items = [...(dt.items || [])];
+  const hasDir = items.some((it) => {
+    const entry = it.webkitGetAsEntry?.();
+    return !!(entry && entry.isDirectory);
+  });
+  if (hasDir) {
+    const listed = [...(dt.files || [])];
+    if (listed.length && listed.some((f) => f.webkitRelativePath)) {
+      return filterImportVideos(listed);
+    }
+    const out = [];
+    for (const it of items) {
+      const entry = it.webkitGetAsEntry?.();
+      if (entry) await collectEntry(entry, "", out);
+      else {
+        const f = it.getAsFile?.();
+        if (f) out.push(f);
+      }
+    }
+    return filterImportVideos(out);
+  }
+  return filterImportVideos([...(dt.files || [])]);
+}
+
 async function openImportDialog(fileList) {
-  const files = [...fileList];
-  if (!files.length) return;
+  const files = filterImportVideos(fileList);
+  if (!files.length) {
+    toast("Nenhum vídeo encontrado nessa pasta");
+    return;
+  }
   state.pendingFiles = files;
   state.pendingDuration = files.length === 1 ? await probeVideoDuration(files[0]) : null;
   const recommended = (state.pendingDuration || 0) >= 90 ? "complete" : "dynamic";
   state.pendingRecommended = recommended;
+  const groups = groupVideosByFolder(files);
+  const folderGroups = groups.filter((g) => g.key);
+  const fromFolder = folderGroups.length > 0;
   const hint = $("#importHint");
   if (hint) {
-    const names = files.map((f) => f.name).slice(0, 3).join(", ");
-    const extra = files.length > 3 ? ` +${files.length - 3}` : "";
-    hint.textContent = `${files.length} arquivo${files.length > 1 ? "s" : ""}: ${names}${extra}`;
+    if (fromFolder) {
+      const merged = folderGroups.filter((g) => g.files.length > 1).length;
+      hint.textContent = `${files.length} vídeo${files.length > 1 ? "s" : ""} em ${folderGroups.length} pasta${folderGroups.length > 1 ? "s" : ""}${merged ? ` · ${merged} vão ser juntados` : ""}`;
+    } else {
+      const names = files.map((f) => f.name).slice(0, 3).join(", ");
+      const extra = files.length > 3 ? ` +${files.length - 3}` : "";
+      hint.textContent = `${files.length} arquivo${files.length > 1 ? "s" : ""}: ${names}${extra}`;
+    }
+  }
+  const folderHint = $("#importFolderHint");
+  if (folderHint) {
+    folderHint.classList.toggle("hidden", !fromFolder);
+    folderHint.textContent = fromFolder
+      ? "Cada subpasta vira um vídeo. Se tiver mais de um arquivo na mesma pasta, eles entram juntos."
+      : "";
   }
   const mergeWrap = $("#mergeTakesWrap");
-  if (mergeWrap) mergeWrap.classList.toggle("hidden", files.length < 2);
+  if (mergeWrap) mergeWrap.classList.toggle("hidden", fromFolder || files.length < 2);
   applyIntentDefaults(recommended, recommended);
+  loadImportPresets().catch(() => {});
   try {
     $("#dlgImport").showModal();
   } catch {
     await uploadFiles(files, collectImportIntent());
   }
+}
+
+function friendlyFileTitle(file) {
+  return String(file?.name || "Vídeo").replace(/\.[^.]+$/, "") || "Vídeo";
+}
+
+function captureFilePoster(file, tmpId) {
+  if (!file || !String(file.type || "").startsWith("video/")) return;
+  try {
+    const url = URL.createObjectURL(file);
+    const v = document.createElement("video");
+    v.muted = true;
+    v.preload = "metadata";
+    const done = (poster) => {
+      URL.revokeObjectURL(url);
+      const job = state.jobs.find((j) => j.id === tmpId);
+      if (!job || job.status !== "importing") return;
+      if (poster) job.localPoster = poster;
+      renderJobs();
+    };
+    v.onloadeddata = () => {
+      try {
+        v.currentTime = Math.min(0.4, (v.duration || 1) * 0.05);
+      } catch {
+        done(null);
+      }
+    };
+    v.onseeked = () => {
+      try {
+        const c = document.createElement("canvas");
+        const w = v.videoWidth || 360;
+        const h = v.videoHeight || 640;
+        c.width = 360;
+        c.height = Math.max(1, Math.round(360 * (h / w)));
+        c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+        done(c.toDataURL("image/jpeg", 0.72));
+      } catch {
+        done(null);
+      }
+    };
+    v.onerror = () => done(null);
+    v.src = url;
+  } catch { /* ignore */ }
+}
+
+function postFormProgress(url, formData, { onProgress, tmpId } = {}) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    if (tmpId) state.uploads[tmpId] = xhr;
+    xhr.open("POST", url);
+    xhr.upload.onprogress = (e) => {
+      if (typeof onProgress !== "function") return;
+      if (e.lengthComputable && e.total > 0) onProgress(e.loaded / e.total);
+      else onProgress(null);
+    };
+    xhr.onload = () => {
+      if (tmpId) delete state.uploads[tmpId];
+      let data = {};
+      try { data = JSON.parse(xhr.responseText || "{}"); } catch { data = {}; }
+      resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, data });
+    };
+    xhr.onerror = () => {
+      if (tmpId) delete state.uploads[tmpId];
+      reject(new Error("falha no upload"));
+    };
+    xhr.onabort = () => {
+      if (tmpId) delete state.uploads[tmpId];
+      reject(Object.assign(new Error("cancelado"), { aborted: true }));
+    };
+    xhr.send(formData);
+  });
+}
+
+function upsertLocalJob(job) {
+  const i = state.jobs.findIndex((j) => j.id === job.id);
+  if (i >= 0) state.jobs[i] = { ...state.jobs[i], ...job };
+  else state.jobs.unshift(job);
+}
+
+function removeLocalJob(id) {
+  state.jobs = state.jobs.filter((j) => j.id !== id);
+  delete state.uploads[id];
 }
 
 async function uploadFiles(fileList, intent) {
@@ -666,43 +1159,120 @@ async function uploadFiles(fileList, intent) {
       return;
     }
   } catch { /* ignore — servidor decide */ }
-  const merge = !!(files.length > 1 && $("#mergeTakes")?.checked);
-  const fd = new FormData();
-  for (const f of files) fd.append("files", f, f.name);
-  if (intent) fd.append("intent", JSON.stringify(intent));
-  toast(merge ? `Juntando ${files.length} takes em 1 vídeo…` : `Importando ${files.length}…`);
-  const res = await fetch(`/api/jobs${merge ? "?merge=1" : ""}`, { method: "POST", body: fd });
-  const data = await res.json();
-  if (res.status === 403 && (data.error === "license_required" || data.error === "update_required")) {
-    renderLicense(data.license || {});
-    if (data.error === "update_required" || data.license?.update?.force) {
-      openUpdateDialog(data.license);
-      toast("Atualização obrigatória");
-    } else {
-      openLicenseDialog(data.license);
-      toast("Licença necessária");
-    }
+  const batches = planImportBatches(files);
+  if (!batches.length) {
+    toast("Nenhum vídeo encontrado nessa pasta");
     return;
   }
-  if (!res.ok) throw new Error(data.error || "falha no upload");
-  const n = (data.jobs || []).length;
+  const now = Date.now();
+  const locals = batches.map((b, i) => ({
+    id: `tmp-${now}-${i}`,
+    name: b.title,
+    title: b.title,
+    status: "importing",
+    progress: 0,
+    createdAt: new Date(now - i).toISOString(),
+    updatedAt: new Date(now - i).toISOString(),
+    hasThumb: false,
+    _files: b.files,
+    _merge: !!b.merge,
+  }));
+  locals.forEach((job, i) => {
+    upsertLocalJob(job);
+    captureFilePoster(batches[i].files[0], job.id);
+  });
+  renderJobs();
+  const merged = batches.filter((b) => b.merge).length;
   toast(
-    data.merged
-      ? `1 projeto com ${files.length} takes na fila`
-      : `${n} na fila — editando com IA`
+    merged
+      ? `Importando ${files.length} vídeos em ${batches.length} pasta${batches.length > 1 ? "s" : ""}…`
+      : `Importando ${files.length} vídeo${files.length > 1 ? "s" : ""}…`
   );
-  setView("fila");
+
+  for (const local of locals) {
+    if (!state.jobs.some((j) => j.id === local.id)) continue;
+    const fd = new FormData();
+    for (const f of local._files) fd.append("files", f, f.name);
+    if (intent) fd.append("intent", JSON.stringify(intent));
+    if (local.title) fd.append("title", local.title);
+    try {
+      const { ok, status, data } = await postFormProgress(
+        `/api/jobs${local._merge ? "?merge=1" : ""}`,
+        fd,
+        {
+          tmpId: local.id,
+          onProgress: (ratio) => {
+            const job = state.jobs.find((j) => j.id === local.id);
+            if (!job || job.status !== "importing") return;
+            job.progress = ratio == null ? null : Math.round(ratio * 100);
+            if (uploadFiles._progressRaf) return;
+            uploadFiles._progressRaf = requestAnimationFrame(() => {
+              uploadFiles._progressRaf = 0;
+              renderJobs();
+            });
+          },
+        }
+      );
+      if (status === 403 && (data.error === "license_required" || data.error === "update_required")) {
+        renderLicense(data.license || {});
+        if (data.error === "update_required" || data.license?.update?.force) openUpdateDialog(data.license);
+        else openLicenseDialog(data.license);
+        removeLocalJob(local.id);
+        renderJobs();
+        toast(data.error === "update_required" ? "Atualização obrigatória" : "Licença necessária");
+        return;
+      }
+      if (!ok) throw new Error(data.error || "falha no upload");
+      const created = (data.jobs || [])[0];
+      if (created) {
+        const prev = state.jobs.find((j) => j.id === local.id) || {};
+        removeLocalJob(local.id);
+        upsertLocalJob({
+          ...created,
+          createdAt: prev.createdAt || created.createdAt,
+          localPoster: prev.localPoster,
+          status: created.status === "queued" ? "queued" : created.status,
+        });
+      } else {
+        removeLocalJob(local.id);
+      }
+      renderJobs();
+    } catch (err) {
+      if (err.aborted) {
+        removeLocalJob(local.id);
+        renderJobs();
+        continue;
+      }
+      const job = state.jobs.find((j) => j.id === local.id);
+      if (job) {
+        job.status = "error";
+        job.message = err.message || "Falha ao importar";
+        job.progress = null;
+      }
+      renderJobs();
+      toast(err.message);
+    }
+  }
   await refreshJobs();
 }
 
 function wireDrop() {
   const zone = $("#dropZone");
   const input = $("#fileInput");
+  const folderInput = $("#folderInput");
   $("#btnPick").onclick = (e) => {
     e.preventDefault();
     e.stopPropagation();
     input.click();
   };
+  const btnFolder = $("#btnPickFolder");
+  if (btnFolder && folderInput) {
+    btnFolder.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      folderInput.click();
+    };
+  }
   zone.addEventListener("click", (e) => {
     if (e.target.closest("button")) return;
     input.click();
@@ -720,12 +1290,20 @@ function wireDrop() {
     })
   );
   zone.addEventListener("drop", (e) => {
-    openImportDialog(e.dataTransfer.files).catch((err) => toast(err.message));
+    collectDroppedFiles(e.dataTransfer)
+      .then((files) => openImportDialog(files))
+      .catch((err) => toast(err.message));
   });
   input.addEventListener("change", () => {
     openImportDialog(input.files).catch((err) => toast(err.message));
     input.value = "";
   });
+  if (folderInput) {
+    folderInput.addEventListener("change", () => {
+      openImportDialog(folderInput.files).catch((err) => toast(err.message));
+      folderInput.value = "";
+    });
+  }
   $$(".intent-card").forEach((card) => {
     card.addEventListener("click", () => applyIntentDefaults(card.dataset.intent, state.pendingRecommended));
   });
@@ -774,6 +1352,42 @@ function showJobDetail(id) {
   } catch {
     toast(text.slice(0, 120));
   }
+}
+
+function askRename(id, current) {
+  const dlg = $("#dlgRename");
+  const input = $("#renameInput");
+  if (!dlg || !input) return;
+  state.pendingRenameId = id;
+  state.pendingRenameCurrent = current || "";
+  input.value = current || "";
+  try {
+    dlg.showModal();
+  } catch {
+    return;
+  }
+  requestAnimationFrame(() => {
+    input.focus();
+    input.select();
+  });
+}
+
+async function confirmRename() {
+  const id = state.pendingRenameId;
+  const current = state.pendingRenameCurrent || "";
+  const title = ($("#renameInput")?.value || "").trim();
+  const dlg = $("#dlgRename");
+  if (dlg?.open) dlg.close();
+  state.pendingRenameId = null;
+  state.pendingRenameCurrent = "";
+  if (!id || !title || title === current) return;
+  await api("/api/jobs/rename", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id, title }),
+  });
+  toast("Nome atualizado");
+  await refreshJobs();
 }
 
 function askDelete(id, name) {
@@ -827,6 +1441,9 @@ function wireList() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ id }),
         });
+      } else if (act === "open-final") {
+        const job = state.jobs.find((x) => x.id === id);
+        if (job) location.href = jobLinks(job).final;
       } else if (act === "retry") {
         await api("/api/jobs/retry", {
           method: "POST",
@@ -837,6 +1454,14 @@ function wireList() {
         setView("fila");
         await refreshJobs();
       } else if (act === "cancel") {
+        if (String(id).startsWith("tmp-")) {
+          const xhr = state.uploads[id];
+          if (xhr) xhr.abort();
+          removeLocalJob(id);
+          renderJobs();
+          toast("Importação cancelada");
+          return;
+        }
         await api("/api/jobs/cancel", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -847,18 +1472,7 @@ function wireList() {
       } else if (act === "detail") {
         showJobDetail(id);
       } else if (act === "rename") {
-        const current = btn.dataset.title || "";
-        const next = window.prompt("Novo nome do vídeo:", current);
-        if (next == null) return;
-        const title = next.trim();
-        if (!title || title === current) return;
-        await api("/api/jobs/rename", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id, title }),
-        });
-        toast("Nome atualizado");
-        await refreshJobs();
+        askRename(id, btn.dataset.title || "");
       } else if (act === "delete") {
         askDelete(id, btn.dataset.name || "");
       }
@@ -873,6 +1487,18 @@ function wireList() {
   window.addEventListener("resize", closeCardMenus);
   window.addEventListener("scroll", closeCardMenus, true);
 
+  const formRename = $("#formRename");
+  if (formRename) {
+    formRename.addEventListener("submit", (e) => {
+      e.preventDefault();
+      confirmRename().catch((err) => toast(err.message));
+    });
+  }
+  $("#btnRenameCancel")?.addEventListener("click", () => {
+    state.pendingRenameId = null;
+    state.pendingRenameCurrent = "";
+    $("#dlgRename")?.close();
+  });
   $("#btnDeleteConfirm").onclick = () => confirmDelete().catch((err) => toast(err.message));
   $("#btnDeleteCancel").onclick = () => {
     state.pendingDeleteId = null;
@@ -2146,9 +2772,15 @@ async function loadLicenca() {
 
 function applySistemaData(data) {
   const hint = $("#sysMachineHint");
+  const status = $("#sysStatusLine");
   const m = data.machine || {};
   const perf = data.performance || {};
   const s = data.settings || {};
+  if (status) {
+    status.textContent = m.error
+      ? "Há um aviso — veja Avançado se precisar"
+      : "Tudo funcionando corretamente";
+  }
   if (hint) {
     const base =
       `${m.os || "?"} ${m.osRelease || ""} · ${m.cores || "?"} núcleos · RAM ${m.ramGb ?? "?"} GB · `
@@ -2256,8 +2888,8 @@ function applyHardwareCard(pub) {
   const enc = pub.encoder || "libx264";
   const on = pub.acceleration === "on";
   hint.textContent = on
-    ? `${pub.friendly || "Aceleração de hardware ativada"} · ${gpu}`
-    : `${pub.friendly || "Renderização pela CPU"} · ${gpu}`;
+    ? `${gpu} · Ativa`
+    : `${gpu} · CPU`;
   if (det) {
     const fps = pub.benchmarkFps != null ? ` · ${pub.benchmarkFps} FPS no teste` : "";
     det.textContent = `Encoder: ${enc} · Concurrency: ${pub.concurrency ?? "—"} · Modo: ${pub.mode || "auto"}${fps}`;
@@ -2312,6 +2944,34 @@ async function loadSistema() {
     if ($("#cacheHint")) $("#cacheHint").textContent = "Cache: —";
   }
   await loadBrandsUi().catch(() => {});
+}
+
+async function loadImportPresets() {
+  const sel = $("#importPresetSelect");
+  const hint = $("#importPresetHint");
+  if (!sel) return;
+  try {
+    const pack = await api("/api/brand-presets");
+    const presets = pack.presets || [];
+    const activeId = pack.activeId || (pack.active && pack.active.id);
+    sel.innerHTML = presets.map((p) =>
+      `<option value="${escapeHtml(p.id)}" ${p.id === activeId ? "selected" : ""}>${escapeHtml(p.name || p.id)}</option>`
+    ).join("") || `<option value="">Padrão</option>`;
+    const cur = presets.find((p) => p.id === sel.value) || pack.active || presets[0];
+    if (hint) hint.textContent = cur ? `Usar: ${cur.name}` : "Usar: padrão da marca";
+    if (cur && cur.contentType && $("#importContentType")) {
+      $("#importContentType").value = cur.contentType;
+    }
+    sel.onchange = () => {
+      const p = presets.find((x) => x.id === sel.value);
+      if (hint) hint.textContent = p ? `Usar: ${p.name}` : "Usar: padrão da marca";
+      if (p && p.contentType && $("#importContentType")) {
+        $("#importContentType").value = p.contentType;
+      }
+    };
+  } catch {
+    if (hint) hint.textContent = "Usar: padrão da marca";
+  }
 }
 
 async function loadBrandsUi() {

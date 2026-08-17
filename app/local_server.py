@@ -96,40 +96,80 @@ STAGE_LABELS = {
     "processing": "Preparando vídeo...",
 }
 
+def resolve_delivery_mp4(edit: Path) -> Path | None:
+    """Arquivo final do projeto: state.finalVideo, senão final.mp4, senão o .mp4 mais novo.
+
+    Depois da 1.70 o arquivo leva o nome da headline ("Transformando celular.mp4"),
+    não necessariamente final.mp4.
+    """
+    skip = {"cut.mp4", "base.mp4", "cut_proxy.mp4"}
+    state_p = edit / "state.json"
+    if state_p.exists():
+        try:
+            rel = str(json.loads(state_p.read_text(encoding="utf-8-sig")).get("finalVideo") or "").strip()
+            if rel and rel not in skip and ".." not in Path(rel).parts:
+                cand = edit / rel
+                if cand.is_file():
+                    return cand
+                parent_cand = edit.parent / Path(rel).name
+                if parent_cand.is_file():
+                    return parent_cand
+        except (OSError, json.JSONDecodeError, TypeError):
+            pass
+    hard = edit / "final.mp4"
+    if hard.is_file():
+        return hard
+    search = [edit]
+    if edit.name.lower() == "edit":
+        search.append(edit.parent)
+    cands = []
+    for folder in search:
+        if not folder.is_dir():
+            continue
+        cands.extend(
+            p for p in folder.glob("*.mp4")
+            if p.name not in skip and not p.name.endswith(".prenorm.mp4")
+        )
+    if not cands:
+        return None
+    return max(cands, key=lambda p: p.stat().st_mtime)
+
+
 def ensure_job_thumb(job: dict) -> Path | None:
-    """JPEG poster for hub cards (lazy). Prefer final → cut → source."""
+    """JPEG poster for hub cards. Prefer cover.jpg (1º frame), senão extrai o frame 0."""
     edit = Path(job["editDir"])
     edit.mkdir(parents=True, exist_ok=True)
     thumb = edit / "thumb.jpg"
+    cover = edit / "cover.jpg"
+    delivery = resolve_delivery_mp4(edit)
+    src = next((p for p in (cover, delivery, edit / "final.mp4", edit / "cut.mp4", Path(job.get("source") or "")) if p and p.is_file()), None)
     if thumb.exists() and thumb.stat().st_size > 400:
-        return thumb
-    candidates = [
-        edit / "final.mp4",
-        edit / "cut.mp4",
-        Path(job.get("source") or ""),
-    ]
-    src = next((p for p in candidates if p and p.is_file()), None)
-    if not src or shutil.which("ffmpeg") is None:
+        if not src or src.stat().st_mtime <= thumb.stat().st_mtime:
+            return thumb
+    if not src:
         return thumb if thumb.exists() else None
+    if shutil.which("ffmpeg") is None:
+        return cover if cover.exists() and cover.stat().st_size > 400 else (thumb if thumb.exists() else None)
     try:
         from app.win_process import hide_console_kwargs
 
+        cmd = [
+            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+            "-i", str(src),
+            "-frames:v", "1", "-q:v", "3",
+            "-vf", "scale=360:-2",
+            str(thumb),
+        ]
         subprocess.run(
-            [
-                "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-                "-ss", "0.4", "-i", str(src),
-                "-frames:v", "1", "-q:v", "3",
-                "-vf", "scale=360:-2",
-                str(thumb),
-            ],
+            cmd,
             check=False,
             capture_output=True,
             timeout=40,
             **hide_console_kwargs(),
         )
     except (OSError, subprocess.TimeoutExpired):
-        return None
-    return thumb if thumb.exists() and thumb.stat().st_size > 400 else None
+        return cover if cover.exists() else None
+    return thumb if thumb.exists() and thumb.stat().st_size > 400 else (cover if cover.exists() else None)
 
 
 def load_llm_proxy() -> dict:
@@ -336,6 +376,34 @@ def _utc() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+_IMPORT_VIDEO_EXT = {".mp4", ".mov", ".m4v", ".mkv", ".webm", ".avi", ".3gp", ".mts", ".m2ts"}
+_IMPORT_SKIP_DIRS = {"edit", "node_modules", ".git", "__pycache__", "remotion"}
+_IMPORT_SKIP_FILES = {"cut.mp4", "final.mp4", "base.mp4", "cut_proxy.mp4"}
+
+
+def _is_import_video(path: Path) -> bool:
+    name = path.name.lower()
+    if name in _IMPORT_SKIP_FILES or name.endswith(".prenorm.mp4"):
+        return False
+    return path.suffix.lower() in _IMPORT_VIDEO_EXT
+
+
+def _walk_import_videos(root: Path) -> list[Path]:
+    found: list[Path] = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [
+            name
+            for name in dirnames
+            if name.lower() not in _IMPORT_SKIP_DIRS and not name.startswith(".")
+        ]
+        for name in filenames:
+            src = Path(dirpath) / name
+            if _is_import_video(src):
+                found.append(src)
+    found.sort(key=lambda item: str(item).lower())
+    return found
+
+
 def _safe_name(name: str) -> str:
     stem = Path(name).stem
     stem = re.sub(r"[^\w\-]+", "_", stem, flags=re.UNICODE).strip("_")
@@ -364,6 +432,11 @@ def _is_opaque_title(name: str) -> bool:
     if re.fullmatch(r"[A-Za-z]{0,4}_?\d{3,}", stem):
         return True
     return False
+
+
+def _job_recency_key(job: dict) -> str:
+    """Mais recente: término (reedição) > atualização > criação."""
+    return str(job.get("finishedAt") or job.get("updatedAt") or job.get("createdAt") or "")
 
 
 def _fmt_job_when(iso: str | None) -> str:
@@ -511,13 +584,29 @@ def save_env_keys(updates: dict[str, str]) -> None:
             os.environ.pop(k, None)
 
 
-def load_preset() -> dict:
-    for path in (USER_PRESET_PATH, PRESET_PATH):
-        if path.exists():
-            try:
-                return json.loads(path.read_text(encoding="utf-8-sig"))
-            except (OSError, json.JSONDecodeError):
-                continue
+def merge_preset(base: dict, overlay: dict | None) -> dict:
+    """Copia o overlay por cima do base. Arquivo curto do usuário não apaga o card final."""
+    out = dict(base or {})
+    if not isinstance(overlay, dict):
+        return out
+    for k, v in overlay.items():
+        if isinstance(v, dict) and isinstance(out.get(k), dict):
+            merged = dict(out[k])
+            merged.update(v)
+            out[k] = merged
+        else:
+            out[k] = v
+    return out
+
+
+def _shipped_preset() -> dict:
+    if PRESET_PATH.exists():
+        try:
+            data = json.loads(PRESET_PATH.read_text(encoding="utf-8-sig"))
+            if isinstance(data, dict) and data:
+                return data
+        except (OSError, json.JSONDecodeError):
+            pass
     return {
         "edit": "limpa",
         "headline": "realce",
@@ -547,6 +636,18 @@ def load_preset() -> dict:
         },
         "endCardCopy": {"line1": "", "line2": ""},
     }
+
+
+def load_preset() -> dict:
+    shipped = _shipped_preset()
+    if USER_PRESET_PATH.exists():
+        try:
+            user = json.loads(USER_PRESET_PATH.read_text(encoding="utf-8-sig"))
+            if isinstance(user, dict) and user:
+                return merge_preset(shipped, user)
+        except (OSError, json.JSONDecodeError):
+            pass
+    return shipped
 
 
 def save_preset(data: dict) -> None:
@@ -603,14 +704,14 @@ class JobStore:
                 self._jobs = {}
 
     def _save(self) -> None:
-        payload = {"jobs": sorted(self._jobs.values(), key=lambda j: j.get("createdAt", ""), reverse=True)}
+        payload = {"jobs": sorted(self._jobs.values(), key=_job_recency_key, reverse=True)}
         tmp = self.jobs_path.with_suffix(".tmp")
         tmp.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
         tmp.replace(self.jobs_path)
 
     def list(self) -> list[dict]:
         with self._lock:
-            return sorted(self._jobs.values(), key=lambda j: j.get("createdAt", ""), reverse=True)
+            return sorted(self._jobs.values(), key=_job_recency_key, reverse=True)
 
     def get(self, job_id: str) -> dict | None:
         with self._lock:
@@ -821,6 +922,13 @@ class Worker:
             save_preset_snap = merge_into_preset(save_preset_snap, load_intent(edit_dir))
         except Exception:
             pass
+        copy = save_preset_snap.get("endCardCopy") if isinstance(save_preset_snap, dict) else None
+        if not isinstance(copy, dict) or not (
+            str(copy.get("line1") or "").strip() or str(copy.get("line2") or "").strip()
+        ):
+            shipped_copy = (_shipped_preset().get("endCardCopy") or {})
+            if str(shipped_copy.get("line1") or "").strip() or str(shipped_copy.get("line2") or "").strip():
+                save_preset_snap["endCardCopy"] = shipped_copy
         preset_path.write_text(json.dumps(save_preset_snap, ensure_ascii=False, indent=2), encoding="utf-8")
 
         env = os.environ.copy()
@@ -1002,12 +1110,13 @@ class Worker:
             leg_path = edit_dir / "legenda.txt"
             if leg_path.exists():
                 legenda = leg_path.read_text(encoding="utf-8-sig")
+            delivery = resolve_delivery_mp4(edit_dir)
             self.store.update(
                 job_id,
                 status="done",
                 message="Pronto",
                 phase=3,
-                final=str(edit_dir / "final.mp4"),
+                final=str(delivery or result.get("final") or (edit_dir / "final.mp4")),
                 legenda=legenda,
                 durationSec=result.get("durationSec"),
                 finishedAt=_utc(),
@@ -1262,7 +1371,7 @@ class StudioHandler(BaseHTTPRequestHandler):
             for j in jobs:
                 edit = Path(j["editDir"])
                 j["hasCut"] = (edit / "cut.mp4").exists()
-                j["hasFinal"] = (edit / "final.mp4").exists()
+                j["hasFinal"] = resolve_delivery_mp4(edit) is not None
                 j["hasThumb"] = (edit / "thumb.jpg").exists()
                 j["thumbUrl"] = f"/api/jobs/{j['id']}/thumb"
                 st_path = edit / "pipeline_status.json"
@@ -1285,7 +1394,31 @@ class StudioHandler(BaseHTTPRequestHandler):
                     except (OSError, json.JSONDecodeError):
                         pass
                 enrich_job_display(j, edit)
+            from app.eta_estimate import attach_eta, collect_history
+
+            hist = collect_history(self.projects_root)
+            for j in jobs:
+                attach_eta(j, hist, Path(j["editDir"]))
             self._json({"jobs": jobs, "busy": self.worker.busy_id})
+            return
+        if path == "/api/content-types":
+            from app.content_type import choices
+
+            self._json({"ok": True, "items": choices()})
+            return
+        if path == "/api/brand-presets":
+            from app.brand_presets import get_active, load as load_presets
+
+            q = parse_qs(urlparse(self.path).query)
+            brand_id = (q.get("brandId") or [""])[0].strip()
+            if not brand_id:
+                from app.brand_kits import list_brands
+
+                brands = list_brands()
+                active = next((b for b in brands if b.get("active")), brands[0] if brands else None)
+                brand_id = str((active or {}).get("id") or "padrao")
+            pack = load_presets(brand_id)
+            self._json({"ok": True, **pack, "active": get_active(brand_id)})
             return
         if path == "/api/system":
             from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutTimeout
@@ -1419,7 +1552,10 @@ class StudioHandler(BaseHTTPRequestHandler):
                     self._file(thumb, "image/jpeg")
                     return
                 if action == "final":
-                    final = edit / "final.mp4"
+                    final = resolve_delivery_mp4(edit)
+                    if not final:
+                        self._json({"error": "sem vídeo final"}, 404)
+                        return
                     self._file(final, "video/mp4")
                     return
                 if action == "legenda":
@@ -1696,30 +1832,159 @@ class StudioHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/ai-edit":
-            from app.ai_actions import apply_actions_to_edits, plan_from_prompt
+            from app.ai_actions import (
+                apply_actions_to_edits,
+                format_apply_log,
+                is_apply_confirmation,
+                make_pending_edit,
+                operations_from_patch,
+                pending_is_stale,
+                plan_from_prompt,
+            )
             from app.broll_library import resolve_query_to_public
             body = self._read_json() or {}
+            mode = str(body.get("mode") or "plan").strip().lower()
+            if mode == "apply":
+                ops = body.get("operations") or []
+                if not isinstance(ops, list):
+                    ops = []
+                pending = body.get("pendingEdit") or {}
+                folder = (body.get("folder") or "").strip()
+                ranges = body.get("currentRanges")
+                if pending and ranges is not None and pending_is_stale(
+                    pending, project_id=folder, ranges=ranges,
+                ):
+                    print("PENDING_EDIT_STALE", flush=True)
+                    self._json({
+                        "ok": False,
+                        "stale": True,
+                        "error": "PENDING_EDIT_STALE",
+                        "applied": False,
+                    }, 409)
+                    return
+                prot = body.get("protectedRanges")
+                if prot is None and folder:
+                    for j in self.store.list():
+                        if Path(j.get("projectDir", "")).name == folder:
+                            ip = Path(j["editDir"]) / "job_intent.json"
+                            if ip.exists():
+                                try:
+                                    prot = json.loads(ip.read_text(encoding="utf-8-sig")).get("protectedRanges")
+                                except (OSError, json.JSONDecodeError):
+                                    prot = None
+                            break
+                if prot:
+                    from app.protected_ranges import filter_ai_ops, format_blocked_log
+
+                    filtered = filter_ai_ops(ops, prot)
+                    ops = filtered["kept"]
+                    if filtered["blocked"]:
+                        for line in format_blocked_log(filtered["blocked"]):
+                            print(line, flush=True)
+                lines = format_apply_log(ops)
+                for line in lines:
+                    print(line, flush=True)
+                reps = []
+                for op in ops:
+                    if isinstance(op, dict) and str(op.get("op") or "") == "fix_captions":
+                        reps.extend(op.get("replacements") or [])
+                if reps:
+                    job_edit = None
+                    if folder:
+                        for j in self.store.list():
+                            if Path(j.get("projectDir", "")).name == folder:
+                                job_edit = Path(j["editDir"])
+                                break
+                    if job_edit is None and body.get("editDir"):
+                        job_edit = Path(str(body["editDir"]))
+                    if job_edit is not None:
+                        try:
+                            from app.caption_fixes import apply_caption_fixes
+
+                            apply_caption_fixes(job_edit, reps)
+                        except Exception as e:
+                            print(f"[warn] captionFixes apply: {e}", flush=True)
+                self._json({"ok": True, "applied": True, "pendingEdit": False, "log": lines})
+                return
             prompt = (body.get("prompt") or "").strip()
+            if is_apply_confirmation(prompt):
+                self._json({
+                    "ok": True,
+                    "confirm": True,
+                    "hasPendingEdit": False,
+                    "operations": [],
+                    "summary": "CONFIRMAÇÃO — aplique a alteração pendente no editor.",
+                    "actions": [],
+                    "patch": {},
+                })
+                return
             if len(prompt) < 3:
                 self._json({"error": "pedido vazio"}, 400)
                 return
             try:
                 dur = body.get("durationSec")
+                src_dur = body.get("sourceDurationSec")
                 try:
                     dur_f = float(dur) if dur is not None else None
                 except (TypeError, ValueError):
                     dur_f = None
-                actions, summary, backend = plan_from_prompt(prompt, duration=dur_f)
+                try:
+                    src_f = float(src_dur) if src_dur is not None else None
+                except (TypeError, ValueError):
+                    src_f = None
+                folder = (body.get("folder") or "").strip()
+                job_edit = None
+                if folder:
+                    for j in self.store.list():
+                        if Path(j.get("projectDir", "")).name == folder:
+                            job_edit = Path(j["editDir"])
+                            break
+                if job_edit is None and body.get("editDir"):
+                    job_edit = Path(str(body["editDir"]))
+                if src_f is None and job_edit is not None:
+                    edl_path = job_edit / "edl.json"
+                    if edl_path.exists():
+                        try:
+                            edl = json.loads(edl_path.read_text(encoding="utf-8-sig"))
+                            ends = [
+                                float(r.get("end") or 0)
+                                for r in (edl.get("ranges") or [])
+                                if isinstance(r, dict)
+                            ]
+                            if ends:
+                                src_f = max(src_f or 0.0, max(ends))
+                            intent_p = job_edit / "job_intent.json"
+                            if intent_p.exists():
+                                intent = json.loads(intent_p.read_text(encoding="utf-8-sig"))
+                                listed = intent.get("sourceDurationSec")
+                                if listed:
+                                    src_f = max(src_f or 0.0, float(listed))
+                        except (OSError, json.JSONDecodeError, TypeError, ValueError):
+                            pass
+                actions, summary, backend = plan_from_prompt(
+                    prompt,
+                    duration=dur_f,
+                    source_duration=src_f,
+                    current_ranges=body.get("currentRanges"),
+                )
+                prot = body.get("protectedRanges")
+                if prot is None and job_edit is not None:
+                    ip = job_edit / "job_intent.json"
+                    if ip.exists():
+                        try:
+                            prot = json.loads(ip.read_text(encoding="utf-8-sig")).get("protectedRanges")
+                        except (OSError, json.JSONDecodeError):
+                            prot = None
                 patch = apply_actions_to_edits(
                     actions,
                     style=body.get("style"),
                     edit_data=body.get("editData"),
                     notes=body.get("notes"),
-                    duration=dur_f,
+                    duration=src_f or dur_f,
+                    protected_ranges=prot,
                 )
                 # Resolver add_broll_hint → arquivo real em remotion/public
                 public = None
-                folder = (body.get("folder") or "").strip()
                 if folder:
                     for j in self.store.list():
                         if Path(j.get("projectDir", "")).name == folder:
@@ -1759,12 +2024,25 @@ class StudioHandler(BaseHTTPRequestHandler):
                         if changed:
                             ed["inserts"] = inserts
                             patch["editData"] = ed
+                ops = operations_from_patch(patch, actions)
+                pending = make_pending_edit(
+                    project_id=folder,
+                    ranges=body.get("currentRanges"),
+                    operations=ops,
+                    actions=actions,
+                    patch=patch,
+                    summary=summary,
+                )
                 self._json({
                     "ok": True,
                     "summary": summary,
                     "backend": backend,
                     "actions": actions,
                     "patch": patch,
+                    "hasPendingEdit": bool(ops),
+                    "operations": ops,
+                    "pendingEdit": pending,
+                    "applied": False,
                 })
             except Exception as e:  # noqa: BLE001
                 from app.llm_session import friendly_llm_error
@@ -1789,6 +2067,45 @@ class StudioHandler(BaseHTTPRequestHandler):
                 self._json(open_setup())
                 return
             self._json(open_url(url))
+            return
+
+        if path == "/api/brand-presets":
+            from app.brand_presets import (
+                create as create_preset,
+                delete as delete_preset,
+                duplicate as dup_preset,
+                load as load_presets,
+                rename as rename_preset,
+                set_default,
+                update_style,
+            )
+            body = self._read_json() or {}
+            brand_id = str(body.get("brandId") or "padrao")
+            action = str(body.get("action") or "create").strip().lower()
+            try:
+                if action == "create":
+                    pack = create_preset(
+                        brand_id,
+                        str(body.get("name") or "Preset"),
+                        style=body.get("style"),
+                        content_type=body.get("contentType"),
+                        brand_name=str(body.get("brandName") or ""),
+                    )
+                elif action == "duplicate":
+                    pack = dup_preset(brand_id, str(body.get("id") or ""), str(body.get("name") or "Cópia"))
+                elif action == "rename":
+                    pack = rename_preset(brand_id, str(body.get("id") or ""), str(body.get("name") or ""))
+                elif action == "delete":
+                    pack = delete_preset(brand_id, str(body.get("id") or ""))
+                elif action == "default":
+                    pack = set_default(brand_id, str(body.get("id") or ""))
+                elif action == "update":
+                    pack = update_style(brand_id, str(body.get("id") or ""), dict(body.get("style") or {}))
+                else:
+                    pack = load_presets(brand_id)
+                self._json({"ok": True, **pack})
+            except ValueError as e:
+                self._json({"ok": False, "error": str(e)}, 400)
             return
 
         if path == "/api/brands":
@@ -2011,15 +2328,60 @@ class StudioHandler(BaseHTTPRequestHandler):
             if not job:
                 self._json({"error": "job not found"}, 404)
                 return
-            target = Path(job.get("final") or job["editDir"])
+            edit = Path(job.get("editDir") or "")
+            target = None
+            if edit:
+                try:
+                    from app.delivery_pack import folder_to_open
+
+                    packed = folder_to_open(edit)
+                    if packed.is_dir():
+                        target = packed
+                except Exception:
+                    target = None
+            if target is None:
+                target = resolve_delivery_mp4(edit) if edit else None
+            if not target:
+                raw = Path(job.get("final") or job.get("editDir") or "")
+                target = raw if raw.exists() else edit
             folder = target if target.is_dir() else target.parent
             if sys.platform == "win32":
-                subprocess.Popen(["explorer", str(folder)])
+                if target.is_file():
+                    subprocess.Popen(f'explorer /select,"{target}"')
+                else:
+                    subprocess.Popen(["explorer", str(folder)])
             elif sys.platform == "darwin":
                 subprocess.Popen(["open", str(folder)])
             else:
                 subprocess.Popen(["xdg-open", str(folder)])
-            self._json({"ok": True, "path": str(folder)})
+            self._json({"ok": True, "path": str(target)})
+            return
+
+        if path == "/api/jobs/open-final":
+            body = self._read_json() or {}
+            job = self.store.get(body.get("id", ""))
+            if not job:
+                self._json({"error": "job not found"}, 404)
+                return
+            edit = Path(job.get("editDir") or "")
+            target = resolve_delivery_mp4(edit) if edit else None
+            if not target or not target.is_file():
+                raw = Path(job.get("final") or "")
+                target = raw if raw.is_file() else None
+            if not target:
+                self._json({"error": "sem vídeo final"}, 404)
+                return
+            try:
+                if sys.platform == "win32":
+                    os.startfile(str(target))  # noqa: S606
+                elif sys.platform == "darwin":
+                    subprocess.Popen(["open", str(target)])
+                else:
+                    subprocess.Popen(["xdg-open", str(target)])
+            except OSError as e:
+                self._json({"error": str(e)}, 500)
+                return
+            self._json({"ok": True, "path": str(target)})
             return
 
         if path == "/api/jobs/rename":
@@ -2073,8 +2435,25 @@ class StudioHandler(BaseHTTPRequestHandler):
             self._json(self.worker.cancel(job_id))
             return
 
+        if path == "/api/jobs/append-cta":
+            from app import license as lic
+            from app.append_source import append_cta
+
+            st = lic.entitlement()
+            if not st.get("entitled"):
+                self._json({"error": lic.deny_reason(st), "license": lic.public_status()}, 403)
+                return
+            try:
+                self._json(self._append_cta_job(parsed))
+            except ValueError as e:
+                self._json({"error": str(e)}, 400)
+            except Exception as e:  # noqa: BLE001
+                self._json({"error": f"Não deu para acrescentar esse vídeo ({e})"}, 500)
+            return
+
         if path == "/api/jobs/requeue-folder":
             from app import license as lic
+            from app.append_source import merge_source_paths
 
             st = lic.entitlement()
             if not st.get("entitled"):
@@ -2094,10 +2473,22 @@ class StudioHandler(BaseHTTPRequestHandler):
             if not job:
                 self._json({"error": "projeto não está na fila"}, 404)
                 return
+            extras = list(body.get("extraSources") or [])
+            edits_p = Path(job.get("editDir") or "") / "preview_edits.json"
+            if edits_p.exists():
+                try:
+                    extras.extend((json.loads(edits_p.read_text(encoding="utf-8-sig")).get("extraSources") or []))
+                except (OSError, json.JSONDecodeError, TypeError):
+                    pass
+            existing = list(job.get("sources") or [])
+            if job.get("source") and job["source"] not in existing:
+                existing.insert(0, job["source"])
+            merged = merge_source_paths(existing, extras, Path(job["projectDir"]))
             if self.worker.busy_id == job["id"] or job.get("status") == "processing":
                 self.worker.cancel(job["id"])
             self.store.update(
                 job["id"],
+                sources=merged or existing,
                 status="queued",
                 message="Na fila — aplicando ajustes",
                 reason=None,
@@ -2154,23 +2545,122 @@ class StudioHandler(BaseHTTPRequestHandler):
                 body = self._read_json()
                 paths = body.get("paths") or []
                 merge = merge or bool(body.get("merge"))
-                created = self._ingest_paths(paths, merge=merge, intent=body.get("intent"))
+                created = self._ingest_paths(
+                    paths,
+                    merge=merge,
+                    intent=body.get("intent"),
+                    title=(body.get("title") or "").strip() or None,
+                )
             self._json({"ok": True, "jobs": created, "merged": bool(merge and len(created) == 1)})
             return
 
         self._json({"error": "unknown route"}, 404)
 
-    def _ingest_paths(self, paths: list[str], merge: bool = False, intent: dict | None = None) -> list[dict]:
+    def _find_job_by_folder(self, folder: str) -> dict | None:
+        folder = (folder or "").strip().strip("/\\")
+        if not folder or "/" in folder or "\\" in folder or folder in (".", ".."):
+            return None
+        for j in self.store.list():
+            if Path(j.get("projectDir", "")).name == folder:
+                return j
+            if Path(j.get("editDir", "")).parent.name == folder:
+                return j
+        return None
+
+    def _append_cta_job(self, parsed) -> dict:
+        from app.append_source import append_cta
+
+        ctype = self.headers.get("Content-Type", "")
+        n = int(self.headers.get("Content-Length") or 0)
+        raw = self.rfile.read(n) if n else b""
+        folder = (parse_qs(parsed.query).get("folder") or [""])[0]
+        filename = ""
+        payload = b""
+        src_path = ""
+        duration_hint = None
+        if "multipart/form-data" in ctype:
+            if "boundary=" not in ctype:
+                raise ValueError("arquivo inválido")
+            mime = b"Content-Type: " + ctype.encode("ascii", "ignore") + b"\r\nMIME-Version: 1.0\r\n\r\n" + raw
+            msg = BytesParser(policy=policy.default).parsebytes(mime)
+            for part in msg.iter_parts():
+                field = part.get_param("name", header="content-disposition") or ""
+                body = part.get_payload(decode=True) or b""
+                if field == "folder":
+                    folder = body.decode("utf-8", "replace").strip()
+                elif field == "path":
+                    src_path = body.decode("utf-8", "replace").strip()
+                elif field == "duration":
+                    try:
+                        duration_hint = float(body.decode("utf-8", "replace").strip())
+                    except ValueError:
+                        duration_hint = None
+                elif field == "file" or part.get_filename():
+                    filename = part.get_filename() or filename
+                    payload = body
+        else:
+            try:
+                body = json.loads(raw or b"{}")
+            except json.JSONDecodeError:
+                body = {}
+            folder = str(body.get("folder") or folder)
+            src_path = str(body.get("path") or "")
+            filename = str(body.get("filename") or "")
+            try:
+                duration_hint = float(body.get("duration") or 0) or None
+            except (TypeError, ValueError):
+                duration_hint = None
+        folder = (folder or "").strip().strip("/\\")
+        job = self._find_job_by_folder(folder)
+        if not job:
+            guess = self.projects_root / folder
+            if not guess.is_dir():
+                raise ValueError("projeto não encontrado — volte em Concluídos e abra de novo")
+            project = guess
+        else:
+            project = Path(job["projectDir"])
+        return append_cta(
+            project,
+            filename=filename,
+            data=payload or None,
+            src_path=src_path or None,
+            duration_hint=duration_hint,
+        )
+
+    def _ingest_paths(
+        self,
+        paths: list[str],
+        merge: bool = False,
+        intent: dict | None = None,
+        title: str | None = None,
+    ) -> list[dict]:
         files: list[Path] = []
+        saw_dir = False
         for p in paths:
             src = Path(p)
-            if src.exists():
+            if src.is_dir():
+                saw_dir = True
+                files.extend(_walk_import_videos(src))
+            elif src.is_file():
                 files.append(src)
         if not files:
             return []
+        if saw_dir and not merge:
+            groups: dict[str, list[Path]] = {}
+            for src in files:
+                groups.setdefault(str(src.parent.resolve()), []).append(src)
+            jobs: list[dict] = []
+            for parent, group in groups.items():
+                group.sort(key=lambda item: item.name.lower())
+                folder_title = Path(parent).name
+                if len(group) > 1:
+                    jobs.append(self._create_job_from_many_files(group, intent=intent, title=folder_title))
+                else:
+                    jobs.append(self._create_job_from_file(group[0], copy=True, intent=intent, title=folder_title))
+            return jobs
         if merge and len(files) > 1:
-            return [self._create_job_from_many_files(files, intent=intent)]
-        return [self._create_job_from_file(src, copy=True, intent=intent) for src in files]
+            return [self._create_job_from_many_files(files, intent=intent, title=title)]
+        return [self._create_job_from_file(src, copy=True, intent=intent, title=title) for src in files]
 
     def _ingest_multipart(self, merge: bool = False) -> list[dict]:
         n = int(self.headers.get("Content-Length") or 0)
@@ -2182,6 +2672,7 @@ class StudioHandler(BaseHTTPRequestHandler):
         msg = BytesParser(policy=policy.default).parsebytes(raw)
         parts: list[tuple[str, bytes]] = []
         intent: dict | None = None
+        title: str | None = None
         for part in msg.iter_parts():
             filename = part.get_filename()
             disp = str(part.get("Content-Disposition") or "")
@@ -2196,19 +2687,22 @@ class StudioHandler(BaseHTTPRequestHandler):
                 except json.JSONDecodeError:
                     intent = None
                 continue
+            if field == "title" and not filename:
+                title = payload.decode("utf-8", errors="replace").strip() or None
+                continue
             if not filename:
                 continue
             parts.append((filename, payload))
         if not parts:
             return []
         if merge and len(parts) > 1:
-            return [self._create_job_from_many_bytes(parts, intent=intent)]
-        return [self._create_job_from_bytes(name, data, intent=intent) for name, data in parts]
+            return [self._create_job_from_many_bytes(parts, intent=intent, title=title)]
+        return [self._create_job_from_bytes(name, data, intent=intent, title=title) for name, data in parts]
 
-    def _create_job_from_many_files(self, files: list[Path], intent: dict | None = None) -> dict:
+    def _create_job_from_many_files(self, files: list[Path], intent: dict | None = None, title: str | None = None) -> dict:
         job_id = uuid.uuid4().hex[:10]
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        label = _safe_name(files[0].stem)[:40] or "takes"
+        label = _safe_name(title or files[0].stem)[:40] or "takes"
         project = self.projects_root / f"{stamp}_{label}_x{len(files)}_{job_id}"
         project.mkdir(parents=True, exist_ok=True)
         copied: list[Path] = []
@@ -2220,15 +2714,15 @@ class StudioHandler(BaseHTTPRequestHandler):
             shutil.copy2(src, dest)
             copied.append(dest)
         primary = copied[0]
-        name = f"{label} (+{len(copied) - 1})" if len(copied) > 1 else label
+        display = (title or "").strip() or (f"{label} (+{len(copied) - 1})" if len(copied) > 1 else label)
         return self._register_job(
-            job_id, name, primary, project / "edit", sources=[str(p) for p in copied], intent=intent
+            job_id, display, primary, project / "edit", sources=[str(p) for p in copied], intent=intent
         )
 
-    def _create_job_from_many_bytes(self, parts: list[tuple[str, bytes]], intent: dict | None = None) -> dict:
+    def _create_job_from_many_bytes(self, parts: list[tuple[str, bytes]], intent: dict | None = None, title: str | None = None) -> dict:
         job_id = uuid.uuid4().hex[:10]
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        label = _safe_name(Path(parts[0][0]).stem)[:40] or "takes"
+        label = _safe_name(title or Path(parts[0][0]).stem)[:40] or "takes"
         project = self.projects_root / f"{stamp}_{label}_x{len(parts)}_{job_id}"
         project.mkdir(parents=True, exist_ok=True)
         copied: list[Path] = []
@@ -2241,12 +2735,12 @@ class StudioHandler(BaseHTTPRequestHandler):
             dest.write_bytes(data)
             copied.append(dest)
         primary = copied[0]
-        display = f"{label} (+{len(copied) - 1})" if len(copied) > 1 else label
+        display = (title or "").strip() or (f"{label} (+{len(copied) - 1})" if len(copied) > 1 else label)
         return self._register_job(
             job_id, display, primary, project / "edit", sources=[str(p) for p in copied], intent=intent
         )
 
-    def _create_job_from_bytes(self, filename: str, data: bytes, intent: dict | None = None) -> dict:
+    def _create_job_from_bytes(self, filename: str, data: bytes, intent: dict | None = None, title: str | None = None) -> dict:
         job_id = uuid.uuid4().hex[:10]
         name = _safe_name(filename)
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -2255,12 +2749,13 @@ class StudioHandler(BaseHTTPRequestHandler):
         ext = Path(filename).suffix or ".mp4"
         source = project / f"{name}{ext}"
         source.write_bytes(data)
-        return self._register_job(job_id, name, source, project / "edit", intent=intent)
+        display = (title or "").strip() or name
+        return self._register_job(job_id, display, source, project / "edit", intent=intent)
 
     def _create_job_from_upload(self, filename: str, data: bytes) -> dict:
         return self._create_job_from_bytes(filename, data)
 
-    def _create_job_from_file(self, src: Path, copy: bool = True, intent: dict | None = None) -> dict:
+    def _create_job_from_file(self, src: Path, copy: bool = True, intent: dict | None = None, title: str | None = None) -> dict:
         job_id = uuid.uuid4().hex[:10]
         name = _safe_name(src.name)
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -2271,7 +2766,8 @@ class StudioHandler(BaseHTTPRequestHandler):
             shutil.copy2(src, dest)
         else:
             shutil.move(str(src), str(dest))
-        return self._register_job(job_id, name, dest, project / "edit", intent=intent)
+        display = (title or "").strip() or name
+        return self._register_job(job_id, display, dest, project / "edit", intent=intent)
 
     def _register_job(
         self,
@@ -2323,6 +2819,12 @@ class StudioHandler(BaseHTTPRequestHandler):
         }
         self.store.upsert(job)
         self.worker.enqueue(job_id)
+        threading.Thread(
+            target=ensure_job_thumb,
+            args=(job,),
+            daemon=True,
+            name=f"thumb-{job_id}",
+        ).start()
         return job
 
 

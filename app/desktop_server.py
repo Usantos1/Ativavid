@@ -262,6 +262,8 @@ class DesktopHandler(ps.Handler):
             "/api/recovery",
             "/api/update/check",
             "/api/brands",
+            "/api/brand-presets",
+            "/api/content-types",
             "/api/library",
             "/api/library/file",
             "/api/license",
@@ -307,7 +309,7 @@ class DesktopHandler(ps.Handler):
                 j["thumbUrl"] = f"/api/jobs/{j['id']}/thumb"
                 edit = Path(j["editDir"])
                 j["hasCut"] = (edit / "cut.mp4").exists()
-                j["hasFinal"] = (edit / "final.mp4").exists()
+                j["hasFinal"] = ls.resolve_delivery_mp4(edit) is not None
                 j["hasThumb"] = (edit / "thumb.jpg").exists()
                 st_path = edit / "pipeline_status.json"
                 if j.get("status") == "processing" and st_path.exists():
@@ -329,6 +331,13 @@ class DesktopHandler(ps.Handler):
                     except (OSError, json.JSONDecodeError):
                         pass
                 ls.enrich_job_display(j, edit)
+            from app.eta_estimate import attach_eta, collect_history
+
+            hist = collect_history(self.projects_root)
+            for j in jobs:
+                edit = Path(j["editDir"])
+                folder = Path(j["projectDir"]).name
+                attach_eta(j, hist, edit)
                 # Ensure editor can open even after a needs_review stop
                 if not (edit / "state.json").exists():
                     edit.mkdir(parents=True, exist_ok=True)
@@ -372,7 +381,11 @@ class DesktopHandler(ps.Handler):
                     self._studio_file(thumb, "image/jpeg")
                     return
                 if action == "final":
-                    self._studio_file(edit / "final.mp4", "video/mp4")
+                    final = ls.resolve_delivery_mp4(edit)
+                    if not final:
+                        self._json({"error": "sem vídeo final"}, 404)
+                        return
+                    self._studio_file(final, "video/mp4")
                     return
                 if action == "cut":
                     self._studio_file(edit / "cut.mp4", "video/mp4")
@@ -421,6 +434,7 @@ class DesktopHandler(ps.Handler):
             "/api/probe",
             "/api/ai-edit",
             "/api/brands",
+            "/api/brand-presets",
             "/api/library/add",
             "/api/library/use",
             "/api/library/upload",
@@ -441,10 +455,12 @@ class DesktopHandler(ps.Handler):
             "/api/admin/devices",
             "/api/jobs",
             "/api/jobs/open-folder",
+            "/api/jobs/open-final",
             "/api/jobs/rename",
             "/api/jobs/retry",
             "/api/jobs/cancel",
             "/api/jobs/requeue-folder",
+            "/api/jobs/append-cta",
             "/api/jobs/delete",
         ):
             return self._studio_post()

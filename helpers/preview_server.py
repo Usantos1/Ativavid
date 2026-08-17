@@ -22,6 +22,9 @@ Routes:
                         <edit>/preview_style.json when body.type=="style-setup"
   /api/open-folder POST opens Explorer at finalVideo (falls back to the edit
                         dir) — local machine only, mirrors "reveal in Finder"
+  /api/open-final  POST opens the delivered mp4 in the OS player (startfile)
+  /api/cover       POST {t} → JPEG do frame na agulha em cover.jpg + thumb.jpg
+                        (não remuxa o MP4; a capa do arquivo continua no render)
   /api/default-style POST body → <skill>/assets/preview/default-style.json —
                         the ONE exception to "assets/preview is data-fed, not
                         written": a shared "house style" data file, read by
@@ -474,8 +477,16 @@ class Handler(BaseHTTPRequestHandler):
                 remaining -= len(chunk)
 
     def _safe(self, base: Path, rel: str) -> Path | None:
-        p = (base / rel.lstrip("/")).resolve()
-        return p if str(p).startswith(str(base.resolve())) else None
+        rel = unquote(str(rel or "")).lstrip("/").replace("\\", "/")
+        if not rel or ".." in Path(rel).parts:
+            return None
+        p = (base / rel).resolve()
+        root = base.resolve()
+        try:
+            p.relative_to(root)
+        except ValueError:
+            return None
+        return p
 
     def _current_video(self) -> Path | None:
         state_p = self.root / "state.json"
@@ -542,6 +553,10 @@ class Handler(BaseHTTPRequestHandler):
             self._thumbs(path[len("/gen/thumbs/"):])
         elif path == "/api/state":
             self._state()
+        elif path == "/api/intent":
+            self._intent_get()
+        elif path == "/api/versions":
+            self._versions_get()
         elif path == "/painel":
             self._send_file(APP_DIR / "painel.html")
         elif path == "/api/projects":
@@ -563,6 +578,9 @@ class Handler(BaseHTTPRequestHandler):
         if route == "/api/open-folder":
             self._open_folder()
             return
+        if route == "/api/open-final":
+            self._open_final()
+            return
         if route == "/api/project/action":
             self._project_action()
             return
@@ -571,6 +589,18 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "/api/images/pick":
             self._images_pick()
+            return
+        if route == "/api/cover":
+            self._save_cover()
+            return
+        if route == "/api/append-cta":
+            self._append_cta()
+            return
+        if route == "/api/intent":
+            self._intent_post()
+            return
+        if route == "/api/versions":
+            self._versions_post()
             return
         if route != "/api/save":
             self._json({"error": "unknown route"}, 404)
@@ -591,6 +621,25 @@ class Handler(BaseHTTPRequestHandler):
         tmp = out.with_suffix(".tmp")
         tmp.write_text(json.dumps(body, ensure_ascii=False, indent=2), encoding="utf-8")
         tmp.replace(out)
+        if name == "preview_edits.json" and body.get("captionFixes"):
+            try:
+                from app.caption_fixes import apply_caption_fixes
+
+                apply_caption_fixes(self.root, body.get("captionFixes"))
+            except Exception:
+                pass
+        if name == "preview_edits.json" and body.get("edl"):
+            try:
+                from app.project_versions import snapshot
+
+                snapshot(
+                    self.root,
+                    origin="save",
+                    description="Antes de salvar nova revisão",
+                    extra={"edl": body.get("edl"), "intent": body.get("intent")},
+                )
+            except Exception:
+                pass
         self._json({"ok": True, "file": str(out)})
 
     def _open_folder(self) -> None:
@@ -604,9 +653,31 @@ class Handler(BaseHTTPRequestHandler):
                 state = json.loads(state_p.read_text(encoding="utf-8"))
             except json.JSONDecodeError:
                 pass
+        try:
+            from app.delivery_pack import folder_to_open
+
+            packed = folder_to_open(self.root)
+            if packed.is_dir() and packed != self.root:
+                target = packed
+                try:
+                    if target.is_file():
+                        subprocess.run(f'explorer /select,"{target}"')
+                    else:
+                        subprocess.run(["explorer", str(target)])
+                except OSError as e:
+                    self._json({"ok": False, "error": str(e)}, 500)
+                    return
+                self._json({"ok": True, "path": str(target)})
+                return
+        except Exception:
+            pass
         # same stale-pointer resolution the Final tab uses — see _resolve_final_video
         rel = self._resolve_final_video(state)
         target = self._safe(self.root, rel) if rel else None
+        if (not target or not target.exists()) and rel and self.root.name.lower() == "edit":
+            parent_hit = self.root.parent / Path(unquote(rel)).name
+            if parent_hit.exists():
+                target = parent_hit
         if not target or not target.exists():
             target = self.root
         try:
@@ -631,6 +702,32 @@ class Handler(BaseHTTPRequestHandler):
         # the selected file — same name either way this resolves.
         want_title = target.parent.name if target.is_file() else target.name
         _bring_window_to_front(want_title)
+        self._json({"ok": True, "path": str(target)})
+
+    def _open_final(self) -> None:
+        """Open the delivered file in the default player — same startfile
+        the dashboard already uses for action=video."""
+        state_p = self.root / "state.json"
+        state: dict = {}
+        if state_p.exists():
+            try:
+                state = json.loads(state_p.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                pass
+        rel = self._resolve_final_video(state)
+        target = self._safe(self.root, rel) if rel else None
+        if (not target or not target.is_file()) and rel and self.root.name.lower() == "edit":
+            parent_hit = self.root.parent / Path(unquote(rel)).name
+            if parent_hit.is_file():
+                target = parent_hit
+        if not target or not target.is_file():
+            self._json({"ok": False, "error": "sem vídeo final"}, 404)
+            return
+        try:
+            os.startfile(str(target))  # noqa: S606 — default player, user asked
+        except OSError as e:
+            self._json({"ok": False, "error": str(e)}, 500)
+            return
         self._json({"ok": True, "path": str(target)})
 
     def _project_edit_dir(self, raw: str) -> Path | None:
@@ -780,6 +877,155 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         self._json({"ok": False, "error": f"ação desconhecida: {action}"}, 400)
+
+    def _append_cta(self) -> None:
+        """Copia um MP4/MOV para a pasta do projeto e devolve o take do fim."""
+        from app.append_source import append_cta
+
+        if self.root.name.lower() != "edit":
+            self._json({"error": "abra o vídeo pelo editor"}, 400)
+            return
+        project = self.root.parent
+        ctype = self.headers.get("Content-Type", "")
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            n = 0
+        raw = self.rfile.read(n) if n else b""
+        filename = ""
+        payload = b""
+        src_path = ""
+        duration_hint = None
+        try:
+            if "multipart/form-data" in ctype:
+                from email import policy as email_policy
+                from email.parser import BytesParser
+
+                mime = (
+                    b"Content-Type: " + ctype.encode("ascii", "ignore")
+                    + b"\r\nMIME-Version: 1.0\r\n\r\n" + raw
+                )
+                msg = BytesParser(policy=email_policy.default).parsebytes(mime)
+                for part in msg.iter_parts():
+                    field = part.get_param("name", header="content-disposition") or ""
+                    body = part.get_payload(decode=True) or b""
+                    if field == "path":
+                        src_path = body.decode("utf-8", "replace").strip()
+                    elif field == "duration":
+                        try:
+                            duration_hint = float(body.decode("utf-8", "replace").strip())
+                        except ValueError:
+                            duration_hint = None
+                    elif field == "file" or part.get_filename():
+                        filename = part.get_filename() or filename
+                        payload = body
+            else:
+                body = json.loads(raw or b"{}")
+                src_path = str(body.get("path") or "")
+                filename = str(body.get("filename") or "")
+                try:
+                    duration_hint = float(body.get("duration") or 0) or None
+                except (TypeError, ValueError):
+                    duration_hint = None
+            self._json(append_cta(
+                project,
+                filename=filename,
+                data=payload or None,
+                src_path=src_path or None,
+                duration_hint=duration_hint,
+            ))
+        except ValueError as e:
+            self._json({"error": str(e)}, 400)
+        except Exception as e:  # noqa: BLE001
+            self._json({"error": f"Não deu para acrescentar esse vídeo ({e})"}, 500)
+
+    def _save_cover(self) -> None:
+        """Frame at playhead → cover.jpg + thumb.jpg. Does not remux the MP4."""
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            body = json.loads(self.rfile.read(length) or b"{}")
+        except (ValueError, json.JSONDecodeError):
+            self._json({"error": "invalid JSON"}, 400)
+            return
+        video = self._current_video()
+        try:
+            from app.delivery_pack import resolve_final_mp4
+
+            final = resolve_final_mp4(self.root)
+            if final is not None:
+                video = final
+        except Exception:
+            pass
+        if not video:
+            self._json({"ok": False, "error": "vídeo ainda não está pronto"}, 404)
+            return
+        try:
+            t = float(body.get("t", 0) or 0)
+        except (TypeError, ValueError):
+            t = 0.0
+        dur = probe_duration(video)
+        if dur > 0:
+            t = min(max(0.0, t), max(0.0, dur - 0.04))
+        else:
+            t = max(0.0, t)
+        cover = self.root / "cover.jpg"
+        thumb = self.root / "thumb.jpg"
+        tmp = self.root / "_cover_pick.jpg"
+        try:
+            proc = _run(
+                [
+                    "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+                    "-ss", f"{t:.3f}", "-i", str(video),
+                    "-frames:v", "1", "-q:v", "2", str(tmp),
+                ],
+                capture_output=True, timeout=30,
+            )
+        except subprocess.TimeoutExpired:
+            try:
+                tmp.unlink(missing_ok=True)
+            except OSError:
+                pass
+            self._json({"ok": False, "error": "não consegui capturar esse frame"}, 500)
+            return
+        if proc.returncode != 0 or not tmp.is_file() or tmp.stat().st_size < 400:
+            try:
+                tmp.unlink(missing_ok=True)
+            except OSError:
+                pass
+            self._json({"ok": False, "error": "não consegui capturar esse frame"}, 500)
+            return
+        try:
+            tmp.replace(cover)
+        except OSError as e:
+            self._json({"ok": False, "error": str(e)}, 500)
+            return
+        _run(
+            [
+                "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+                "-i", str(cover), "-vf", "scale=360:-2", "-q:v", "3", str(thumb),
+            ],
+            capture_output=True, timeout=20,
+        )
+        if self.root.name.lower() == "edit":
+            try:
+                shutil.copy2(cover, self.root.parent / "cover.jpg")
+            except OSError:
+                pass
+        pack_name = ""
+        try:
+            from app.delivery_pack import ensure_delivery_pack
+
+            packed = ensure_delivery_pack(self.root, force_cover=True)
+            if packed:
+                pack_name = packed.name
+        except Exception:
+            pack_name = ""
+        self._json({
+            "ok": True,
+            "t": round(t, 3),
+            "file": "capa.jpg" if pack_name else "cover.jpg",
+            "pack": pack_name,
+        })
 
     def _save_default_style(self) -> None:
         """The "house style" — every NEW project's Estilo tab starts here.
@@ -970,12 +1216,25 @@ class Handler(BaseHTTPRequestHandler):
             p = self._safe(base, rel)
             if p and p.exists():
                 return rel
-        skip = {"cut.mp4", "base.mp4"}
-        cands = [p for p in base.glob("*.mp4")
-                 if p.name not in skip and not p.name.endswith(".prenorm.mp4")]
+        skip = {"cut.mp4", "base.mp4", "cut_proxy.mp4"}
+        search = [base]
+        if base.name.lower() == "edit":
+            search.append(base.parent)
+        cands: list[Path] = []
+        for folder in search:
+            if not folder.is_dir():
+                continue
+            cands.extend(
+                p for p in folder.glob("*.mp4")
+                if p.name not in skip and not p.name.endswith(".prenorm.mp4")
+            )
         if not cands:
             return None
-        return max(cands, key=lambda p: p.stat().st_mtime).name
+        chosen = max(cands, key=lambda p: p.stat().st_mtime)
+        try:
+            return str(chosen.relative_to(base)).replace("\\", "/")
+        except ValueError:
+            return chosen.name
 
     def _state(self) -> None:
         state_p = self.root / "state.json"
@@ -1016,14 +1275,73 @@ class Handler(BaseHTTPRequestHandler):
         if video:
             cached = probe_duration_cached(video)
             dur = float(cached) if cached is not None else 0.0
+        intent = None
+        intent_p = self.root / "job_intent.json"
+        if intent_p.exists():
+            try:
+                intent = json.loads(intent_p.read_text(encoding="utf-8-sig"))
+            except (OSError, json.JSONDecodeError):
+                intent = None
         self._json({
             "state": state,
             "edl": edl,
+            "intent": intent,
             "mtimes": mtimes,
             "videoDuration": dur,
             "hasPendingEdits": edits_p.exists(),
             "now": time.time(),
         })
+
+    def _intent_get(self) -> None:
+        from app.editing_intent import load as load_intent
+
+        self._json({"ok": True, "intent": load_intent(self.root)})
+
+    def _intent_post(self) -> None:
+        from app.editing_intent import load as load_intent
+        from app.editing_intent import save as save_intent
+
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            body = json.loads(self.rfile.read(length) or b"{}")
+        except (ValueError, json.JSONDecodeError):
+            self._json({"error": "invalid JSON"}, 400)
+            return
+        cur = load_intent(self.root) or {}
+        if isinstance(body, dict):
+            cur.update(body)
+        saved = save_intent(self.root, cur)
+        self._json({"ok": True, "intent": saved})
+
+    def _versions_get(self) -> None:
+        from app.project_versions import list_versions
+
+        self._json({"ok": True, "versions": list_versions(self.root)})
+
+    def _versions_post(self) -> None:
+        from app.project_versions import list_versions, restore, snapshot
+
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            body = json.loads(self.rfile.read(length) or b"{}")
+        except (ValueError, json.JSONDecodeError):
+            self._json({"error": "invalid JSON"}, 400)
+            return
+        action = str((body or {}).get("action") or "snapshot").strip().lower()
+        try:
+            if action == "restore":
+                out = restore(self.root, str(body.get("id") or ""))
+                self._json(out)
+                return
+            item = snapshot(
+                self.root,
+                origin=str(body.get("origin") or "manual"),
+                description=str(body.get("description") or "Versão"),
+                extra=body.get("extra") if isinstance(body.get("extra"), dict) else None,
+            )
+            self._json({"ok": True, "version": item, "versions": list_versions(self.root)})
+        except ValueError as e:
+            self._json({"ok": False, "error": str(e)}, 400)
 
     def _waveform(self) -> None:
         video = self._current_video()

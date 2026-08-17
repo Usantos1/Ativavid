@@ -791,6 +791,204 @@ def transcript_looks_bad(text: str) -> bool:
     return False
 
 
+_WIN_BAD_NAME = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+_WIN_RESERVED = {
+    "CON", "PRN", "AUX", "NUL",
+    *(f"COM{i}" for i in range(1, 10)),
+    *(f"LPT{i}" for i in range(1, 10)),
+}
+
+
+def headline_delivery_text(edit_data: dict | None, llm_meta: dict | None = None) -> str:
+    """Texto da headline na tela — o nome que o cliente vê no arquivo final."""
+    hook = (edit_data or {}).get("hook") or {}
+    if hook.get("enabled") is not False:
+        lines = hook.get("lines") or hook.get("text") or []
+        if isinstance(lines, str):
+            lines = [lines]
+        text = " ".join(str(x).strip() for x in lines if str(x or "").strip())
+        if text:
+            return text
+    for src in (
+        (llm_meta or {}).get("headline"),
+        (edit_data or {}).get("aiHeadline"),
+        (edit_data or {}).get("headline") if isinstance((edit_data or {}).get("headline"), str) else "",
+    ):
+        text = str(src or "").strip()
+        if text and text.lower() not in ("outline", "realce", "card", "misto", "nenhuma"):
+            return text
+    return ""
+
+
+def safe_delivery_filename(text: str) -> str:
+    s = _WIN_BAD_NAME.sub("", text or "")
+    s = re.sub(r"\s+", " ", s).strip(" .")
+    if not s or s.upper() in _WIN_RESERVED:
+        return "final.mp4"
+    return f"{s[:80].rstrip(' .')}.mp4"
+
+
+def promote_final_headline(
+    edit_dir: Path,
+    final: Path,
+    edit_data: dict | None,
+    llm_meta: dict | None = None,
+) -> Path:
+    """Renomeia final.mp4 para a headline. Se não houver texto, mantém final.mp4."""
+    if not final or not final.is_file():
+        return final
+    dest_name = safe_delivery_filename(headline_delivery_text(edit_data, llm_meta))
+    dest = edit_dir / dest_name
+    if dest.resolve() == final.resolve():
+        return final
+    prev_name = ""
+    state_p = edit_dir / "state.json"
+    if state_p.exists():
+        try:
+            prev_name = str(json.loads(state_p.read_text(encoding="utf-8")).get("finalVideo") or "")
+        except (OSError, json.JSONDecodeError, TypeError):
+            prev_name = ""
+    try:
+        if dest.exists():
+            dest.unlink()
+        final.replace(dest)
+        if prev_name and prev_name not in {dest.name, final.name, "cut.mp4", "base.mp4"}:
+            leftover = edit_dir / prev_name
+            if leftover.is_file():
+                leftover.unlink()
+        print(f"[final] {dest.name}", flush=True)
+        return dest
+    except OSError as e:
+        print(f"[warn] rename final: {e}", flush=True)
+        return final
+
+
+def _grab_frame(video: Path, dest: Path, t: float | None = None) -> bool:
+    cmd = [_ffmpeg_exe(), "-y", "-hide_banner", "-loglevel", "error"]
+    if t and t > 0:
+        cmd += ["-ss", f"{t:.3f}"]
+    cmd += ["-i", str(video), "-frames:v", "1", "-q:v", "2", str(dest)]
+    try:
+        _run_tool(cmd, capture_output=True, timeout=40)
+    except Exception:
+        return False
+    return dest.exists() and dest.stat().st_size > 400
+
+
+def _jpeg_is_dark(jpg: Path) -> bool:
+    try:
+        from PIL import Image
+
+        im = Image.open(jpg).convert("L").resize((24, 24))
+        return (sum(im.getdata()) / 576.0) < 16
+    except Exception:
+        pass
+    try:
+        raw = _run_tool(
+            [
+                _ffmpeg_exe(), "-hide_banner", "-loglevel", "error",
+                "-i", str(jpg), "-vf", "scale=16:16,format=gray",
+                "-f", "rawvideo", "-",
+            ],
+            capture_output=True, timeout=15,
+        )
+        data = raw.stdout or b""
+        if len(data) >= 16:
+            return (sum(data[:256]) / max(1, len(data[:256]))) < 16
+    except Exception:
+        return False
+    return False
+
+
+def seal_delivery_cover(edit_dir: Path, final: Path) -> Path:
+    """Capa = primeiro frame com imagem. Grava cover.jpg, thumb e embute no MP4.
+
+    Instagram/Reels usam o frame 0. Se ele for preto, carimbamos a capa nele
+    e anexamos o JPEG no arquivo para a capa ir junto na hora de postar.
+    """
+    if not final or not final.is_file():
+        return final
+    cover = edit_dir / "cover.jpg"
+    thumb = edit_dir / "thumb.jpg"
+    probe = edit_dir / "_cover_try.jpg"
+    chosen_t = 0.0
+    if _grab_frame(final, probe, None) and _jpeg_is_dark(probe):
+        for t in (0.12, 0.28, 0.5, 0.8):
+            if _grab_frame(final, probe, t) and not _jpeg_is_dark(probe):
+                chosen_t = t
+                break
+    if not (probe.exists() and probe.stat().st_size > 400):
+        return final
+    try:
+        shutil.copy2(probe, cover)
+        probe.unlink(missing_ok=True)
+    except OSError:
+        return final
+    try:
+        _run_tool(
+            [
+                _ffmpeg_exe(), "-y", "-hide_banner", "-loglevel", "error",
+                "-i", str(cover), "-vf", "scale=360:-2", "-q:v", "3", str(thumb),
+            ],
+            capture_output=True, timeout=20,
+        )
+    except Exception:
+        pass
+
+    work = edit_dir / "_final_cover.mp4"
+    if chosen_t > 0:
+        try:
+            proc = _run_tool(
+                [
+                    _ffmpeg_exe(), "-y", "-hide_banner", "-loglevel", "error",
+                    "-i", str(final), "-i", str(cover),
+                    "-filter_complex",
+                    "[0:v][1:v]overlay=0:0:enable='eq(n,0)'[v]",
+                    "-map", "[v]", "-map", "0:a?",
+                    "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+                    "-pix_fmt", "yuv420p", "-c:a", "copy",
+                    "-movflags", "+faststart", str(work),
+                ],
+                capture_output=True, timeout=180,
+            )
+            if proc.returncode == 0 and work.is_file() and work.stat().st_size > 1000:
+                work.replace(final)
+            elif work.exists():
+                work.unlink(missing_ok=True)
+        except Exception as e:
+            print(f"[warn] cover frame0: {e}", flush=True)
+            try:
+                work.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+    tagged = edit_dir / "_final_tagged.mp4"
+    try:
+        proc = _run_tool(
+            [
+                _ffmpeg_exe(), "-y", "-hide_banner", "-loglevel", "error",
+                "-i", str(final), "-i", str(cover),
+                "-map", "0", "-map", "1",
+                "-c", "copy", "-c:v:1", "mjpeg",
+                "-disposition:v:1", "attached_pic",
+                "-movflags", "+faststart", str(tagged),
+            ],
+            capture_output=True, timeout=60,
+        )
+        if proc.returncode == 0 and tagged.is_file() and tagged.stat().st_size > 1000:
+            tagged.replace(final)
+        elif tagged.exists():
+            tagged.unlink(missing_ok=True)
+    except Exception as e:
+        print(f"[warn] cover attach: {e}", flush=True)
+        try:
+            tagged.unlink(missing_ok=True)
+        except OSError:
+            pass
+    print(f"[cover] {cover.name} frame={chosen_t:.2f}s", flush=True)
+    return final
+
+
 def hook_lines_from_text(text: str) -> list[str]:
     words = [w for w in re.split(r"\s+", text) if w]
     if not words:
@@ -1707,9 +1905,10 @@ def run(
     for idx, src in enumerate(sources):
         w, h = _display_wh(src)
         dur_i = _ffprobe_duration(src)
-        if dur_i < 3 or dur_i > max_dur:
+        min_dur = 3.0 if idx == 0 else 0.4
+        if dur_i < min_dur or dur_i > max_dur:
             raise NeedsReview("out_of_format", f"{src.name}: duration {dur_i:.1f}s outside window")
-        if w > h * 1.15 and not allow_landscape:
+        if idx == 0 and w > h * 1.15 and not allow_landscape:
             raise NeedsReview(
                 "out_of_format",
                 f"{src.name} displays as landscape {w}x{h}; use exportPreset=youtube no estilo para 16:9",
@@ -1737,7 +1936,10 @@ def run(
 
         spoken_i = transcript_text(edit_dir, stem) or transcript_text(edit_dir, key)
         if transcript_looks_bad(spoken_i):
-            raise NeedsReview("bad_transcript", f"{src.name}: {spoken_i[:200] or '(empty)'}")
+            if idx == 0:
+                raise NeedsReview("bad_transcript", f"{src.name}: {spoken_i[:200] or '(empty)'}")
+            print(f"[warn] {src.name}: sem fala — take extra, seguindo", flush=True)
+            spoken_i = ""
         spoken_parts.append(spoken_i)
 
         set_stage(edit_dir, "analyzing", f"Analisando {src.name}…", 22)
@@ -1762,10 +1964,22 @@ def run(
             source_key = key
 
         if len(sources) > 1:
-            all_ranges.extend(build_edl_ranges(
-                key, regions_i, voice_i, spoken_i, source_dur=dur_i,
-                preserve_hook=bool(preset.get("preserveHook")),
-            ))
+            try:
+                all_ranges.extend(build_edl_ranges(
+                    key, regions_i, voice_i, spoken_i, source_dur=dur_i,
+                    preserve_hook=bool(preset.get("preserveHook")),
+                ))
+            except NeedsReview:
+                if idx == 0:
+                    raise
+                all_ranges.append({
+                    "source": key,
+                    "start": 0.0,
+                    "end": round(dur_i, 3),
+                    "beat": "CTA",
+                    "quote": "",
+                    "reason": "take extra sem fala",
+                })
 
     _helper("pack_transcripts.py", "--edit-dir", str(edit_dir))
     cut_spoken_join = "\n".join(spoken_parts).strip()
@@ -1775,43 +1989,42 @@ def run(
     llm_meta: dict = {"ok": False}
     ranges: list[dict] | None = None
 
-    if len(sources) == 1:
-        ranges = load_preview_edit_ranges(edit_dir, source_key)
-        if ranges:
-            llm_meta = {"ok": True, "backend": "preview_edits"}
-            print(f"[edits] corte do editor · {len(ranges)} takes", flush=True)
-            set_stage(edit_dir, "planning", "Aplicando seus ajustes…", 38)
-        else:
-            try:
-                sys.path.insert(0, str(HELPERS))
-                from llm_cut_plan import try_plan_cut  # type: ignore
+    ranges = load_preview_edit_ranges(edit_dir, source_key)
+    if ranges:
+        llm_meta = {"ok": True, "backend": "preview_edits"}
+        print(f"[edits] corte do editor · {len(ranges)} takes", flush=True)
+        set_stage(edit_dir, "planning", "Aplicando seus ajustes…", 38)
+    elif len(sources) == 1:
+        try:
+            sys.path.insert(0, str(HELPERS))
+            from llm_cut_plan import try_plan_cut  # type: ignore
 
-                ranges, llm_meta = try_plan_cut(
-                    edit_dir=edit_dir,
-                    source_key=source_key,
-                    preset=preset,
-                    regions=regions,
-                    voice=voice,
-                    duration_s=dur,
-                )
-            except Exception as e:  # noqa: BLE001
-                llm_meta = {"ok": False, "error": str(e)[:300]}
-                ranges = None
-            if ranges:
-                print(
-                    f"[ia] corte via {llm_meta.get('backend')} · {len(ranges)} takes"
-                    + (f" · hook={llm_meta.get('hook')!r}" if llm_meta.get("hook") else ""),
-                    flush=True,
-                )
-            else:
-                print(
-                    f"[ia] fallback heurístico ({llm_meta.get('error') or 'sem plano'})",
-                    flush=True,
-                )
-                ranges = build_edl_ranges(
-                    source_key, regions, voice, spoken, source_dur=dur,
-                    preserve_hook=bool(preset.get("preserveHook")),
-                )
+            ranges, llm_meta = try_plan_cut(
+                edit_dir=edit_dir,
+                source_key=source_key,
+                preset=preset,
+                regions=regions,
+                voice=voice,
+                duration_s=dur,
+            )
+        except Exception as e:  # noqa: BLE001
+            llm_meta = {"ok": False, "error": str(e)[:300]}
+            ranges = None
+        if ranges:
+            print(
+                f"[ia] corte via {llm_meta.get('backend')} · {len(ranges)} takes"
+                + (f" · hook={llm_meta.get('hook')!r}" if llm_meta.get("hook") else ""),
+                flush=True,
+            )
+        else:
+            print(
+                f"[ia] fallback heurístico ({llm_meta.get('error') or 'sem plano'})",
+                flush=True,
+            )
+            ranges = build_edl_ranges(
+                source_key, regions, voice, spoken, source_dur=dur,
+                preserve_hook=bool(preset.get("preserveHook")),
+            )
     else:
         ranges = all_ranges
         llm_meta = {"ok": True, "backend": "multi_take_concat", "takes": len(sources)}
@@ -1821,19 +2034,20 @@ def run(
     if not ranges:
         raise NeedsReview("no_speech", "nenhum trecho de fala para cortar")
 
-    try:
-        from app.editing_intent import guard_ranges
+    if llm_meta.get("backend") != "preview_edits":
+        try:
+            from app.editing_intent import guard_ranges
 
-        ranges = guard_ranges(
-            ranges,
-            preset=preset,
-            regions=regions,
-            duration_s=dur,
-            edit_dir=edit_dir,
-            source_stem=primary.stem,
-        )
-    except Exception:
-        pass
+            ranges = guard_ranges(
+                ranges,
+                preset=preset,
+                regions=regions,
+                duration_s=dur,
+                edit_dir=edit_dir,
+                source_stem=primary.stem,
+            )
+        except Exception:
+            pass
 
     for i, r in enumerate(ranges):
         if str(r.get("beat") or "").upper() in ("HOOK", "CTA", "KEEP"):
@@ -2079,6 +2293,23 @@ def run(
         except Exception as e:  # noqa: BLE001
             print(f"[warn] caption coverage check: {e}", flush=True)
 
+        try:
+            from app.caption_fixes import apply_caption_fixes, load_stored_fixes
+
+            fixes = list(load_stored_fixes(edit_dir))
+            for name in ("preview_edits.json", "preview_edits.applied.json"):
+                p = edit_dir / name
+                if not p.exists():
+                    continue
+                data = json.loads(p.read_text(encoding="utf-8-sig"))
+                if isinstance(data.get("captionFixes"), list):
+                    fixes.extend(data["captionFixes"])
+                    break
+            if fixes:
+                apply_caption_fixes(edit_dir, fixes)
+        except Exception as e:  # noqa: BLE001
+            print(f"[warn] captionFixes: {e}", flush=True)
+
         cap_style = preset.get("captions") or "karaoke"
         if cap_style == "stacked":
             # Prefer captions.json timings (already clamped / EDL-mapped) over a
@@ -2108,10 +2339,14 @@ def run(
             edit_data["inserts"] = tmp["inserts"]
             edit_data = _inserts_to_longform_broll(edit_data)
     else:
+        from app.caption_fixes import apply_replacements_to_text, load_stored_fixes
+
+        _text_fixes = load_stored_fixes(edit_dir)
+        cut_spoken = apply_replacements_to_text(cut_spoken, _text_fixes)
         hook = hook_lines_from_text(cut_spoken)
         if llm_meta.get("headline"):
             preset = dict(preset)
-            preset["aiHeadline"] = llm_meta["headline"]
+            preset["aiHeadline"] = apply_replacements_to_text(str(llm_meta["headline"]), _text_fixes)
         edit_data = build_edit_data(cut_path, preset, hook, duration, fps)
         edit_data = _attach_auto_broll(edit_data, public, preset, cut_spoken, duration)
         if zoom_baked:
@@ -2338,22 +2573,40 @@ def run(
         from video_score import score_structural  # type: ignore
 
         edl_ranges = json.loads((edit_dir / "edl.json").read_text(encoding="utf-8")).get("ranges") or []
+        silences = list((vdata or {}).get("silences") or [])
+        low_levels = sum(
+            1 for row in ((vdata or {}).get("range_levels") or [])
+            if str(row.get("verdict") or "") == "LOW-LEVEL"
+        )
         score = score_structural(
             duration=duration,
             ranges=edl_ranges,
             has_hook_beat=any(str(r.get("beat") or "").upper() == "HOOK" for r in edl_ranges),
             has_cta=any(str(r.get("beat") or "").upper() == "CTA" for r in edl_ranges),
+            silence_flags=len(silences) + low_levels,
             transcript_ok=not transcript_looks_bad(cut_spoken),
+            spoken=cut_spoken or "",
         )
         (edit_dir / "score.json").write_text(json.dumps(score, ensure_ascii=False, indent=2), encoding="utf-8")
     except Exception as e:  # noqa: BLE001
         score = None
         print(f"[warn] score: {e}", flush=True)
 
+    final = promote_final_headline(edit_dir, final, edit_data, llm_meta)
+    final = seal_delivery_cover(edit_dir, final)
+    try:
+        from app.delivery_pack import ensure_delivery_pack
+
+        packed = ensure_delivery_pack(edit_dir, final=final)
+        if packed:
+            print(f"[pack] {packed}", flush=True)
+    except Exception as e:  # noqa: BLE001
+        print(f"[warn] delivery pack: {e}", flush=True)
     set_stage(edit_dir, "done", "Pronto", 100)
     _write_preview_state(
         edit_dir, source.name, phase=3, message="Pronto",
         fps=int(fps), style=style_blob,
+        final_name=final.name,
     )
     canary = {}
     try:
