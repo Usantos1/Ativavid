@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.95
+
+Mais velocidade de verdade e o novo tipo Anúncio (AIDA).
+
+- Novo tipo de conteúdo **Anúncio (AIDA)**: a IA monta o corte na estrutura Atenção → Interesse → Desejo → Ação, com gancho forte nos 2 primeiros segundos e CTA garantido no fim — disponível na importação e em Estilos
+- A exportação final não regrava mais o vídeo inteiro quando o render já sai pronto — medido: de dezenas de segundos para ~1s nessa etapa
+- A análise inicial do vídeo (transcrição, silêncios, voz e cor) roda em paralelo — a fase custa o tempo da transcrição, não a soma das quatro
+- Música do tipo Anúncio: batida comercial com fechamento marcado
+
 ## 1.94
 
 Medição de verdade e render respeitando o perfil da máquina.

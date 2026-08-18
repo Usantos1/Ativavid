@@ -5,6 +5,7 @@ CONTENT_TYPES = (
     "educational",
     "humor",
     "sales",
+    "ad",
     "review",
     "institutional",
     "informational",
@@ -14,6 +15,7 @@ LABELS = {
     "educational": "Educativo",
     "humor": "Humor",
     "sales": "Venda",
+    "ad": "Anúncio (AIDA)",
     "review": "Review",
     "institutional": "Institucional",
     "informational": "Informativo",
@@ -37,6 +39,15 @@ _RULES = {
         "Preserve o arco: problema → argumento → oferta → CTA. "
         "Não corte a objeção nem a prova que sustenta a oferta. "
         "O CTA do fim é parte da venda, não um extra."
+    ),
+    "ad": (
+        "TIPO=ad (Anúncio, estrutura AIDA).\n"
+        "Monte o corte na ordem AIDA: Atenção (gancho forte nos primeiros 2s) → "
+        "Interesse (o problema/desejo) → Desejo (benefício ou prova concreta) → "
+        "Ação (CTA claro no fim). "
+        "O primeiro range DEVE ser beat=HOOK com a frase mais forte do vídeo; "
+        "o último DEVE ser beat=CTA. Corte tudo que não sustenta um dos 4 blocos. "
+        "Nunca termine sem o CTA — sem ação explícita não é anúncio."
     ),
     "review": (
         "TIPO=review.\n"
@@ -64,6 +75,10 @@ def normalize_content_type(raw: str | None) -> str | None:
         "piada": "humor",
         "venda": "sales",
         "comercial": "sales",
+        "anuncio": "ad",
+        "anúncio": "ad",
+        "aida": "ad",
+        "ads": "ad",
         "analise": "review",
         "institucional": "institutional",
         "informativo": "informational",

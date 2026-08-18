@@ -1652,21 +1652,55 @@ def encode_final(
         ]
 
     t0 = time.perf_counter()
+    # Se o Remotion já entregou yuv420p/tv/bt709 (render com --color-space=
+    # bt709, medido: sai idêntico ao que a cadeia de conversão produzia), o
+    # reencode de vídeo não tem trabalho — copia o stream e processa só o
+    # áudio. Falha na cópia cai no reencode antigo.
+    proc = None
     try:
-        from app.render_engine import encode_with_fallback, public_profile  # type: ignore
-
-        pub = public_profile()
-        print(
-            f"EXPORT_INFO gpu={pub.get('gpu') or '-'} encoder={pub.get('encoder')} "
-            f"mode={pub.get('mode')} accel={pub.get('acceleration')}",
-            flush=True,
-        )
-        proc = encode_with_fallback(_cmd, label="final_encode")
+        tags = _run_tool(
+            [
+                _ffprobe_exe(), "-v", "error", "-select_streams", "v:0",
+                "-show_entries", "stream=pix_fmt,color_range,color_space",
+                "-of", "csv=p=0", str(render),
+            ],
+            capture_output=True, text=True, timeout=30,
+        ).stdout.strip().split(",")
+        if tags[:3] == ["yuv420p", "tv", "bt709"]:
+            print("[final_encode] video ja em bt709/tv -> stream copy", flush=True)
+            proc = _run_tool(
+                [
+                    _ffmpeg_exe(), "-y", "-hide_banner", "-nostats",
+                    "-i", str(render),
+                    "-filter_complex", "[0:a]loudnorm=I=-14:TP=-1:LRA=11[out]",
+                    "-map", "0:v", "-c:v", "copy",
+                    "-map", "[out]", "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
+                    "-t", f"{duration:.6f}", "-movflags", "+faststart",
+                    str(final),
+                ],
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+            )
+            if proc.returncode != 0:
+                print("[warn] stream copy falhou — reencode normal", flush=True)
+                proc = None
     except Exception:
-        proc = _run_tool(
-            _cmd("libx264", ["-preset", "slow", "-crf", "17", "-pix_fmt", "yuv420p"]),
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
-        )
+        proc = None
+    if proc is None:
+        try:
+            from app.render_engine import encode_with_fallback, public_profile  # type: ignore
+
+            pub = public_profile()
+            print(
+                f"EXPORT_INFO gpu={pub.get('gpu') or '-'} encoder={pub.get('encoder')} "
+                f"mode={pub.get('mode')} accel={pub.get('acceleration')}",
+                flush=True,
+            )
+            proc = encode_with_fallback(_cmd, label="final_encode")
+        except Exception:
+            proc = _run_tool(
+                _cmd("libx264", ["-preset", "slow", "-crf", "17", "-pix_fmt", "yuv420p"]),
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+            )
     if proc.returncode != 0:
         raise RuntimeError(f"final_encode failed:\n{(proc.stderr or '')[-3000:]}")
     elapsed = max(0.001, time.perf_counter() - t0)
@@ -1868,6 +1902,10 @@ _MUSIC_VIBES = {
     "sales": (
         "energetic modern pop instrumental, driving beat, bright synths and "
         "claps, 126 bpm, confident urgent mood, no vocals"
+    ),
+    "ad": (
+        "punchy commercial pop instrumental, big drums, rising energy with a "
+        "clear final hit, 128 bpm, bold persuasive mood, no vocals"
     ),
     "educational": (
         "minimal lofi hip-hop instrumental, warm keys and soft beat, 92 bpm, "
@@ -2186,7 +2224,26 @@ def run(
         sources_map[key] = str(src)
 
         set_stage(edit_dir, "transcribing", f"Transcrevendo {src.name} ({idx + 1}/{len(sources)})…", 12 + idx)
-        _helper("transcribe.py", str(src), "--edit-dir", str(edit_dir), "--language", language)
+        # As quatro análises do take são independentes entre si — transcrição
+        # é rede, regiões/voz/cor são CPU. Em paralelo, a fase custa o tempo
+        # da mais lenta (quase sempre a transcrição), não a soma das quatro.
+        from concurrent.futures import ThreadPoolExecutor
+
+        with ThreadPoolExecutor(max_workers=4) as _an_ex:
+            _f_tr = _an_ex.submit(
+                _helper, "transcribe.py", str(src),
+                "--edit-dir", str(edit_dir), "--language", language,
+            )
+            _f_sr = _an_ex.submit(_helper, "speech_regions.py", str(src))
+            _f_vl = _an_ex.submit(
+                _helper, "voice_levels.py", str(src),
+                "--edit-dir", str(edit_dir), "--json",
+            )
+            _f_color = _an_ex.submit(_helper, "detect_color.py", str(src), "--json")
+            _f_tr.result()
+            sr = _f_sr.result()
+            vl = _f_vl.result()
+            _color_proc = _f_color.result()
         stem_tr = edit_dir / "transcripts" / f"{stem}.json"
         key_tr = edit_dir / "transcripts" / f"{key}.json"
         if stem_tr.exists() and stem != key and not key_tr.exists():
@@ -2204,15 +2261,13 @@ def run(
         spoken_parts.append(spoken_i)
 
         set_stage(edit_dir, "analyzing", f"Analisando {src.name}…", 22)
-        sr = _helper("speech_regions.py", str(src))
         regions_i = parse_speech_regions(sr.stdout)
-        vl = _helper("voice_levels.py", str(src), "--edit-dir", str(edit_dir), "--json")
         voice_i = json.loads(vl.stdout)
         low_phrases = [p for p in voice_i.get("phrases") or [] if p.get("flag") == "LOW"]
         if low_phrases:
             print(f"[warn] {src.name}: {len(low_phrases)} under-level phrase(s)", flush=True)
 
-        color = json.loads(_helper("detect_color.py", str(src), "--json").stdout)
+        color = json.loads(_color_proc.stdout)
         if color.get("confidence") == "low":
             print(f"[warn] {src.name}: color confidence low (profile={color.get('profile')})", flush=True)
         g = resolve_color_grade(color, preset)
@@ -2893,6 +2948,9 @@ def run(
                         "out/render.mp4",
                         f"--concurrency={conc}",
                         f"--offthreadvideo-cache-size-in-bytes={cache_b}",
+                        # Sai yuv420p/tv/bt709 direto (medido) — o encode_final
+                        # detecta e copia o stream em vez de reencodar o vídeo.
+                        "--color-space=bt709",
                         *flags,
                     ),
                     cwd=remotion,
