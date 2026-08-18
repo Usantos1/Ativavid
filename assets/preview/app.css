@@ -581,6 +581,19 @@ body.applying-corrections .player-frame {
 .quick-chip.cap { font-weight: 500; opacity: 0.92; }
 .quick-chip.current { border-color: var(--interact); }
 
+/* Sugestões de headline da IA — chips clicáveis ao lado da atual */
+.hl-options { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.hl-options.hidden { display: none; }
+.hl-options-label { font-size: 11px; font-weight: 600; color: var(--muted); flex: 0 0 auto; }
+.quick-chip.hl-alt {
+  cursor: pointer;
+  font-weight: 500;
+  opacity: 0.85;
+  max-width: 220px;
+  border-style: dashed;
+}
+.quick-chip.hl-alt:hover { opacity: 1; border-color: var(--interact); border-style: solid; }
+
 .chip.caption.current {
   outline: 2px solid color-mix(in srgb, var(--interact) 80%, transparent);
   outline-offset: 1px;
@@ -1565,6 +1578,19 @@ kbd {
   text-shadow: 0 4px 20px rgba(0, 0, 0, 0.55);
 }
 .kar-line span { display: inline-block; will-change: opacity, translate; }
+
+/* Impacto: linha de 3 palavras em caixa alta, palavra "quente" numa caixa */
+.imp-line {
+  position: absolute;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  white-space: nowrap;
+  font-family: 'Poppins', sans-serif;
+  font-weight: 900;
+  line-height: 1.08;
+}
+.imp-word { display: inline-block; will-change: transform, background; }
 
 .stk-cue { position: absolute; display: flex; flex-direction: column; align-items: center; text-align: center; }
 .stk-line { white-space: pre; letter-spacing: -1.5px; line-height: 1.12; }

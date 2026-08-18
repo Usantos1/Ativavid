@@ -40,7 +40,12 @@ const playfair = loadPlayfair('italic', {weights: ['700', '900']});
 loadPlayfair('normal', {weights: ['700', '900']});
 const PLAYFAIR = playfair.fontFamily;
 
-type SfxCfg = {enabled?: boolean; clickVolume?: number; scratchVolume?: number};
+type SfxCfg = {
+  enabled?: boolean;
+  clickVolume?: number;
+  scratchVolume?: number;
+  stackClickVolume?: number;
+};
 type CapCfg = {
   emphasisAccent?: string;
   circleAccent?: string;

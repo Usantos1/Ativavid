@@ -1490,10 +1490,10 @@ def build_edit_data(cut: Path, preset: dict, hook: list[str], duration: float, f
             ed["transitions"] = transitions
 
     ca = preset.get("captionAccent")
-    if ca and captions in ("karaoke", "simples", "serifada", "classica", "bloco"):
+    if ca and captions in ("karaoke", "simples", "serifada", "classica", "bloco", "recorte"):
         ed["captions"]["accent"] = ca
     ea = preset.get("emphasisAccent")
-    if ea and captions in ("stacked", "scatter"):
+    if ea and captions in ("stacked", "scatter", "impacto"):
         ed["captions"]["emphasisAccent"] = ea
     circ = preset.get("circleAccent")
     if circ and captions == "stacked":
@@ -1816,6 +1816,77 @@ def _clear_dir_windows(dest: Path) -> None:
         )
 
 
+_MUSIC_VIBES = {
+    # A trilha acompanha o TIPO do conteúdo — um vibe fixo dava a mesma música
+    # para humor, venda e tutorial (contradizia a própria doc da skill).
+    "humor": (
+        "playful upbeat brazilian funk-pop instrumental, bouncy percussion, "
+        "quirky synth stabs, 124 bpm, fun mischievous mood, no vocals"
+    ),
+    "sales": (
+        "energetic modern pop instrumental, driving beat, bright synths and "
+        "claps, 126 bpm, confident urgent mood, no vocals"
+    ),
+    "educational": (
+        "minimal lofi hip-hop instrumental, warm keys and soft beat, 92 bpm, "
+        "focused calm mood, no vocals"
+    ),
+    "review": (
+        "modern chillhop instrumental, crisp drums, warm electric piano, "
+        "104 bpm, curious upbeat mood, no vocals"
+    ),
+    "institutional": (
+        "elegant corporate instrumental, soft piano, warm pads and light "
+        "percussion, 100 bpm, trustworthy inspiring mood, no vocals"
+    ),
+    "informational": (
+        "clean minimal electronic instrumental, light pulse, airy pads, "
+        "106 bpm, clear neutral mood, no vocals"
+    ),
+}
+_MUSIC_DEFAULT = (
+    "upbeat modern brazilian pop instrumental, light guitars and soft drums, "
+    "120 bpm, warm confident mood, no vocals"
+)
+
+
+def _music_vibe_for(preset: dict, is_longform: bool) -> str:
+    if is_longform:
+        return "calm cinematic instrumental bed, soft piano and pads, 90 bpm, no vocals"
+    try:
+        from app.content_type import normalize_content_type
+
+        ct = normalize_content_type(preset.get("contentType")) or ""
+    except Exception:
+        ct = str(preset.get("contentType") or "").strip().lower()
+    return _MUSIC_VIBES.get(ct, _MUSIC_DEFAULT)
+
+
+def _sync_template_src(template: Path, dest: Path) -> None:
+    """Copia o src/ do template embarcado por cima do scaffold reusado.
+
+    CustomGraphics.tsx é o ÚNICO arquivo editável pelo usuário (Hard Rule 11)
+    e só entra se estiver faltando — nunca sobrescreve customização.
+    """
+    src_dir = template / "src"
+    dst_dir = dest / "src"
+    if not src_dir.is_dir():
+        return
+    dst_dir.mkdir(parents=True, exist_ok=True)
+    synced = 0
+    for f in src_dir.iterdir():
+        if not f.is_file():
+            continue
+        target = dst_dir / f.name
+        if f.name == "CustomGraphics.tsx" and target.exists():
+            continue
+        if not target.exists() or target.read_bytes() != f.read_bytes():
+            shutil.copy2(f, target)
+            synced += 1
+    if synced:
+        print(f"[scaffold] template src sincronizado ({synced} arquivo(s))", flush=True)
+
+
 def scaffold_remotion(edit_dir: Path, *, track: str = "shortform") -> Path:
     dest = edit_dir / "remotion"
     src = LONGFORM if track == "longform" else SHORTFORM
@@ -1829,6 +1900,14 @@ def scaffold_remotion(edit_dir: Path, *, track: str = "shortform") -> Path:
     ).is_dir()
     if dest.exists() and cli_ok:
         print("[scaffold] reusando Remotion existente", flush=True)
+        # O template embarcado ganha estilos novos entre versões; o src/ do
+        # scaffold é imutável (fora CustomGraphics) e fica para trás — aí o
+        # projeto antigo falha a checagem de integridade ou renderiza o estilo
+        # errado em silêncio. Sincronizar é barato (poucos KB).
+        try:
+            _sync_template_src(src, dest)
+        except Exception as e:  # noqa: BLE001
+            print(f"[warn] sync template src: {e}", flush=True)
         try:
             _seed_remotion_chrome(dest)
         except Exception as e:  # noqa: BLE001
@@ -2252,12 +2331,7 @@ def run(
     music_thread = None
     music_tmp = edit_dir / "_trilha_ai.mp3"
     music_tmp.unlink(missing_ok=True)
-    music_vibe = (
-        "calm cinematic instrumental bed, soft piano and pads, 90 bpm, no vocals"
-        if is_longform else
-        "upbeat modern brazilian pop instrumental, light guitars and soft drums, "
-        "120 bpm, warm confident mood, no vocals"
-    )
+    music_vibe = _music_vibe_for(preset, is_longform)
     if elems.get("musicAI"):
         # O J-cut e o polimento só ENCURTAM a timeline, então a duração
         # planejada é >= a final e a trilha nunca sai curta (+2s de margem).
@@ -2572,6 +2646,22 @@ def run(
         if llm_meta.get("headline"):
             preset = dict(preset)
             preset["aiHeadline"] = apply_replacements_to_text(str(llm_meta["headline"]), _text_fixes)
+        # 3 opções de headline para o seletor do editor: a escolhida + as
+        # alternativas da IA (ângulos diferentes), todas com as correções de
+        # texto do usuário aplicadas. Arquivo é só dado — não muda o render.
+        try:
+            opts = []
+            for cand in [llm_meta.get("headline"), *(llm_meta.get("headlineAlts") or [])]:
+                t = apply_replacements_to_text(str(cand or "").strip(), _text_fixes)
+                if t and t not in opts:
+                    opts.append(t[:80])
+            if opts:
+                (edit_dir / "headline_options.json").write_text(
+                    json.dumps({"options": opts[:3]}, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+        except Exception as e:  # noqa: BLE001
+            print(f"[warn] headline options: {e}", flush=True)
         edit_data = build_edit_data(cut_path, preset, hook, duration, fps)
         edit_data = _attach_auto_broll(edit_data, public, preset, cut_spoken, duration)
         if zoom_baked:

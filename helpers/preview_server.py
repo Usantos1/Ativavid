@@ -1329,6 +1329,17 @@ class Handler(BaseHTTPRequestHandler):
             apply_task = public_view(read_task(self.root), self.root)
         except Exception:
             apply_task = None
+        headline_options: list[str] = []
+        opts_p = self.root / "headline_options.json"
+        if opts_p.exists():
+            try:
+                raw_opts = json.loads(opts_p.read_text(encoding="utf-8-sig"))
+                if isinstance(raw_opts, dict) and isinstance(raw_opts.get("options"), list):
+                    headline_options = [
+                        str(o).strip() for o in raw_opts["options"] if str(o or "").strip()
+                    ][:3]
+            except (OSError, json.JSONDecodeError):
+                headline_options = []
         self._json({
             "state": state,
             "edl": edl,
@@ -1341,6 +1352,7 @@ class Handler(BaseHTTPRequestHandler):
             "corrections": corrections,
             "applyStatus": apply_status,
             "applyTask": apply_task,
+            "headlineOptions": headline_options,
             "now": time.time(),
         })
 

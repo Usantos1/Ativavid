@@ -323,9 +323,13 @@ and the UI opens its own tab, sitting between FASE 1 and FASE 2:
 - **Estilo de headline** — `outline`, `card`, `realce`, `misto`, or `nenhuma`
   ("Nenhuma" — no hook at all, `hook.enabled:false`). Always two lines, size
   fitted to the text (see the track reference).
-- **Estilo de legenda** — three animated (`karaoke`, `stacked`/"Empilhado",
-  `scatter`/"Disperso"), three static (`simples`, `serifada`, `classica`), or
-  `nenhuma` ("Nenhuma" — no burned captions at all, `captions.enabled:false`).
+- **Estilo de legenda** — four animated (`karaoke`, `stacked`/"Empilhado",
+  `scatter`/"Disperso", `impacto`/"Impacto" — UPPERCASE cues where the word
+  being spoken sits in a solid emphasis-coloured box that pops in), five
+  static (`simples`, `serifada`, `classica`, `bloco`, `recorte`/"Recorte" —
+  CapCut-style sticker: UPPERCASE glyphs cut out by a thick dark outline,
+  caption colour tints the text), or `nenhuma` ("Nenhuma" — no burned
+  captions at all, `captions.enabled:false`).
   Both `nenhuma` picks (headline and caption) are real final looks — a clean
   talking-head cut, or captions the user will add elsewhere — not a
   placeholder for "decide later".

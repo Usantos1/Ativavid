@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.90
+
+Recursos novos no visual: mais estilos de legenda, headlines para escolher e trilha que combina com o conteúdo.
+
+- Novo estilo de legenda **Impacto**: a palavra falada aparece numa caixa colorida que pulsa — o visual mais usado em Reels de venda
+- Novo estilo de legenda **Recorte**: letras grandes com contorno grosso, estilo sticker de CapCut
+- A IA agora sugere **3 headlines por vídeo** — as opções aparecem no editor e um clique troca na hora
+- A **trilha sonora combina com o tipo de conteúdo**: humor ganha música divertida, venda ganha batida energética, educativo ganha som calmo de foco
+- As cores da marca valem nos estilos novos: a cor de ênfase pinta a caixa do Impacto e a cor da legenda pinta o texto do Recorte
+- Projetos antigos recebem os estilos novos automaticamente no próximo render
+- O instalador ficou um pouco menor (limpeza de arquivos internos)
+
 ## 1.89
 
 Velocidade: o mesmo vídeo fica pronto bem mais rápido, com a mesma qualidade.

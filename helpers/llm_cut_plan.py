@@ -223,12 +223,15 @@ def _system_prompt(preset: dict | None = None) -> str:
         "- Beats úteis: HOOK, PROBLEM, SOLUTION, BENEFIT, PROOF, CTA "
         "(pule o que não existir — mas não pule o miolo que liga um beat ao outro).\n"
         "- start/end em segundos no vídeo ORIGINAL (não invente timestamps fora da fala).\n"
-        "- Também devolva headline curta (máx 6 palavras) em \"headline\".\n"
+        "- Também devolva headline curta (máx 6 palavras) em \"headline\" E mais "
+        "2 alternativas com ângulos DIFERENTES (curiosidade, benefício, urgência…) "
+        "em \"headlineAlts\".\n"
         "- Responda SOMENTE JSON válido (sem markdown, sem prosa).\n\n"
         f"PARÂMETROS DO PRESET:\n{extra}\n"
         "FORMATO:\n"
         '{"ranges":[{"source":"SRC","start":1.2,"end":4.5,"beat":"HOOK",'
-        '"quote":"…","reason":"…"}],"hook":"uma linha","headline":"…","notes":"opcional"}'
+        '"quote":"…","reason":"…"}],"hook":"uma linha","headline":"…",'
+        '"headlineAlts":["…","…"],"notes":"opcional"}'
     )
 
 
@@ -441,10 +444,16 @@ def plan_cut(
     except Exception:
         pass
     drops = parsed.get("drops") if isinstance(parsed, dict) else None
+    alts = parsed.get("headlineAlts") if isinstance(parsed, dict) else None
+    if isinstance(alts, list):
+        alts = [str(a).strip()[:80] for a in alts if str(a or "").strip()][:3]
+    else:
+        alts = []
     meta = {
         "backend": backend,
         "hook": (parsed.get("hook") if isinstance(parsed, dict) else None),
         "headline": (parsed.get("headline") if isinstance(parsed, dict) else None),
+        "headlineAlts": alts,
         "notes": (parsed.get("notes") if isinstance(parsed, dict) else None),
         "rangeCount": len(ranges),
         "rawChars": len(text or ""),

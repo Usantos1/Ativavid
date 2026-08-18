@@ -1,12 +1,12 @@
 ﻿; ATIVAVID — Inno Setup
 ; Compile: .\installer\build.ps1
-; Saida: installer/dist/Instalar ATIVAVID 1.89.exe
+; Saida: installer/dist/Instalar ATIVAVID 1.90.exe
 ;
 ; Instala em C:\Program Files\ATIVAVID (como app Windows normal).
 ; Atalho → ATIVAVID.vbs (sem janela CMD).
 
 #define MyAppName "ATIVAVID"
-#define MyAppVersion "1.89"
+#define MyAppVersion "1.90"
 #define MyAppPublisher "ATIVAVID"
 #define MyAppURL "https://github.com/fillrochaa/edvid"
 #define MyAppExeName "ATIVAVID.vbs"
@@ -50,7 +50,7 @@ Name: "desktopicon"; Description: "Criar atalho na Area de Trabalho"; GroupDescr
 
 [Files]
 Source: "..\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; \
-  Excludes: "vendor\ffmpeg\*.exe,vendor\ffmpeg\*.dll,.git,.venv,node_modules,__pycache__,*.pyc,edit,cloud,installer\dist,.env,.ativavid-sessions.json,.ativavid-settings.json,ativa_vid.egg-info,Projetos"
+  Excludes: "vendor\ffmpeg\*.exe,vendor\ffmpeg\*.dll,.git,.venv,node_modules,__pycache__,*.pyc,edit,cloud,installer\dist,.env,.ativavid-sessions.json,.pytest_cache,.ativavid-settings.json,ativa_vid.egg-info,Projetos"
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{sys}\wscript.exe"; Parameters: "//nologo ""{app}\{#MyAppExeName}"""; WorkingDir: "{app}"; IconFilename: "{app}\assets\preview\ativa-vid-icon.ico"

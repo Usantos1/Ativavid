@@ -46,6 +46,11 @@ type Variant = {
   // the text is always white — coloured text over a shop wall full of
   // coloured product is the case a text-shadow cannot rescue.
   block?: boolean;
+  // "recorte": CapCut-style sticker — UPPERCASE white glyphs cut out by a
+  // thick near-black outline. The outline is what guarantees legibility, so
+  // the picked caption colour tints the TEXT (accent over dark edge always
+  // reads); the outline itself is never user-coloured.
+  sticker?: boolean;
 };
 
 const C = (editData as any).captions ?? {};
@@ -101,6 +106,20 @@ export const SIMPLE_VARIANTS: Record<string, Variant> = {
     maxW: 760,
     block: true,
   },
+  recorte: {
+    family: POPPINS,
+    weight: 800,
+    size: 78,
+    maxWords: 3,
+    lines: 1,
+    squeeze: 1,
+    squeezeY: 1,
+    tracking: -1,
+    bottom: 430,
+    // the outline eats ~8px each side; keep the sticker inside the safe area
+    maxW: 800,
+    sticker: true,
+  },
 };
 
 /* Text colour for the "bloco" slab, decided from the slab's own brightness.
@@ -123,7 +142,9 @@ const isBreak = (t: string) => /[.,!?…]$/.test(t);
 
 const widthOf = (words: Word[], V: Variant) =>
   measureText({
-    text: words.map((w) => clean(w.text)).join(' '),
+    // recorte renders UPPERCASE — measuring the lowercase form would group
+    // lines ~10% too wide and run the sticker past the safe area
+    text: words.map((w) => (V.sticker ? clean(w.text).toUpperCase() : clean(w.text))).join(' '),
     fontFamily: V.family,
     fontSize: V.size,
     fontWeight: V.weight,
@@ -223,6 +244,46 @@ export const SimpleCaptions: React.FC<{variant: string}> = ({variant}) => {
             >
               {ln.map((w) => clean(w.text)).join(' ')}
             </div>
+          ))}
+        </div>
+      </AbsoluteFill>
+    );
+  }
+
+  if (V.sticker) {
+    // Thick outline via layered shadows in 8 directions — NOT WebkitTextStroke:
+    // a centered stroke eats half its width out of the glyph, and paint-order
+    // support for HTML text varies across headless Chrome builds. Shadows
+    // always render behind the fill, on every build.
+    const R = Math.max(5, Math.round(V.size * 0.09));
+    const D = 0.7071 * R;
+    const edge = '#141518';
+    const outline = [
+      `${R}px 0 0 ${edge}`, `-${R}px 0 0 ${edge}`,
+      `0 ${R}px 0 ${edge}`, `0 -${R}px 0 ${edge}`,
+      `${D.toFixed(1)}px ${D.toFixed(1)}px 0 ${edge}`,
+      `-${D.toFixed(1)}px ${D.toFixed(1)}px 0 ${edge}`,
+      `${D.toFixed(1)}px -${D.toFixed(1)}px 0 ${edge}`,
+      `-${D.toFixed(1)}px -${D.toFixed(1)}px 0 ${edge}`,
+      '0 14px 30px rgba(0,0,0,0.5)',
+    ].join(', ');
+    return (
+      <AbsoluteFill style={{justifyContent: 'flex-end', alignItems: 'center', paddingBottom: V.bottom}}>
+        <div
+          style={{
+            textAlign: 'center',
+            fontFamily: V.family,
+            fontWeight: V.weight,
+            fontSize: V.size,
+            letterSpacing: V.tracking,
+            lineHeight: 1.16,
+            color: C.accent ?? '#fff',
+            whiteSpace: 'pre',
+            textShadow: outline,
+          }}
+        >
+          {lines.map((ln, i) => (
+            <div key={i}>{ln.map((w) => clean(w.text).toUpperCase()).join(' ')}</div>
           ))}
         </div>
       </AbsoluteFill>

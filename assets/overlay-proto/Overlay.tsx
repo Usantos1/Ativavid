@@ -8,6 +8,7 @@ import {CustomGraphics} from './CustomGraphics';
 import {StackedCaptions} from './StackedCaptions';
 import {ScatterCaptions} from './ScatterCaptions';
 import {SimpleCaptions, SIMPLE_VARIANTS} from './SimpleCaptions';
+import {ImpactCaptions} from './ImpactCaptions';
 import {EndCard, HookIntro, Inserts, Karaoke} from './Main';
 import editData from '../public/edit-data.json';
 
@@ -28,9 +29,11 @@ export const Overlay: React.FC = () => {
           ? <StackedCaptions />
           : D.captions.style === 'scatter'
             ? <ScatterCaptions />
-            : SIMPLE_VARIANTS[D.captions.style as string]
-              ? <SimpleCaptions variant={D.captions.style as string} />
-              : <Karaoke />
+            : D.captions.style === 'impacto'
+              ? <ImpactCaptions />
+              : SIMPLE_VARIANTS[D.captions.style as string]
+                ? <SimpleCaptions variant={D.captions.style as string} />
+                : <Karaoke />
         : null}
       {D.endCard?.enabled ? <EndCard /> : null}
     </AbsoluteFill>

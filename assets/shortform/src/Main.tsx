@@ -34,6 +34,7 @@ import {CustomGraphics} from './CustomGraphics';
 import {StackedCaptions} from './StackedCaptions';
 import {ScatterCaptions} from './ScatterCaptions';
 import {SimpleCaptions, SIMPLE_VARIANTS} from './SimpleCaptions';
+import {ImpactCaptions} from './ImpactCaptions';
 
 const {fontFamily} = loadFont('normal', {weights: ['400', '600', '900']});
 
@@ -101,9 +102,11 @@ export type EditData = {
     // "karaoke" (default, single line), "stacked" (multi-font stack + pencil
     // outline + click/scratch SFX, reads public/caption-cues.json) or "scatter"
     // (serif, lowercase, scattered word-by-word — reads captions.json alone).
-    // The three STATIC ones ("simples", "serifada", "classica") live in
-    // SimpleCaptions.tsx and take no tunables — they ARE the tuning.
-    style?: 'karaoke' | 'stacked' | 'scatter' | 'simples' | 'serifada' | 'classica';
+    // The STATIC ones ("simples", "serifada", "classica", "bloco", "recorte")
+    // live in SimpleCaptions.tsx and take no tunables — they ARE the tuning.
+    // "impacto" (ImpactCaptions.tsx) boxes the spoken word in emphasisAccent.
+    style?: 'karaoke' | 'stacked' | 'scatter' | 'impacto'
+      | 'simples' | 'serifada' | 'classica' | 'bloco' | 'recorte';
     scatterOffsetY?: number;   // scatter: block centre, fraction of height
     scatterFontSize?: number;  // scatter: ordinary word size (default 74)
     scatterSafeWidth?: number; // scatter: layout width budget (default 940)
@@ -821,9 +824,11 @@ export const Main: React.FC = () => {
           ? <StackedCaptions />
           : D.captions.style === 'scatter'
             ? <ScatterCaptions />
-            : SIMPLE_VARIANTS[D.captions.style as string]
-              ? <SimpleCaptions variant={D.captions.style as string} />
-              : <Karaoke />
+            : D.captions.style === 'impacto'
+              ? <ImpactCaptions />
+              : SIMPLE_VARIANTS[D.captions.style as string]
+                ? <SimpleCaptions variant={D.captions.style as string} />
+                : <Karaoke />
         : null}
       {/* last: the sign-off covers the captions too, not just the footage */}
       {D.endCard?.enabled ? <EndCard /> : null}

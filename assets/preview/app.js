@@ -168,7 +168,9 @@ const STYLE_CATALOG = {
   captions: [
     {id: 'karaoke', name: 'Karaokê', demo: 'karaoke'},
     {id: 'stacked', name: 'Empilhado', demo: 'stacked', default: true},
+    {id: 'impacto', name: 'Impacto', demo: 'impacto'},
     {id: 'scatter', name: 'Disperso', demo: 'scatter'},
+    {id: 'recorte', name: 'Recorte', stat: 'recorte'},
     {id: 'simples', name: 'Simples', stat: 'simples'},
     {id: 'serifada', name: 'Serifada', stat: 'serifada'},
     {id: 'classica', name: 'Clássica', stat: 'classica'},
@@ -556,6 +558,7 @@ const STATIC_VARIANTS = {
   serifada: {family: "'Libre Baskerville',serif", weight: 700, size: 84, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: -1, maxW: 860},
   classica: {family: "'Inter',sans-serif", weight: 500, size: 52, maxWords: 14, lines: 2, sx: 1, sy: 1, tracking: 0, maxW: 840},
   bloco: {family: "'Poppins',sans-serif", weight: 800, size: 76, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: -2, maxW: 760, block: true},
+  recorte: {family: "'Poppins',sans-serif", weight: 800, size: 78, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: -1, maxW: 800, sticker: true},
 };
 const ORPHAN_PT = /^(o|a|os|as|e|é|de|do|da|em|no|na|um|uma|que|se|ao|à|por|com)$/i;
 
@@ -577,7 +580,10 @@ function buildStaticDemo(host, id) {
   host.innerHTML = '';
   const wrap = el('div', 'cap-demo', host);
   const words = CAP_TEXT.split(' ');
-  const wOf = (ws) => measureType(ws.join(' '), V.size, V.weight, V.family, V.tracking) * V.sx;
+  const wOf = (ws) => measureType(
+    (V.sticker ? ws.join(' ').toUpperCase() : ws.join(' ')),
+    V.size, V.weight, V.family, V.tracking,
+  ) * V.sx;
 
   // the WHOLE sentence, cut into cues exactly as the render would
   const cues = [];
@@ -626,6 +632,23 @@ function buildStaticDemo(host, id) {
       }
       return box;
     }
+    if (V.sticker) {
+      // mirrors SimpleCaptions' sticker branch — outline por sombras em 8
+      // direções, texto na cor da legenda (contorno escuro garante leitura)
+      const R = Math.max(3, Math.round(V.size * 0.09 * s));
+      const D = (0.7071 * R).toFixed(1);
+      const edge = '#141518';
+      box.style.color = S.style.captionAccent || '#fff';
+      box.style.textShadow = [
+        `${R}px 0 0 ${edge}`, `-${R}px 0 0 ${edge}`,
+        `0 ${R}px 0 ${edge}`, `0 -${R}px 0 ${edge}`,
+        `${D}px ${D}px 0 ${edge}`, `-${D}px ${D}px 0 ${edge}`,
+        `${D}px -${D}px 0 ${edge}`, `-${D}px -${D}px 0 ${edge}`,
+        '0 8px 18px rgba(0,0,0,0.5)',
+      ].join(', ');
+      for (const ln of lines) el('div', '', box).textContent = ln.join(' ').toUpperCase();
+      return box;
+    }
     for (const ln of lines) el('div', '', box).textContent = ln.join(' ');
     return box;
   });
@@ -643,7 +666,65 @@ function buildStaticDemo(host, id) {
   };
 }
 
-const CAP_BUILDERS = { karaoke: buildKaraokeDemo, stacked: buildStackedDemo, scatter: buildScatterDemo };
+// Impacto: cues de 3 palavras em caixa alta; a palavra "falada" ganha uma
+// caixa sólida na cor de ênfase que entra com um pop. Mesmos números do
+// ImpactCaptions.tsx (POP 5f, overshoot back(2.2) aproximado).
+function buildImpactDemo(host) {
+  const s = host.clientWidth / 1080;
+  host.innerHTML = '';
+  const wrap = el('div', 'cap-demo', host);
+  const words = CAP_TEXT.toUpperCase().split(' ');
+  const cues = [];
+  for (let i = 0; i < words.length; i += 3) cues.push(words.slice(i, i + 3));
+
+  const STEP = 0.3, POP = 5 / FPS_REF, TAIL = 0.5;
+  const box = S.style.emphasisAccent || '#ffd400';
+  const ink = inkOn(box);
+  const built = [];
+  let t = 0;
+  for (const cue of cues) {
+    const line = el('div', 'imp-line', wrap);
+    line.style.fontSize = `${72 * s}px`;
+    line.style.gap = `${16 * s}px`;
+    const spans = cue.map((w) => {
+      const sp = el('span', 'imp-word', line);
+      sp.textContent = w;
+      sp.style.borderRadius = `${13 * s}px`;
+      sp.style.padding = `${4 * s}px ${13 * s}px ${6 * s}px`;
+      return sp;
+    });
+    const start = t;
+    t = start + (cue.length - 1) * STEP + STEP + TAIL;
+    built.push({ line, spans, start, end: t });
+  }
+  const cycle = t + 0.3;
+
+  return (now) => {
+    const p = now % cycle;
+    for (const L of built) {
+      const on = p >= L.start && p < L.end;
+      L.line.style.display = on ? '' : 'none';
+      if (!on) continue;
+      let hot = 0;
+      L.spans.forEach((_, j) => { if (p >= L.start + j * STEP) hot = j; });
+      L.spans.forEach((sp, j) => {
+        const isHot = j === hot;
+        sp.style.background = isHot ? box : 'transparent';
+        sp.style.color = isHot ? ink : '#fff';
+        sp.style.textShadow = isHot ? 'none' : '0 3px 12px rgba(0,0,0,0.6)';
+        if (isHot) {
+          const e = clamp01((p - (L.start + j * STEP)) / POP);
+          const over = 1 + 0.18 * Math.sin(Math.min(1, e) * Math.PI); // pop com leve overshoot
+          sp.style.transform = `scale(${(0.82 + 0.18 * e) * over})`;
+        } else {
+          sp.style.transform = '';
+        }
+      });
+    }
+  };
+}
+
+const CAP_BUILDERS = { karaoke: buildKaraokeDemo, stacked: buildStackedDemo, scatter: buildScatterDemo, impacto: buildImpactDemo };
 
 const LABEL_W = 48; // .track-label width (content x offset of lanes)
 const MIN_SEG = 0.2; // s
@@ -1564,6 +1645,45 @@ function refreshQuickFixes() {
   bar.classList.toggle('hidden', !show);
   const chip = $('hlChip');
   if (chip) chip.textContent = hl.length ? hl.join(' / ') : 'Headline';
+  refreshHeadlineOptions(hl);
+}
+
+// 3 opções de headline vindas da IA (headline_options.json do render):
+// clicar troca a headline na hora, pelo mesmo caminho do editar manual (com
+// undo e persistência). A opção atual não vira chip.
+function headlineTwoLines(text) {
+  const words = String(text || '').trim().split(/\s+/).filter(Boolean);
+  if (words.length <= 1) return words.join(' ');
+  const mid = Math.max(1, Math.floor(words.length / 2));
+  return words.slice(0, mid).join(' ') + '\n' + words.slice(mid).join(' ');
+}
+
+function refreshHeadlineOptions(hlLines) {
+  const host = $('hlOptions');
+  if (!host) return;
+  const current = (hlLines || headlineLines()).join(' ').trim().toLowerCase();
+  const opts = (S.headlineOptions || [])
+    .filter((o) => String(o || '').trim())
+    .filter((o) => o.trim().toLowerCase() !== current);
+  const sig = opts.join('|') + '::' + current;
+  if (host.dataset.sig === sig) return;
+  host.dataset.sig = sig;
+  host.innerHTML = '';
+  host.classList.toggle('hidden', !opts.length || S.applying);
+  if (!opts.length) return;
+  const label = el('span', 'hl-options-label', host);
+  label.textContent = 'IA sugere:';
+  for (const opt of opts.slice(0, 2)) {
+    const b = el('button', 'quick-chip hl-alt', host);
+    b.type = 'button';
+    b.textContent = opt;
+    b.title = 'Usar esta headline';
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      commitHeadline(headlineTwoLines(opt));
+      toast('Headline trocada — Aplicar alterações para gravar no vídeo');
+    });
+  }
 }
 
 function currentCaptionIndex(t) {
@@ -1660,6 +1780,7 @@ async function applyState(data) {
   S.videoDuration = data.videoDuration || 0;
   S.hasCut = !!data.hasCut || S.videoDuration > 0;
   S.presetUsed = (data.presetUsed && typeof data.presetUsed === 'object') ? data.presetUsed : null;
+  S.headlineOptions = Array.isArray(data.headlineOptions) ? data.headlineOptions : [];
   S.fps = S.state.fps || 24;
   S.savedPending = !!data.hasPendingEdits;
   if (data.corrections) S.corrections = data.corrections;
@@ -2292,8 +2413,10 @@ const capAccentUsed = () => S.style.captions !== 'nenhuma';
 // "bloco" consumes the caption colour too, but paints the SLAB with it rather
 // than the text (see SimpleCaptions.tsx) — still a real use of the pick, so it
 // belongs here; the note in the Estilo tab is what explains where it lands.
-const CAP_BASE_STYLES = ['karaoke', 'simples', 'serifada', 'classica', 'bloco'];
-const CAP_EMPH_STYLES = ['stacked', 'scatter'];
+// "recorte" pinta o TEXTO do sticker (o contorno escuro é fixo — é ele que
+// garante a leitura); "impacto" usa a cor de ênfase na CAIXA da palavra atual.
+const CAP_BASE_STYLES = ['karaoke', 'simples', 'serifada', 'classica', 'bloco', 'recorte'];
+const CAP_EMPH_STYLES = ['stacked', 'scatter', 'impacto'];
 const CAP_CIRCLE_STYLES = ['stacked'];
 const legendaAccentUsed = () => capAccentUsed() && CAP_BASE_STYLES.includes(S.style.captions);
 const emphasisAccentUsed = () => capAccentUsed() && CAP_EMPH_STYLES.includes(S.style.captions);
@@ -3206,6 +3329,8 @@ const CAP_OVERLAY_STYLES = {
   karaoke:   {family: "'Poppins',sans-serif", weight: 900, size: 76, bottom: 300, ink: 'accent'},
   stacked:   {family: "'Poppins',sans-serif", weight: 900, size: 74, bottom: 320, ink: 'white', italic: true},
   scatter:   {family: "'Lora',serif",         weight: 400, size: 70, bottom: 330, ink: 'white'},
+  impacto:   {family: "'Poppins',sans-serif", weight: 900, size: 72, bottom: 430, ink: 'white', upper: true},
+  recorte:   {family: "'Poppins',sans-serif", weight: 800, size: 78, bottom: 430, ink: 'accent', upper: true},
   simples:   {family: "'Poppins',sans-serif", weight: 600, size: 82, bottom: 430, ink: 'accent'},
   serifada:  {family: "'Libre Baskerville',serif", weight: 700, size: 84, bottom: 430, ink: 'accent'},
   classica:  {family: "'Inter',sans-serif",   weight: 500, size: 52, bottom: 430, ink: 'accent'},
@@ -3250,6 +3375,7 @@ function updateCapOverlay() {
   line.style.fontSize = `${V.size * s}px`;
   line.style.color = ink;
   if (V.italic) line.style.fontStyle = 'italic';
+  if (V.upper) line.style.textTransform = 'uppercase';
   if (V.ink === 'slab') {
     line.style.background = S.style.captionAccent || '#111214';
     line.style.padding = `${V.size * 0.09 * s}px ${V.size * 0.16 * s}px`;
