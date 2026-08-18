@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.92
+
+Posição e tamanho da legenda agora são escolha sua.
+
+- Em Estilos → Personalizar: **Posição da legenda** (Embaixo, Centro ou Alto) e **Tamanho da legenda** (Pequena, Média ou Grande)
+- Vale para todos os 9 estilos de legenda — cada um sobe e escala do seu jeito, sem quebrar linha errado
+- O preview do editor mostra a posição e o tamanho reais antes de renderizar
+- A escolha fica salva no preset da marca, como as cores
+
 ## 1.91
 
 Três estilos novos de headline.

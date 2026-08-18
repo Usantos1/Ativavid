@@ -16,6 +16,7 @@ STYLE_KEYS = (
     "speechClean", "videoGoal", "brollMode", "captionChunk", "exportPreset",
     "colorGrade", "endCardCopy", "fastMode", "oneClick", "contentType",
     "brandId", "brandName", "note", "smartEmphasis", "endCardType",
+    "captionPosition", "captionSize",
 )
 
 

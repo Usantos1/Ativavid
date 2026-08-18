@@ -199,10 +199,21 @@ function splitTwo(words: Word[], V: Variant): Word[][] {
   return [words.slice(0, best), words.slice(best)];
 }
 
+// Posição/tamanho do preset: "baixo" mantém o bottom de cada variante;
+// centro/alto usam a mesma altura visual do karaokê. O tamanho escala a fonte
+// ANTES do agrupamento — a quebra de linha é medida no tamanho final.
+const POS_BOTTOM: Record<string, number> = {centro: 900, alto: 1330};
+const CAP_SCALE: number = (C as any).sizeScale ?? 1;
+
 export const SimpleCaptions: React.FC<{variant: string}> = ({variant}) => {
   const frame = useCurrentFrame();
   const {fps, durationInFrames} = useVideoConfig();
-  const V = SIMPLE_VARIANTS[variant] ?? SIMPLE_VARIANTS.simples;
+  const base = SIMPLE_VARIANTS[variant] ?? SIMPLE_VARIANTS.simples;
+  const V: Variant = {
+    ...base,
+    size: Math.round(base.size * CAP_SCALE),
+    bottom: POS_BOTTOM[(C as any).position as string] ?? base.bottom,
+  };
   const cues = buildCues(captions as Word[], V);
 
   let idx = -1;

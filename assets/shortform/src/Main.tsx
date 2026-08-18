@@ -81,6 +81,14 @@ export type EditData = {
     maxWords: number;
     safeWidth: number;
     paddingBottom: number;
+    // "Posição da legenda" do preset: baixo (default de cada estilo), centro,
+    // alto. karaoke posiciona por paddingBottom; os estáticos e o impacto leem
+    // este campo; stacked/scatter recebem seus offsets próprios já mapeados.
+    position?: 'baixo' | 'centro' | 'alto';
+    // "Tamanho da legenda" (P/M/G → 0.85/1/1.18) — os estáticos e o impacto
+    // multiplicam a fonte por ele; karaoke/stacked/scatter recebem os knobs
+    // próprios (fontSize/fontScale/scatterFontSize) já escalados.
+    sizeScale?: number;
     // "Legenda" colour — the BASE text: karaoke's whole line, and the three
     // static styles (simples/serifada/classica). Stacked's white lines and
     // scatter's ink-gradient words are deliberately NOT tied to this — they

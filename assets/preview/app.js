@@ -2851,6 +2851,8 @@ $('setupGo').addEventListener('click', async () => {
       videoGoal: S.style.videoGoal || 'reels',
       brollMode: S.style.brollMode || 'quando_necessario',
       captionChunk: S.style.captionChunk || 'frase_curta',
+      captionPosition: S.style.captionPosition || 'baixo',
+      captionSize: S.style.captionSize || 'm',
       exportPreset: S.style.exportPreset || 'reels',
       colorGrade: S.style.colorGrade || 'marca',
       endCardCopy: S.endCardCopy || null,
@@ -2939,6 +2941,8 @@ $('setupGo').addEventListener('click', async () => {
     videoGoal: S.style.videoGoal || 'reels',
     brollMode: S.style.brollMode || 'quando_necessario',
     captionChunk: S.style.captionChunk || 'frase_curta',
+    captionPosition: S.style.captionPosition || 'baixo',
+    captionSize: S.style.captionSize || 'm',
     exportPreset: S.style.exportPreset || 'reels',
     colorGrade: S.style.colorGrade || 'marca',
   };
@@ -3040,6 +3044,8 @@ $('setupSaveDefault').addEventListener('click', async () => {
     videoGoal: S.style.videoGoal || 'reels',
     brollMode: S.style.brollMode || 'quando_necessario',
     captionChunk: S.style.captionChunk || 'frase_curta',
+    captionPosition: S.style.captionPosition || 'baixo',
+    captionSize: S.style.captionSize || 'm',
     exportPreset: S.style.exportPreset || 'reels',
     colorGrade: S.style.colorGrade || 'marca',
     smartEmphasis: S.style.smartEmphasis !== false,
@@ -3412,10 +3418,14 @@ function updateCapOverlay() {
   const ink = V.ink === 'slab' ? inkOn(S.style.captionAccent || '#111214')
             : V.ink === 'accent' ? (S.style.captionAccent || '#f4f1e9')
             : '#fff';
+  // posição/tamanho do preset — mesmo mapa do render (_apply_caption_geometry)
+  const capPos = S.style.captionPosition || 'baixo';
+  const posBottom = capPos === 'centro' ? 900 : capPos === 'alto' ? 1330 : V.bottom;
+  const capScale = { p: 0.85, m: 1, g: 1.18 }[S.style.captionSize] || 1;
 
   box.classList.remove('hidden');
-  box.style.paddingBottom = `${V.bottom * s}px`;
-  const sig = `${i}|${text}|${style}|${Math.round(s * 100)}`;
+  box.style.paddingBottom = `${posBottom * s}px`;
+  const sig = `${i}|${text}|${style}|${capPos}|${capScale}|${Math.round(s * 100)}`;
   if (box.dataset.sig === sig && box.querySelector('.cap-overlay-line')) {
     highlightCurrentCaption(i);
     return;
@@ -3425,7 +3435,7 @@ function updateCapOverlay() {
   const line = el('div', 'cap-overlay-line' + (V.ink === 'slab' ? ' slab' : ''), box);
   line.style.fontFamily = V.family;
   line.style.fontWeight = String(V.weight);
-  line.style.fontSize = `${V.size * s}px`;
+  line.style.fontSize = `${V.size * capScale * s}px`;
   line.style.color = ink;
   if (V.italic) line.style.fontStyle = 'italic';
   if (V.upper) line.style.textTransform = 'uppercase';
@@ -4618,6 +4628,8 @@ function refreshAutoControls() {
     ['autoBroll', 'brollMode', 'quando_necessario'],
     ['autoExport', 'exportPreset', 'reels'],
     ['autoCaptionChunk', 'captionChunk', 'frase_curta'],
+    ['autoCapPosition', 'captionPosition', 'baixo'],
+    ['autoCapSize', 'captionSize', 'm'],
     ['autoContentType', 'contentType', 'informational'],
   ];
   for (const [id, key, def] of map) {
@@ -4657,6 +4669,8 @@ function wireAutoControls() {
     ['autoBroll', 'brollMode'],
     ['autoExport', 'exportPreset'],
     ['autoCaptionChunk', 'captionChunk'],
+    ['autoCapPosition', 'captionPosition'],
+    ['autoCapSize', 'captionSize'],
     ['autoContentType', 'contentType'],
   ];
   for (const [id, key] of map) {
@@ -5436,6 +5450,8 @@ function currentStyleSnapshot() {
     videoGoal: S.style?.videoGoal,
     brollMode: S.style?.brollMode,
     captionChunk: S.style?.captionChunk,
+    captionPosition: S.style?.captionPosition,
+    captionSize: S.style?.captionSize,
     exportPreset: S.style?.exportPreset,
     colorGrade: S.style?.colorGrade,
     endCardCopy: S.endCardCopy || null,

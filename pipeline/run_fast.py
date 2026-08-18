@@ -1466,7 +1466,7 @@ def build_edit_data(cut: Path, preset: dict, hook: list[str], duration: float, f
             "safeWidth": 720,
             "paddingBottom": 420,
             "windows": [],
-        },
+        },  # posição/tamanho do preset entram logo abaixo (_apply_caption_geometry)
         "inserts": [],
         "behind": [],
         "soundtrack": {
@@ -1504,6 +1504,7 @@ def build_edit_data(cut: Path, preset: dict, hook: list[str], duration: float, f
     circ = preset.get("circleAccent")
     if circ and captions == "stacked":
         ed["captions"]["circleAccent"] = circ
+    _apply_caption_geometry(ed, preset)
 
     chunk = (preset.get("captionChunk") or "frase_curta").lower()
     if chunk in ("palavra", "word"):
@@ -1822,6 +1823,39 @@ def _clear_dir_windows(dest: Path) -> None:
             f"Não deu para limpar {dest} (arquivo em uso). "
             "Cancele a edição desse projeto na Fila, espere 5s e tente de novo."
         )
+
+
+_CAP_SIZE_SCALE = {"p": 0.85, "m": 1.0, "g": 1.18}
+# paddingBottom por posição (quadro de 1920): "baixo" mantém o default de cada
+# estilo; centro/alto sobem o bloco. Os offsets de stacked/scatter são frações
+# próprias de cada componente, mapeadas para a MESMA altura visual.
+_CAP_POS_PADDING = {"centro": 900, "alto": 1330}
+_CAP_POS_STACKED = {"baixo": 0.156, "centro": -0.02, "alto": -0.28}
+_CAP_POS_SCATTER = {"baixo": 0.72, "centro": 0.5, "alto": 0.3}
+
+
+def _apply_caption_geometry(ed: dict, preset: dict) -> None:
+    """Traduz captionPosition/captionSize nos knobs que cada estilo já lê.
+
+    karaoke lê fontSize/paddingBottom; stacked lê fontScale/stackedOffsetY;
+    scatter lê scatterFontSize/scatterOffsetY; os estáticos e o impacto leem
+    position/sizeScale (SimpleCaptions/ImpactCaptions).
+    """
+    cap = ed.get("captions") or {}
+    pos = str(preset.get("captionPosition") or "baixo").lower()
+    size = str(preset.get("captionSize") or "m").lower()
+    scale = _CAP_SIZE_SCALE.get(size, 1.0)
+    if scale != 1.0:
+        cap["fontSize"] = round(76 * scale)
+        cap["fontScale"] = round(scale, 3)
+        cap["scatterFontSize"] = round(72 * scale)
+        cap["sizeScale"] = round(scale, 3)
+    if pos in _CAP_POS_PADDING:
+        cap["paddingBottom"] = _CAP_POS_PADDING[pos]
+        cap["stackedOffsetY"] = _CAP_POS_STACKED[pos]
+        cap["scatterOffsetY"] = _CAP_POS_SCATTER[pos]
+    cap["position"] = pos
+    ed["captions"] = cap
 
 
 _MUSIC_VIBES = {

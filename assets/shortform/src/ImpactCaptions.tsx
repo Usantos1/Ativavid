@@ -30,10 +30,10 @@ const {fontFamily} = loadFont('normal', {weights: ['800', '900']});
 type Word = {text: string; startMs: number; endMs: number};
 
 const C = (editData as any).captions ?? {};
-const SIZE = 72;
+const SIZE = Math.round(72 * (C.sizeScale ?? 1)); // captionSize do preset
 const MAX_W = 820;
 const MAX_WORDS = 3;
-const BOTTOM = C.paddingBottom ?? 430;
+const BOTTOM = C.paddingBottom ?? 430; // captionPosition entra por aqui (900/1330)
 const BOX = C.emphasisAccent || '#ffd400';
 const POP = 5; // frames — the box lands fast; slower reads as lag, not punch
 
