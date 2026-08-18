@@ -75,6 +75,7 @@
       const done = jobs.filter((j) => j.status === "done").length;
       if (filaEl) filaEl.textContent = String(fila);
       if (doneEl) doneEl.textContent = String(done);
+      return fila;
     } catch {
       /* ignore — hub poll continues */
     }
@@ -159,16 +160,29 @@
     refreshHint();
     refreshJobCounts();
     wireWindowChrome();
-    setInterval(() => {
-      // /api/jobs varre o disco no servidor — não martelar com o app oculto.
-      if (document.hidden) return;
-      refreshJobCounts().catch(() => {});
+    // SSE: os contadores acordam por evento; o intervalo vira watchdog e só
+    // corre rápido quando há fila ativa (/api/jobs varre o disco no servidor).
+    let sseOk = false;
+    let lastTick = Date.now();
+    let lastFila = 1;
+    const tick = () => {
+      lastTick = Date.now();
+      refreshJobCounts().then((n) => { if (typeof n === "number") lastFila = n; }).catch(() => {});
       refreshHint().catch(() => {});
+    };
+    try {
+      const es = new EventSource("/api/events");
+      es.onopen = () => { sseOk = true; };
+      es.onerror = () => { sseOk = false; };
+      es.addEventListener("tick", () => { if (!document.hidden) tick(); });
+    } catch { sseOk = false; }
+    setInterval(() => {
+      if (document.hidden) return;
+      if (sseOk && lastFila === 0 && Date.now() - lastTick < 20000) return;
+      tick();
     }, 2500);
     document.addEventListener("visibilitychange", () => {
-      if (document.hidden) return;
-      refreshJobCounts().catch(() => {});
-      refreshHint().catch(() => {});
+      if (!document.hidden) tick();
     });
   };
   if (document.readyState === "loading") {

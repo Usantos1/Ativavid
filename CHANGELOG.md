@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.07
+
+O app fica em silêncio quando não tem nada acontecendo.
+
+- A Fila agora é avisada na hora que algo muda (evento do servidor), em vez de perguntar a cada 2,5 segundos
+- Com a fila vazia e nada rodando, o app para de varrer o disco — zero trabalho em segundo plano
+- Durante um processamento, a barra de progresso continua atualizando rápido como sempre
+- Se a conexão de eventos cair, o comportamento antigo volta sozinho
+
 ## 2.06
 
 Vídeo em Concluídos com seek instantâneo e sem pesar na memória.

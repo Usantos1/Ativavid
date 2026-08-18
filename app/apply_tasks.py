@@ -498,6 +498,12 @@ def _persist(edit_dir: Path, task: dict[str, Any]) -> dict[str, Any]:
     task["editDir"] = str(edit)
     task["updatedAt"] = _utc()
     _write_json(task_path(edit), task)
+    try:
+        from app.event_bus import bump
+
+        bump()  # progresso do Apply aparece na Fila sem esperar o poll
+    except Exception:
+        pass
     root = projects_root_for(edit)
     with _index_lock:
         tasks = _load_index(root)

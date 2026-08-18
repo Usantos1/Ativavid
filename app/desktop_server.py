@@ -188,6 +188,35 @@ class DesktopHandler(ps.Handler):
             self._json(gw.status())
             return
 
+        # Server-Sent Events: um tick a cada mudança de estado (JobStore /
+        # índice de applies). O frontend usa isto para só fazer poll rápido
+        # quando há trabalho de verdade — app ocioso fica em silêncio.
+        if raw == "/api/events":
+            from app.event_bus import version, wait_for_change
+
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            try:
+                self.wfile.write(b"retry: 3000\n\n")
+                last = version()
+                self.wfile.write(f"event: tick\ndata: {last}\n\n".encode())
+                self.wfile.flush()
+                while True:
+                    cur = wait_for_change(last, timeout=15.0)
+                    if cur != last:
+                        last = cur
+                        self.wfile.write(f"event: tick\ndata: {cur}\n\n".encode())
+                    else:
+                        self.wfile.write(b": ping\n\n")  # heartbeat
+                    self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                return
+            except OSError:
+                return
+
         # Queue / brand APIs
         if raw == "/api/health":
             keys = ls.load_env_keys()

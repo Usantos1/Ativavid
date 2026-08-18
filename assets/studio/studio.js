@@ -3366,21 +3366,42 @@ async function boot() {
     await checkCrashRecovery();
   } catch { /* ignore */ }
   await refreshJobs();
+  // Poll adaptativo: o progresso fino de um job RODANDO vem de arquivos que
+  // o subprocesso escreve (fora do event bus), então só aí o poll de 2,5s se
+  // paga. Ocioso, quem avisa é o SSE (/api/events) — com um watchdog de 20s
+  // caso a conexão caia em silêncio. /api/jobs varre o disco no servidor;
+  // cada rodada evitada é I/O real economizado.
   let pollBusy = false;
-  setInterval(async () => {
-    // /api/jobs varre o disco no servidor: pular com o app oculto e nunca
-    // empilhar uma rodada nova em cima de uma que ainda não respondeu.
-    if (document.hidden || pollBusy) return;
+  let sseOk = false;
+  let lastRefresh = Date.now();
+  const tickRefresh = async () => {
+    if (pollBusy) return;
     pollBusy = true;
+    lastRefresh = Date.now();
     try {
       await refreshJobs().catch(() => {});
       await refreshHealth().catch(() => {});
     } finally {
       pollBusy = false;
     }
+  };
+  try {
+    const es = new EventSource("/api/events");
+    es.onopen = () => { sseOk = true; };
+    es.onerror = () => { sseOk = false; };
+    es.addEventListener("tick", () => {
+      if (!document.hidden) tickRefresh();
+    });
+  } catch { sseOk = false; }
+  const hasActiveWork = () =>
+    (state.jobs || []).some((j) => jobInFila(j) || j.status === "processing" || j.applying);
+  setInterval(() => {
+    if (document.hidden || pollBusy) return;
+    if (sseOk && !hasActiveWork() && Date.now() - lastRefresh < 20000) return;
+    tickRefresh();
   }, 2500);
   document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) refreshJobs().catch(() => {});
+    if (!document.hidden) tickRefresh();
   });
 }
 

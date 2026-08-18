@@ -686,6 +686,12 @@ class JobStore:
         tmp = self.jobs_path.with_suffix(".tmp")
         tmp.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
         tmp.replace(self.jobs_path)
+        try:
+            from app.event_bus import bump
+
+            bump()  # acorda o /api/events — a Fila atualiza sem poll cego
+        except Exception:
+            pass
 
     def list(self) -> list[dict]:
         with self._lock:
