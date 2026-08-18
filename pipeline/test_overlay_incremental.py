@@ -95,3 +95,13 @@ def test_template_change_forces_full_render():
     old = _snap(hook={"endSec": 4}, template="t1")
     new = _snap(hook={"endSec": 4}, template="t2")
     assert _incremental_ranges(old, new, FPS, FRAMES) is None
+
+
+def test_cache_slots_are_per_project(tmp_path):
+    """edit_dir.name é sempre "edit" — o slot tem que vir do PROJETO."""
+    from app.overlay_path import _cache_dir_for
+
+    a = _cache_dir_for(tmp_path / "Projetos" / "proj_A" / "edit")
+    b = _cache_dir_for(tmp_path / "Projetos" / "proj_B" / "edit")
+    assert a != b
+    assert a == _cache_dir_for(tmp_path / "Projetos" / "proj_A" / "edit")

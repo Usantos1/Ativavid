@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.02
+
+Validação completa e uma correção importante no reaproveitamento de render.
+
+- Rodamos o pipeline inteiro de ponta a ponta num vídeo real com os recursos novos juntos (Impacto + Pergunta→Resposta + fontes da marca + palavras de destaque): tudo funcionando, 337/337 frames
+- **Correção**: o reaproveitamento de render guardava tudo num lugar só — projetos diferentes se atropelavam e ninguém reaproveitava de verdade; agora cada projeto tem o seu espaço
+- Medido depois da correção: repetir um render com os mesmos efeitos caiu de ~88s para ~16s (o desenho dos efeitos é reaproveitado inteiro e só a montagem final roda)
+
 ## 2.01
 
 Imagens de apoio quando você pede, e timeline leve para arrastar.

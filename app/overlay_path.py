@@ -171,7 +171,17 @@ def _incremental_ranges(
 
 
 def _cache_dir_for(edit_dir: Path) -> Path:
-    return _OV_CACHE_ROOT / edit_dir.name
+    """Slot por PROJETO. `edit_dir.name` é sempre "edit" — usar só isso fazia
+    todos os projetos colidirem no mesmo slot (um sobrescrevia o cache do
+    outro e nenhum reusava). O hash do caminho absoluto separa de verdade.
+    """
+    import hashlib
+
+    p = Path(edit_dir).resolve()
+    tag = hashlib.sha1(str(p).lower().encode("utf-8")).hexdigest()[:12]
+    parent = p.parent.name or "proj"
+    safe = "".join(c for c in parent if c.isalnum() or c in "-_")[:40]
+    return _OV_CACHE_ROOT / f"{safe}_{tag}"
 
 
 def load_overlay_cache(edit_dir: Path) -> tuple[Path, dict[str, Any]] | None:
