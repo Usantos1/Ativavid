@@ -208,6 +208,14 @@ const STYLE_CATALOG = {
       icon: '<svg viewBox="0 0 16 16"><path d="M3 13.2L13 3.2" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" fill="none"/><path d="M6.6 14L9.4 11.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none" opacity=".55"/><path d="M6.6 4.8L3.8 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none" opacity=".55"/></svg>',
     },
     {
+      // OFF por padrão: emoji divide opiniões — é uma decisão da marca,
+      // não um padrão do produto. Mapa curado PT, no máximo 1 a cada 6s.
+      id: 'emojiCaptions',
+      name: 'Emoji nas legendas',
+      def: false,
+      icon: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.4" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="5.8" cy="6.6" r="0.9"/><circle cx="10.2" cy="6.6" r="0.9"/><path d="M5.2 9.6c.7 1.2 1.7 1.8 2.8 1.8s2.1-.6 2.8-1.8" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>',
+    },
+    {
       id: 'musicAI',
       name: 'Trilha sonora com IA',
       def: true,
@@ -2901,6 +2909,8 @@ $('setupGo').addEventListener('click', async () => {
       captionFont: S.style.captionFont || null,
       headlineFont: S.style.headlineFont || null,
       emphasisWords: S.style.emphasisWords || null,
+    headlineDuration: S.style.headlineDuration || 'curta',
+      headlineDuration: S.style.headlineDuration || 'curta',
       exportPreset: S.style.exportPreset || 'reels',
       colorGrade: S.style.colorGrade || 'marca',
       endCardCopy: S.endCardCopy || null,
@@ -2994,6 +3004,7 @@ $('setupGo').addEventListener('click', async () => {
     captionFont: S.style.captionFont || null,
     headlineFont: S.style.headlineFont || null,
     emphasisWords: S.style.emphasisWords || null,
+    headlineDuration: S.style.headlineDuration || 'curta',
     exportPreset: S.style.exportPreset || 'reels',
     colorGrade: S.style.colorGrade || 'marca',
   };
@@ -3100,6 +3111,7 @@ $('setupSaveDefault').addEventListener('click', async () => {
     captionFont: S.style.captionFont || null,
     headlineFont: S.style.headlineFont || null,
     emphasisWords: S.style.emphasisWords || null,
+    headlineDuration: S.style.headlineDuration || 'curta',
     exportPreset: S.style.exportPreset || 'reels',
     colorGrade: S.style.colorGrade || 'marca',
     smartEmphasis: S.style.smartEmphasis !== false,
@@ -4729,6 +4741,7 @@ function refreshAutoControls() {
     ['autoCapFont', 'captionFont', ''],
     ['autoHlFont', 'headlineFont', ''],
     ['autoEmphWords', 'emphasisWords', ''],
+    ['autoHlDuration', 'headlineDuration', 'curta'],
     ['autoContentType', 'contentType', 'informational'],
   ];
   for (const [id, key, def] of map) {
@@ -4838,6 +4851,7 @@ function wireAutoControls() {
     ['autoCapFont', 'captionFont'],
     ['autoHlFont', 'headlineFont'],
     ['autoEmphWords', 'emphasisWords'],
+    ['autoHlDuration', 'headlineDuration'],
     ['autoContentType', 'contentType'],
   ];
   for (const [id, key] of map) {
@@ -5622,6 +5636,7 @@ function currentStyleSnapshot() {
     captionFont: S.style?.captionFont,
     headlineFont: S.style?.headlineFont,
     emphasisWords: S.style?.emphasisWords,
+    headlineDuration: S.style?.headlineDuration,
     exportPreset: S.style?.exportPreset,
     colorGrade: S.style?.colorGrade,
     endCardCopy: S.endCardCopy || null,

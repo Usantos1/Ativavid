@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.03
+
+Emoji nas legendas e headline que fica o tempo que você quiser.
+
+- Novo elemento **Emoji nas legendas** (desligado por padrão): palavras como grátis, garantia, celular, cuidado e hoje ganham o emoji certo automaticamente — no máximo 1 a cada 6 segundos, sem poluir, sem custo de IA
+- Novo controle **"Headline fica na tela"**: Alguns segundos (como hoje), O dobro do tempo, ou O vídeo inteiro
+- Os dois valem para todos os estilos e ficam salvos no preset da marca
+
 ## 2.02
 
 Validação completa e uma correção importante no reaproveitamento de render.

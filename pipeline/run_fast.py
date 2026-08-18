@@ -1446,12 +1446,9 @@ def build_edit_data(cut: Path, preset: dict, hook: list[str], duration: float, f
         "hook": {
             "enabled": hook_enabled,
             # "pilula" é barra de contexto, não momento de abertura — fica o
-            # vídeo inteiro. Os demais estilos mantêm a janela de gancho.
-            "endSec": (
-                round(duration, 3)
-                if headline == "pilula" and hook_enabled
-                else min(4.0, max(1.5, duration * 0.25))
-            ),
+            # vídeo inteiro. Para os demais, "headlineDuration" do preset:
+            # curta (janela clássica), media (dobro, teto 8s) ou inteira.
+            "endSec": _hook_end_sec(headline, preset, duration),
             "style": headline if hook_enabled else "outline",
             "lines": hook if hook_enabled else ["", ""],
             "accent": accent,
@@ -1902,6 +1899,21 @@ def _apply_caption_geometry(ed: dict, preset: dict) -> None:
 # IDs do catálogo de fontes do template (assets/shortform/src/fonts.ts).
 # Valor fora do catálogo é descartado — o template ignoraria e a UI mentiria.
 _FONT_IDS = {"poppins", "inter", "montserrat", "playfair", "lora", "anton", "bebas", "archivo"}
+
+
+def _hook_end_sec(headline: str, preset: dict, duration: float) -> float:
+    """Janela da headline. pilula/inteira = vídeo todo; media = dobro (teto
+    8s); curta (default) = fórmula clássica. O espaço do b-roll continua
+    usando a janela clássica (clamp min(4.0,…) nos pontos de leitura)."""
+    if not duration:
+        return 4.0
+    dur_pref = str(preset.get("headlineDuration") or "curta").lower().strip()
+    if headline == "pilula" or dur_pref in ("inteira", "sempre", "full"):
+        return round(duration, 3)
+    base = min(4.0, max(1.5, duration * 0.25))
+    if dur_pref in ("media", "média", "longa"):
+        return round(min(8.0, max(base * 2, 3.0), duration), 3)
+    return round(base, 3)
 
 
 def _apply_brand_fonts(ed: dict, preset: dict) -> None:
@@ -2776,6 +2788,16 @@ def run(
                 apply_caption_fixes(edit_dir, fixes)
         except Exception as e:  # noqa: BLE001
             print(f"[warn] captionFixes: {e}", flush=True)
+
+        if (preset.get("elements") or {}).get("emojiCaptions"):
+            try:
+                from app.caption_emoji import apply_to_captions_file
+
+                n_emoji = apply_to_captions_file(caps_path)
+                if n_emoji:
+                    print(f"[emoji] {n_emoji} emoji(s) nas legendas", flush=True)
+            except Exception as e:  # noqa: BLE001
+                print(f"[warn] emoji captions: {e}", flush=True)
 
         cap_style = preset.get("captions") or "karaoke"
         if cap_style == "stacked":
