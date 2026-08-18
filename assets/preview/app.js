@@ -2910,7 +2910,10 @@ $('setupGo').addEventListener('click', async () => {
       headlineFont: S.style.headlineFont || null,
       emphasisWords: S.style.emphasisWords || null,
     headlineDuration: S.style.headlineDuration || 'curta',
+    headlineAnimation: S.style.headlineAnimation || 'padrao',
       headlineDuration: S.style.headlineDuration || 'curta',
+    headlineAnimation: S.style.headlineAnimation || 'padrao',
+      headlineAnimation: S.style.headlineAnimation || 'padrao',
       exportPreset: S.style.exportPreset || 'reels',
       colorGrade: S.style.colorGrade || 'marca',
       endCardCopy: S.endCardCopy || null,
@@ -3005,6 +3008,7 @@ $('setupGo').addEventListener('click', async () => {
     headlineFont: S.style.headlineFont || null,
     emphasisWords: S.style.emphasisWords || null,
     headlineDuration: S.style.headlineDuration || 'curta',
+    headlineAnimation: S.style.headlineAnimation || 'padrao',
     exportPreset: S.style.exportPreset || 'reels',
     colorGrade: S.style.colorGrade || 'marca',
   };
@@ -3112,6 +3116,7 @@ $('setupSaveDefault').addEventListener('click', async () => {
     headlineFont: S.style.headlineFont || null,
     emphasisWords: S.style.emphasisWords || null,
     headlineDuration: S.style.headlineDuration || 'curta',
+    headlineAnimation: S.style.headlineAnimation || 'padrao',
     exportPreset: S.style.exportPreset || 'reels',
     colorGrade: S.style.colorGrade || 'marca',
     smartEmphasis: S.style.smartEmphasis !== false,
@@ -4742,6 +4747,7 @@ function refreshAutoControls() {
     ['autoHlFont', 'headlineFont', ''],
     ['autoEmphWords', 'emphasisWords', ''],
     ['autoHlDuration', 'headlineDuration', 'curta'],
+    ['autoHlAnim', 'headlineAnimation', 'padrao'],
     ['autoContentType', 'contentType', 'informational'],
   ];
   for (const [id, key, def] of map) {
@@ -4852,6 +4858,7 @@ function wireAutoControls() {
     ['autoHlFont', 'headlineFont'],
     ['autoEmphWords', 'emphasisWords'],
     ['autoHlDuration', 'headlineDuration'],
+    ['autoHlAnim', 'headlineAnimation'],
     ['autoContentType', 'contentType'],
   ];
   for (const [id, key] of map) {
@@ -5637,6 +5644,7 @@ function currentStyleSnapshot() {
     headlineFont: S.style?.headlineFont,
     emphasisWords: S.style?.emphasisWords,
     headlineDuration: S.style?.headlineDuration,
+    headlineAnimation: S.style?.headlineAnimation,
     exportPreset: S.style?.exportPreset,
     colorGrade: S.style?.colorGrade,
     endCardCopy: S.endCardCopy || null,

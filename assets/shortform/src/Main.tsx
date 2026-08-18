@@ -79,6 +79,9 @@ export type EditData = {
     // starts answering.
     answerLines?: string[];
     answerAtSec?: number;
+    // "Entrada da headline": padrao (fade+sobe), pop (escala com peso),
+    // deslizar (da esquerda). carimbo/pergunta têm entradas próprias.
+    animation?: 'padrao' | 'pop' | 'deslizar';
     accent?: string;        // realce/misto marker + text colour (default #ff5200)
     // Fonte da marca para TODAS as headlines (id do catálogo em fonts.ts:
     // poppins/inter/montserrat/playfair/lora/anton/bebas/archivo). Ausente =
@@ -667,7 +670,21 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
   const enter = interpolate(f, [0, 8], [0, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic)});
   const exit = interpolate(f, [totalFrames - 9, totalFrames], [1, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
   const op = Math.min(enter, exit);
-  const y = interpolate(enter, [0, 1], [24, 0]);
+
+  // "Entrada da headline" (preset → hook.animation):
+  //   padrao   = fade + sobe 24px (o de sempre)
+  //   pop      = escala 0.68→1 com overshoot — entra com peso
+  //   deslizar = vem da esquerda (-56px), sem subir
+  // carimbo (slam) e pergunta (duas fases) têm entradas próprias e ignoram.
+  const anim = String(H.animation ?? 'padrao');
+  const popEnter = interpolate(f, [0, 9], [0, 1], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+    easing: Easing.out(Easing.back(2)),
+  });
+  const y = anim === 'padrao' ? interpolate(enter, [0, 1], [24, 0]) : 0;
+  const slideX = anim === 'deslizar' ? interpolate(enter, [0, 1], [-56, 0]) : 0;
+  const popScale = anim === 'pop' ? 0.68 + 0.32 * popEnter : 1;
 
   const styleId = H.style ?? 'outline';
   const S = HL_STYLES[styleId] ?? HL_STYLES.outline;
@@ -684,7 +701,8 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
   const top = H.paddingTop ?? S.top;
   const shell: React.CSSProperties = {
     opacity: op,
-    translate: `0px ${y}px`,
+    translate: `${slideX.toFixed(1)}px ${y}px`,
+    scale: String(popScale.toFixed(3)),
     textAlign: 'center',
     fontFamily: HL_FF,
     lineHeight: lh,
@@ -784,7 +802,8 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
         <div
           style={{
             opacity: op,
-            translate: `0px ${y}px`,
+            translate: `${slideX.toFixed(1)}px ${y}px`,
+            scale: String(popScale.toFixed(3)),
             display: 'flex',
             alignItems: 'center',
             gap: Math.round(sz * 0.35),
@@ -821,7 +840,8 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
         <div
           style={{
             opacity: op,
-            translate: `0px ${(-y).toFixed(1)}px`,
+            translate: `${slideX.toFixed(1)}px ${(-y).toFixed(1)}px`,
+            scale: String(popScale.toFixed(3)),
             display: 'flex',
             alignItems: 'stretch',
             gap: 26,
@@ -915,7 +935,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
     return (
       <AbsoluteFill style={{justifyContent: 'flex-start', alignItems: 'center', paddingTop: top}}>
         <Sfx src="whoosh.mp3" volume={0.1} />
-        <div style={{opacity: op, translate: `0px ${y}px`, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 28}}>
+        <div style={{opacity: op, translate: `${slideX.toFixed(1)}px ${y}px`, scale: String(popScale.toFixed(3)), display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 28}}>
           {H.logo || H.sign ? (
             <div style={{display: 'flex', alignItems: 'center', gap: 34}}>
               {H.logo ? <Img src={staticFile(H.logo)} style={{width: 300, borderRadius: 18, boxShadow: '0 12px 34px rgba(0,0,0,0.4)'}} /> : null}

@@ -1449,6 +1449,11 @@ def build_edit_data(cut: Path, preset: dict, hook: list[str], duration: float, f
             # vídeo inteiro. Para os demais, "headlineDuration" do preset:
             # curta (janela clássica), media (dobro, teto 8s) ou inteira.
             "endSec": _hook_end_sec(headline, preset, duration),
+            "animation": (
+                str(preset.get("headlineAnimation") or "padrao").lower()
+                if str(preset.get("headlineAnimation") or "").lower() in ("pop", "deslizar")
+                else "padrao"
+            ),
             "style": headline if hook_enabled else "outline",
             "lines": hook if hook_enabled else ["", ""],
             "accent": accent,

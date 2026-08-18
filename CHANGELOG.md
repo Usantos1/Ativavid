@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.04
+
+Entrada da headline do seu jeito.
+
+- Novo controle **"Entrada da headline"** em Estilos → Personalizar: **Suave** (aparece subindo, como hoje), **Com peso** (entra crescendo, com impacto) ou **Deslizando** (vem da esquerda)
+- Vale para todos os estilos de headline — Carimbo e Pergunta→Resposta mantêm as entradas próprias que já têm personalidade
+- A escolha fica salva no preset da marca
+
 ## 2.03
 
 Emoji nas legendas e headline que fica o tempo que você quiser.
