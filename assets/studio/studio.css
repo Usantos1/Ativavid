@@ -978,7 +978,7 @@ body.view-estilo-on .ws-head {
   padding: 4px 8px; border-radius: 999px; background: color-mix(in srgb, var(--text) 8%, transparent); color: var(--dim);
 }
 .chip.done { background: rgba(45, 212, 168, 0.14); color: var(--ok); }
-.chip.processing, .chip.queued, .chip.importing { background: rgba(0, 229, 212, 0.12); color: var(--teal); }
+.chip.processing, .chip.queued, .chip.importing, .chip.updating { background: rgba(0, 229, 212, 0.12); color: var(--teal); }
 .chip.needs_review { background: rgba(245, 185, 66, 0.16); color: var(--warn); }
 .chip.error { background: rgba(255, 90, 106, 0.15); color: var(--bad); }
 .pc-msg {
@@ -1531,9 +1531,10 @@ body.view-estilo-on .ws-head {
 .toast {
   position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
   background: var(--panel); border: 1px solid var(--line); color: var(--text);
-  padding: 10px 16px; border-radius: 999px;
+  padding: 10px 16px; border-radius: 16px;
   z-index: 50; font-size: 13px; max-width: calc(100% - 2rem);
   box-shadow: 0 8px 24px color-mix(in srgb, var(--text) 16%, transparent);
+  white-space: pre-line; text-align: center; line-height: 1.35;
 }
 .pc-progress {
   height: 4px;

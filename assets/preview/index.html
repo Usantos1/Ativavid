@@ -118,17 +118,19 @@
     <div id="stateMessage" class="state-message" hidden></div>
   </div>
   <div class="head-actions">
+    <span id="pendingPill" class="pill pending hidden" title="">Alterações pendentes</span>
     <span id="dirtyPill" class="pill hidden"><b id="dirtyCount">0</b> ajuste(s)</span>
     <span id="savedPill" class="pill saved hidden">✓ salvo</span>
     <span id="scorePill" class="pill score hidden" title="Análise estrutural — não é previsão de alcance">score <b id="scoreVal">—</b></span>
     <button id="btnAiEdit" class="btn ghost" title="Pedir mudanças à IA">Editar com IA</button>
     <button id="btnOpenFinal" class="btn ghost" disabled title="O vídeo final ainda não está pronto">Ver final</button>
     <button id="btnOpenFolder" class="btn ghost" title="Abrir pasta do projeto">Abrir pasta</button>
-    <button id="btnSave" class="btn primary" disabled title="Nada para salvar">Salvar</button>
+    <button id="btnApply" class="btn primary" disabled title="Nada para aplicar">Aplicar alterações</button>
     <div class="head-more" id="headMore">
       <button type="button" id="btnHeadMore" class="btn ghost head-more-btn" aria-haspopup="menu" aria-expanded="false" title="Mais ações">•••</button>
       <div id="headMoreMenu" class="head-more-menu hidden" role="menu">
-        <button type="button" id="btnVersions" class="head-more-item" role="menuitem">Versões</button>
+        <button type="button" id="btnVersions" class="head-more-item" role="menuitem">Restaurar versão</button>
+        <button type="button" id="btnSave" class="head-more-item" role="menuitem">Salvar e enviar à fila</button>
         <button type="button" id="btnDiscard" class="head-more-item" disabled role="menuitem" title="Nada para descartar">Descartar alterações</button>
       </div>
     </div>
@@ -359,7 +361,7 @@
         <div id="endCardCopy" class="endcard-copy hidden">
           <label class="ec-field">
             <span class="ec-label">@ da loja</span>
-            <input id="ecLine1" type="text" placeholder="Segue @lojaprimecamp" maxlength="60">
+            <input id="ecLine1" type="text" placeholder="Segue @sua_marca" maxlength="60">
           </label>
           <label class="ec-field">
             <span class="ec-label">chamada</span>
@@ -400,10 +402,12 @@
         <div class="sz-side sz-right"></div>
         <span class="sz-label">zona segura</span>
       </div>
+      <div id="hlOverlay" class="hl-overlay hidden" title="Clique para editar a headline deste vídeo"></div>
       <!-- WYSIWYG caption layer. Only meaningful BEFORE the Fase-2 render,
            where the video has no burned-in captions yet: seeing the wrong word
            here costs a click, seeing it after the render costs a re-render. -->
       <div id="capOverlay" class="cap-overlay hidden"></div>
+      <div id="applyStage" class="apply-stage hidden" hidden>Aplicando alterações...</div>
       <button id="btnCapPreview" class="btn ghost small cap-toggle hidden"
               title="Mostrar a legenda sobre o vídeo, como vai ficar">legenda</button>
       <button id="btnSafeZone" class="btn ghost small safe-toggle"
@@ -412,6 +416,10 @@
   </section>
 
   <div id="editorCol" class="editor-col">
+    <div id="quickFixes" class="quick-fixes glass hidden">
+      <button type="button" id="hlChip" class="quick-chip" title="Clique para editar a headline deste vídeo">Headline</button>
+      <button type="button" id="capNow" class="quick-chip cap" title="Legenda neste momento — clique para corrigir">—</button>
+    </div>
   <div id="transportBar" class="transport glass">
     <button id="btnPlay" class="btn icon" title="Play/Pause (espaço)"></button>
     <button id="btnMute" class="btn icon" title="Mudo"></button>
@@ -423,8 +431,12 @@
     </button>
     <button id="btnUndo" class="btn icon" title="Desfazer (Ctrl+Z)" disabled></button>
     <button id="btnRedo" class="btn icon" title="Refazer (Ctrl+Shift+Z)" disabled></button>
-    <button id="btnSplit" class="btn icon" title="Cortar o take selecionado na agulha (tecla S)"></button>
-    <button id="btnDeleteTake" class="btn icon" title="Apagar o take selecionado (Delete)" disabled></button>
+    <button id="btnSplit" class="btn cover-btn" title="Cortar o take selecionado na agulha (S)">
+      <span id="splitIcon"></span><span>Cortar</span>
+    </button>
+    <button id="btnDeleteTake" class="btn cover-btn" title="Excluir o take selecionado (Delete)" disabled>
+      <span id="deleteIcon"></span><span>Excluir</span>
+    </button>
     <button id="btnCover" class="btn cover-btn" title="Salvar o frame da agulha como capa.jpg na pasta para postar">
       <span id="coverIcon"></span><span>Capa</span>
     </button>
@@ -447,6 +459,9 @@
     <div class="spacer"></div>
     <span class="transport-divider"></span>
     <span class="dim small">zoom</span>
+    <button id="btnZoomOut" class="btn ghost small" title="Afastar (Ctrl + scroll também funciona)">−</button>
+    <button id="btnZoom100" class="btn ghost small" title="Zoom 100% — escala visual, sem mudar o tempo">100%</button>
+    <button id="btnZoomIn" class="btn ghost small" title="Aproximar (Ctrl + scroll também funciona)">+</button>
     <input id="zoom" type="range" min="0" max="100" value="0" title="Zoom da timeline (centrado na agulha)">
     <button id="btnFit" class="btn ghost small" title="Ajustar à janela">fit</button>
   </div>
@@ -546,7 +561,7 @@
       <h3 class="help-sec-title">Corte</h3>
       <ul class="help-list">
         <li><span class="help-keys"><kbd>M</kbd></span><span>marca <b>IN</b>, depois <b>OUT</b> — aí escreva o ajuste</span></li>
-        <li><span class="help-keys"><kbd>delete</kbd></span><span>remove o take selecionado</span></li>
+        <li><span class="help-keys"><kbd>delete</kbd></span><span>exclui o take selecionado</span></li>
         <li><span class="help-keys"><kbd>S</kbd></span><span>corta o take na agulha</span></li>
         <li><span class="help-keys"><kbd>alt</kbd><kbd>←</kbd><kbd>→</kbd></span><span>borda <b>final</b>, 1 frame</span></li>
         <li><span class="help-keys"><kbd>alt</kbd><kbd>shift</kbd><kbd>←</kbd><kbd>→</kbd></span><span>borda <b>inicial</b>, 1 frame</span></li>
@@ -560,7 +575,7 @@
         <li><span class="help-keys"><span class="help-gesture">arrastar</span></span><span>bordas do take ajustam o corte</span></li>
         <li><span class="help-keys"><span class="help-gesture">duplo-clique</span></span><span>desfaz o ajuste do take</span></li>
         <li><span class="help-keys"><span class="help-gesture">pinça</span></span><span>zoom no trackpad</span></li>
-        <li><span class="help-keys"><span class="help-gesture">barra zoom</span></span><span>amplia a partir da agulha</span></li>
+        <li><span class="help-keys"><kbd>ctrl</kbd><span class="help-gesture">scroll</span></span><span>zoom da timeline</span></li>
       </ul>
     </section>
   </div>

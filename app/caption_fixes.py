@@ -20,10 +20,125 @@ def _punct_suffix(s: str) -> str:
 
 
 def tokens_match(word: str, needle: str) -> bool:
+    """Igualdade de palavra. Ignora maiúscula e pontuação final. Sem prefixo."""
     a, b = _fold(word), _fold(needle)
-    if not a or not b:
-        return False
-    return a == b or a.startswith(b) or b.startswith(a)
+    return bool(a) and a == b
+
+
+def _split_tokens(text: str) -> list[str]:
+    return [t for t in re.split(r"\s+", str(text or "").strip()) if t]
+
+
+def _item_span_s(item: dict) -> tuple[float, float]:
+    if item.get("startMs") is not None or item.get("endMs") is not None:
+        return float(item.get("startMs") or 0) / 1000.0, float(item.get("endMs") or 0) / 1000.0
+    return float(item.get("start") or 0), float(item.get("end") or 0)
+
+
+def _item_ids(item: dict) -> set[str]:
+    out: set[str] = set()
+    for key in ("id", "tokenId", "cueId", "wordId"):
+        raw = item.get(key)
+        if raw is not None and str(raw).strip() != "":
+            out.add(str(raw))
+    return out
+
+
+def locate_replacement_windows(words: list[dict], src_toks: list[str]) -> list[int]:
+    """Índices iniciais de janelas com match exato de cada token."""
+    hits: list[int] = []
+    n = len(src_toks)
+    if n < 1 or not isinstance(words, list):
+        return hits
+    for i in range(0, len(words) - n + 1):
+        window = words[i : i + n]
+        if len(window) != n:
+            continue
+        if all(
+            isinstance(window[k], dict)
+            and window[k].get("text") is not None
+            and tokens_match(str(window[k].get("text") or ""), src_toks[k])
+            for k in range(n)
+        ):
+            hits.append(i)
+    return hits
+
+
+def _fix_time_range_s(fix: dict) -> tuple[float, float] | None:
+    if fix.get("startMs") is not None or fix.get("endMs") is not None:
+        a = float(fix.get("startMs") or 0) / 1000.0
+        b = float(fix.get("endMs") or 0) / 1000.0
+        return (a, b) if b > a else None
+    for a_key, b_key in (("start", "end"), ("renderedStart", "renderedEnd")):
+        if fix.get(a_key) is None and fix.get(b_key) is None:
+            continue
+        a = float(fix.get(a_key) or 0)
+        b = float(fix.get(b_key) or 0)
+        if b > a:
+            return a, b
+    return None
+
+
+def resolve_replacement_index(
+    words: list[dict], src_toks: list[str], fix: dict | None = None
+) -> tuple[str, list[int]]:
+    """Escolhe a janela. ('ok', [i]) | ('none', []) | ('ambiguous', [...]).
+
+    Ordem: tokenId/cueId → índice → intervalo temporal → match exato único.
+    Várias ocorrências sem alvo → ambíguo, não chuta.
+    Cue clicado (id único) não passa pelo matcher textual.
+    """
+    fix = fix if isinstance(fix, dict) else {}
+    n = len(src_toks)
+    target_id = None
+    for key in ("tokenId", "cueId", "id", "wordId"):
+        if fix.get(key) is not None and str(fix.get(key)).strip() != "":
+            target_id = str(fix.get(key))
+            break
+    if target_id is not None:
+        id_hits = [
+            i
+            for i, w in enumerate(words)
+            if isinstance(w, dict) and target_id in _item_ids(w)
+        ]
+        if len(id_hits) == 1:
+            start = id_hits[0]
+            if start + max(1, n) <= len(words):
+                return "ok", [start]
+            return "ok", id_hits
+
+    hits = locate_replacement_windows(words, src_toks)
+    if target_id is not None:
+        hits = [
+            i
+            for i in hits
+            if any(target_id in _item_ids(words[i + k]) for k in range(n) if isinstance(words[i + k], dict))
+        ]
+
+    if fix.get("index") is not None:
+        try:
+            idx = int(fix["index"])
+        except (TypeError, ValueError):
+            idx = None
+        if idx is not None:
+            hits = [i for i in hits if i == idx]
+
+    span = _fix_time_range_s(fix)
+    if span is not None:
+        t0, t1 = span
+        timed: list[int] = []
+        for i in hits:
+            ws, we = _item_span_s(words[i])
+            we2 = _item_span_s(words[i + n - 1])[1]
+            if ws < t1 and we2 > t0:
+                timed.append(i)
+        hits = timed
+
+    if len(hits) == 1:
+        return "ok", hits
+    if len(hits) == 0:
+        return "none", []
+    return "ambiguous", hits
 
 
 def _replace_word(word: str, new: str) -> str:
@@ -32,10 +147,35 @@ def _replace_word(word: str, new: str) -> str:
     return core + (suf if not _punct_suffix(new) else "")
 
 
-def apply_replacements_to_words(words: list[dict], fixes: list[dict]) -> int:
-    """Troca o texto; preserva startMs/endMs. Devolve quantas palavras mudaram."""
+def apply_replacements_to_words(
+    words: list[dict],
+    fixes: list[dict],
+    *,
+    splice: bool = True,
+    all_occurrences: bool = False,
+) -> int:
+    """Troca o texto. Se o número de tokens muda, redistribui o intervalo do cue.
+
+    O início/fim globais do trecho original se mantêm. Sem Whisper.
+    splice=True (captions.json): a lista ganha/perde palavras.
+    splice=False (cues aninhados): só altera o texto dos nós existentes.
+    Sem alvo e com 2+ ocorrências: não altera (ambíguo), salvo all_occurrences.
+    """
+    return int(replace_caption_tokens(words, fixes, splice=splice, all_occurrences=all_occurrences)["changed"])
+
+
+def replace_caption_tokens(
+    words: list[dict],
+    fixes: list[dict],
+    *,
+    splice: bool = True,
+    all_occurrences: bool = False,
+) -> dict[str, Any]:
     changed = 0
-    items = [w for w in words if isinstance(w, dict) and w.get("text") is not None]
+    ambiguous = False
+    match_count = 0
+    if not isinstance(words, list):
+        return {"changed": 0, "ambiguous": False, "matches": 0}
     for fix in fixes or []:
         if not isinstance(fix, dict):
             continue
@@ -43,44 +183,95 @@ def apply_replacements_to_words(words: list[dict], fixes: list[dict]) -> int:
         dst = str(fix.get("to") or "").strip()
         if not src or not dst:
             continue
-        src_toks = [t for t in re.split(r"\s+", src) if t]
-        dst_toks = [t for t in re.split(r"\s+", dst) if t]
-        if not src_toks:
+        src_toks = _split_tokens(src)
+        dst_toks = _split_tokens(dst)
+        if not src_toks or not dst_toks:
             continue
-        i = 0
-        while i < len(items):
-            window = items[i : i + len(src_toks)]
-            if len(window) == len(src_toks) and all(
-                tokens_match(window[k]["text"], src_toks[k]) for k in range(len(src_toks))
-            ):
-                if len(dst_toks) == 1:
-                    new = _replace_word(window[0]["text"], dst_toks[0])
-                    if window[0]["text"] != new:
-                        window[0]["text"] = new
-                        changed += 1
-                    for extra in window[1:]:
-                        if extra["text"]:
-                            extra["text"] = ""
-                            changed += 1
-                elif len(dst_toks) == len(src_toks):
-                    for k, tok in enumerate(dst_toks):
-                        new = _replace_word(window[k]["text"], tok)
-                        if window[k]["text"] != new:
-                            window[k]["text"] = new
-                            changed += 1
-                else:
-                    new = _replace_word(window[0]["text"], " ".join(dst_toks))
-                    if window[0]["text"] != new:
-                        window[0]["text"] = new
-                        changed += 1
-                    for extra in window[1:]:
-                        if extra["text"]:
-                            extra["text"] = ""
-                            changed += 1
-                i += len(src_toks)
-                continue
-            i += 1
+        status, hits = resolve_replacement_index(words, src_toks, fix)
+        if status == "none":
+            continue
+        if status == "ambiguous" and not all_occurrences:
+            ambiguous = True
+            match_count += len(hits)
+            continue
+        if status == "ok" or all_occurrences:
+            match_count += len(hits)
+            for i in sorted(hits, reverse=True):
+                changed += _apply_window(words, i, src_toks, dst_toks, splice=splice)
+    return {"changed": changed, "ambiguous": ambiguous, "matches": match_count}
+
+
+def _apply_window(
+    words: list[dict],
+    i: int,
+    src_toks: list[str],
+    dst_toks: list[str],
+    *,
+    splice: bool,
+) -> int:
+    window = words[i : i + len(src_toks)]
+    if len(window) != len(src_toks):
+        return 0
+    t0 = float(window[0].get("startMs") if window[0].get("startMs") is not None else window[0].get("start") or 0)
+    t1 = float(window[-1].get("endMs") if window[-1].get("endMs") is not None else window[-1].get("end") or 0)
+    use_ms = window[0].get("startMs") is not None or window[0].get("endMs") is not None
+    if len(dst_toks) == len(src_toks):
+        new_words = []
+        for k, tok in enumerate(dst_toks):
+            w = dict(window[k])
+            w["text"] = _replace_word(str(window[k].get("text") or ""), tok)
+            new_words.append(w)
+    else:
+        new_words = _redistribute_tokens(window[0], dst_toks, t0, t1, use_ms)
+    if splice:
+        words[i : i + len(src_toks)] = new_words
+        return 1
+    changed = 0
+    if len(dst_toks) == len(src_toks):
+        for k, tok in enumerate(dst_toks):
+            nxt = _replace_word(str(window[k].get("text") or ""), tok)
+            if window[k].get("text") != nxt:
+                window[k]["text"] = nxt
+                changed += 1
+    else:
+        joined = " ".join(dst_toks)
+        if window[0].get("text") != joined:
+            window[0]["text"] = joined
+            changed += 1
+        for extra in window[1:]:
+            if extra.get("text"):
+                extra["text"] = ""
+                changed += 1
     return changed
+
+
+def _redistribute_tokens(
+    template: dict, dst_toks: list[str], t0: float, t1: float, use_ms: bool
+) -> list[dict]:
+    """Parte o intervalo [t0, t1] em N tokens iguais. O span global não muda."""
+    n = max(1, len(dst_toks))
+    span = max(0.0, t1 - t0)
+    out: list[dict] = []
+    for i, tok in enumerate(dst_toks):
+        a = t0 + span * i / n
+        b = t1 if i == n - 1 else t0 + span * (i + 1) / n
+        w = dict(template)
+        w["text"] = tok
+        if use_ms:
+            w["startMs"] = int(round(a))
+            w["endMs"] = int(round(b))
+        else:
+            w["start"] = round(a, 3)
+            w["end"] = round(b, 3)
+        out.append(w)
+    if out:
+        if use_ms:
+            out[0]["startMs"] = int(round(t0))
+            out[-1]["endMs"] = int(round(t1))
+        else:
+            out[0]["start"] = round(t0, 3)
+            out[-1]["end"] = round(t1, 3)
+    return out
 
 
 def _collect_text_nodes(node: Any, out: list[dict]) -> None:
@@ -117,7 +308,8 @@ def apply_replacements_to_text(text: str, fixes: list[dict] | None = None) -> st
         dst = str(fix.get("to") or "").strip()
         if not src or not dst:
             continue
-        out = re.sub(re.escape(src), dst, out, flags=re.I)
+        pattern = r"(?<!\w)" + re.escape(src) + r"(?!\w)"
+        out = re.sub(pattern, dst, out, flags=re.I)
     return out
 
 
@@ -171,22 +363,33 @@ def apply_caption_fixes(edit_dir: Path, fixes: list[dict] | None) -> dict:
     public = edit / "remotion" / "public"
     caps_p = public / "captions.json"
     cues_p = public / "caption-cues.json"
-    applied = patch_edit_data_text(edit, fixes)
     if not fixes:
-        return {"ok": True, "changed": applied}
+        return {"ok": True, "changed": patch_edit_data_text(edit, fixes)}
 
+    applied = 0
     if caps_p.exists():
         words = json.loads(caps_p.read_text(encoding="utf-8-sig"))
         if isinstance(words, list):
-            applied += apply_replacements_to_words(words, fixes)
+            result = replace_caption_tokens(words, fixes)
+            if result.get("ambiguous") and not result.get("changed"):
+                return {
+                    "ok": False,
+                    "changed": 0,
+                    "ambiguous": True,
+                    "matches": int(result.get("matches") or 0),
+                    "error": "Essa palavra aparece mais de uma vez. Clique na legenda certa no vídeo.",
+                }
+            applied += int(result.get("changed") or 0)
             words = [w for w in words if isinstance(w, dict) and str(w.get("text") or "").strip()]
             caps_p.write_text(json.dumps(words, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    applied += patch_edit_data_text(edit, fixes)
 
     if cues_p.exists():
         cues = json.loads(cues_p.read_text(encoding="utf-8-sig"))
         nodes: list[dict] = []
         _collect_text_nodes(cues, nodes)
-        applied += apply_replacements_to_words(nodes, fixes)
+        applied += apply_replacements_to_words(nodes, fixes, splice=False)
         _prune_empty_cue_words(cues)
         cues_p.write_text(json.dumps(cues, ensure_ascii=False) + "\n", encoding="utf-8")
 

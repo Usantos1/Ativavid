@@ -181,10 +181,13 @@ def validate_overlay_alpha(
     opaque_hits = 0
     sample_frames = [6, max(6, frames // 2), max(6, frames - 12)]
     for idx in sample_frames:
+        # -ss antes do -i: o overlay é all-intra (ProRes/VP8), então o seek cai
+        # direto no frame alvo em vez de decodificar o arquivo inteiro até lá.
+        # Meio frame antes do alvo para o próximo frame decodificado ser o idx.
+        seek = max(0.0, (idx - 0.5) / fps_f)
         _run([
             _ffmpeg(), "-y", "-hide_banner", "-loglevel", "error",
-            "-i", str(path),
-            "-vf", f"select=eq(n\\,{idx})",
+            "-ss", f"{seek:.6f}", "-i", str(path),
             "-frames:v", "1", "-pix_fmt", "rgba", str(sample),
         ])
         if sample.exists() and _png_fully_opaque(sample):

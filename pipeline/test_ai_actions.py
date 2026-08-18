@@ -9,6 +9,7 @@ if str(REPO) not in sys.path:
 
 from app.ai_actions import (
     FAIL_PLAN,
+    VAGUE_CUT_MSG,
     apply_actions_to_edits,
     format_apply_log,
     interpret_llm_reply,
@@ -18,7 +19,10 @@ from app.ai_actions import (
     parse_deterministic_command,
     pending_is_stale,
     plan_from_prompt,
+    prompt_allows_cut,
+    filter_unsafe_cuts,
     sanitize_proposal_summary,
+    validate_actions,
 )
 
 
@@ -209,6 +213,122 @@ def test_summary_is_proposal_not_done():
     assert "consegui preparar" in empty.lower() or "descrever de outra forma" in empty.lower()
 
 
+def test_vague_melhoria_does_not_trim():
+    def chat(messages, model=None):
+        return json.dumps({
+            "actions": [{
+                "action": "trim_range",
+                "start": 12.95,
+                "end": 13.35,
+                "reason": "keep punchline",
+            }],
+            "summary": "Vou deixar só o gancho",
+        }), "fake"
+
+    actions, summary, _backend = plan_from_prompt(
+        "melhoria",
+        duration=33.8,
+        source_duration=55.0,
+        chat_fn=chat,
+    )
+    assert actions == []
+    assert summary == VAGUE_CUT_MSG
+
+
+def test_trim_uses_cut_clock_not_source():
+    actions = validate_actions(
+        {"actions": [{"action": "trim_range", "start": 12.95, "end": 13.35}]},
+        duration=33.8,
+        source_duration=55.0,
+    )
+    assert actions[0]["start"] == 12.95
+    assert actions[0]["end"] == 13.35
+    tiny = validate_actions(
+        {"actions": [{"action": "trim_range", "start": 0, "end": 0.4}]},
+        duration=33.8,
+        source_duration=55.0,
+    )
+    assert tiny[0]["end"] == 0.4
+    actions, summary, _backend = plan_from_prompt(
+        "melhoria",
+        duration=33.8,
+        source_duration=55.0,
+        chat_fn=lambda *a, **k: (json.dumps({
+            "actions": [{"action": "trim_range", "start": 0, "end": 0.4}],
+            "summary": "Vou enxugar",
+        }), "fake"),
+    )
+    assert actions == []
+    assert summary == VAGUE_CUT_MSG
+
+
+def test_explicit_remove_still_works():
+    def chat(messages, model=None):
+        return json.dumps({
+            "actions": [{
+                "action": "remove_range",
+                "start": 8.0,
+                "end": 12.0,
+                "reason": "repetition",
+            }],
+            "summary": "Vou tirar o trecho repetitivo",
+        }), "fake"
+
+    actions, _summary, _backend = plan_from_prompt(
+        "tira essa parte que ficou repetitiva",
+        duration=20.0,
+        chat_fn=chat,
+    )
+    assert actions[0]["action"] == "remove_range"
+
+
+def _cut_reply(action="trim_range"):
+    payload = {
+        "trim_range": {"action": "trim_range", "start": 0, "end": 0.4, "reason": "keep punchline"},
+        "remove_range": {"action": "remove_range", "start": 0, "end": 12, "reason": "enxugar"},
+        "set_duration_max": {"action": "set_duration_max", "maxSec": 0.4, "reason": "curto"},
+    }[action]
+    return json.dumps({"actions": [payload], "summary": "Vou enxugar"}), "fake"
+
+
+def test_vague_prompts_never_allow_cut():
+    for text in (
+        "melhoria",
+        "melhora",
+        "melhorar",
+        "melhora o vídeo",
+        "melhora o video",
+        "deixa melhor",
+        "deixa o vídeo melhor",
+        "fica melhor",
+        "pode melhorar",
+        "melhorar o vídeo",
+    ):
+        assert prompt_allows_cut(text) is False
+        for action in ("trim_range", "remove_range", "set_duration_max"):
+            actions, summary, _backend = plan_from_prompt(
+                text,
+                duration=33.8,
+                source_duration=55.0,
+                chat_fn=lambda *a, act=action, **k: _cut_reply(act),
+            )
+            assert actions == [], (text, action, actions)
+            assert summary == VAGUE_CUT_MSG
+
+
+def test_filter_unsafe_cuts_all_cut_actions():
+    for body in (
+        {"action": "trim_range", "start": 0, "end": 0.4},
+        {"action": "remove_range", "start": 0, "end": 30},
+        {"action": "set_duration_max", "maxSec": 0.4},
+    ):
+        kept = filter_unsafe_cuts([body], prompt="melhoria", cut_duration=33.8)
+        assert kept == [], body
+        tiny = filter_unsafe_cuts([body], prompt="corta os últimos 2 segundos", cut_duration=33.8)
+        if body["action"] in ("trim_range", "set_duration_max"):
+            assert tiny == []
+
+
 if __name__ == "__main__":
     for fn in (
         test_confirm_phrases,
@@ -223,6 +343,11 @@ if __name__ == "__main__":
         test_confirm_applies_existing_pending,
         test_undo_restores_exact_edl_snapshot,
         test_summary_is_proposal_not_done,
+        test_vague_melhoria_does_not_trim,
+        test_trim_uses_cut_clock_not_source,
+        test_explicit_remove_still_works,
+        test_vague_prompts_never_allow_cut,
+        test_filter_unsafe_cuts_all_cut_actions,
     ):
         fn()
         print("ok", fn.__name__)

@@ -72,6 +72,7 @@ def normalize(raw: dict | None, *, duration_s: float | None = None) -> dict:
 
     content = normalize_content_type(src.get("contentType") or src.get("tipoConteudo"))
     preset_id = str(src.get("brandPresetId") or "").strip() or None
+    brand_id = str(src.get("brandId") or "").strip() or None
     return {
         "editingIntent": mode,
         "contentType": content,
@@ -81,6 +82,7 @@ def normalize(raw: dict | None, *, duration_s: float | None = None) -> dict:
         "preserveContext": flags["preserveContext"],
         "protectedRanges": ranges,
         "brandStyleSource": brand,
+        "brandId": brand_id,
         "brandPresetId": preset_id,
         "suggestedIntent": suggest_intent(duration_s) if duration_s is not None else None,
         "sourceDurationSec": round(float(duration_s), 2) if duration_s else None,
@@ -148,6 +150,8 @@ def merge_into_preset(preset: dict, intent: dict | None) -> dict:
     out["brandStyleSource"] = data["brandStyleSource"]
     if data.get("contentType"):
         out["contentType"] = data["contentType"]
+    if data.get("brandId"):
+        out["brandId"] = data["brandId"]
     if data.get("brandPresetId"):
         out["brandPresetId"] = data["brandPresetId"]
     if data.get("sourceDurationSec") is not None:

@@ -48,3 +48,14 @@ def test_v1_v2_v3_restore_v1(tmp_path: Path):
     ids = [x["id"] for x in list_versions(edit)]
     assert "v1" in ids
     assert len(ids) >= 4
+    corr = json.loads((edit / "corrections.json").read_text(encoding="utf-8"))
+    assert corr["finalStale"] is True
+    assert corr["dirty"]["edl"] is True
+
+
+if __name__ == "__main__":
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as d:
+        test_v1_v2_v3_restore_v1(Path(d))
+    print("ok")

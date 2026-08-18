@@ -7,7 +7,10 @@ per-session it is fed by data only:
   - <edit>/cut.mp4             current render (played + scrubbed)
   - <edit>/preview_edits.json  WRITTEN BY THE UI when the user saves timeline
                                adjustments — the skill reads, validates, applies
-                               and re-renders. The UI never touches edl.json.
+                               and re-renders.
+  - <edit>/corrections.json    dirty flags + headline do operador; a UI grava
+                               headline/captions/EDL nas fontes de verdade
+                               (edit-data.json, captions.json, edl.json)
   - <edit>/preview_style.json  WRITTEN BY THE UI at the Fase 1 → Fase 2 gate:
                                editing style, caption style, edit elements.
 
@@ -20,6 +23,9 @@ Routes:
   /api/state    GET     state.json + mtimes (UI polls this to hot-reload)
   /api/save     POST    body → <edit>/preview_edits.json (atomic), or
                         <edit>/preview_style.json when body.type=="style-setup"
+  /api/corrections POST persist headline/legenda/EDL; op=apply dispara o executor
+  /api/apply-plan GET   plano testável: reuseCut vs rebuildCut
+  /api/apply-status GET progresso amigável do Apply
   /api/open-folder POST opens Explorer at finalVideo (falls back to the edit
                         dir) — local machine only, mirrors "reveal in Finder"
   /api/open-final  POST opens the delivered mp4 in the OS player (startfile)
@@ -533,6 +539,11 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802
         path = self._scope(self.path.split("?", 1)[0])
+        # /p/<pasta> desconhecida não pode cair no dummy do hub (Estilo padrão /
+        # loja-teste): o editor acharia que não há cut.mp4 e herdaria outra marca.
+        if getattr(self, "scope_miss", False) and path.startswith("/api/"):
+            self._json({"ok": False, "error": "projeto não encontrado"}, 404)
+            return
         if path in ("/", "/index.html", "/fase1", "/estilo", "/fase2", "/estilo-padrao"):
             # the last SPA tab routes (app.js reads location.pathname) — a real
             # path, not a query string or hash. /estilo-padrao is the desktop
@@ -557,6 +568,12 @@ class Handler(BaseHTTPRequestHandler):
             self._intent_get()
         elif path == "/api/versions":
             self._versions_get()
+        elif path == "/api/apply-plan":
+            self._apply_plan_get()
+        elif path == "/api/apply-status":
+            self._apply_status_get()
+        elif path == "/api/corrections":
+            self._corrections_get()
         elif path == "/painel":
             self._send_file(APP_DIR / "painel.html")
         elif path == "/api/projects":
@@ -601,6 +618,12 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "/api/versions":
             self._versions_post()
+            return
+        if route == "/api/corrections":
+            self._corrections_post()
+            return
+        if route == "/api/apply-plan":
+            self._apply_plan_get()
             return
         if route != "/api/save":
             self._json({"error": "unknown route"}, 404)
@@ -840,18 +863,12 @@ class Handler(BaseHTTPRequestHandler):
             if (body.get("confirm") or "").strip() != proj.name:
                 self._json({"ok": False, "error": "confirmacao nao confere com o nome do projeto"}, 400)
                 return
-            ps = (
-                "Add-Type -AssemblyName Microsoft.VisualBasic; "
-                "[Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory("
-                f"'{str(proj).replace(chr(39), chr(39) * 2)}', "
-                "'OnlyErrorDialogs', 'SendToRecycleBin')"
-            )
-            r = _run(["powershell", "-NoProfile", "-Command", ps],
-                     capture_output=True, text=True, timeout=120,
-                     stdin=subprocess.DEVNULL, encoding="utf-8", errors="replace")
-            if r.returncode != 0 or proj.exists():
-                self._json({"ok": False,
-                            "error": (r.stderr or "falhou ao mover para a Lixeira").strip()[:200]}, 500)
+            from app.recycle import RecycleError, send_to_recycle_bin
+
+            try:
+                send_to_recycle_bin(proj)
+            except RecycleError as e:
+                self._json({"ok": False, "error": str(e)[:200]}, 500)
                 return
             self._json({"ok": True, "deleted": proj.name, "recycled": True})
             return
@@ -1275,6 +1292,15 @@ class Handler(BaseHTTPRequestHandler):
         if video:
             cached = probe_duration_cached(video)
             dur = float(cached) if cached is not None else 0.0
+        preset_used = None
+        used_p = self.root / "preset-used.json"
+        if used_p.exists():
+            try:
+                raw_used = json.loads(used_p.read_text(encoding="utf-8-sig"))
+                if isinstance(raw_used, dict):
+                    preset_used = raw_used
+            except (OSError, json.JSONDecodeError):
+                preset_used = None
         intent = None
         intent_p = self.root / "job_intent.json"
         if intent_p.exists():
@@ -1282,13 +1308,39 @@ class Handler(BaseHTTPRequestHandler):
                 intent = json.loads(intent_p.read_text(encoding="utf-8-sig"))
             except (OSError, json.JSONDecodeError):
                 intent = None
+        corrections = None
+        try:
+            from app.quick_corrections import load as load_corrections
+
+            corrections = load_corrections(self.root)
+        except Exception:
+            corrections = None
+        apply_status = None
+        try:
+            from app.apply_execute import read_apply_status
+
+            apply_status = read_apply_status(self.root)
+        except Exception:
+            apply_status = None
+        apply_task = None
+        try:
+            from app.apply_tasks import public_view, read_task
+
+            apply_task = public_view(read_task(self.root), self.root)
+        except Exception:
+            apply_task = None
         self._json({
             "state": state,
             "edl": edl,
             "intent": intent,
             "mtimes": mtimes,
             "videoDuration": dur,
+            "hasCut": video is not None,
+            "presetUsed": preset_used,
             "hasPendingEdits": edits_p.exists(),
+            "corrections": corrections,
+            "applyStatus": apply_status,
+            "applyTask": apply_task,
             "now": time.time(),
         })
 
@@ -1342,6 +1394,51 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"ok": True, "version": item, "versions": list_versions(self.root)})
         except ValueError as e:
             self._json({"ok": False, "error": str(e)}, 400)
+
+    def _read_json_body(self) -> dict:
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            body = json.loads(self.rfile.read(length) or b"{}")
+        except (ValueError, json.JSONDecodeError):
+            return {}
+        return body if isinstance(body, dict) else {}
+
+    def _apply_plan_get(self) -> None:
+        try:
+            from app.quick_corrections import plan_for_edit
+
+            plan = plan_for_edit(self.root)
+        except Exception as e:
+            self._json({"ok": False, "error": str(e)}, 500)
+            return
+        self._json({"ok": True, "plan": plan, "execute": False})
+
+    def _apply_status_get(self) -> None:
+        try:
+            from app.apply_execute import read_apply_status
+
+            st = read_apply_status(self.root)
+        except Exception as e:
+            self._json({"ok": False, "error": str(e)}, 500)
+            return
+        self._json({"ok": True, **st})
+
+    def _corrections_get(self) -> None:
+        try:
+            from app.quick_corrections import handle
+
+            self._json(handle(self.root, {"op": "load"}))
+        except Exception as e:
+            self._json({"ok": False, "error": str(e)}, 500)
+
+    def _corrections_post(self) -> None:
+        body = self._read_json_body()
+        try:
+            from app.quick_corrections import handle
+
+            self._json(handle(self.root, body))
+        except Exception as e:
+            self._json({"ok": False, "error": str(e)}, 500)
 
     def _waveform(self) -> None:
         video = self._current_video()

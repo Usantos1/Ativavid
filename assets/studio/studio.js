@@ -38,12 +38,33 @@ const VIEW_COPY = {
   doutor: ["Sistema", "Desempenho e pastas."],
 };
 
-function toast(msg) {
+function toast(msg, ms) {
   const t = $("#toast");
   t.textContent = msg;
   t.classList.remove("hidden");
   clearTimeout(toast._tm);
-  toast._tm = setTimeout(() => t.classList.add("hidden"), 2800);
+  toast._tm = setTimeout(() => t.classList.add("hidden"), ms || 2800);
+}
+
+function applyBusy(j) {
+  const qa = j && j.quickApply;
+  return !!(qa && (qa.status === "queued" || qa.status === "running"));
+}
+
+function applyFailed(j) {
+  const qa = j && j.quickApply;
+  return !!(qa && qa.status === "failed");
+}
+
+function applyCompleted(j) {
+  const qa = j && j.quickApply;
+  return !!(qa && qa.status === "completed");
+}
+
+function jobInFila(j) {
+  if (["importing", "queued", "processing", "needs_review", "error"].includes(j.status)) return true;
+  const qa = j && j.quickApply;
+  return !!(qa && ["queued", "running", "failed"].includes(qa.status));
 }
 
 function escapeHtml(s) {
@@ -58,7 +79,20 @@ function looksTechnical(s) {
   return TECH_LEAK.test(String(s || ""));
 }
 
-function queueCopy(j) {
+function queueCopy(j, view) {
+  const qa = j && j.quickApply;
+  if (applyBusy(j)) {
+    const stageText = (qa && qa.stageLabel) || "Aplicando edição...";
+    const bits = [stageText];
+    if (qa && qa.elapsedLabel) bits.push(qa.elapsedLabel);
+    if (qa && qa.etaLabel) bits.push(qa.etaLabel);
+    return { badge: "ATUALIZANDO", text: bits.join(" · ") };
+  }
+  if (applyFailed(j) && view !== "done") {
+    const text = (qa && qa.stageLabel) || "Não foi possível atualizar o vídeo.";
+    return { badge: "REVISAR", text };
+  }
+
   const status = String(j.status || "");
   const stage = String(j.stage || "");
   const raw = `${j.message || ""} ${j.stageLabel || ""} ${stage} ${j.reason || ""}`;
@@ -78,7 +112,11 @@ function queueCopy(j) {
     if (j.reason === "missing_brand_copy" || /marca|end.?card|card final/i.test(raw)) {
       return { badge: "REVISAR", text: "Falta o texto da marca em Estilos (card final)" };
     }
-    return { badge: "ERRO", text: "Não foi possível concluir este vídeo." };
+    const friendly = String(j.message || "").trim();
+    const text = friendly && !TECH_LEAK.test(friendly)
+      ? friendly
+      : "Não foi possível concluir este vídeo.";
+    return { badge: "ERRO", text };
   }
   if (status === "queued" || stage === "queued") {
     return { badge: "NA FILA", text: "Aguardando na fila" };
@@ -112,8 +150,9 @@ function jobWhenLabel(j) {
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} · ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-function jobHeadline(j) {
-  const text = queueCopy(j).text;
+function jobHeadline(j, view) {
+  const text = queueCopy(j, view).text;
+  if (applyBusy(j) || (applyFailed(j) && view !== "done")) return text;
   const when = jobWhenLabel(j);
   if (when && (j.status === "done" || j.stage === "done")) {
     return `${text} · ${when}`;
@@ -160,7 +199,7 @@ function setView(name) {
         const t = document.documentElement.getAttribute("data-theme") || "dark";
         applyThemeToIframes(t);
       };
-      fr.src = "/estilo-padrao?embed=1";
+      fr.src = estiloFrameSrc();
     } else {
       applyThemeToIframes(document.documentElement.getAttribute("data-theme") || "dark");
     }
@@ -175,6 +214,14 @@ function setView(name) {
   } catch { /* ignore */ }
 }
 
+function estiloFrameSrc() {
+  const id = ($("#brandSelect") && $("#brandSelect").value) || "";
+  const q = new URLSearchParams({ embed: "1" });
+  if (id) q.set("brandId", id);
+  q.set("t", String(Date.now()));
+  return `/estilo-padrao?${q.toString()}`;
+}
+
 function jobRecency(j) {
   const t = Date.parse(j.finishedAt || j.updatedAt || j.createdAt || 0);
   return Number.isFinite(t) ? t : 0;
@@ -182,7 +229,7 @@ function jobRecency(j) {
 
 function filterJobs(kind) {
   if (kind === "fila") {
-    return state.jobs.filter((j) => ["importing", "queued", "processing", "needs_review", "error"].includes(j.status));
+    return state.jobs.filter(jobInFila);
   }
   if (kind === "done") {
     return state.jobs
@@ -211,10 +258,13 @@ function jobLinks(j) {
 
 function cardSig(j, opts) {
   const links = jobLinks(j);
+  const qa = j.quickApply || {};
   return [
     j.id, j.status, j.title || j.name, Math.round(Number(j.progress) || 0), j.hasFinal, j.hasThumb, j.finishedAt, j.finishedAtLabel,
     j.stage, j.message, j.localPoster || j.thumbUrl, links.editor, links.estilo, links.final,
     opts && opts.compact ? "1" : "0",
+    qa.status || "", qa.stage || "", qa.elapsedLabel || "", qa.etaLabel || "", qa.stageLabel || "",
+    opts && opts.view ? opts.view : "",
   ].join("\t");
 }
 
@@ -226,6 +276,9 @@ function cardProgressPct(j) {
 }
 
 function cardProgressHtml(j) {
+  if (applyBusy(j)) {
+    return `<div class="pc-progress indeterminate" aria-hidden="true"><span></span></div>`;
+  }
   if (j.status !== "importing" && j.status !== "processing") return "";
   const pct = cardProgressPct(j);
   if (pct == null) {
@@ -276,26 +329,37 @@ function cardThumbSrc(j) {
   return "";
 }
 
+function chipTone(j, view) {
+  const copy = queueCopy(j, view);
+  if (copy.badge === "ATUALIZANDO") return "updating";
+  if (copy.badge === "REVISAR") return "needs_review";
+  return j.status;
+}
+
 function cardHtml(j, opts) {
   const compact = !!(opts && opts.compact);
   const enter = !!(opts && opts.enter);
+  const view = opts && opts.view;
   const canFinal = j.hasFinal || j.status === "done";
   const links = jobLinks(j);
   const editor = links.editor;
   const estilo = links.estilo;
   const busy = j.status === "processing" || j.status === "queued" || j.status === "importing";
-  const headline = jobHeadline(j);
+  const headline = jobHeadline(j, view);
   const title = j.title || j.name || "Vídeo";
   const fmt = j.formatLabel || (canFinal || j.hasCut ? "9:16" : "");
   const dur = j.durationLabel || "";
   const metaBits = [dur, fmt].filter(Boolean);
-  const chipLabel = queueCopy(j).badge;
+  const copy = queueCopy(j, view);
+  const chipLabel = copy.badge;
+  const tone = chipTone(j, view);
   const thumb = cardThumbSrc(j);
   const progress = cardProgressHtml(j);
   const safeId = escapeHtml(j.id);
   const menuKey = escapeHtml(`${j.id}:${compact ? "c" : "f"}`);
-    const primary = j.status === "done"
-    ? `<a class="chip-btn primary${canFinal ? "" : " disabled"}" href="${escapeHtml(links.final)}">Visualizar</a>`
+    const updating = applyBusy(j);
+    const primary = j.status === "done" || updating
+    ? `<a class="chip-btn primary${canFinal ? "" : " disabled"}" href="${escapeHtml(links.final)}"${updating ? ' title="Ainda estou atualizando este vídeo. Este é o final anterior."' : ""}>${updating ? "Ver anterior" : "Visualizar"}</a>`
     : busy
       ? `<button type="button" class="chip-btn" data-act="cancel" data-id="${safeId}">Cancelar</button>`
       : `<button type="button" class="chip-btn" data-act="retry" data-id="${safeId}">Tentar novamente</button>`;
@@ -306,6 +370,9 @@ function cardHtml(j, opts) {
         <a role="menuitem" href="${escapeHtml(links.final)}" ${canFinal ? "" : "class=\"disabled\""}>Ver vídeo final</a>
         <a role="menuitem" href="${escapeHtml(editor)}">Editar</a>
         <a role="menuitem" href="${escapeHtml(estilo)}" data-id="${safeId}">Alterar estilo</a>
+        ${(copy.badge === "ERRO" || copy.badge === "REVISAR" || j.detail)
+          ? `<button type="button" role="menuitem" data-act="detail" data-id="${safeId}">Ver detalhe</button>`
+          : ""}
         <button type="button" role="menuitem" class="danger" data-act="delete" data-id="${safeId}" data-name="${escapeHtml(title)}">Apagar</button>
       </div>
     </div>`;
@@ -326,7 +393,7 @@ function cardHtml(j, opts) {
             data-title="${escapeHtml(title)}" title="Clique para renomear">${escapeHtml(title)}</button>
           ${metaBits.length ? `<div class="pc-when">${escapeHtml(metaBits.join(" · "))}</div>` : ""}
         </div>
-        <span class="chip ${j.status}">${escapeHtml(chipLabel)}</span>
+        <span class="chip ${escapeHtml(tone)}">${escapeHtml(chipLabel)}</span>
       </div>
       ${headline ? `<div class="pc-msg">${escapeHtml(headline)}</div>` : ""}
       ${progress}
@@ -443,7 +510,8 @@ function syncCards(box, jobs, opts) {
 }
 
 function patchCard(el, j, opts) {
-  const copy = queueCopy(j);
+  const view = opts && opts.view;
+  const copy = queueCopy(j, view);
   const compact = !!(opts && opts.compact);
   el.classList.remove("pc-enter");
   el.className = `project-card ${j.status}${compact ? " compact" : ""}`;
@@ -451,7 +519,7 @@ function patchCard(el, j, opts) {
   el.dataset.cardSig = cardSig(j, opts);
   const chip = el.querySelector(".chip");
   if (chip) {
-    chip.className = `chip ${j.status}`;
+    chip.className = `chip ${chipTone(j, view)}`;
     chip.textContent = copy.badge;
   }
   const name = el.querySelector(".pc-name");
@@ -470,7 +538,7 @@ function patchCard(el, j, opts) {
       if (anchor) anchor.insertAdjacentElement("beforebegin", msg);
       else el.querySelector(".pc-body")?.appendChild(msg);
     }
-    msg.textContent = jobHeadline(j);
+    msg.textContent = jobHeadline(j, view);
   } else if (msg) {
     msg.remove();
   }
@@ -480,22 +548,26 @@ function patchCard(el, j, opts) {
     const busy = j.status === "processing" || j.status === "queued" || j.status === "importing";
     const links = jobLinks(j);
     const first = actions.querySelector(":scope > a.chip-btn, :scope > button.chip-btn");
-    if (j.status === "done") {
+    if (j.status === "done" || applyBusy(j)) {
       const canFinal = j.hasFinal || j.status === "done";
       const href = links.final;
+      const updating = applyBusy(j);
+      const label = updating ? "Ver anterior" : "Visualizar";
       if (!first || first.tagName !== "A" || first.dataset.viewFinal !== "1") {
         const a = document.createElement("a");
         a.className = "chip-btn primary";
         a.href = href;
         a.dataset.viewFinal = "1";
-        a.textContent = "Visualizar";
+        a.textContent = label;
+        a.title = updating ? "Ainda estou atualizando este vídeo. Este é o final anterior." : "";
         if (!canFinal) a.classList.add("disabled");
         if (first) first.replaceWith(a);
         else actions.insertBefore(a, actions.firstChild);
       } else {
         first.href = href;
-        first.textContent = "Visualizar";
+        first.textContent = label;
         first.className = "chip-btn primary";
+        first.title = updating ? "Ainda estou atualizando este vídeo. Este é o final anterior." : "";
         first.classList.toggle("disabled", !canFinal);
       }
     } else if (first && (first.tagName === "A" || first.dataset.act === "open-final")) {
@@ -541,7 +613,9 @@ function renderJobs() {
   $("#countDone").textContent = String(done.length);
   const verFila = $("#btnVerFila");
   if (verFila) {
-    const busy = state.jobs.filter((j) => ["importing", "queued", "processing"].includes(j.status)).length;
+    const busy = state.jobs.filter((j) =>
+      ["importing", "queued", "processing"].includes(j.status) || applyBusy(j)
+    ).length;
     verFila.textContent = busy ? `Ver fila (${busy})` : "Ver fila";
   }
 
@@ -558,9 +632,54 @@ function renderJobs() {
       : "Nenhum projeto";
   }
 
-  renderInto("jobListRecent", null, filterJobs("recent"), { compact: true });
-  renderInto("jobListFila", "emptyFila", fila);
-  renderInto("jobListDone", "emptyDone", done);
+  renderInto("jobListRecent", null, filterJobs("recent"), { compact: true, view: "recent" });
+  renderInto("jobListFila", "emptyFila", fila, { view: "fila" });
+  renderInto("jobListDone", "emptyDone", done, { view: "done" });
+}
+
+function applyAckKey(qa) {
+  const id = qa && (qa.taskId || qa.finishedAt);
+  return id ? `ativavid-apply-ack:${id}` : "";
+}
+
+function hasApplyAck(qa) {
+  if (!qa) return false;
+  if (qa.acknowledgedAt) return true;
+  const key = applyAckKey(qa);
+  if (!key) return false;
+  try { return localStorage.getItem(key) === "1"; } catch { return false; }
+}
+
+function markApplyAck(qa) {
+  if (!qa) return;
+  const key = applyAckKey(qa);
+  if (key) {
+    try { localStorage.setItem(key, "1"); } catch { /* ignore */ }
+  }
+  fetch("/api/apply-ack", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ taskId: qa.taskId || "", projectId: qa.projectId || "" }),
+  }).catch(() => {});
+}
+
+function maybeToastApply(prevJobs, nextJobs) {
+  const prevMap = new Map((prevJobs || []).map((j) => [String(j.id), j]));
+  for (const j of nextJobs || []) {
+    const qa = j.quickApply;
+    if (!qa || hasApplyAck(qa)) continue;
+    const was = (prevMap.get(String(j.id)) || {}).quickApply || {};
+    const justFinished = was.status === "running" || was.status === "queued";
+    if (!justFinished) continue;
+    if (qa.status === "completed") {
+      markApplyAck(qa);
+      const title = j.title || j.name || "Vídeo";
+      toast(`Vídeo atualizado\n${title} está pronto.`, 4500);
+    } else if (qa.status === "failed") {
+      markApplyAck(qa);
+      toast("Não foi possível aplicar as alterações. Seu vídeo anterior foi mantido.", 5000);
+    }
+  }
 }
 
 async function refreshJobs() {
@@ -568,7 +687,9 @@ async function refreshJobs() {
   const incoming = data.jobs || [];
   const locals = state.jobs.filter((j) => j.status === "importing" && String(j.id).startsWith("tmp-"));
   const incomingIds = new Set(incoming.map((j) => j.id));
-  state.jobs = [...locals.filter((j) => !incomingIds.has(j.id)), ...incoming];
+  const next = [...locals.filter((j) => !incomingIds.has(j.id)), ...incoming];
+  maybeToastApply(state.jobs, next);
+  state.jobs = next;
   renderJobs();
 }
 
@@ -818,6 +939,7 @@ function collectImportIntent() {
     protectedRanges: parseProtectedRanges($("#protRanges")?.value || ""),
     brandStyleSource: $("#useBrandStyle")?.checked ? "default" : "custom",
     contentType: $("#importContentType")?.value || null,
+    brandId: $("#brandSelect")?.value || null,
     brandPresetId: $("#importPresetSelect")?.value || null,
     sourceDurationSec: state.pendingDuration || null,
   };
@@ -1340,7 +1462,15 @@ function wireDrop() {
 function showJobDetail(id) {
   const j = state.jobs.find((x) => x.id === id);
   if (!j) return;
-  const text = queueCopy(j).text;
+  const copy = queueCopy(j, state.view);
+  const qa = j.quickApply || {};
+  const parts = [];
+  if (copy.text) parts.push(copy.text);
+  if (j.message && j.message !== copy.text) parts.push(String(j.message));
+  if (qa.stageLabel && qa.stageLabel !== copy.text) parts.push(String(qa.stageLabel));
+  if (qa.detail) parts.push(String(qa.detail));
+  if (j.detail) parts.push(String(j.detail));
+  const text = parts.filter(Boolean).join("\n\n") || copy.text || "Sem detalhe neste vídeo.";
   const title = $("#detailTitle");
   const body = $("#detailBody");
   const dlg = $("#dlgJobDetail");
@@ -1406,7 +1536,7 @@ async function confirmDelete() {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ id }),
   });
-  toast("Projeto apagado");
+  toast("Projeto foi para a Lixeira");
   await refreshJobs();
 }
 
@@ -2651,6 +2781,11 @@ function wireForms() {
         });
         toast("Marca ativada");
         await loadBrandsUi();
+        const fr = $("#estiloFrame");
+        if (fr) {
+          fr.dataset.loaded = "1";
+          fr.src = estiloFrameSrc();
+        }
       } catch (e) {
         toast(e.message || "Falha ao ativar marca");
       }
@@ -2991,6 +3126,13 @@ async function loadBrandsUi() {
       ? `Ativa: ${active.name || active.id} · export ${active.exportPreset || "reels"}`
       : "";
   }
+  const fr = $("#estiloFrame");
+  if (fr && fr.dataset.loaded === "1" && document.body.classList.contains("view-estilo-on")) {
+    const cur = new URL(fr.src, location.origin);
+    if ((cur.searchParams.get("brandId") || "") !== (active && active.id || "")) {
+      fr.src = estiloFrameSrc();
+    }
+  }
   try {
     const lib = await api("/api/library");
     if ($("#libraryHint")) {
@@ -3193,7 +3335,7 @@ async function boot() {
     const fr = $("#estiloFrame");
     if (fr) {
       fr.dataset.loaded = "";
-      fr.src = "/estilo-padrao?embed=1&t=" + Date.now();
+      fr.src = estiloFrameSrc();
       fr.dataset.loaded = "1";
     }
   });

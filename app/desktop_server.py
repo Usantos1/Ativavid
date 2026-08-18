@@ -335,9 +335,16 @@ class DesktopHandler(ps.Handler):
 
             hist = collect_history(self.projects_root)
             for j in jobs:
+                attach_eta(j, hist, Path(j["editDir"]))
+            try:
+                from app.apply_tasks import enrich_jobs_list
+
+                enrich_jobs_list(jobs, self.projects_root)
+            except Exception:
+                pass
+            for j in jobs:
                 edit = Path(j["editDir"])
                 folder = Path(j["projectDir"]).name
-                attach_eta(j, hist, edit)
                 # Ensure editor can open even after a needs_review stop
                 if not (edit / "state.json").exists():
                     edit.mkdir(parents=True, exist_ok=True)
@@ -453,6 +460,7 @@ class DesktopHandler(ps.Handler):
             "/api/admin/licenses",
             "/api/admin/access",
             "/api/admin/devices",
+            "/api/apply-ack",
             "/api/jobs",
             "/api/jobs/open-folder",
             "/api/jobs/open-final",

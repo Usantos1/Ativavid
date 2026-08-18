@@ -346,16 +346,10 @@ def sessions_public() -> list[dict]:
 
 def preset_from_style_payload(body: dict, base: dict | None = None) -> dict:
     """Map preview_style.json / style-setup payload onto the brand preset shape."""
-    out = dict(base or load_preset())
-    for k in (
-        "edit", "headline", "captions", "accent",
-        "captionAccent", "emphasisAccent", "circleAccent",
-        "fastMode", "oneClick", "endCardCopy", "note",
-        "rhythm", "intensity", "speechClean", "videoGoal",
-        "brollMode", "captionChunk", "smartEmphasis", "endCardType",
-        "exportPreset", "brandId", "brandName",
-        "contentType", "outputFormat",
-    ):
+    from app.brand_presets import STYLE_KEYS
+
+    out = dict(base if base is not None else load_preset())
+    for k in (*STYLE_KEYS, "outputFormat"):
         if k in body and body[k] is not None:
             out[k] = body[k]
     # oneClick e fastMode são o mesmo interruptor de produto
@@ -590,6 +584,11 @@ def merge_preset(base: dict, overlay: dict | None) -> dict:
     if not isinstance(overlay, dict):
         return out
     for k, v in overlay.items():
+        if k == "endCardCopy":
+            from app.brand_kits import end_card_copy_filled
+
+            if not end_card_copy_filled(v):
+                continue
         if isinstance(v, dict) and isinstance(out.get(k), dict):
             merged = dict(out[k])
             merged.update(v)
@@ -600,42 +599,10 @@ def merge_preset(base: dict, overlay: dict | None) -> dict:
 
 
 def _shipped_preset() -> dict:
-    if PRESET_PATH.exists():
-        try:
-            data = json.loads(PRESET_PATH.read_text(encoding="utf-8-sig"))
-            if isinstance(data, dict) and data:
-                return data
-        except (OSError, json.JSONDecodeError):
-            pass
-    return {
-        "edit": "limpa",
-        "headline": "realce",
-        "captions": "stacked",
-        "accent": "#E30004",
-        "captionAccent": "#FFFFFF",
-        "emphasisAccent": "#ff0000",
-        "circleAccent": None,
-        "fastMode": True,
-        "oneClick": True,
-        "rhythm": "dinamico",
-        "intensity": "medio",
-        "speechClean": "medio",
-        "videoGoal": "reels",
-        "brollMode": "quando_necessario",
-        "captionChunk": "frase_curta",
-        "smartEmphasis": True,
-        "endCardType": "seguir",
-        "colorGrade": "marca",
-        "elements": {
-            "tracking": False,
-            "zoomAuto": True,
-            "zoomCuts": True,
-            "flashCut": True,
-            "musicAI": False,
-            "endCard": True,
-        },
-        "endCardCopy": {"line1": "", "line2": ""},
-    }
+    from app.brand_kits import fill_end_card_copy
+    from app.style_defaults import load_shipped_style
+
+    return fill_end_card_copy(load_shipped_style())
 
 
 def load_preset() -> dict:
@@ -653,13 +620,22 @@ def load_preset() -> dict:
 def save_preset(data: dict) -> None:
     data = dict(data)
     data["fastMode"] = True
+    from app.brand_kits import fill_end_card_copy, load_brand, save_brand
+    from app.brand_presets import style_snapshot
+
+    data = fill_end_card_copy(data)
     raw = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
     USER_PRESET_PATH.parent.mkdir(parents=True, exist_ok=True)
     USER_PRESET_PATH.write_text(raw, encoding="utf-8")
     try:
-        PRESET_PATH.parent.mkdir(parents=True, exist_ok=True)
-        PRESET_PATH.write_text(raw, encoding="utf-8")
-    except OSError:
+        brand = load_brand()
+        brand.update(style_snapshot(data))
+        if data.get("brandName"):
+            brand["brandName"] = data["brandName"]
+        if data.get("brandId"):
+            brand["brandId"] = data["brandId"]
+        save_brand(brand)
+    except Exception:
         pass
 
 
@@ -765,6 +741,19 @@ class Worker:
             self.parallel_jobs = max(1, int(perf.get("parallelJobs") or 1))
         except Exception:  # noqa: BLE001
             self.parallel_jobs = 1
+        try:
+            from app.job_slots import configure as configure_slots
+
+            configure_slots(self.parallel_jobs)
+        except Exception:
+            pass
+
+        try:
+            from app.apply_tasks import sweep_stale_applies
+
+            sweep_stale_applies(self.store.root, boot=True)
+        except Exception:
+            pass
 
         # re-queue anything left as queued/processing after crash
         recovered: list[str] = []
@@ -863,11 +852,24 @@ class Worker:
                             reason="cancelled",
                         )
                     continue
-                # Já tem worker neste job (enqueue duplicado antigo / race)
                 with self._proc_lock:
                     if job_id in self._busy:
                         continue
-                self._run_one(job_id)
+                from app.job_slots import acquire as acquire_slot
+                from app.job_slots import release as release_slot
+
+                if not acquire_slot(timeout=3600):
+                    self.store.update(
+                        job_id,
+                        status="queued",
+                        message="Na fila...",
+                    )
+                    self.enqueue(job_id)
+                    continue
+                try:
+                    self._run_one(job_id)
+                finally:
+                    release_slot()
             except Exception as e:  # noqa: BLE001
                 self.store.update(
                     job_id,
@@ -906,15 +908,11 @@ class Worker:
         edit_dir = Path(job["editDir"])
         edit_dir.mkdir(parents=True, exist_ok=True)
         preset_path = edit_dir / "preset-used.json"
-        # Prefer style saved in this project (editor Estilo tab); else brand default
-        style_file = edit_dir / "preview_style.json"
-        if style_file.exists():
-            try:
-                style_body = json.loads(style_file.read_text(encoding="utf-8-sig"))
-                save_preset_snap = preset_from_style_payload(style_body)
-            except (json.JSONDecodeError, OSError, TypeError):
-                save_preset_snap = load_preset()
-        else:
+        from app.preset_chain import resolve_for_edit
+
+        try:
+            save_preset_snap = resolve_for_edit(edit_dir, job=job, write=False)
+        except Exception:
             save_preset_snap = load_preset()
         try:
             from app.editing_intent import load as load_intent, merge_into_preset
@@ -922,13 +920,9 @@ class Worker:
             save_preset_snap = merge_into_preset(save_preset_snap, load_intent(edit_dir))
         except Exception:
             pass
-        copy = save_preset_snap.get("endCardCopy") if isinstance(save_preset_snap, dict) else None
-        if not isinstance(copy, dict) or not (
-            str(copy.get("line1") or "").strip() or str(copy.get("line2") or "").strip()
-        ):
-            shipped_copy = (_shipped_preset().get("endCardCopy") or {})
-            if str(shipped_copy.get("line1") or "").strip() or str(shipped_copy.get("line2") or "").strip():
-                save_preset_snap["endCardCopy"] = shipped_copy
+        from app.brand_kits import fill_end_card_copy
+
+        save_preset_snap = fill_end_card_copy(save_preset_snap)
         preset_path.write_text(json.dumps(save_preset_snap, ensure_ascii=False, indent=2), encoding="utf-8")
 
         env = os.environ.copy()
@@ -1399,6 +1393,12 @@ class StudioHandler(BaseHTTPRequestHandler):
             hist = collect_history(self.projects_root)
             for j in jobs:
                 attach_eta(j, hist, Path(j["editDir"]))
+            try:
+                from app.apply_tasks import enrich_jobs_list
+
+                enrich_jobs_list(jobs, self.projects_root)
+            except Exception:
+                pass
             self._json({"jobs": jobs, "busy": self.worker.busy_id})
             return
         if path == "/api/content-types":
@@ -2384,6 +2384,22 @@ class StudioHandler(BaseHTTPRequestHandler):
             self._json({"ok": True, "path": str(target)})
             return
 
+        if path == "/api/apply-ack":
+            body = self._read_json() or {}
+            try:
+                from app.apply_tasks import acknowledge_task
+
+                view = acknowledge_task(
+                    self.projects_root,
+                    task_id=str(body.get("taskId") or ""),
+                    project_id=str(body.get("projectId") or ""),
+                )
+            except Exception as e:
+                self._json({"ok": False, "error": str(e)[:160]}, 500)
+                return
+            self._json({"ok": True, "quickApply": view})
+            return
+
         if path == "/api/jobs/rename":
             body = self._read_json() or {}
             job = self.store.get(body.get("id", ""))
@@ -2512,20 +2528,22 @@ class StudioHandler(BaseHTTPRequestHandler):
             deleted_files = False
             proj = Path(removed["projectDir"]).resolve() if removed else None
             root = self.projects_root.resolve()
-            # Only wipe folders we created under the projects root
-            if proj and proj != root and root in proj.parents and proj.is_dir():
+            from app.recycle import RecycleError, is_safe_project_dir, send_to_recycle_bin
+
+            if proj and is_safe_project_dir(proj, root):
                 try:
-                    shutil.rmtree(proj)
+                    send_to_recycle_bin(proj)
                     deleted_files = True
-                except OSError as e:
+                except RecycleError as e:
                     self._json({
                         "ok": True,
                         "removedFromList": True,
                         "deletedFiles": False,
+                        "recycled": False,
                         "warning": str(e),
                     })
                     return
-            self._json({"ok": True, "removedFromList": True, "deletedFiles": deleted_files})
+            self._json({"ok": True, "removedFromList": True, "deletedFiles": deleted_files, "recycled": deleted_files})
             return
 
         if path == "/api/jobs":

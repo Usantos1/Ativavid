@@ -478,7 +478,116 @@ body.portrait .player-frame video {
   text-align: center;
   z-index: 3;
 }
+.pill.pending {
+  background: rgba(240, 161, 58, 0.16);
+  border-color: rgba(240, 161, 58, 0.5);
+  color: var(--warn, #f0a13a);
+}
+body.applying-corrections .editor-col,
+body.applying-corrections .hl-overlay,
+body.applying-corrections .cap-overlay,
+body.applying-corrections .quick-fixes {
+  pointer-events: none;
+}
+body.applying-corrections .player-frame {
+  pointer-events: none;
+}
+.apply-stage {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  z-index: 6;
+  font-size: 12px;
+  font-weight: 650;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  padding: 6px 12px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.apply-stage.hidden { display: none; }
+#btnOpenFinal.is-stale {
+  opacity: 0.78;
+}
+.apply-hint {
+  font-size: 11px;
+  color: var(--muted, #9aa3ad);
+  white-space: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hl-overlay {
+  position: absolute;
+  inset: 8px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 22px;
+  pointer-events: none;
+  text-align: center;
+  z-index: 4;
+}
+.hl-overlay-line {
+  pointer-events: auto;
+  cursor: text;
+  max-width: 90%;
+  font-family: 'Poppins', sans-serif;
+  font-weight: 900;
+  font-size: clamp(16px, 3.6vw, 36px);
+  line-height: 1.05;
+  letter-spacing: -0.8px;
+  color: #fff;
+  text-shadow: 0 4px 18px rgba(0, 0, 0, 0.65);
+  white-space: pre-wrap;
+}
+.hl-overlay-line[contenteditable="true"] {
+  outline: 2px solid var(--interact);
+  background: rgba(0, 0, 0, 0.4);
+  padding: 4px 10px;
+  border-radius: 8px;
+}
+
+.quick-fixes {
+  display: flex;
+  gap: 8px;
+  margin-top: 0;
+  padding: 6px 10px;
+  align-items: center;
+  border-radius: 12px;
+  flex: 0 0 auto;
+}
+.quick-fixes.hidden { display: none; }
+.quick-chip {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--text);
+  background: var(--glass-strong);
+  border: 1px solid var(--stroke);
+  border-radius: 999px;
+  padding: 5px 12px;
+  max-width: 48%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: text;
+  text-align: left;
+}
+.quick-chip.cap { font-weight: 500; opacity: 0.92; }
+.quick-chip.current { border-color: var(--interact); }
+
+.chip.caption.current {
+  outline: 2px solid color-mix(in srgb, var(--interact) 80%, transparent);
+  outline-offset: 1px;
+}
 .cap-overlay-line {
+  pointer-events: auto;
+  cursor: text;
   max-width: 86%;
   line-height: 1.1;
   letter-spacing: -1px;
@@ -759,7 +868,10 @@ canvas { display: block; }
   transition: box-shadow 0.12s;
 }
 .clip:hover { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.3); z-index: 3; }
-.clip.selected { box-shadow: 0 0 0 2px var(--interact); z-index: 4; }
+.clip.selected {
+  box-shadow: 0 0 0 2px var(--interact), 0 0 0 5px color-mix(in srgb, var(--interact) 22%, transparent);
+  z-index: 4;
+}
 .clip.dirty { border: 1.5px dashed var(--interact); }
 .clip.removed { opacity: 0.28; filter: grayscale(1); }
 
@@ -821,6 +933,15 @@ canvas { display: block; }
 .clip .handle.r { right: 0; border-right: 3px solid transparent; }
 .clip:hover .handle.l { border-left-color: var(--interact); }
 .clip:hover .handle.r { border-right-color: var(--interact); }
+/* Take curto no fit: o handle de 9px cobria o corpo. Hit-test maior no
+   eixo vertical; a largura visual continua sendo duração × zoom. */
+.clip.tight .handle { pointer-events: none; }
+.clip .clip-body-hit {
+  position: absolute;
+  left: 0; right: 0;
+  top: -10px; bottom: -10px;
+  z-index: 4;
+}
 
 /* caption + insert chips */
 .chip {
@@ -915,20 +1036,20 @@ canvas { display: block; }
   position: absolute;
   top: 0; bottom: 0;
   width: 0;
-  border-left: 1.5px solid var(--interact);
-  box-shadow: 0 0 6px color-mix(in srgb, var(--interact) 55%, transparent);
+  border-left: 2px solid var(--interact);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--interact) 70%, transparent);
   z-index: 10;
   pointer-events: none;
 }
 .needle-head {
   position: absolute;
-  top: -4px;
-  left: -5px;
-  width: 11px;
-  height: 11px;
+  top: -5px;
+  left: -6px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   background: var(--interact);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--interact) 22%, transparent), 0 2px 6px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--interact) 28%, transparent), 0 2px 8px rgba(0, 0, 0, 0.5);
 }
 
 /* ---------- footer / tooltip / toast ---------- */
@@ -962,6 +1083,8 @@ kbd {
   bottom: 22px; left: 50%;
   transform: translateX(-50%);
   z-index: 100;
+  white-space: pre-line;
+  text-align: center;
   background: var(--overlay-bg);
   border: 1px solid rgba(9, 181, 183, 0.55);
   border-radius: 12px;

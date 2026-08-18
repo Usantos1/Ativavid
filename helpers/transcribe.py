@@ -645,6 +645,42 @@ def _transcribe_audio(
     }
 
 
+def source_signature(video: Path) -> str:
+    st = Path(video).stat()
+    return f"{int(st.st_size)}:{int(st.st_mtime)}"
+
+
+def signature_path(transcripts_dir: Path, stem: str) -> Path:
+    return Path(transcripts_dir) / f"{stem}.srcsig"
+
+
+def write_source_signature(transcripts_dir: Path, video: Path) -> None:
+    path = signature_path(transcripts_dir, Path(video).stem)
+    path.write_text(source_signature(video), encoding="utf-8")
+
+
+def transcript_cache_hit(out_path: Path, video: Path) -> bool:
+    """Reusa transcrição só se o arquivo fonte tem o mesmo tamanho e mtime."""
+    if not out_path.exists():
+        return False
+    sig_path = signature_path(out_path.parent, Path(video).stem)
+    wanted = source_signature(video)
+    have = ""
+    if sig_path.exists():
+        try:
+            have = sig_path.read_text(encoding="utf-8").strip()
+        except OSError:
+            have = ""
+    if have and have != wanted:
+        return False
+    if not have:
+        try:
+            sig_path.write_text(wanted, encoding="utf-8")
+        except OSError:
+            pass
+    return True
+
+
 def transcribe_one(
     video: Path,
     edit_dir: Path,
@@ -659,7 +695,9 @@ def transcribe_one(
 ) -> Path:
     """Transcribe a single video. Returns path to transcript JSON.
 
-    Cached: returns existing path immediately if the transcript already exists.
+    Cached: returns existing path immediately if the transcript already exists
+    and the source still has the same size and mtime. A replaced file with the
+    same name is transcribed again.
     num_speakers is accepted for CLI compatibility but ignored (Groq Whisper
     does not diarize; ElevenLabs Scribe is called with diarize=false here).
 
@@ -672,7 +710,7 @@ def transcribe_one(
     transcripts_dir.mkdir(parents=True, exist_ok=True)
     out_path = transcripts_dir / f"{video.stem}.json"
 
-    if out_path.exists():
+    if transcript_cache_hit(out_path, video):
         if verbose:
             print(f"cached: {out_path.name}")
         return out_path
@@ -729,6 +767,10 @@ def transcribe_one(
                                     backend=resolved, wcpp=wcpp)
 
     out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    try:
+        write_source_signature(transcripts_dir, video)
+    except OSError:
+        pass
     # only THIS video's chunk dir — siblings may belong to parallel batch workers
     shutil.rmtree(chunk_cache, ignore_errors=True)
     dt = time.time() - t0

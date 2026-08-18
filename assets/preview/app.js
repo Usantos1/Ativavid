@@ -701,6 +701,7 @@ let S = {
   minPps: 4,
   selected: -1, // selected clip index (draft)
   lastSig: '', // change detection
+  staleNotice: false,
   savedPending: false,
   notes: [], // correction markers [{id,start,end,text}] — draft-timeline seconds
   pendingIn: null, // an IN is open, waiting for its OUT
@@ -723,6 +724,13 @@ let S = {
   // The UI never rewrites captions.json — it records the intent and the skill
   // re-runs the caption pipeline, which is what owns word timings.
   captionFixes: {},
+  applying: false,
+  applyToastAt: '',
+  applyDoneAt: '',
+  applyStage: '',
+  corrections: { dirty: { headline: false, captions: false, edl: false, style: false }, finalStale: false, captionsTimedTo: null },
+  captionActiveIndex: -1,
+  editingHeadline: false,
   pendingEdit: null, // {projectId, edlRevision, operations, timestamp, ...}
   finalFailed: false,
   protectedRanges: [],
@@ -1010,7 +1018,8 @@ async function loadPostCaption() {
 // btnSave below: it sends the WHOLE current ranges list, not a diff), so
 // this needs no new save-schema and no server change.
 function splitAtPlayhead() {
-  if (S.tab !== 1) { toast('Corte só na aba Corte', 1600); return; }
+  if (S.applying) return;
+  if (S.tab !== 1) { toast('Corte só na aba Edição', 1600); return; }
   if (S.selected < 0) { toast('Selecione um take pra cortar', 1600); return; }
   const r = S.draft[S.selected];
   if (!r || r.removed) { toast('Esse take está removido', 1600); return; }
@@ -1030,8 +1039,9 @@ function splitAtPlayhead() {
   const halfA = { source: r.source, start: r.start, end: sourceSplit, beat: r.beat, removed: false, srcIdx: null, orig: { start: r.start, end: r.end } };
   const halfB = { source: r.source, start: sourceSplit, end: r.end, beat: r.beat, removed: false, srcIdx: null, orig: { start: r.start, end: r.end } };
   S.draft.splice(S.selected, 1, halfA, halfB);
-  S.selected = -1;
+  S.selected = S.selected + 1;
   renderAll(); refreshHeader();
+  persistEdl();
   toast('Cortado — agora são 2 takes', 1800);
 }
 
@@ -1086,6 +1096,7 @@ function deleteClipRange(i, xA, xB) {
   S.draft.splice(i, 1, ...pieces);
   S.selected = -1;
   renderAll(); refreshHeader();
+  persistEdl();
   toast('Trecho apagado', 1800);
 }
 
@@ -1099,7 +1110,11 @@ const MAX_HISTORY = 100;
 function snapshotState() {
   // style included: a mis-click on a caption style is exactly as worth undoing
   // as a mis-drag on a take, and the user thinks of Ctrl+Z as one history
-  return structuredClone({ draft: S.draft, insertsDraft: S.insertsDraft, notes: S.notes, style: S.style, captionFixes: S.captionFixes });
+  return structuredClone({
+    draft: S.draft, insertsDraft: S.insertsDraft, notes: S.notes, style: S.style,
+    captionFixes: S.captionFixes,
+    hookLines: headlineLines(),
+  });
 }
 function refreshUndoRedoButtons() {
   $('btnUndo').disabled = S.history.length === 0;
@@ -1123,11 +1138,15 @@ function restoreSnapshot(snap) {
   S.notes = snap.notes;
   if (snap.style) S.style = snap.style;
   S.captionFixes = snap.captionFixes || {};
+  if (snap.hookLines && S.editData) {
+    S.editData.hook = { ...(S.editData.hook || {}), enabled: true, lines: snap.hookLines };
+  }
   closeCaptionEditor();
   S.selected = keepSel;
   S.editingNote = null;
   $('noteEditor').classList.add('hidden');
   renderAll(); refreshHeader(); renderNotes();
+  persistUndoState();
   // the Estilo tab is built from S.style, so it has to be rebuilt too — and
   // the accent CSS vars re-applied (these read S.style themselves), or the
   // demos keep painting the colours from before the undo
@@ -1169,22 +1188,72 @@ function dirtyCount() {
   n += Object.keys(S.captionFixes).length; // and each caption text fix
   return n;
 }
+function pendingFlags() {
+  const d = (S.corrections && S.corrections.dirty) || {};
+  return {
+    headline: !!d.headline,
+    captions: !!d.captions || Object.keys(S.captionFixes).length > 0,
+    edl: !!d.edl || edlDirty(),
+    style: !!d.style,
+  };
+}
+function pendingList() {
+  const f = pendingFlags();
+  const labels = { headline: 'headline', captions: 'legenda', edl: 'corte', style: 'estilo' };
+  return Object.keys(labels).filter((k) => f[k]).map((k) => labels[k]);
+}
 function refreshHeader() {
-  const n = dirtyCount();
+  const list = pendingList();
+  const n = list.length;
+  const session = dirtyCount();
   const save = $('btnSave');
   const discard = $('btnDiscard');
-  $('dirtyPill').classList.toggle('hidden', n === 0);
+  const apply = $('btnApply');
+  const pending = $('pendingPill');
+  $('dirtyPill').classList.add('hidden');
   $('dirtyCount').textContent = n;
-  // Sempre visíveis — só desabilitam quando não há o que salvar
-  save.classList.remove('hidden');
-  discard.classList.remove('hidden');
-  save.disabled = n === 0;
-  discard.disabled = n === 0;
-  save.title = n === 0 ? 'Nada para salvar' : 'Salvar ajustes';
-  discard.title = n === 0 ? 'Nada para descartar' : 'Descartar ajustes';
-  $('savedPill').classList.toggle('hidden', !(S.savedPending && n === 0));
+  if (pending) {
+    pending.classList.toggle('hidden', n === 0 && !S.applying);
+    pending.textContent = S.applying
+      ? (S.applyStage || 'Aplicando alterações...')
+      : 'Alterações pendentes';
+    pending.title = S.applying
+      ? (S.applyStage || 'Atualizando o vídeo final')
+      : (n === 0 ? '' : list.map((x) => x[0].toUpperCase() + x.slice(1)).join(' · '));
+  }
+  if (apply) {
+    apply.classList.remove('hidden');
+    if (S.applying) {
+      apply.disabled = true;
+      apply.textContent = S.applyStage || 'Aplicando alterações...';
+      apply.title = S.applyStage || 'Aplicando alterações';
+    } else {
+      apply.disabled = n === 0;
+      apply.textContent = n === 0
+        ? 'Aplicar alterações'
+        : (n === 1 ? 'Aplicar 1 alteração' : `Aplicar ${n} alterações`);
+      apply.title = n === 0
+        ? 'Nada para aplicar'
+        : list.map((x) => x[0].toUpperCase() + x.slice(1)).join(' · ');
+    }
+  }
+  const hint = $('applyHint');
+  if (hint) {
+    hint.classList.add('hidden');
+  }
+  if (save) {
+    save.classList.remove('hidden');
+    save.disabled = session === 0 && n === 0;
+  }
+  if (discard) {
+    discard.classList.remove('hidden');
+    discard.disabled = n === 0 && session === 0;
+    discard.title = discard.disabled ? 'Nada para descartar' : 'Descartar correções deste vídeo';
+  }
+  $('savedPill').classList.toggle('hidden', !(S.savedPending && n === 0 && session === 0));
   refreshFinalButton();
   refreshProjectChrome();
+  refreshQuickFixes();
 }
 
 function hasFinalVideo() {
@@ -1195,8 +1264,18 @@ function refreshFinalButton() {
   const btn = $('btnOpenFinal');
   if (!btn) return;
   const ok = hasFinalVideo();
+  const stale = !!(S.corrections && S.corrections.finalStale) || pendingList().length > 0;
   btn.disabled = !ok;
-  btn.title = ok ? 'Abrir o vídeo final no player do Windows' : 'O vídeo final ainda não está pronto';
+  btn.classList.toggle('is-stale', !!(ok && stale));
+  btn.textContent = 'Ver final';
+  if (!ok) {
+    btn.title = 'O vídeo final ainda não está pronto';
+  } else if (stale) {
+    btn.title = 'O vídeo final ainda não inclui as alterações pendentes.';
+    btn.textContent = 'Final anterior';
+  } else {
+    btn.title = 'Abrir o vídeo final';
+  }
 }
 
 function friendlyBeatLabel(beat, fallback) {
@@ -1250,6 +1329,266 @@ function generatedProjectTitle() {
   return '';
 }
 
+function headlineLines() {
+  const ed = S.editData || {};
+  const hook = ed.hook || {};
+  const lines = hook.lines || hook.text || [];
+  const arr = Array.isArray(lines) ? lines : [lines];
+  return arr.map((x) => String(x || '').trim()).filter(Boolean);
+}
+
+async function persistCorrection(body) {
+  if (!BASE) return null;
+  if (S.applying && body && body.op !== 'apply' && body.op !== 'plan' && body.op !== 'load') {
+    toast('Estou aplicando as alterações. Espere terminar para editar.', 2400);
+    return null;
+  }
+  try {
+    const res = await fetch(`${BASE}/api/corrections`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (data && data.corrections) S.corrections = data.corrections;
+    refreshHeader();
+    return data;
+  } catch {
+    toast('Não consegui gravar a correção neste projeto', 2800);
+    return null;
+  }
+}
+
+function applyApplyStatus(st, task) {
+  const qa = task && typeof task === 'object' ? task : null;
+  const qaBusy = !!(qa && (qa.status === 'queued' || qa.status === 'running'));
+  const running = !!(st && st.running) || qaBusy;
+  const was = !!S.applying;
+  S.applying = running;
+  const stageMsg = (qa && qa.stageLabel)
+    || (st && st.message)
+    || 'Aplicando edição...';
+  S.applyStage = running ? String(stageMsg) : '';
+  document.body.classList.toggle('applying-corrections', running);
+  const stageEl = $('applyStage');
+  if (stageEl) {
+    stageEl.hidden = !running;
+    stageEl.classList.toggle('hidden', !running);
+    if (running) stageEl.textContent = S.applyStage;
+  }
+  if (running) {
+    refreshHeader();
+    return;
+  }
+  const at = String((qa && qa.finishedAt) || (st && st.at) || '');
+  const ok = (qa && qa.status === 'completed') || (st && st.ok === true);
+  const fail = (qa && qa.status === 'failed') || (st && st.ok === false);
+  const ackId = (qa && (qa.taskId || qa.finishedAt)) || at;
+  const ackKey = ackId ? `ativavid-apply-ack:${ackId}` : '';
+  let alreadyAck = false;
+  try { alreadyAck = !!(ackKey && localStorage.getItem(ackKey) === '1'); } catch { alreadyAck = false; }
+  if (qa && qa.acknowledgedAt) alreadyAck = true;
+  if (ok && at && at !== S.applyToastAt && was && !alreadyAck) {
+    S.applyToastAt = at;
+    if (ackKey) {
+      try { localStorage.setItem(ackKey, '1'); } catch { /* ignore */ }
+    }
+    fetch('/api/apply-ack', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ taskId: (qa && qa.taskId) || '', projectId: (qa && qa.projectId) || '' }),
+    }).catch(() => {});
+    const title = (typeof generatedProjectTitle === 'function' && generatedProjectTitle())
+      || (S.state && S.state.project)
+      || '';
+    toast(title ? `Vídeo atualizado\n${title} está pronto.` : 'Vídeo atualizado', 4000);
+  } else if (fail && at && at !== S.applyToastAt && was && !alreadyAck) {
+    S.applyToastAt = at;
+    if (ackKey) {
+      try { localStorage.setItem(ackKey, '1'); } catch { /* ignore */ }
+    }
+    fetch('/api/apply-ack', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ taskId: (qa && qa.taskId) || '', projectId: (qa && qa.projectId) || '' }),
+    }).catch(() => {});
+    toast((st && st.message) || 'Não foi possível aplicar as alterações. Seu vídeo anterior foi mantido.', 5000);
+  }
+  if (ok && at && at !== S.applyDoneAt) {
+    S.applyDoneAt = at;
+    S.history = [];
+    S.future = [];
+    S.captionFixes = {};
+    refreshUndoRedoButtons();
+    S.lastSig = '';
+    if (BASE) {
+      fetch(`${BASE}/api/state`).then((r) => r.json()).then((data) => applyState(data)).catch(() => {});
+    }
+  }
+  if (was || ok || fail) refreshHeader();
+}
+
+async function persistHeadline(lines) {
+  const list = (lines || []).map((x) => String(x || '').trim()).filter(Boolean);
+  if (!list.length) return null;
+  return persistCorrection({ op: 'set_headline', lines: list });
+}
+
+async function persistCaptionFix(from, to, extra) {
+  const data = await persistCorrection({ op: 'fix_caption', from, to, ...(extra || {}) });
+  if (data && data.ok === false) {
+    toast(data.error || 'Essa palavra aparece mais de uma vez. Clique na legenda certa.', 3600);
+    return data;
+  }
+  if (data && Array.isArray(data.captionWords) && data.captionWords.length) {
+    S.captions = groupCaptions(data.captionWords);
+    S.captionFixes = {};
+  }
+  return data;
+}
+
+function draftRangesPayload() {
+  return S.draft.filter((r) => !r.removed).map((r) => ({
+    source: r.source, start: +r.start.toFixed(3), end: +r.end.toFixed(3), beat: r.beat,
+  }));
+}
+
+async function persistEdl() {
+  const data = await persistCorrection({ op: 'set_edl', ranges: draftRangesPayload() });
+  if (data && data.ok) {
+    S.draft.forEach((r) => {
+      if (!r.removed) {
+        r.orig = { start: r.start, end: r.end };
+        r.added = false;
+      }
+    });
+    refreshHeader();
+  }
+  return data;
+}
+
+let _undoPersistTimer = null;
+function persistUndoState() {
+  clearTimeout(_undoPersistTimer);
+  _undoPersistTimer = setTimeout(() => {
+    persistHeadline(headlineLines());
+    persistEdl();
+  }, 200);
+}
+
+function isTypingContext() {
+  if (S.applying || S.editingHeadline) return true;
+  if (document.getElementById('capEditor')) return true;
+  const ae = document.activeElement;
+  if (ae) {
+    const tag = (ae.tagName || '').toUpperCase();
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || ae.isContentEditable) return true;
+    if (ae.closest && ae.closest('#capEditor, #hlOverlay, #quickFixes, .cap-input, .note-editor, .ai-panel, .img-modal, .help-modal, .versions-panel, dialog, .av-dlg')) {
+      return true;
+    }
+  }
+  const overlayOpen = (id) => {
+    const n = $(id);
+    if (!n) return false;
+    if ((n.tagName || '').toUpperCase() === 'DIALOG') return !!n.open;
+    return !n.classList.contains('hidden') && !n.hidden;
+  };
+  return overlayOpen('helpModal') || overlayOpen('imgModal') || overlayOpen('aiPanel') || overlayOpen('versionsPanel') || overlayOpen('noteEditor') || overlayOpen('dlgAutosave');
+}
+function isQuickEditing() { return isTypingContext(); }
+
+function commitHeadline(text) {
+  const lines = String(text || '').split('\n').map((s) => s.trim()).filter(Boolean);
+  if (!lines.length) return;
+  if (lines.join('\n') === headlineLines().join('\n')) return;
+  pushHistory();
+  if (!S.editData) S.editData = {};
+  S.editData.hook = { ...(S.editData.hook || {}), enabled: true, lines };
+  persistHeadline(lines);
+  renderAll();
+  refreshHeader();
+  refreshProjectChrome();
+}
+
+function beginHeadlineEdit() {
+  if (S.applying) return;
+  const box = $('hlOverlay');
+  const cur = headlineLines().join('\n');
+  S.editingHeadline = true;
+  if (box) {
+    box.classList.remove('hidden');
+    let line = box.querySelector('.hl-overlay-line');
+    if (!line) {
+      box.innerHTML = '';
+      line = el('div', 'hl-overlay-line', box);
+      line.textContent = cur;
+    }
+    line.contentEditable = 'true';
+    line.focus();
+    const range = document.createRange();
+    range.selectNodeContents(line);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    let cancelled = false;
+    const finish = () => {
+      S.editingHeadline = false;
+      line.contentEditable = 'false';
+      line.removeEventListener('blur', finish);
+      if (!cancelled) commitHeadline(line.textContent);
+      else line.textContent = cur;
+    };
+    line.addEventListener('blur', finish);
+    line.onkeydown = (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); line.blur(); }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        cancelled = true;
+        line.textContent = cur;
+        line.blur();
+      }
+    };
+    return;
+  }
+  S.editingHeadline = false;
+  const next = window.prompt('Headline deste vídeo', cur);
+  if (next != null) commitHeadline(next);
+}
+
+function refreshQuickFixes() {
+  const bar = $('quickFixes');
+  if (!bar) return;
+  const hl = headlineLines();
+  const show = !HOUSE_STYLE && (!!hl.length || S.captions.length > 0);
+  bar.classList.toggle('hidden', !show);
+  const chip = $('hlChip');
+  if (chip) chip.textContent = hl.length ? hl.join(' / ') : 'Headline';
+}
+
+function currentCaptionIndex(t) {
+  const time = t == null ? (video.currentTime || 0) : t;
+  return S.captions.findIndex((c) => time >= c.start && time < c.end);
+}
+
+function highlightCurrentCaption(i) {
+  S.captionActiveIndex = i;
+  const lane = typeof laneCaptions !== 'undefined' ? laneCaptions : document.getElementById('laneCaptions');
+  if (lane) {
+    lane.querySelectorAll('.chip.caption').forEach((ch) => {
+      ch.classList.toggle('current', +ch.dataset.ci === i);
+    });
+  }
+  const panel = $('capNow');
+  if (panel) {
+    const c = i >= 0 ? S.captions[i] : null;
+    const fix = c && S.captionFixes[i];
+    const text = c ? (fix ? fix.to : c.text) : '—';
+    if (panel.textContent !== text) panel.textContent = text;
+    panel.classList.toggle('current', i >= 0);
+  }
+}
+
 function projectFileLabel() {
   const raw = String(S.state.project || S.state.video || '').trim();
   if (!raw) return '';
@@ -1292,19 +1631,25 @@ function refreshProjectChrome() {
 async function poll() {
   try {
     const res = await fetch(`${BASE}/api/state`);
+    if (!res.ok) return;
     const data = await res.json();
-    const sig = JSON.stringify([data.state, data.edl, data.mtimes, data.videoDuration]);
+    const sig = JSON.stringify([data.state, data.edl, data.mtimes, data.videoDuration, data.hasCut, data.corrections]);
+    applyApplyStatus(data.applyStatus, data.applyTask);
     if (sig !== S.lastSig) {
-      const hadEdits = dirtyCount() > 0;
+      // Primeira carga SEMPRE aplica. Dialog fechado / foco em select não é edição.
+      const firstLoad = !S.lastSig;
+      const hadEdits = !firstLoad && (dirtyCount() > 0 || S.history.length > 0);
       if (!hadEdits) {
         S.lastSig = sig;
+        S.staleNotice = false;
         await applyState(data);
-      } else {
+      } else if (!S.staleNotice) {
+        S.staleNotice = true;
         toast('Novo estado disponível — salve ou descarte seus ajustes para atualizar', 4000);
       }
     }
   } catch (e) { /* server restarting; keep polling */ }
-  setTimeout(poll, 2000);
+  setTimeout(poll, S.applying ? 700 : 2000);
 }
 
 async function applyState(data) {
@@ -1313,8 +1658,11 @@ async function applyState(data) {
   S.state = next;
   S.mtimes = data.mtimes || {};
   S.videoDuration = data.videoDuration || 0;
+  S.hasCut = !!data.hasCut || S.videoDuration > 0;
+  S.presetUsed = (data.presetUsed && typeof data.presetUsed === 'object') ? data.presetUsed : null;
   S.fps = S.state.fps || 24;
   S.savedPending = !!data.hasPendingEdits;
+  if (data.corrections) S.corrections = data.corrections;
 
   $('projectName').textContent = S.state.project || 'ATIVAVID';
   // Opened from the dashboard, this is NOT the project the session is watching:
@@ -1339,19 +1687,27 @@ async function applyState(data) {
   if (pn) pn.title = statusLine || (S.state.project || '');
 
   const ranges = (data.edl && data.edl.ranges) || [];
+  const timedTo = (data.corrections && data.corrections.captionsTimedTo) || null;
+  const edlPending = !!(data.corrections && data.corrections.dirty && data.corrections.dirty.edl);
+  // Relógio do cut.mp4 / captions.json — não o EDL pendente. Assim a overlay
+  // da legenda continua no tempo do vídeo até o Apply.
+  const cutClock = (edlPending && Array.isArray(timedTo) && timedTo.length) ? timedTo : ranges;
   // J-cut timeline, written by render.py. Under a J-cut the picture of every take
   // after the first starts a few frames into itself, so the rendered clip is
   // SHORTER than end-start and the takes do not simply abut. Without this the
   // filmstrip and the needle drift a little further at each junction.
-  S.jcut = (data.edl && data.edl.jcut_timeline) || null;
-  S.rendered = ranges.map((r) => ({ source: r.source, start: +r.start, end: +r.end, beat: r.beat || '' }));
+  S.jcut = (edlPending && timedTo) ? null : ((data.edl && data.edl.jcut_timeline) || null);
+  S.rendered = cutClock.map((r) => ({ source: r.source, start: +r.start, end: +r.end, beat: r.beat || '' }));
   // srcIdx: this entry's position in S.rendered/S.jcut — jcutGeom() reads
   // lead/tail through THIS, not the entry's current S.draft position, so a
   // split earlier in the array can't shift an untouched later take's
   // geometry out from under it. Split-off pieces get srcIdx:null (see
   // splitAtPlayhead/deleteClipRange) — there's no real per-piece geometry
   // for those until the skill re-renders and writes a fresh jcut_timeline.
-  S.draft = S.rendered.map((r, srcIdx) => ({ ...r, removed: false, srcIdx, orig: { start: r.start, end: r.end } }));
+  S.draft = ranges.map((r, srcIdx) => ({
+    source: r.source, start: +r.start, end: +r.end, beat: r.beat || '',
+    removed: false, srcIdx, orig: { start: +r.start, end: +r.end },
+  }));
   if (data.intent) {
     S.protectedRanges = Array.isArray(data.intent.protectedRanges) ? data.intent.protectedRanges : [];
     S.contentType = data.intent.contentType || S.contentType;
@@ -1384,7 +1740,7 @@ async function applyState(data) {
   // the skill opened the gate → land the user on the Estilo tab
   if (S.state.awaitingStyle || HOUSE_STYLE) S.tab = 'style';
 
-  const hasVideo = S.videoDuration > 0;
+  const hasVideo = S.videoDuration > 0 || !!S.hasCut;
   $('playerWrap').classList.toggle('hidden', !hasVideo || HOUSE_STYLE);
   $('editorCol').classList.toggle('hidden', !hasVideo || HOUSE_STYLE);
   $('transportBar')?.classList.toggle('hidden', !hasVideo || HOUSE_STYLE);
@@ -1409,13 +1765,13 @@ async function applyState(data) {
 
   if (HOUSE_STYLE) {
     document.body.classList.add('house-style');
-    const pn = $('projectName');
-    if (pn) {
-      pn.textContent = 'Estilo padrão da marca';
-      pn.title = 'Escolhas visuais iguais às do editor — salvas para todos os vídeos';
+    const pnHouse = $('projectName');
+    if (pnHouse) {
+      pnHouse.textContent = 'Estilo padrão da marca';
+      pnHouse.title = 'Escolhas visuais iguais às do editor — salvas para todos os vídeos';
     }
-    const sm = $('stateMessage');
-    if (sm) sm.textContent = 'Escolhas visuais iguais às do editor — salvas para todos os vídeos';
+    const smHouse = $('stateMessage');
+    if (smHouse) smHouse.textContent = 'Escolhas visuais iguais às do editor — salvas para todos os vídeos';
   }
   if (tabS.disabled && S.tab === 'style') S.tab = 1;
   // a deep link to #fase2 before Fase 2 exists yet has nothing to show
@@ -1429,7 +1785,12 @@ async function applyState(data) {
   // on every 2s poll, and pushing a history entry each time would make the
   // back button useless (dozens of identical entries instead of one per tab)
   const wantPath = HOUSE_STYLE ? '/estilo-padrao' : (BASE + TAB_TO_PATH[S.tab]);
-  const wantSearch = HUB_EMBED ? '?embed=1' : '';
+  let wantSearch = '';
+  if (HUB_EMBED) {
+    const q = new URLSearchParams(location.search);
+    q.set('embed', '1');
+    wantSearch = `?${q.toString()}`;
+  }
   if (location.pathname !== wantPath || (HUB_EMBED && location.search.indexOf('embed=1') < 0)) {
     history.replaceState(null, '', wantPath + wantSearch);
   }
@@ -1463,6 +1824,7 @@ async function applyState(data) {
   renderSetup();
   refreshHeader();
   loadPostCaption(); // picks up a caption written between polls
+  loadBrandPresets({ applyActive: !!(HOUSE_STYLE || HUB_EMBED) });
 }
 
 // Fase 1 plays the clean cut; Fase 2 plays the Phase-2 render (state.finalVideo)
@@ -1535,18 +1897,31 @@ function wireProxyFallback() {
 
 function groupCaptions(caps) {
   // mirror the template: lines of ≤3 words, break on punctuation
+  const words = (caps || []).map((w, i) => {
+    if (!w || typeof w !== 'object') return null;
+    const id = w.tokenId || w.cueId || w.id || w.wordId || null;
+    return { ...w, wordIndex: i, tokenId: id };
+  }).filter(Boolean);
   const lines = [];
   let cur = [];
-  for (const w of caps) {
+  for (const w of words) {
     cur.push(w);
-    if (cur.length >= 3 || /[.,!?…]$/.test(w.text)) { lines.push(cur); cur = []; }
+    if (cur.length >= 3 || /[.,!?…]$/.test(w.text || '')) { lines.push(cur); cur = []; }
   }
   if (cur.length) lines.push(cur);
-  return lines.map((line) => ({
-    text: line.map((w) => w.text.replace(/[.,!?…]+$/, '')).join(' '),
-    start: line[0].startMs / 1000,
-    end: line[line.length - 1].endMs / 1000,
-  }));
+  return lines.map((line) => {
+    const t0 = line[0].startMs != null ? line[0].startMs : (Number(line[0].start) || 0) * 1000;
+    const t1 = line[line.length - 1].endMs != null ? line[line.length - 1].endMs : (Number(line[line.length - 1].end) || 0) * 1000;
+    return {
+      text: line.map((w) => String(w.text || '').replace(/[.,!?…]+$/, '')).join(' '),
+      start: t0 / 1000,
+      end: t1 / 1000,
+      wordIndex: line[0].wordIndex,
+      tokenId: line[0].tokenId,
+      cueId: line[0].cueId || line[0].id || line[0].tokenId || null,
+      words: line,
+    };
+  });
 }
 
 /* ---------- caption text correction ----------
@@ -1586,11 +1961,29 @@ function openCaptionEditor(i, anchorEl) {
   const commit = () => {
     const v = input.value.trim();
     closeCaptionEditor();
-    if (!v || v === c.text) {                 // back to the original = drop the fix
+    if (!v || v === c.text) {
       if (S.captionFixes[i]) { pushHistory(); delete S.captionFixes[i]; }
     } else if (!S.captionFixes[i] || S.captionFixes[i].to !== v) {
       pushHistory();
-      S.captionFixes[i] = { from: c.text, to: v, start: c.start, end: c.end };
+      const from = c.text;
+      S.captionFixes[i] = { from, to: v, start: c.start, end: c.end };
+      c.text = v;
+      persistCaptionFix(from, v, {
+        start: c.start,
+        end: c.end,
+        startMs: Math.round((c.start || 0) * 1000),
+        endMs: Math.round((c.end || 0) * 1000),
+        index: c.wordIndex,
+        tokenId: c.tokenId || undefined,
+        cueId: c.cueId || undefined,
+      }).then((data) => {
+        if (data && data.ok === false) {
+          c.text = from;
+          delete S.captionFixes[i];
+          renderAll();
+          refreshHeader();
+        }
+      });
     }
     renderAll(); refreshHeader();
   };
@@ -1703,6 +2096,8 @@ function fitZoom() {
   $('zoom').value = 0;
 }
 const MAX_PPS = 200;
+const ZOOM_100_PPS = 40;
+const CLIP_TIGHT_PX = 24;
 
 // Zoom keeping `t` (seconds) parked at `anchorX` (px from the panel's left edge).
 function applyZoom(pps, t, anchorX) {
@@ -1736,6 +2131,24 @@ function setZoom(v) { // slider 0..100 → minPps..200, anchored on the needle
   const visible = xBefore >= LABEL_W && xBefore <= panel.clientWidth;
   const anchor = visible ? xBefore : LABEL_W + (panel.clientWidth - LABEL_W) / 2;
   applyZoom(S.minPps * Math.pow(MAX_PPS / S.minPps, v / 100), t, anchor);
+}
+
+function zoomAnchor() {
+  const t = renderedToDraft(video.currentTime || 0);
+  const xBefore = LABEL_W + t * S.pps - panel.scrollLeft;
+  const visible = xBefore >= LABEL_W && xBefore <= panel.clientWidth;
+  const anchor = visible ? xBefore : LABEL_W + (panel.clientWidth - LABEL_W) / 2;
+  return { t, anchor };
+}
+
+function setZoom100() {
+  const { t, anchor } = zoomAnchor();
+  applyZoom(Math.max(S.minPps, ZOOM_100_PPS), t, anchor);
+}
+
+function bumpZoom(factor) {
+  const { t, anchor } = zoomAnchor();
+  applyZoom(S.pps * factor, t, anchor);
 }
 
 // Lanes are clipped at the gutter (and the divider is positioned) by a
@@ -2108,7 +2521,7 @@ function renderSetup() {
   // Layout amplo igual ao Estilos do hub (sidebar) — só no editor, não no embed
   document.body.classList.toggle('styles-wide', show && !HUB_EMBED);
   refreshEndCardCopy();   // follows the "Card final" checkbox
-  const hasVideo = S.videoDuration > 0;
+  const hasVideo = S.videoDuration > 0 || !!S.hasCut;
   $('stage').classList.toggle('hidden', show || !hasVideo);
   $('emptyState').classList.toggle('hidden', hasVideo || show);
   // Ajuda é da timeline — some na aba Estilos / embed do hub
@@ -2485,11 +2898,16 @@ function renderClips() {
       return;
     }
     const c = el('div', 'clip', laneVideo);
+    const px = r.dur * S.pps;
     c.style.left = `${r.out * S.pps}px`;
-    c.style.width = `${Math.max(r.dur * S.pps, 8)}px`;
+    c.style.width = `${Math.max(px, 0)}px`;
     c.dataset.i = i;
     if (i === S.selected) c.classList.add('selected');
     if (r.start !== r.orig.start || r.end !== r.orig.end) c.classList.add('dirty');
+    if (px > 0 && px < CLIP_TIGHT_PX) {
+      c.classList.add('tight');
+      el('div', 'clip-body-hit', c);
+    }
 
     // filmstrip from the rendered cut
     if (S.thumbCount > 0 && rl[i]) {
@@ -2597,19 +3015,22 @@ function renderChips() {
   if (!showCaps) return;
 
   laneCaptions.innerHTML = '';
-  S.captions.forEach((c, i) => {
-    const start = renderedToDraft(c.start);
-    const end = renderedToDraft(c.end);
-    const fix = S.captionFixes[i];
-    const chip = el('div', 'chip caption' + (fix ? ' fixed' : ''), laneCaptions);
-    chip.style.left = `${start * S.pps}px`;
-    chip.style.width = `${Math.max((end - start) * S.pps, 6)}px`;
-    chip.textContent = fix ? fix.to : c.text;
-    chip.title = fix
-      ? `“${c.text}” → “${fix.to}” (clique para editar)`
-      : `${c.text} — clique para corrigir o texto`;
-    chip.dataset.ci = String(i);
-  });
+  const edlPending = !!(S.corrections && S.corrections.dirty && S.corrections.dirty.edl);
+  if (!edlPending) {
+    S.captions.forEach((c, i) => {
+      const start = renderedToDraft(c.start);
+      const end = renderedToDraft(c.end);
+      const fix = S.captionFixes[i];
+      const chip = el('div', 'chip caption' + (fix ? ' fixed' : ''), laneCaptions);
+      chip.style.left = `${start * S.pps}px`;
+      chip.style.width = `${Math.max((end - start) * S.pps, 6)}px`;
+      chip.textContent = fix ? fix.to : c.text;
+      chip.title = fix
+        ? `“${c.text}” → “${fix.to}” (clique para editar)`
+        : `${c.text} — clique para corrigir o texto`;
+      chip.dataset.ci = String(i);
+    });
+  }
 
   // Inserts stay Fase-2 only: they describe the Phase-2 render, and on the
   // Fase-1 cut there is nothing for them to sit against.
@@ -2816,6 +3237,12 @@ function updateCapOverlay() {
 
   box.classList.remove('hidden');
   box.style.paddingBottom = `${V.bottom * s}px`;
+  const sig = `${i}|${text}|${style}|${Math.round(s * 100)}`;
+  if (box.dataset.sig === sig && box.querySelector('.cap-overlay-line')) {
+    highlightCurrentCaption(i);
+    return;
+  }
+  box.dataset.sig = sig;
   box.innerHTML = '';
   const line = el('div', 'cap-overlay-line' + (V.ink === 'slab' ? ' slab' : ''), box);
   line.style.fontFamily = V.family;
@@ -2830,10 +3257,38 @@ function updateCapOverlay() {
   }
   line.textContent = text;
   if (fix) line.classList.add('fixed');
+  highlightCurrentCaption(i);
+}
+
+function updateHlOverlay() {
+  const box = $('hlOverlay');
+  if (!box) return;
+  const lines = headlineLines();
+  const hook = (S.editData && S.editData.hook) || {};
+  const usable = S.tab !== 2 && lines.length && hook.enabled !== false;
+  if (!usable) { box.classList.add('hidden'); return; }
+  const end = Number(hook.endSec) || 4;
+  const t = video.currentTime || 0;
+  const editing = box.querySelector('[contenteditable="true"]') || S.editingHeadline;
+  if (!editing && t > end + 0.2) {
+    box.classList.add('hidden');
+    return;
+  }
+  box.classList.remove('hidden');
+  if (editing) return;
+  const want = lines.join('\n');
+  let line = box.querySelector('.hl-overlay-line');
+  if (!line) {
+    box.innerHTML = '';
+    line = el('div', 'hl-overlay-line', box);
+  }
+  if (line.textContent !== want) line.textContent = want;
 }
 
 function rafLoop() {
   updateCapOverlay();
+  updateHlOverlay();
+  highlightCurrentCaption(currentCaptionIndex());
   if (capAnims.length) {
     const now = performance.now() / 1000;
     for (const step of capAnims) step(now);
@@ -2981,7 +3436,10 @@ panel.addEventListener('pointermove', (e) => {
       const moved = drag.type === 'trim'
         ? (S.draft[drag.i].start !== drag.r.start || S.draft[drag.i].end !== drag.r.end)
         : (S.insertsDraft[drag.i].start !== drag.c.start || S.insertsDraft[drag.i].end !== drag.c.end);
-      if (moved) pushHistory(drag.preSnapshot);
+      if (moved) {
+        pushHistory(drag.preSnapshot);
+        if (drag.type === 'trim') persistEdl();
+      }
     }
     if (drag && drag.type === 'clip-range') {
       if (drag.moved) deleteClipRange(drag.i, drag.x0, drag.x1);
@@ -3001,11 +3459,12 @@ laneVideo.addEventListener('dblclick', (e) => {
   pushHistory();
   r.start = r.orig.start; r.end = r.orig.end; r.removed = false;
   renderAll(); refreshHeader();
+  persistEdl();
 });
 
 // keyboard
 document.addEventListener('keydown', (e) => {
-  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (isTypingContext()) return;
   if (e.key === 'm' || e.key === 'M') {
     e.preventDefault();
     toggleMark();
@@ -3064,7 +3523,8 @@ $('btnPlay').innerHTML = ICON.play;
 $('btnMute').innerHTML = ICON.vol;
 $('btnPlay').addEventListener('click', togglePlay);
 document.querySelector('.player-frame')?.addEventListener('click', (e) => {
-  if (e.target.closest('button')) return;
+  if (isTypingContext()) return;
+  if (e.target.closest('button, .cap-overlay-line, .hl-overlay-line, #capEditor, #hlOverlay')) return;
   togglePlay();
 });
 video.addEventListener('play', () => { $('btnPlay').innerHTML = ICON.pause; });
@@ -3080,9 +3540,9 @@ $('btnUndo').innerHTML = ICON.undo;
 $('btnRedo').innerHTML = ICON.redo;
 $('btnUndo').addEventListener('click', undo);
 $('btnRedo').addEventListener('click', redo);
-$('btnSplit').innerHTML = ICON.razor;
+$('btnSplit').innerHTML = `${ICON.razor}<span>Cortar</span>`;
 $('btnSplit').addEventListener('click', splitAtPlayhead);
-$('btnDeleteTake').innerHTML = ICON.trash;
+$('btnDeleteTake').innerHTML = `${ICON.trash}<span>Excluir</span>`;
 $('btnDeleteTake').addEventListener('click', toggleSelectedTake);
 $('coverIcon').innerHTML = ICON.cover;
 $('btnCover').addEventListener('click', saveCoverFromPlayhead);
@@ -3201,16 +3661,29 @@ async function appendCtaFromFile(file) {
 }
 
 function toggleSelectedTake() {
+  if (S.applying) return;
   if (S.tab !== 1 || S.selected < 0) {
     toast('Selecione um take pra apagar', 1600);
     return;
   }
-  const r = S.draft[S.selected];
+  const i = S.selected;
+  const r = S.draft[i];
   if (!r) return;
   pushHistory();
   r.removed = !r.removed;
+  if (r.removed) {
+    const next = S.draft.findIndex((x, j) => j > i && !x.removed);
+    let prev = -1;
+    for (let j = i - 1; j >= 0; j--) {
+      if (!S.draft[j].removed) { prev = j; break; }
+    }
+    S.selected = next >= 0 ? next : prev;
+    const keep = S.selected >= 0 ? draftLayout()[S.selected] : null;
+    if (keep) seekDraft(keep.out + Math.min(0.05, keep.dur / 2));
+  }
   renderAll();
   refreshHeader();
+  persistEdl();
 }
 
 function refreshTransportActions() {
@@ -3221,8 +3694,8 @@ function refreshTransportActions() {
   btn.disabled = !can;
   btn.classList.toggle('danger-on', !!(r && r.removed));
   btn.title = !can
-    ? 'Selecione um take para apagar'
-    : (r.removed ? 'Restaurar o take selecionado (Delete)' : 'Apagar o take selecionado (Delete)');
+    ? 'Selecione um take para excluir'
+    : (r.removed ? 'Restaurar o take selecionado (Delete)' : 'Excluir o take selecionado (Delete)');
 }
 
 async function saveCoverFromPlayhead() {
@@ -3801,6 +4274,9 @@ $('noteText').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); $('noteOk').click(); }
 });
 $('btnFit').addEventListener('click', () => { fitZoom(); renderAll(); });
+if ($('btnZoomOut')) $('btnZoomOut').addEventListener('click', () => bumpZoom(1 / 1.4));
+$('btnZoom100').addEventListener('click', () => setZoom100());
+$('btnZoomIn').addEventListener('click', () => bumpZoom(1.4));
 panel.addEventListener('scroll', () => requestAnimationFrame(() => { drawRuler(); drawWave(); positionNeedle(); }));
 // renderSetup too: the caption demos bake their scale from the box width, so a
 // resize (or the short-pane media query kicking in) has to rebuild them
@@ -3842,13 +4318,75 @@ $('btnSave').addEventListener('click', async () => {
   await saveEditsAndReturnToQueue();
 });
 
-$('btnDiscard').addEventListener('click', () => {
-  // srcIdx: this entry's position in S.rendered/S.jcut — jcutGeom() reads
-  // lead/tail through THIS, not the entry's current S.draft position, so a
-  // split earlier in the array can't shift an untouched later take's
-  // geometry out from under it. Split-off pieces get srcIdx:null (see
-  // splitAtPlayhead/deleteClipRange) — there's no real per-piece geometry
-  // for those until the skill re-renders and writes a fresh jcut_timeline.
+if ($('btnApply')) {
+  $('btnApply').addEventListener('click', async () => {
+    if (S.applying || pendingList().length === 0) return;
+    S.applying = true;
+    document.body.classList.add('applying-corrections');
+    refreshHeader();
+    const data = await persistCorrection({ op: 'apply' });
+    if (!data || data.ok === false) {
+      S.applying = false;
+      document.body.classList.remove('applying-corrections');
+      toast(
+        (data && (data.message || data.error)) ||
+        'Não foi possível aplicar as alterações. Seu vídeo anterior foi mantido.',
+        5000
+      );
+      refreshHeader();
+      return;
+    }
+    if (data.noop) {
+      S.applying = false;
+      document.body.classList.remove('applying-corrections');
+      refreshHeader();
+      toast('Nada para aplicar', 2000);
+      return;
+    }
+    applyApplyStatus(data.applyStatus || {
+      running: !!data.started,
+      ok: data.ok === true && !data.started ? true : null,
+      message: data.message || 'Aplicando edição...',
+      at: data.started ? '' : 'local',
+    }, data.applyTask);
+  });
+}
+
+if ($('hlOverlay')) {
+  $('hlOverlay').addEventListener('click', (e) => {
+    e.stopPropagation();
+    beginHeadlineEdit();
+  });
+}
+if ($('capOverlay')) {
+  $('capOverlay').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const i = currentCaptionIndex();
+    if (i >= 0) openCaptionEditor(i, e.target.closest('.cap-overlay-line') || e.target);
+  });
+}
+if ($('hlChip')) {
+  $('hlChip').addEventListener('click', (e) => {
+    e.stopPropagation();
+    beginHeadlineEdit();
+  });
+}
+if ($('capNow')) {
+  $('capNow').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const i = currentCaptionIndex();
+    if (i >= 0) openCaptionEditor(i, e.currentTarget);
+    else toast('Avance o vídeo até aparecer a legenda', 1800);
+  });
+}
+
+$('btnDiscard').addEventListener('click', async () => {
+  const data = await persistCorrection({ op: 'discard' });
+  if (data && data.ok && data.restored) {
+    toast('Correções desfeitas', 2000);
+    location.reload();
+    return;
+  }
   S.draft = S.rendered.map((r, srcIdx) => ({ ...r, removed: false, srcIdx, orig: { start: r.start, end: r.end } }));
   buildInsertsDraft();
   S.notes = [];
@@ -4684,8 +5222,10 @@ async function openVersionsPanel() {
         if (data.intent && Array.isArray(data.intent.protectedRanges)) {
           S.protectedRanges = data.intent.protectedRanges;
         }
-        toast('Versão restaurada');
+        if (data.corrections) S.corrections = data.corrections;
+        toast('Versão restaurada — clique em Aplicar alterações para atualizar o vídeo');
         panel.classList.add('hidden');
+        location.reload();
       } catch (e) {
         toast(e.message || 'Não restaurei');
       }
@@ -4718,18 +5258,47 @@ function currentStyleSnapshot() {
   };
 }
 
-async function loadBrandPresets() {
+async function loadBrandPresets(opts) {
+  const applyActive = !!(opts && opts.applyActive);
   const sel = $('presetSelect');
   if (!sel) return;
+  const projectBrand = String(
+    (S.presetUsed && (S.presetUsed.brandId || S.presetUsed.brandName))
+    || (S.state && S.state.style && S.state.style.brandId)
+    || ''
+  ).trim();
+  const qsBrand = new URLSearchParams(location.search).get('brandId') || '';
+  let brandId = '';
+  if (HOUSE_STYLE || HUB_EMBED) {
+    brandId = qsBrand;
+  } else {
+    brandId = (S.presetUsed && S.presetUsed.brandId) || (S.state && S.state.style && S.state.style.brandId) || '';
+  }
+  // Projeto real: nunca cair no active.json global (loja-teste dos testes).
+  if (!HOUSE_STYLE && !HUB_EMBED && !brandId) {
+    const label = (S.presetUsed && S.presetUsed.brandName) || 'Deste vídeo';
+    sel.innerHTML = `<option value="">${label}</option>`;
+    S.brandPresets = { brandId: '', presets: [], activeId: '' };
+    return;
+  }
   try {
-    const r = await fetch('/api/brand-presets');
+    const q = brandId ? `?brandId=${encodeURIComponent(brandId)}` : '';
+    const r = await fetch('/api/brand-presets' + q);
     const pack = await r.json();
     const presets = pack.presets || [];
     S.brandPresets = pack;
+    const wantId = (!HOUSE_STYLE && !HUB_EMBED)
+      ? ''
+      : (pack.activeId || '');
     sel.innerHTML = presets.map((p) =>
-      `<option value="${p.id}" ${p.id === pack.activeId ? 'selected' : ''}>${p.name || p.id}</option>`
+      `<option value="${p.id}" ${p.id === wantId ? 'selected' : ''}>${p.name || p.id}</option>`
     ).join('');
-    applyPresetToUi(presets.find((p) => p.id === sel.value) || pack.active);
+    if (!sel.innerHTML) {
+      sel.innerHTML = `<option value="">${projectBrand || 'Deste vídeo'}</option>`;
+    }
+    if (applyActive) {
+      applyPresetToUi(presets.find((p) => p.id === sel.value) || pack.active);
+    }
   } catch { /* hub sem rota em preview isolado */ }
 }
 
@@ -4772,7 +5341,7 @@ async function presetAction(action) {
     const data = await r.json();
     if (!r.ok || data.error) throw new Error(data.error || 'Falha no preset');
     S.brandPresets = data;
-    await loadBrandPresets();
+    await loadBrandPresets({ applyActive: !!(HOUSE_STYLE || HUB_EMBED) });
     toast(action === 'delete' ? 'Preset excluído' : 'Preset atualizado');
   } catch (e) {
     toast(e.message || 'Não deu para alterar o preset');
@@ -4782,7 +5351,7 @@ async function presetAction(action) {
 function wirePresets() {
   const bar = $('presetBar');
   if (!bar) return;
-  loadBrandPresets();
+  loadBrandPresets({ applyActive: !!(HOUSE_STYLE || HUB_EMBED) });
   const sel = $('presetSelect');
   if (sel) {
     sel.onchange = () => {

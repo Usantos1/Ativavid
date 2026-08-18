@@ -48,6 +48,16 @@ RETRY_PROMPT = (
     '"summary":"Vou…"}'
 )
 FAIL_PLAN = "Não consegui preparar essa alteração. Tente descrever de outra forma."
+VAGUE_CUT_MSG = "Diga o que melhorar: um trecho para cortar, uma palavra da legenda, ou a headline."
+MIN_KEEP_SEC = 3.0
+CUT_ACTIONS = {"trim_range", "remove_range", "set_duration_max"}
+CUT_INTENT_RE = re.compile(
+    r"\b(corta|cortar|tira|tirar|remove|remover|apaga|apagar|"
+    r"encurta|encurtar|diminui|diminuir|trim|"
+    r"deixa\s+s[oó]|s[oó]\s+os?\s+(primeiros?|[uú]ltimos?)|"
+    r"[uú]ltimos?\s+\d+|primeiros?\s+\d+|no\s+m[aá]ximo\s+\d+)\b",
+    re.I,
+)
 
 _CMD_FULL_RESTORE = re.compile(
     r"^(restaura|restaurar|volta|voltar|devolve|devolver)\s+"
@@ -97,7 +107,14 @@ SYSTEM = (
     "do início ao fim do ORIGINAL (sourceDuration), não do corte atual.\n"
     "fix_captions: from/to ou replacements=[{from,to}] para corrigir palavra "
     "errada na legenda (ex.: pericô→Película). Não corta o vídeo.\n"
-    "Nunca invente FFmpeg. Prefira poucas ações claras."
+    "Nunca invente FFmpeg. Prefira poucas ações claras.\n"
+    "trim_range/remove_range/set_duration_max usam o relógio do CORTE ATUAL "
+    "(0 até DURAÇÃO_CORTE_ATUAL). Os números do EDL_ATUAL são tempo da FONTE — "
+    "não copie esses valores para trim/remove.\n"
+    "Pedido vago (melhoria, melhora, deixa melhor) sem dizer O QUE cortar: "
+    "não emita trim/remove/set_duration_max. Use noop.\n"
+    "Nunca deixe o corte com menos de 3 segundos, salvo pedido explícito "
+    "de um trecho curto."
 )
 
 
@@ -118,7 +135,12 @@ def extract_json(text: str) -> dict:
     return data
 
 
-def validate_actions(payload: dict, *, duration: float | None = None) -> list[dict[str, Any]]:
+def validate_actions(
+    payload: dict,
+    *,
+    duration: float | None = None,
+    source_duration: float | None = None,
+) -> list[dict[str, Any]]:
     items = payload.get("actions") or []
     if not isinstance(items, list):
         raise ValueError("actions deve ser lista")
@@ -139,13 +161,16 @@ def validate_actions(payload: dict, *, duration: float | None = None) -> list[di
         for key in ("text", "style", "rhythm", "intensity", "query", "reason"):
             if key in raw and raw[key] is not None:
                 item[key] = str(raw[key])[:240]
-        if duration is not None:
+        cap = source_duration if action == "restore_range" else duration
+        if cap is None:
+            cap = duration or source_duration
+        if cap is not None:
             if "start" in item:
-                item["start"] = max(0.0, min(item["start"], duration))
+                item["start"] = max(0.0, min(item["start"], cap))
             if "end" in item:
-                item["end"] = max(0.0, min(item["end"], duration))
+                item["end"] = max(0.0, min(item["end"], cap))
             if "maxSec" in item:
-                item["maxSec"] = max(0.5, min(item["maxSec"], duration))
+                item["maxSec"] = max(0.5, min(item["maxSec"], cap))
             if "start" in item and "end" in item and item["end"] <= item["start"]:
                 continue
         if "scale" in item:
@@ -433,17 +458,62 @@ def interpret_llm_reply(
     text: str,
     *,
     duration: float | None = None,
+    source_duration: float | None = None,
 ) -> tuple[list[dict[str, Any]], str] | None:
     """None se não houver JSON + actions válidas. Não inventa operação."""
     try:
         data = extract_json(text)
-        actions = validate_actions(data, duration=duration)
+        actions = validate_actions(
+            data, duration=duration, source_duration=source_duration,
+        )
     except (ValueError, json.JSONDecodeError, TypeError):
         return None
     if not structured_actions_ok(actions):
         return None
     summary = str(data.get("summary") or "Alteração planejada")[:200]
     return actions, summary
+
+
+def prompt_allows_cut(text: str) -> bool:
+    return bool(CUT_INTENT_RE.search(_norm_cmd(text)))
+
+
+def _estimated_remaining(actions: list[dict[str, Any]], cut_duration: float | None) -> float | None:
+    if not cut_duration or float(cut_duration) <= 0:
+        return None
+    remaining = float(cut_duration)
+    for a in actions or []:
+        act = str(a.get("action") or "")
+        if act == "restore_range":
+            return None
+        if act == "trim_range" and "start" in a and "end" in a:
+            remaining = min(remaining, max(0.0, float(a["end"]) - float(a["start"])))
+        elif act == "remove_range" and "start" in a and "end" in a:
+            remaining -= max(0.0, float(a["end"]) - float(a["start"]))
+        elif act == "set_duration_max" and "maxSec" in a:
+            remaining = min(remaining, float(a["maxSec"]))
+    return remaining
+
+
+def filter_unsafe_cuts(
+    actions: list[dict[str, Any]],
+    *,
+    prompt: str,
+    cut_duration: float | None = None,
+) -> list[dict[str, Any]]:
+    """Pedido vago não corta. Trecho restante < 3s só com pedido explícito e curto."""
+    if not any(str(a.get("action") or "") in CUT_ACTIONS for a in actions or []):
+        return list(actions or [])
+    allow = prompt_allows_cut(prompt)
+    rem = _estimated_remaining(actions, cut_duration)
+    drop = False
+    if not allow:
+        drop = True
+    elif rem is not None and rem + 1e-9 < MIN_KEEP_SEC and (cut_duration or 0) > MIN_KEEP_SEC:
+        drop = True
+    if not drop:
+        return list(actions or [])
+    return [a for a in (actions or []) if str(a.get("action") or "") not in CUT_ACTIONS]
 
 
 def edl_revision(ranges: list | None) -> str:
@@ -603,13 +673,19 @@ def plan_from_prompt(
         {"role": "system", "content": SYSTEM},
         {"role": "user", "content": ctx + f"PEDIDO:\n{user_text.strip()}"},
     ]
-    clamp = orig or duration
     backend = "llm"
     for attempt in (1, 2):
         text, backend = chat_fn(messages, model="gemini-web/default")
-        parsed = interpret_llm_reply(text, duration=clamp)
+        parsed = interpret_llm_reply(
+            text, duration=duration, source_duration=orig,
+        )
         if parsed:
             actions, summary = parsed
+            actions = filter_unsafe_cuts(
+                actions, prompt=user_text, cut_duration=duration,
+            )
+            if not structured_actions_ok(actions):
+                return [], VAGUE_CUT_MSG, backend
             return actions, sanitize_proposal_summary(summary, has_ops=True), backend
         if attempt == 1:
             messages.append({"role": "assistant", "content": text or ""})

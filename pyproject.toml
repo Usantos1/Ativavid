@@ -1,6 +1,6 @@
 [project]
 name = "ativa-vid"
-version = "0.1.0"
+version = "1.88"
 description = "Conversation-driven video editor skill for Claude Code"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
@@ -20,6 +20,7 @@ dependencies = [
 
 [project.optional-dependencies]
 animations = ["manim"]
+test = ["pytest>=8.0"]
 # Person matting for the "element behind the subject" effect (person_matte.py).
 # Robust Video Matting via torch.hub — heavy (~2GB), so it's opt-in: install with
 # `uv sync --extra matting`. Base install stays light for users who don't need it.
@@ -31,3 +32,14 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 py-modules = []
+
+[dependency-groups]
+dev = ["pytest>=8.0"]
+
+[tool.uv]
+default-groups = ["dev"]
+
+[tool.pytest.ini_options]
+testpaths = ["pipeline"]
+python_files = ["test_*.py"]
+addopts = "-q --tb=short"

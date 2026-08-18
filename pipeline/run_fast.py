@@ -564,6 +564,24 @@ def _display_wh(path: Path) -> tuple[int, int]:
 
 
 def _count_frames(path: Path) -> int:
+    # nb_frames from the container index is exact for the ffmpeg-written MP4s
+    # this is called on; -count_frames decodes the whole file and is kept only
+    # as the fallback for containers that don't carry the count.
+    out = _run_tool(
+        [
+            _ffprobe_exe(), "-v", "error", "-select_streams", "v:0",
+            "-show_entries", "stream=nb_frames",
+            "-of", "default=nw=1:nk=1", str(path),
+        ],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    if out not in ("", "N/A"):
+        try:
+            n = int(out)
+            if n > 0:
+                return n
+        except ValueError:
+            pass
     out = _run_tool(
         [
             _ffprobe_exe(), "-v", "error", "-select_streams", "v:0",
@@ -580,27 +598,11 @@ def load_preset(path: Path | None, raw: str | None) -> dict:
         return json.loads(raw)
     p = path or DEFAULT_PRESET
     if not p.exists():
-        # fallback baked-in house style (matches default-style shape)
-        return {
-            "edit": "limpa",
-            "headline": "realce",
-            "captions": "stacked",
-            "accent": "#E30004",
-            "captionAccent": "#FFFFFF",
-            "emphasisAccent": "#ff0000",
-            "circleAccent": None,
-            "elements": {
-                "tracking": False,
-                "zoomAuto": True,
-                "zoomCuts": True,
-                "flashCut": True,
-                "musicAI": False,
-                "endCard": True,
-            },
-            "fastMode": True,
-            "colorGrade": "marca",
-            "endCardCopy": {"line1": "", "line2": ""},
-        }
+        if str(REPO) not in sys.path:
+            sys.path.insert(0, str(REPO))
+        from app.style_defaults import load_shipped_style
+
+        return load_shipped_style()
     return json.loads(p.read_text(encoding="utf-8-sig"))
 
 
@@ -1475,6 +1477,7 @@ def encode_final(
     with_music: bool,
     duration: float,
     duration_in_frames: int | None = None,
+    dest: Path | None = None,
 ) -> Path:
     """Reencode color-convert do render Remotion → final.mp4.
 
@@ -1485,7 +1488,7 @@ def encode_final(
     ``with_music`` is kept for call-site compatibility / logging only.
     """
     render = edit_dir / "remotion" / "out" / "render.mp4"
-    final = edit_dir / "final.mp4"
+    final = Path(dest) if dest is not None else edit_dir / "final.mp4"
     _ = with_music  # soundtrack already baked in Remotion when enabled
 
     vid_chain = (
@@ -1853,6 +1856,9 @@ def run(
     status: dict = {"status": "processing", "phase": 1, "edit_dir": str(edit_dir)}
 
     # --- brand gate ---
+    from app.brand_kits import fill_end_card_copy
+
+    preset = fill_end_card_copy(preset)
     elems = preset.get("elements") or {}
     copy = preset.get("endCardCopy") or {}
     if elems.get("endCard", True) and not (

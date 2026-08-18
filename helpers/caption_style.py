@@ -23,17 +23,11 @@ import json
 import unicodedata
 from pathlib import Path
 
-# ---- Portuguese defaults (accent lands on content words, never on connectives) ----
+# Palavras genéricas de ênfase em PT — sem vocabulário de cliente.
 EMPH = {
-    "referencia", "tempo", "desculpa", "favorita", "gratis", "gratuito", "limite",
-    "irrecusavel", "irresistivel", "ilimitados", "zero", "garantia", "transformar",
-    "transforma", "lucro", "colossal", "obrigatoria", "nunca", "hoje", "agora",
-    "inception", "segify", "impossivel", "tudo", "reconhecido", "faturamento",
-    "frustrava", "desconhecido", "147", "3.000", "mil", "24", "15", "50", "100",
-    "200", "400", "500", "250", "12", "ia", "inteligencia", "artificial",
-    "correria", "gavetinha", "dinheiro", "clientes", "editar", "editor", "edicao",
-    "vender", "faturar", "conteudo", "videos", "video", "gravar", "postar",
-    "instagram", "whatsapp", "comunidade", "cursos",
+    "gratis", "gratuito", "hoje", "agora", "nunca", "zero", "tudo",
+    "impossivel", "irrecusavel", "irresistivel", "ilimitados", "garantia",
+    "nada", "sempre", "urgente", "ultimo", "unica", "unico",
 }
 NEG = {"nao", "nunca", "nada", "nem", "jamais"}
 STOP = {

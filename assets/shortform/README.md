@@ -114,7 +114,7 @@ Then copy `cut.mp4` into `public/` and generate the data files below.
     "lastSec": 2.5,            // held from the END of the video, not a start
                                // time: the cut's length changes on every trim,
                                // so a fixed start silently drifts off the tail
-    "lines": ["@primecamp", "capinha nova? chama no direct"],
+    "lines": ["@sua_marca", "chama no direct"],
     "logo": null,              // staticFile path, drawn above the lines
     "accent": "#ff0000",       // first line's colour (default: hook.accent)
     "dim": 0.82                // how much video shows through; 1 = solid black

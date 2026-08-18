@@ -147,6 +147,17 @@ def build_captions(edl: dict, edit_dir: Path) -> list[dict]:
     When `jcut_timeline` exists, place words on the AUDIO timeline of the mixed
     cut (what the viewer hears), not the naive sum of range durations.
     """
+    return [
+        {k: v for k, v in w.items() if k in ("text", "startMs", "endMs", "timestampMs", "confidence")}
+        for w in build_captions_with_provenance(edl, edit_dir)
+    ]
+
+
+def build_captions_with_provenance(edl: dict, edit_dir: Path, *, quiet: bool = False) -> list[dict]:
+    """A mesma associação source→token que criou as captions, com proveniência.
+
+    sourceStart/sourceEnd são o relógio da FONTE (transcript), não o do cut.
+    """
     caps: list[dict] = []
     ranges = edl.get("ranges") or []
     jcut = edl.get("jcut_timeline") or []
@@ -178,12 +189,27 @@ def build_captions(edl: dict, edit_dir: Path) -> list[dict]:
                 text = (w.get("text") or "").strip()
                 if not text:
                     continue
-                caps.append(_pack(text, t, e))
+                item = _pack(text, t, e)
+                item["source"] = str(src)
+                # Relógio da fonte DENTRO do take que gerou o cue — não o
+                # timestamp cru se o pad do range puxou a palavra vizinha.
+                src_s = a + min(out_dur, rel_t)
+                src_e = a + min(out_dur, rel_e)
+                lo, hi = a, a + out_dur
+                src_s = min(max(src_s, lo), hi)
+                src_e = min(max(src_e, lo), hi)
+                if src_e - src_s <= 1e-4:
+                    src_e = min(hi, src_s + 0.04)
+                    if src_e - src_s <= 1e-4:
+                        src_s = max(lo, src_e - 0.04)
+                item["sourceStart"] = src_s
+                item["sourceEnd"] = src_e
+                caps.append(item)
 
         if i >= len(jcut):
             off += range_dur
 
-    if missing:
+    if missing and not quiet:
         print(f"  [warn] transcript ausente para source(s): {', '.join(sorted(set(missing)))}")
 
     caps.sort(key=lambda c: c["startMs"])

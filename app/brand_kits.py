@@ -132,6 +132,39 @@ def get_active_id() -> str:
         return "padrao"
 
 
+def end_card_copy_filled(copy: object) -> bool:
+    if not isinstance(copy, dict):
+        return False
+    return bool(str(copy.get("line1") or "").strip() or str(copy.get("line2") or "").strip())
+
+
+def shipped_end_card_copy() -> dict[str, str]:
+    """Texto do card final do preset empacotado — não o stub curto do usuário."""
+    for path in (PKG_BRANDS / "padrao.json", PREVIEW / "default-style.json"):
+        if not path.exists():
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8-sig"))
+        except (OSError, json.JSONDecodeError, TypeError):
+            continue
+        copy = data.get("endCardCopy") if isinstance(data, dict) else None
+        if end_card_copy_filled(copy):
+            return {
+                "line1": str(copy.get("line1") or ""),
+                "line2": str(copy.get("line2") or ""),
+            }
+    return {"line1": "", "line2": ""}
+
+
+def fill_end_card_copy(preset: dict | None) -> dict:
+    """Se o card final está vazio, usa o texto empacotado. Não apaga o que já tem."""
+    out = dict(preset or {})
+    if end_card_copy_filled(out.get("endCardCopy")):
+        return out
+    out["endCardCopy"] = shipped_end_card_copy()
+    return out
+
+
 def load_brand(brand_id: str | None = None) -> dict[str, Any]:
     ensure_brands_dir()
     bid = brand_id or get_active_id()

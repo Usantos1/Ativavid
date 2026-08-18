@@ -67,9 +67,11 @@
       if (!res.ok) return;
       const data = await res.json();
       const jobs = Array.isArray(data.jobs) ? data.jobs : [];
-      const fila = jobs.filter((j) =>
-        ["queued", "processing", "needs_review", "error"].includes(j.status)
-      ).length;
+      const fila = jobs.filter((j) => {
+        if (["queued", "processing", "needs_review", "error", "importing"].includes(j.status)) return true;
+        const qa = j.quickApply;
+        return !!(qa && ["queued", "running", "failed"].includes(qa.status));
+      }).length;
       const done = jobs.filter((j) => j.status === "done").length;
       if (filaEl) filaEl.textContent = String(fila);
       if (doneEl) doneEl.textContent = String(done);

@@ -25,6 +25,7 @@ import _utf8  # noqa: F401  — UTF-8 no stdout antes de qualquer print
 
 import argparse
 import atexit
+import functools
 import json
 import math
 import os
@@ -415,6 +416,28 @@ def resolve_path(maybe_path: str, base: Path) -> Path:
     return (base / p).resolve()
 
 
+# extract_segment probes the same source ~6x per call and a J-cut EDL calls it
+# twice per range, so a 30-cut render spawns hundreds of identical ffprobes
+# (100-300ms each on Windows). The source never changes mid-run, so results are
+# cached per (path, mtime, size); a file we can't stat falls through uncached.
+def _memo_by_stat(fn):
+    cache: dict[tuple, object] = {}
+
+    @functools.wraps(fn)
+    def wrapper(video: Path, *args, **kwargs):
+        try:
+            st = Path(video).stat()
+        except OSError:
+            return fn(video, *args, **kwargs)
+        key = (str(video), st.st_mtime_ns, st.st_size)
+        if key not in cache:
+            cache[key] = fn(video, *args, **kwargs)
+        return cache[key]
+
+    return wrapper
+
+
+@_memo_by_stat
 def probe_duration(video: Path) -> float:
     r = _run(
         ["ffprobe", "-v", "error", "-show_entries", "format=duration",
@@ -449,6 +472,7 @@ TONEMAP_CHAIN = (
 )
 
 
+@_memo_by_stat
 def _color_tags(video: Path) -> dict[str, str]:
     """Read the source's color tags (empty strings when absent/unknown)."""
     try:
@@ -508,6 +532,7 @@ def wide_gamut_chain(video: Path) -> str:
     )
 
 
+@_memo_by_stat
 def is_portrait_source(video: Path) -> bool:
     """Return True if the video DISPLAYS as portrait (height > width).
 
@@ -546,6 +571,7 @@ def is_portrait_source(video: Path) -> bool:
     return h > w
 
 
+@_memo_by_stat
 def source_fps(video: Path) -> float:
     """Return the source's video frame rate (frames per second).
 
@@ -1088,37 +1114,47 @@ def polish_edl_edges(edl: dict, edit_dir: Path) -> None:
 def plan_jcut(edl: dict, edit_dir: Path, cfg: dict) -> list[dict]:
     """Work out each take's video range, audio range and output offsets."""
     fps = cfg["fps"]
-    lead = cfg["lead_frames"] / fps
     ranges = edl["ranges"]
     sources = edl["sources"]
     n = len(ranges)
 
-    plan: list[dict] = []
-    a_off = v_off = 0.0
+    srcs: list[Path] = []
+    tail_frames: list[int] = []
+    silence_ms: list[int | None] = []
     for i, r in enumerate(ranges):
         src = resolve_path(sources[r["source"]], edit_dir)
+        srcs.append(src)
         start, end = float(r["start"]), float(r["end"])
 
         # Mid-take only: head/tail of the whole cut were already polished on the EDL.
-        tail = 0.0
         avail = trailing_silence(src, start, end) if i < n - 1 else None
+        silence_ms.append(round(avail * 1000) if avail is not None else None)
+        tf = 0
         if avail is not None and cfg["tail_trim_frames"]:
             budget = max(0.0, avail - 0.010)          # keep 10ms of room tone
-            usable_frames = min(cfg["tail_trim_frames"], int(budget * fps))
-            tail = usable_frames / fps
+            tf = min(cfg["tail_trim_frames"], int(budget * fps))
+        tail_frames.append(tf)
 
-        a_in, a_out = start, end - tail
-        v_in = start + (lead if i > 0 else 0.0)
-        v_out = a_out
+    repo = Path(__file__).resolve().parent.parent
+    if str(repo) not in sys.path:
+        sys.path.insert(0, str(repo))
+    from app.timeline_map import layout_jcut_spans
+
+    layout = layout_jcut_spans(
+        ranges,
+        fps=fps,
+        lead_frames=cfg["lead_frames"],
+        tail_frames=tail_frames,
+    )
+    plan: list[dict] = []
+    for i, (r, span) in enumerate(zip(ranges, layout)):
         plan.append({
-            "i": i, "src": src, "range": r,
-            "a_in": a_in, "a_out": a_out, "a_off": a_off,
-            "v_in": v_in, "v_out": v_out, "v_off": v_off,
-            "tail_frames": round(tail * fps),
-            "silence_avail_ms": round(avail * 1000) if avail is not None else None,
+            "i": i, "src": srcs[i], "range": r,
+            "a_in": span["a_in"], "a_out": span["a_out"], "a_off": span["a_off"],
+            "v_in": span["v_in"], "v_out": span["v_out"], "v_off": span["v_off"],
+            "tail_frames": span["tailFrames"],
+            "silence_avail_ms": silence_ms[i],
         })
-        v_off += v_out - v_in
-        a_off += (a_out - a_in) - lead
     return plan
 
 

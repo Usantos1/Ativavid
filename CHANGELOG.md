@@ -1,5 +1,44 @@
 # Changelog
 
+## 1.88
+
+Consertos de confiança: o que estava vendido e o que podia apagar trabalho.
+
+- Apagar um projeto no hub manda a pasta para a Lixeira, como no painel
+- Aplicar alterações entra na mesma fila dos vídeos, com teto de jobs paralelos
+- A Fila deixa de fingir que uma atualização ainda está rodando quando ela já falhou
+- Pedido vago no Editar com IA (tipo “melhoria”, “melhora o vídeo”, “deixa melhor”) não corta o vídeo
+- O preset escolhido na importação passa a valer no render (projeto > preset da marca > marca > padrão do app)
+- Transcrição só reusa o cache se o arquivo fonte tiver o mesmo tamanho e data
+- Intensidade do estilo volta a gravar na marca ativa
+- Erro na Fila mostra a mensagem e abre o detalhe no card
+- O app não inventa mais @lojaprimecamp no card final — a copy da marca fica vazia até você preencher
+
+## 1.87
+
+Editor de correções rápidas: ajuste o vídeo pronto sem mandar tudo de volta para análise.
+
+- Dá para editar a headline direto no vídeo
+- Dá para corrigir legendas direto no player
+- Dá para fazer cortes manuais na timeline
+- A agulha agora corta e exclui trechos, com os botões Cortar e Excluir
+- Zoom na timeline para acertos mais precisos
+- Novo botão Aplicar alterações
+- Correções pequenas não precisam mais refazer toda a análise do vídeo
+- Cortes manuais mantêm as legendas no tempo certo
+- Se a atualização falhar, o vídeo anterior fica protegido
+- A pasta publicar atualiza depois de aplicar as correções
+- Aplicações de correções agora aparecem na Fila
+- É possível continuar usando o ATIVAVID enquanto o vídeo é atualizado
+- Concluídos mostra quando um vídeo está sendo atualizado
+- Aviso global quando a atualização termina
+- Melhor acompanhamento do processamento de correções
+- Histórico de versões e restauração mais estáveis
+- Ajustes gerais de estabilidade no editor
+- Cortes manuais voltam a aplicar quando o áudio de um mesmo vídeo se cruza no corte
+- Pedido vago no Editar com IA (tipo “melhoria”) não corta mais o vídeo inteiro
+- A Fila não fica mais em “atualizando” quando a atualização já falhou
+
 ## 1.86
 
 - No tipo de conteúdo da importação, as opções do menu ficam legíveis (texto escuro no fundo claro)
