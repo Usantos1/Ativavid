@@ -581,6 +581,32 @@ body.applying-corrections .player-frame {
 .quick-chip.cap { font-weight: 500; opacity: 0.92; }
 .quick-chip.current { border-color: var(--interact); }
 
+/* Galeria de modelos prontos (aba Estilo) */
+.tpl-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+}
+.tpl-card {
+  font: inherit;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--stroke);
+  background: var(--glass-strong);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.15s;
+}
+.tpl-card:hover { border-color: var(--interact); transform: translateY(-1px); }
+.tpl-dots { display: flex; gap: 5px; min-height: 10px; }
+.tpl-dot { width: 10px; height: 10px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.25); }
+.tpl-name { font-weight: 700; font-size: 13.5px; }
+.tpl-desc { font-size: 11.5px; color: var(--muted); line-height: 1.35; }
+
 /* Sugestões de headline da IA — chips clicáveis ao lado da atual */
 .hl-options { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
 .hl-options.hidden { display: none; }

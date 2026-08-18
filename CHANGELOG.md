@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.93
+
+Galeria de modelos prontos: um clique monta o visual completo.
+
+- Nova seção **"Começar por um modelo"** no topo da aba Estilos, com 12 combinações completas: Venda agressiva, Educativo clean, Humor caótico, Notícia urgente, Sticker CapCut, Review direto, Minimalista, Institucional, Impacto total, Depoimento, Tutorial prático e Clipe de podcast
+- Cada modelo define headline, legenda, cores, ritmo, intensidade, tipo de conteúdo e efeitos de uma vez — depois é só ajustar o que quiser e salvar
+- Dá para salvar qualquer modelo ajustado como preset da marca (botão "Novo preset", como sempre)
+
 ## 1.92
 
 Posição e tamanho da legenda agora são escolha sua.

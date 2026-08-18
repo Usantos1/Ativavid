@@ -2714,6 +2714,7 @@ function renderSetup() {
   }
   if (!wasShowing) $('styleSetup').scrollTop = 0; // open at the top, always
   wasShowing = true;
+  renderStyleTemplates();
 
   $('setupGo').textContent = HOUSE_STYLE
     ? 'Salvar padrão e voltar'
@@ -4639,6 +4640,71 @@ function refreshAutoControls() {
     if (key === 'videoGoal' && v === 'tutorial') v = 'educativo';
     if (key === 'contentType') v = S.contentType || v;
     el.value = v;
+  }
+}
+
+/* ---------- galeria de modelos: combinações completas com nome ------------
+ * Cada modelo é só dados sobre o catálogo existente — aplicar = assinar os
+ * campos no estilo atual (mesma semântica de clicar card a card) e o usuário
+ * ajusta/salva como sempre. Nada aqui cria caminho novo de render. */
+const _tplElems = (o) => ({ tracking: false, zoomAuto: true, zoomCuts: true, flashCut: true, musicAI: true, endCard: false, ...(o || {}) });
+const STYLE_TEMPLATES = [
+  { id: 'venda_agressiva', name: 'Venda agressiva', desc: 'Impacto na palavra, corte rápido, urgência',
+    style: { edit: 'limpa', headline: 'realce', captions: 'impacto', accent: '#e30004', emphasisAccent: '#ffd400', captionAccent: null, rhythm: 'rapido', intensity: 'forte', speechClean: 'agressivo', contentType: 'sales', captionChunk: 'frase_curta', captionPosition: 'baixo', captionSize: 'g', elements: _tplElems() } },
+  { id: 'educativo_clean', name: 'Educativo clean', desc: 'Pílula de contexto, legenda limpa, ritmo calmo',
+    style: { edit: 'limpa', headline: 'pilula', captions: 'simples', accent: '#33e0a3', captionAccent: '#ffffff', emphasisAccent: null, rhythm: 'calmo', intensity: 'sutil', speechClean: 'leve', contentType: 'educational', captionChunk: 'frase_curta', captionPosition: 'baixo', captionSize: 'm', elements: _tplElems() } },
+  { id: 'humor_caotico', name: 'Humor caótico', desc: 'Carimbo, legenda empilhada, energia total',
+    style: { edit: 'limpa', headline: 'carimbo', captions: 'stacked', accent: '#ff5200', emphasisAccent: '#ffd400', circleAccent: '#39E508', rhythm: 'rapido', intensity: 'forte', speechClean: 'medio', contentType: 'humor', captionChunk: 'frase_curta', captionPosition: 'baixo', captionSize: 'm', elements: _tplElems() } },
+  { id: 'noticia_urgente', name: 'Notícia urgente', desc: 'Manchete na base, legenda em bloco',
+    style: { edit: 'limpa', headline: 'manchete', captions: 'bloco', accent: '#e30004', captionAccent: '#ffffff', emphasisAccent: null, rhythm: 'dinamico', intensity: 'medio', speechClean: 'medio', contentType: 'informational', captionChunk: 'frase_curta', captionPosition: 'baixo', captionSize: 'm', elements: _tplElems() } },
+  { id: 'sticker_capcut', name: 'Sticker CapCut', desc: 'Sombra dura + recorte com contorno grosso',
+    style: { edit: 'limpa', headline: 'sombra', captions: 'recorte', accent: '#ffd400', captionAccent: '#ffffff', emphasisAccent: null, rhythm: 'dinamico', intensity: 'medio', speechClean: 'medio', contentType: 'humor', captionChunk: 'frase_curta', captionPosition: 'baixo', captionSize: 'm', elements: _tplElems() } },
+  { id: 'review_direto', name: 'Review direto', desc: 'Sublinhado, karaokê, tom de análise',
+    style: { edit: 'limpa', headline: 'sublinhado', captions: 'karaoke', accent: '#4da3ff', captionAccent: '#ffffff', emphasisAccent: null, rhythm: 'dinamico', intensity: 'medio', speechClean: 'medio', contentType: 'review', captionChunk: 'frase_curta', captionPosition: 'baixo', captionSize: 'm', elements: _tplElems() } },
+  { id: 'minimalista', name: 'Minimalista', desc: 'Sem headline, legenda clássica, zero efeitos',
+    style: { edit: 'limpa', headline: 'nenhuma', captions: 'classica', accent: null, captionAccent: '#f4f1e9', emphasisAccent: null, rhythm: 'calmo', intensity: 'sutil', speechClean: 'leve', contentType: 'institutional', captionChunk: 'frase_longa', captionPosition: 'baixo', captionSize: 'm', elements: _tplElems({ zoomAuto: false, zoomCuts: false, flashCut: false, musicAI: false }) } },
+  { id: 'institucional', name: 'Institucional', desc: 'Cartão sóbrio, legenda serifada, calmo',
+    style: { edit: 'limpa', headline: 'card', captions: 'serifada', accent: null, captionAccent: '#f4f1e9', emphasisAccent: null, rhythm: 'calmo', intensity: 'sutil', speechClean: 'leve', contentType: 'institutional', captionChunk: 'frase_curta', captionPosition: 'baixo', captionSize: 'm', elements: _tplElems({ flashCut: false }) } },
+  { id: 'impacto_total', name: 'Impacto total', desc: 'Contorno + caixa na palavra, legenda grande',
+    style: { edit: 'limpa', headline: 'outline', captions: 'impacto', accent: null, emphasisAccent: '#e30004', captionAccent: null, rhythm: 'rapido', intensity: 'forte', speechClean: 'agressivo', contentType: 'sales', captionChunk: 'frase_curta', captionPosition: 'baixo', captionSize: 'g', elements: _tplElems() } },
+  { id: 'depoimento', name: 'Depoimento', desc: 'Misto discreto, palavras dispersas, suave',
+    style: { edit: 'limpa', headline: 'misto', captions: 'scatter', accent: '#ff5200', emphasisAccent: '#ff5200', captionAccent: null, rhythm: 'calmo', intensity: 'sutil', speechClean: 'leve', contentType: 'institutional', videoGoal: 'depoimento', captionChunk: 'frase_curta', captionPosition: 'baixo', captionSize: 'm', elements: _tplElems({ flashCut: false }) } },
+  { id: 'tutorial_pratico', name: 'Tutorial prático', desc: 'Pílula no topo, karaokê palavra a palavra',
+    style: { edit: 'limpa', headline: 'pilula', captions: 'karaoke', accent: '#7c5cff', captionAccent: '#ffffff', emphasisAccent: null, rhythm: 'dinamico', intensity: 'medio', speechClean: 'medio', contentType: 'educational', captionChunk: 'palavra', captionPosition: 'baixo', captionSize: 'm', elements: _tplElems() } },
+  { id: 'clipe_podcast', name: 'Clipe de podcast', desc: 'Cartão no gancho, karaokê amarelo clássico',
+    style: { edit: 'limpa', headline: 'card', captions: 'karaoke', accent: null, captionAccent: '#ffd400', emphasisAccent: null, rhythm: 'dinamico', intensity: 'medio', speechClean: 'medio', contentType: 'informational', captionChunk: 'frase_curta', captionPosition: 'centro', captionSize: 'm', elements: _tplElems({ zoomCuts: false }) } },
+];
+
+function applyStyleTemplate(t) {
+  if (!S.style) S.style = defaultStyle();
+  Object.assign(S.style, JSON.parse(JSON.stringify(t.style)));
+  if (t.style.contentType) {
+    S.contentType = t.style.contentType;
+    persistIntent();
+  }
+  refreshAutoControls();
+  renderSetup();
+  toast(`Modelo "${t.name}" aplicado — ajuste o que quiser e salve`);
+}
+
+function renderStyleTemplates() {
+  const host = $('styleTemplates');
+  if (!host) return;
+  if (!host.dataset.built) {
+    host.dataset.built = '1';
+    for (const t of STYLE_TEMPLATES) {
+      const card = el('button', 'tpl-card', host);
+      card.type = 'button';
+      const dots = el('span', 'tpl-dots', card);
+      for (const c of [t.style.accent, t.style.emphasisAccent, t.style.captionAccent]) {
+        if (!c) continue;
+        const d = el('span', 'tpl-dot', dots);
+        d.style.background = c;
+      }
+      el('span', 'tpl-name', card).textContent = t.name;
+      el('span', 'tpl-desc', card).textContent = t.desc;
+      card.addEventListener('click', () => applyStyleTemplate(t));
+    }
   }
 }
 
