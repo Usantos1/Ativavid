@@ -1909,7 +1909,7 @@ def _apply_caption_geometry(ed: dict, preset: dict) -> None:
 
 # IDs do catálogo de fontes do template (assets/shortform/src/fonts.ts).
 # Valor fora do catálogo é descartado — o template ignoraria e a UI mentiria.
-_FONT_IDS = {"poppins", "inter", "montserrat", "playfair", "lora", "anton", "bebas", "archivo"}
+_FONT_IDS = {"poppins", "inter", "montserrat", "playfair", "lora", "anton", "bebas", "archivo", "arquivo"}
 
 
 def _hook_end_sec(headline: str, preset: dict, duration: float) -> float:
@@ -1952,6 +1952,10 @@ _MUSIC_VIBES = {
         "punchy commercial pop instrumental, big drums, rising energy with a "
         "clear final hit, 128 bpm, bold persuasive mood, no vocals"
     ),
+    "viral": (
+        "hard-hitting brazilian phonk instrumental, heavy 808s, aggressive "
+        "cowbell groove, 130 bpm, hype viral energy, no vocals"
+    ),
     "educational": (
         "minimal lofi hip-hop instrumental, warm keys and soft beat, 92 bpm, "
         "focused calm mood, no vocals"
@@ -1973,6 +1977,39 @@ _MUSIC_DEFAULT = (
     "upbeat modern brazilian pop instrumental, light guitars and soft drums, "
     "120 bpm, warm confident mood, no vocals"
 )
+
+
+def _attach_brand_font_file(ed: dict, public) -> None:
+    """Fonte própria da marca (id "arquivo"): copia o .ttf/.otf de
+    ~/ATIVAVID/Fontes para public/fonts/ e aponta ed["brandFontFile"].
+    Sem arquivo na pasta, o id cai fora com aviso — nunca quebra o render.
+    É o caminho para fontes licenciadas do usuário (ex.: Integral) sem o
+    app redistribuí-las."""
+    from pathlib import Path as _P
+
+    uses = [k for k in ("captions", "hook")
+            if str((ed.get(k) or {}).get("fontFamily") or "") == "arquivo"]
+    if not uses:
+        return
+    fonts_dir = _P.home() / "ATIVAVID" / "Fontes"
+    fonts_dir.mkdir(parents=True, exist_ok=True)
+    cand = sorted(
+        [f for f in fonts_dir.iterdir()
+         if f.is_file() and f.suffix.lower() in (".ttf", ".otf", ".woff2", ".woff")],
+        key=lambda f: f.name.lower(),
+    )
+    if not cand:
+        print(f"[warn] fonte da marca: nenhum .ttf/.otf em {fonts_dir} — usando padrão", flush=True)
+        for k in uses:
+            ed[k].pop("fontFamily", None)
+        return
+    src = cand[0]
+    dest_dir = _P(public) / "fonts"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / f"brand{src.suffix.lower()}"
+    shutil.copy2(src, dest)
+    ed["brandFontFile"] = f"fonts/{dest.name}"
+    print(f"[fonte] {src.name} → {dest.name} (fonte da marca)", flush=True)
 
 
 def _music_vibe_for(preset: dict, is_longform: bool) -> str:
@@ -2941,6 +2978,7 @@ def run(
         f"fps={_tl['fps']:g}",
         flush=True,
     )
+    _attach_brand_font_file(edit_data, public)
     (public / "edit-data.json").write_text(
         json.dumps(edit_data, indent=2, ensure_ascii=False), encoding="utf-8"
     )

@@ -101,15 +101,32 @@ def _rhythm_rules(preset: dict) -> str:
     rhythm = rhythm_alias.get(rhythm, rhythm)
     goal = goal_alias.get(goal, goal)
 
+    natural_txt = (
+        "Poucos cortes; cenas 3–8s; preserve o fio da conversa. "
+        "NÃO pule frases do meio só para encurtar. "
+        "Só corte silêncio longo, falso começo e repetição óbvia."
+    )
+    viral_txt = "Muitos cortes; cenas 0.8–2.5s; energia alta; hook agressivo."
     rhythm_map = {
-        "natural": (
-            "Poucos cortes; cenas 3–8s; preserve o fio da conversa. "
-            "NÃO pule frases do meio só para encurtar. "
-            "Só corte silêncio longo, falso começo e repetição óbvia."
-        ),
+        "natural": natural_txt,
+        # A UI manda "calmo"/"rapido" — sem estes aliases os presets Natural
+        # e Intenso caíam em silêncio no fallback "dinamico" (bug real).
+        "calmo": natural_txt,
         "dinamico": "Ritmo comercial; cenas 1.5–4s; silêncios longos fora; mantenha contexto entre beats.",
-        "viral": "Muitos cortes; cenas 0.8–2.5s; energia alta; hook agressivo.",
+        "viral": viral_txt,
+        "rapido": viral_txt,
         "muito_rapido": "Corte máximo; cenas ≤2s; quase sem pausa; só o essencial.",
+        "cirurgico": (
+            "Corte CIRÚRGICO: um corte a cada frase completa; remova TODA "
+            "pausa, respiração e conector vazio entre frases; cenas 1–3s. "
+            "A frase nunca é quebrada no meio — corta-se ENTRE frases, sempre."
+        ),
+        "narrativa": (
+            "Ritmo de NARRATIVA: blocos longos de 5–15s que preservam a "
+            "história inteira; nunca corte dentro de um arco (setup → "
+            "desenvolvimento → conclusão). Só remova o que está FORA da "
+            "história: silêncio longo, erro de gravação, tangente abandonada."
+        ),
     }
     intensity_map = {
         "sutil": "Zoom/efeitos discretos; flash raro ou nenhum.",

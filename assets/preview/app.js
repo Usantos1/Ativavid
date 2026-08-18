@@ -4904,14 +4904,32 @@ const RHYTHM_PRESETS = {
   natural: { rhythm: 'calmo', intensity: 'sutil', speechClean: 'leve' },
   dinamico: { rhythm: 'dinamico', intensity: 'medio', speechClean: 'medio' },
   intenso: { rhythm: 'rapido', intensity: 'forte', speechClean: 'agressivo' },
+  // Um corte por frase, zero pausas — o ritmo de retenção máxima
+  cirurgico: { rhythm: 'cirurgico', intensity: 'forte', speechClean: 'agressivo',
+    elements: { zoomCuts: true, flashCut: true } },
+  // Storytelling: blocos longos, sem flash/zoom quebrando a imersão
+  narrativa: { rhythm: 'narrativa', intensity: 'sutil', speechClean: 'leve',
+    elements: { flashCut: false, zoomCuts: false } },
+  // O mais agressivo do catálogo — cenas ≤2s, tudo ligado
+  turbo: { rhythm: 'muito_rapido', intensity: 'forte', speechClean: 'agressivo',
+    elements: { zoomCuts: true, flashCut: true, zoomAuto: true } },
+  // Ritmo de anúncio: comercial no corte, forte nos efeitos
+  comercial: { rhythm: 'dinamico', intensity: 'forte', speechClean: 'medio',
+    elements: { flashCut: true, zoomCuts: true } },
 };
 
 function applyRhythmPreset(id) {
   const p = RHYTHM_PRESETS[id];
   if (!p) return;
   if (!S.style) S.style = defaultStyle();
-  Object.assign(S.style, p);
+  const { elements, ...fields } = p;
+  Object.assign(S.style, fields);
+  if (elements) {
+    // merge — um preset de ritmo ajusta zoom/flash sem apagar trilha/endCard
+    S.style.elements = { ...(S.style.elements || {}), ...elements };
+  }
   refreshAutoControls();
+  renderSetup();
   document.querySelectorAll('.rhythm-preset').forEach((b) => {
     b.classList.toggle('on', b.dataset.preset === id);
   });

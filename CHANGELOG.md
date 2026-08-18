@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.10
+
+Mais ritmos de corte, tipo Viral e a SUA fonte no sistema.
+
+- **4 presets de ritmo novos** (7 no total): **Cirúrgico** (um corte por frase, zero pausas), **Narrativa** (blocos longos, a história nunca quebra), **Turbo** (corte máximo) e **Comercial** (ritmo de anúncio com flash e zoom fortes) — cada um com regras próprias para a IA
+- Novo tipo de conteúdo **Viral**: gancho nos 2 primeiros segundos, zero enrolação e final que faz reassistir — com trilha phonk própria
+- **Sua fonte no app**: coloque qualquer .ttf/.otf na pasta `ATIVAVID/Fontes` (ex.: a Integral do CapCut) e escolha "Sua fonte (pasta Fontes)" — vale para legendas e headlines
+
 ## 2.09
 
 Home nova: mostra o que está acontecendo e vídeos de verdade.

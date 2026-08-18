@@ -11,6 +11,7 @@
  * "auto" (ou ausência) mantém a tipografia própria de cada estilo — o
  * default continua sendo o design assinado do template, não uma fonte.
  */
+import {continueRender, delayRender, staticFile} from 'remotion';
 import {loadFont as loadPoppins} from '@remotion/google-fonts/Poppins';
 import {loadFont as loadInter} from '@remotion/google-fonts/Inter';
 import {loadFont as loadMontserrat} from '@remotion/google-fonts/Montserrat';
@@ -27,7 +28,33 @@ const ED = editData as any;
 const CAP_ID = String(ED?.captions?.fontFamily ?? '').trim().toLowerCase();
 const HOOK_ID = String(ED?.hook?.fontFamily ?? '').trim().toLowerCase();
 
+// Fonte PRÓPRIA da marca (id "arquivo"): o pipeline copia o .ttf/.otf da
+// pasta ~/ATIVAVID/Fontes para public/fonts/ e aponta brandFontFile. É assim
+// que fontes licenciadas que o usuário já tem (ex.: Integral do CapCut)
+// entram no render sem o app precisar redistribuí-las.
+const BRAND_FILE = String(ED?.brandFontFile ?? '').trim();
+let brandLoaded = false;
+
+function loadBrandFile(): Resolved | null {
+  if (!BRAND_FILE) return null;
+  const family = 'BrandLocal';
+  if (!brandLoaded && typeof document !== 'undefined') {
+    brandLoaded = true;
+    const handle = delayRender('fonte da marca');
+    const face = new FontFace(family, `url(${staticFile(BRAND_FILE)})`);
+    face
+      .load()
+      .then((f) => {
+        (document as any).fonts.add(f);
+        continueRender(handle);
+      })
+      .catch(() => continueRender(handle));
+  }
+  return {family};
+}
+
 function load(id: string): Resolved | null {
+  if (id === 'arquivo') return loadBrandFile();
   switch (id) {
     case 'poppins':
       return {family: loadPoppins('normal', {weights: ['400', '600', '800', '900']}).fontFamily};

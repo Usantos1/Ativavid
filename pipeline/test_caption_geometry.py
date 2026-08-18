@@ -127,3 +127,29 @@ def test_broll_gate_respects_explicit_choice(monkeypatch, tmp_path):
     # "sempre" em limpa NÃO zera mais os inserts — o pedido do usuário vale
     out = _attach_auto_broll(dict(ed), tmp_path, _broll_preset("limpa", "sempre"), "fala", 30)
     assert out["inserts"] != []
+
+
+def test_brand_font_file_attach(monkeypatch, tmp_path):
+    """id "arquivo": copia a fonte de ~/ATIVAVID/Fontes para public/fonts."""
+    from run_fast import _attach_brand_font_file
+
+    home = tmp_path / "home"
+    (home / "ATIVAVID" / "Fontes").mkdir(parents=True)
+    (home / "ATIVAVID" / "Fontes" / "Integral.ttf").write_bytes(b"\x00\x01fake")
+    monkeypatch.setenv("USERPROFILE", str(home))
+    monkeypatch.setenv("HOME", str(home))
+
+    public = tmp_path / "public"
+    public.mkdir()
+    ed = {"captions": {"fontFamily": "arquivo"}, "hook": {"fontFamily": "poppins"}}
+    _attach_brand_font_file(ed, public)
+    assert ed["brandFontFile"] == "fonts/brand.ttf"
+    assert (public / "fonts" / "brand.ttf").read_bytes() == b"\x00\x01fake"
+
+    # pasta vazia: o id cai fora com aviso, nunca quebra
+    for f in (home / "ATIVAVID" / "Fontes").glob("*.ttf"):
+        f.unlink()
+    ed2 = {"captions": {"fontFamily": "arquivo"}, "hook": {}}
+    _attach_brand_font_file(ed2, public)
+    assert "fontFamily" not in ed2["captions"]
+    assert "brandFontFile" not in ed2
