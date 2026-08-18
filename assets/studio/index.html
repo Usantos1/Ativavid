@@ -18,6 +18,9 @@
 <link rel="stylesheet" href="/assets/studio/studio.css">
 </head>
 <body class="hub">
+  <div id="dropAnywhere" class="drop-anywhere hidden" aria-hidden="true">
+    <div class="drop-anywhere-msg">Solte para importar</div>
+  </div>
   <div class="app-shell">
     <aside class="sidebar" id="sidebar">
       <div class="sb-brand">
@@ -124,6 +127,7 @@
       <main class="ws-body">
         <!-- IMPORT -->
         <section class="view" id="view-import" data-view-panel="import">
+          <div id="homeNow" class="home-now hidden"></div>
           <div class="hero-import" id="dropZone">
             <input type="file" id="fileInput" accept="video/*,.mp4,.mov,.m4v,.mkv,.webm,.avi" multiple hidden>
             <input type="file" id="folderInput" webkitdirectory directory multiple hidden>
@@ -136,6 +140,7 @@
               <div class="hero-cta-row">
                 <button type="button" class="export-btn" id="btnPick">Escolher vídeos</button>
                 <button type="button" class="ghost-btn" id="btnPickFolder">Escolher pasta</button>
+                <button type="button" class="ghost-btn" id="btnPickPodcast" title="Um vídeo longo vira vários Reels">Clipes de podcast</button>
               </div>
             </div>
           </div>

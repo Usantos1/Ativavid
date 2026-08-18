@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.09
+
+Home nova: mostra o que está acontecendo e vídeos de verdade.
+
+- **Faixa "Agora"** no topo do Início: o que está processando, com a etapa real ("Renderizando efeitos…") e a barra — e a área de importar encolhe enquanto há trabalho
+- **Título humano nos concluídos**: em vez de "IMG_3987", o card mostra a headline do vídeo
+- **Ações do dia a dia no card**: botões "Pasta" (abre a publicar) e "Legenda" (copia o texto do post) direto no concluído
+- **Arraste para qualquer lugar da janela**: um alvo gigante "Solte para importar" aparece na hora
+- **Clipes de podcast** ganhou botão próprio na área de importar
+- Os contadores do topo ("2 Processando · 49 Concluído") viraram atalhos clicáveis
+- Os campos da tela Estilos agora respeitam o tema escuro (dropdown incluso)
+
 ## 2.08
 
 Quatro layouts de vídeo novos e a tela de Estilos mais clara.

@@ -2445,5 +2445,97 @@ body.view-estilo-on .ws-head {
   opacity: .65;
 }
 .brand-group-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.brand-group-row select, .brand-group-row input[type="text"] { min-width: 150px; }
+.brand-group-row select,
+.brand-group-row input[type="text"] {
+  min-width: 150px;
+  border: 1px solid var(--line);
+  background: var(--panel2);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font: inherit;
+  /* o dropdown NATIVO do select segue o tema (senão abre claro no dark) */
+  color-scheme: dark;
+}
+[data-theme="light"] .brand-group-row select,
+[data-theme="light"] .brand-group-row input[type="text"] { color-scheme: light; }
+.brand-group-row select:focus,
+.brand-group-row input[type="text"]:focus {
+  outline: 2px solid color-mix(in srgb, var(--accent, #e30004) 55%, transparent);
+  outline-offset: 1px;
+}
 .brand-group .hint { margin: 0; font-size: 12px; opacity: .7; max-width: 340px; }
+
+
+/* ---- Home: faixa "Agora" + hero adaptativo + drop na janela inteira ---- */
+.home-now {
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  background: linear-gradient(165deg, var(--panel) 0%, var(--bg2) 100%);
+  padding: 14px 18px;
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.home-now.hidden { display: none; }
+.home-now-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.home-now-row { display: grid; grid-template-columns: minmax(120px, 1fr) auto; gap: 4px 16px; align-items: baseline; }
+.home-now-row .pc-progress { grid-column: 1 / -1; }
+.home-now-name { font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-now-stage { font-size: 12.5px; opacity: .75; white-space: nowrap; }
+.home-now-more { justify-self: start; }
+
+/* com trabalho ativo, o hero de importar encolhe — o palco é do progresso */
+body.home-working .hero-import { min-height: 0; }
+body.home-working .hero-import .hero-ico { display: none; }
+body.home-working .hero-import .hero-copy p { display: none; }
+body.home-working .hero-import .hero-inner { padding: 10px 0; }
+
+/* contadores do topo viram atalhos */
+.meta-jump {
+  font: inherit;
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 6px;
+}
+.meta-jump:hover { background: color-mix(in srgb, var(--text) 10%, transparent); text-decoration: underline; }
+.meta-dot { opacity: .5; margin: 0 2px; }
+
+/* alvo de drop gigante ao arrastar arquivo para a janela */
+.drop-anywhere {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--bg) 62%, transparent);
+  backdrop-filter: blur(3px);
+  border: 3px dashed var(--accent);
+  border-radius: 18px;
+  margin: 10px;
+  pointer-events: none;
+}
+.drop-anywhere.hidden { display: none; }
+.drop-anywhere-msg {
+  font-size: 26px;
+  font-weight: 750;
+  padding: 18px 34px;
+  border-radius: 999px;
+  background: var(--panel);
+  border: 1px solid var(--hairline);
+  box-shadow: 0 18px 60px rgba(0,0,0,.45);
+}
+
+/* thumbs um pouco maiores nos cards */
+.pc-thumb { width: 128px; }

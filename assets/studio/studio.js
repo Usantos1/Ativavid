@@ -336,6 +336,19 @@ function chipTone(j, view) {
   return j.status;
 }
 
+// Concluído sem rename manual: o arquivo entregue é NOMEADO pela headline,
+// então o stem dele é o melhor título humano que temos ("IMG_3987" não diz
+// nada; "Essa película aguenta martelada" diz tudo).
+function displayTitle(j) {
+  const manual = j.titleLocked && j.title;
+  if (!manual && j.status === "done" && j.final) {
+    const base = String(j.final).split(/[\\/]/).pop() || "";
+    const stem = base.replace(/\.[^.]+$/, "").trim();
+    if (stem && !/^(final|cut)$/i.test(stem)) return stem.slice(0, 80);
+  }
+  return j.title || j.name || "Vídeo";
+}
+
 function cardHtml(j, opts) {
   const compact = !!(opts && opts.compact);
   const enter = !!(opts && opts.enter);
@@ -346,7 +359,7 @@ function cardHtml(j, opts) {
   const estilo = links.estilo;
   const busy = j.status === "processing" || j.status === "queued" || j.status === "importing";
   const headline = jobHeadline(j, view);
-  const title = j.title || j.name || "Vídeo";
+  const title = displayTitle(j);
   const fmt = j.formatLabel || (canFinal || j.hasCut ? "9:16" : "");
   const dur = j.durationLabel || "";
   const metaBits = [dur, fmt].filter(Boolean);
@@ -399,6 +412,7 @@ function cardHtml(j, opts) {
       ${progress}
       <div class="pc-actions">
         ${primary}
+        ${j.status === "done" ? `<button type="button" class="chip-btn ghostish" data-act="folder" data-id="${safeId}" title="Abrir a pasta publicar">Pasta</button>${j.legenda ? `<button type="button" class="chip-btn ghostish" data-act="copylegenda" data-id="${safeId}" title="Copiar a legenda do post">Legenda</button>` : ""}` : ""}
         ${menu}
       </div>
     </div>
@@ -627,14 +641,61 @@ function renderJobs() {
   if (meta) {
     const workView = ["import", "fila", "done"].includes(state.view);
     meta.hidden = !workView;
-    meta.textContent = state.jobs.length
-      ? Object.entries(counts).map(([k, v]) => `${v} ${STATUS_LABEL[k] || k}`).join(" · ")
-      : "Nenhum projeto";
+    if (state.jobs.length) {
+      meta.innerHTML = Object.entries(counts).map(([k, v]) =>
+        `<button type="button" class="meta-jump" data-view="${k === "done" ? "done" : "fila"}">${v} ${escapeHtml(STATUS_LABEL[k] || k)}</button>`
+      ).join(`<span class="meta-dot">·</span>`);
+      if (!meta.dataset.wired) {
+        meta.dataset.wired = "1";
+        meta.addEventListener("click", (e) => {
+          const b = e.target.closest("[data-view]");
+          if (b) setView(b.dataset.view);
+        });
+      }
+    } else {
+      meta.textContent = "Nenhum projeto";
+    }
   }
 
+  renderHomeNow();
   renderInto("jobListRecent", null, filterJobs("recent"), { compact: true, view: "recent" });
   renderInto("jobListFila", "emptyFila", fila, { view: "fila" });
   renderInto("jobListDone", "emptyDone", done, { view: "done" });
+}
+
+// Faixa "Agora": o que está rodando, com a FASE real (o message do job já é
+// o rótulo do estágio do pipeline) e a barra. Com trabalho ativo o hero de
+// importar encolhe (classe home-working no body) — o palco é do progresso.
+function renderHomeNow() {
+  const host = $("#homeNow");
+  if (!host) return;
+  const actives = state.jobs.filter((j) =>
+    ["importing", "queued", "processing"].includes(j.status) || applyBusy(j));
+  document.body.classList.toggle("home-working", actives.length > 0);
+  if (!actives.length) {
+    host.classList.add("hidden");
+    host.innerHTML = "";
+    return;
+  }
+  host.classList.remove("hidden");
+  const sig = actives.map((j) => `${j.id}|${j.message}|${j.progress || ""}`).join("~");
+  if (host.dataset.sig === sig) return;
+  host.dataset.sig = sig;
+  host.innerHTML = `<div class="home-now-title">Agora</div>` + actives.slice(0, 3).map((j) => `
+    <div class="home-now-row" data-id="${escapeHtml(j.id)}">
+      <div class="home-now-name">${escapeHtml(displayTitle(j))}</div>
+      <div class="home-now-stage">${escapeHtml(j.message || "Processando…")}</div>
+      ${cardProgressHtml(j)}
+    </div>`).join("") + (actives.length > 3
+      ? `<button type="button" class="ghost-btn home-now-more" data-view="fila">+${actives.length - 3} na fila</button>`
+      : "");
+  if (!host.dataset.wired) {
+    host.dataset.wired = "1";
+    host.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-view]");
+      if (b) setView(b.dataset.view);
+    });
+  }
 }
 
 function applyAckKey(qa) {
@@ -1417,9 +1478,49 @@ function wireDrop() {
       .catch((err) => toast(err.message));
   });
   input.addEventListener("change", () => {
-    openImportDialog(input.files).catch((err) => toast(err.message));
+    openImportDialog(input.files)
+      .then(() => {
+        if (state.presetIntent) {
+          document.querySelector(`.intent-card[data-intent="${state.presetIntent}"]`)?.click();
+          state.presetIntent = null;
+        }
+      })
+      .catch((err) => toast(err.message));
     input.value = "";
   });
+  const btnPodcast = $("#btnPickPodcast");
+  if (btnPodcast) {
+    btnPodcast.onclick = () => {
+      state.presetIntent = "clips";
+      input.click();
+    };
+  }
+  // Arrastar arquivo para QUALQUER lugar da janela abre a importação — o
+  // overlay dá o alvo gigante; sem ele o usuário tinha que acertar o card.
+  const anywhere = $("#dropAnywhere");
+  if (anywhere) {
+    let dragDepth = 0;
+    window.addEventListener("dragenter", (e) => {
+      const types = (e.dataTransfer && e.dataTransfer.types) || [];
+      if (![...types].includes("Files")) return;
+      dragDepth += 1;
+      anywhere.classList.remove("hidden");
+    });
+    window.addEventListener("dragleave", () => {
+      dragDepth = Math.max(0, dragDepth - 1);
+      if (!dragDepth) anywhere.classList.add("hidden");
+    });
+    window.addEventListener("dragover", (e) => e.preventDefault());
+    window.addEventListener("drop", (e) => {
+      e.preventDefault();
+      dragDepth = 0;
+      anywhere.classList.add("hidden");
+      if (!e.dataTransfer) return;
+      collectDroppedFiles(e.dataTransfer)
+        .then((files) => { if (files && files.length) openImportDialog(files); })
+        .catch((err) => toast(err.message));
+    });
+  }
   if (folderInput) {
     folderInput.addEventListener("change", () => {
       openImportDialog(folderInput.files).catch((err) => toast(err.message));
