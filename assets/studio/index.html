@@ -163,27 +163,34 @@
         <!-- ESTILO — catálogo no mesmo shell (appbar + sidebar) -->
         <section class="view hidden view-estilo" id="view-estilo" data-view-panel="estilo">
           <div class="estilo-brand-bar" id="estiloBrandBar">
-            <label class="ia-form">Marca
-              <select id="brandSelect"></select>
-            </label>
-            <label class="ia-form">Export
-              <select id="exportPresetSelect">
-                <option value="reels">Reels / Shorts</option>
-                <option value="youtube">YouTube 16:9</option>
-                <option value="square">Quadrado 1:1</option>
-                <option value="feed">Feed 4:5</option>
-              </select>
-            </label>
-            <label class="ia-form">Nova marca
-              <input type="text" id="brandNewName" placeholder="Nome da loja">
-            </label>
-            <div class="panel-actions">
-              <button type="button" class="export-btn" id="btnBrandActivate">Ativar</button>
-              <button type="button" class="ghost-btn" id="btnBrandSave">Salvar</button>
-              <button type="button" class="ghost-btn" id="btnLibraryRefresh">B-roll</button>
+            <div class="brand-group">
+              <span class="brand-group-title">Marca ativa</span>
+              <div class="brand-group-row">
+                <select id="brandSelect"></select>
+                <button type="button" class="export-btn" id="btnBrandActivate">Usar esta marca</button>
+              </div>
+              <p class="hint" id="brandHint"></p>
             </div>
-            <p class="hint" id="brandHint"></p>
-            <p class="hint" id="libraryHint"></p>
+            <div class="brand-group">
+              <span class="brand-group-title">Criar marca nova</span>
+              <div class="brand-group-row">
+                <input type="text" id="brandNewName" placeholder="Nome da marca">
+                <select id="exportPresetSelect" title="Formato dos vídeos desta marca">
+                  <option value="reels">Reels / Shorts</option>
+                  <option value="youtube">YouTube 16:9</option>
+                  <option value="square">Quadrado 1:1</option>
+                  <option value="feed">Feed 4:5</option>
+                </select>
+                <button type="button" class="ghost-btn" id="btnBrandSave">Criar com o estilo atual</button>
+              </div>
+            </div>
+            <div class="brand-group">
+              <span class="brand-group-title">Imagens da marca</span>
+              <div class="brand-group-row">
+                <button type="button" class="ghost-btn" id="btnLibraryRefresh">Abrir pasta de imagens</button>
+              </div>
+              <p class="hint" id="libraryHint"></p>
+            </div>
           </div>
           <iframe
             id="estiloFrame"

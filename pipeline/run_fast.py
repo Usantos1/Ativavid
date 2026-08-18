@@ -1415,6 +1415,7 @@ def build_edit_data(cut: Path, preset: dict, hook: list[str], duration: float, f
 
     hook_enabled = headline != "nenhuma"
     cap_enabled = captions != "nenhuma"
+    edit_style_norm = str(preset.get("edit") or "limpa").lower().strip()
     accent = preset.get("accent") or "#ff5200"
 
     # Prefer AI-generated headline text when present
@@ -1460,6 +1461,11 @@ def build_edit_data(cut: Path, preset: dict, hook: list[str], duration: float, f
             "logo": None,
             "sign": None,
         },
+        "videoLayout": (
+            edit_style_norm
+            if edit_style_norm in ("limpa", "split", "split2", "moldura", "barra", "desfocado", "degrade")
+            else "limpa"
+        ),
         "captions": {
             "enabled": cap_enabled,
             "style": captions if cap_enabled else "karaoke",
@@ -1536,11 +1542,11 @@ def _attach_auto_broll(edit_data: dict, public: Path, preset: dict, transcript: 
         print("[broll] desligado no estilo", flush=True)
         return edit_data
     explicit = mode not in ("quando_necessario", "", "auto")
-    if edit_style in ("limpa", "clean", "limpo") and not explicit:
+    if edit_style in ("limpa", "clean", "limpo", "moldura", "barra", "desfocado", "degrade") and not explicit:
         edit_data["inserts"] = []
         print("[broll] estilo limpa + b-roll no padrão — sem inserts automáticos", flush=True)
         return edit_data
-    if edit_style in ("limpa", "clean", "limpo"):
+    if edit_style in ("limpa", "clean", "limpo", "moldura", "barra", "desfocado", "degrade"):
         print(f"[broll] estilo limpa, mas b-roll={mode} pedido — inserts ligados", flush=True)
     # 1) biblioteca local
     try:
@@ -2489,7 +2495,7 @@ def run(
             overlay_flag = False
         overlay_candidate = (
             not bool(elems.get("tracking"))
-            and str(preset.get("edit") or "").lower() not in ("split", "split2")
+            and str(preset.get("edit") or "").lower() not in ("split", "split2", "moldura", "barra", "desfocado")
         )
         if attach_to_edl and (experimental_on() or (overlay_flag and overlay_candidate)):
             try:

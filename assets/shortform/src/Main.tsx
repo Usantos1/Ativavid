@@ -148,6 +148,9 @@ export type EditData = {
     fontScale?: number;
     sfx?: {enabled?: boolean; clickVolume?: number; scratchVolume?: number};
   };
+  // Layout do vídeo: limpa (default), split/split2 (tela dividida),
+  // moldura, barra, desfocado, degrade — ver VideoStage/LayoutScrim.
+  videoLayout?: string;
   // Contador de lista (Top N): badge "1º/2º…" no canto, sincronizado com a
   // enumeração falada — detectado das legendas por app/list_counter.py.
   listMarkers?: {n: number; atSec: number}[];
@@ -1046,6 +1049,60 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
   );
 };
 
+
+// ============ LAYOUTS DE VÍDEO (edit-data.videoLayout) =======================
+// "limpa" (default) = quadro cheio. Os transformadores (moldura/barra/
+// desfocado) rodam no caminho FULL (render_path marca video_layout);
+// "degrade" é só o scrim e continua overlay-elegível.
+const VIDEO_LAYOUT = String((D as any).videoLayout ?? 'limpa');
+const LAYOUT_ACCENT: string = D.hook?.accent ?? '#ff5200';
+
+export const LayoutScrim: React.FC = () => {
+  if (VIDEO_LAYOUT !== 'degrade') return null;
+  return (
+    <AbsoluteFill
+      style={{background: 'linear-gradient(180deg, rgba(0,0,0,0) 52%, rgba(0,0,0,0.74) 100%)'}}
+    />
+  );
+};
+
+const VideoStage: React.FC = () => {
+  if (VIDEO_LAYOUT === 'moldura') {
+    return (
+      <AbsoluteFill style={{background: `color-mix(in srgb, ${LAYOUT_ACCENT} 22%, #0c0d10)`}}>
+        <div style={{position: 'absolute', inset: 0, transform: 'scale(0.93)', borderRadius: 40, overflow: 'hidden', boxShadow: '0 30px 90px rgba(0,0,0,0.55)'}}>
+          <DynamicVideo />
+        </div>
+      </AbsoluteFill>
+    );
+  }
+  if (VIDEO_LAYOUT === 'barra') {
+    // vídeo ancorado no TOPO (corte tipo cover mantém o rosto); a faixa
+    // sólida de baixo é exatamente onde a legenda "baixo" senta
+    return (
+      <AbsoluteFill style={{background: '#101114'}}>
+        <div style={{position: 'absolute', top: 0, left: 0, right: 0, height: '72%', overflow: 'hidden'}}>
+          <DynamicVideo />
+        </div>
+      </AbsoluteFill>
+    );
+  }
+  if (VIDEO_LAYOUT === 'desfocado') {
+    return (
+      <AbsoluteFill style={{background: '#0b0b0d'}}>
+        <AbsoluteFill style={{transform: 'scale(1.32)', filter: 'blur(44px) brightness(0.55)'}}>
+          <DynamicVideo />
+        </AbsoluteFill>
+        <div style={{position: 'absolute', inset: 0, transform: 'scale(0.86)', borderRadius: 44, overflow: 'hidden', boxShadow: '0 26px 80px rgba(0,0,0,0.6)'}}>
+          <DynamicVideo />
+        </div>
+      </AbsoluteFill>
+    );
+  }
+  return <DynamicVideo />;
+};
+
+
 const HookIntro: React.FC = () => {
   const {fps} = useVideoConfig();
   const dur = Math.round(D.hook.endSec * fps);
@@ -1061,8 +1118,9 @@ export const Main: React.FC = () => {
   return (
     <AbsoluteFill style={{backgroundColor: 'black'}}>
       {D.soundtrack.enabled ? <Soundtrack /> : null}
-      <DynamicVideo />
+      <VideoStage />
       <BehindSubject />
+      <LayoutScrim />
       <Inserts />
       <CustomGraphics />
       <ListCounter />

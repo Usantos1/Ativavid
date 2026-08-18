@@ -10,7 +10,7 @@ import {ScatterCaptions} from './ScatterCaptions';
 import {SimpleCaptions, SIMPLE_VARIANTS} from './SimpleCaptions';
 import {ImpactCaptions} from './ImpactCaptions';
 import {ListCounter} from './ListCounter';
-import {EndCard, HookIntro, Inserts, Karaoke} from './Main';
+import {EndCard, HookIntro, Inserts, Karaoke, LayoutScrim} from './Main';
 import editData from '../public/edit-data.json';
 
 const D = editData as {
@@ -22,6 +22,7 @@ const D = editData as {
 export const Overlay: React.FC = () => {
   return (
     <AbsoluteFill style={{backgroundColor: 'transparent'}}>
+      <LayoutScrim />
       <Inserts />
       <CustomGraphics />
       <ListCounter />

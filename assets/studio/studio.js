@@ -3122,8 +3122,9 @@ async function loadBrandsUi() {
     $("#exportPresetSelect").value = active.exportPreset || "reels";
   }
   if ($("#brandHint")) {
+    const fmtNames = { reels: "Reels/Shorts", youtube: "YouTube 16:9", square: "Quadrado 1:1", feed: "Feed 4:5" };
     $("#brandHint").textContent = active
-      ? `Ativa: ${active.name || active.id} · export ${active.exportPreset || "reels"}`
+      ? `Os vídeos desta marca saem em ${fmtNames[active.exportPreset] || "Reels/Shorts"}. O estilo edita-se abaixo.`
       : "";
   }
   const fr = $("#estiloFrame");
@@ -3136,11 +3137,13 @@ async function loadBrandsUi() {
   try {
     const lib = await api("/api/library");
     if ($("#libraryHint")) {
-      $("#libraryHint").textContent =
-        `Biblioteca: ${lib.items?.length || 0} arquivo(s) em ${lib.root || "%USERPROFILE%\\\\ATIVAVID\\\\Biblioteca"}`;
+      const n = lib.items?.length || 0;
+      $("#libraryHint").textContent = n
+        ? `${n} imagem(ns) disponíveis para usar como b-roll`
+        : "Coloque fotos dos seus produtos na pasta para a IA usar como b-roll";
     }
   } catch {
-    if ($("#libraryHint")) $("#libraryHint").textContent = "Biblioteca: —";
+    if ($("#libraryHint")) $("#libraryHint").textContent = "";
   }
 }
 

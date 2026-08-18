@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.08
+
+Quatro layouts de vídeo novos e a tela de Estilos mais clara.
+
+- **Moldura**: o vídeo vira um cartão arredondado sobre um fundo na cor da marca
+- **Barra inferior**: vídeo no topo e uma faixa sólida embaixo, onde a legenda senta — leitura perfeita em qualquer cena
+- **Fundo desfocado**: o vídeo aparece menor, flutuando sobre uma cópia borrada dele mesmo — o look clássico de Reels
+- **Degradê**: uma sombra suave na base do vídeo para a legenda nunca sumir na cena clara (este mantém o render rápido)
+- A área de marca em Estilos foi reorganizada: grupos claros ("Marca ativa", "Criar marca nova", "Imagens da marca"), botões que dizem o que fazem e sem textos técnicos
+
 ## 2.07
 
 O app fica em silêncio quando não tem nada acontecendo.

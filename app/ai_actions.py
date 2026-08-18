@@ -301,7 +301,7 @@ def apply_actions_to_edits(
             edit_style = (style.get("edit") or "limpa").lower().strip()
             _bm = str(style.get("brollMode") or "quando_necessario").lower().strip()
             _broll_ok = _bm not in ("off", "nenhum", "none", "desligado") and (
-                edit_style not in ("limpa", "clean", "limpo")
+                edit_style not in ("limpa", "clean", "limpo", "moldura", "barra", "desfocado", "degrade")
                 or _bm not in ("quando_necessario", "", "auto")
             )
             if _broll_ok and a.get("query"):

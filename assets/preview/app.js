@@ -147,6 +147,73 @@ const STYLE_CATALOG = {
         <rect x="40" y="62.5" width="10" height="2.4" rx="1.2" fill="rgba(255,255,255,.5)"/>
       </svg>`,
     },
+    {
+      id: 'moldura',
+      name: 'Moldura',
+      mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
+        <rect x=".5" y=".5" width="65" height="117" rx="7" fill="#0b0e13" stroke="rgba(255,255,255,.12)"/>
+        <rect x="2" y="2" width="62" height="114" rx="6" fill="rgba(255,119,19,.22)"/>
+        <rect x="7" y="9" width="52" height="100" rx="6" fill="rgba(255,255,255,.07)"/>
+        <circle cx="33" cy="48" r="11" fill="rgba(255,255,255,.16)"/>
+        <path d="M16 109a17 17 0 0134 0z" fill="rgba(255,255,255,.16)"/>
+        <rect x="14" y="76" width="38" height="10" rx="5" fill="#0b0e13" stroke="rgba(9,181,183,.65)"/>
+        <rect x="18" y="80" width="10" height="2.4" rx="1.2" fill="rgba(9,181,183,.9)"/>
+        <rect x="30" y="80" width="8" height="2.4" rx="1.2" fill="rgba(255,255,255,.5)"/>
+        <rect x="40" y="80" width="8" height="2.4" rx="1.2" fill="rgba(255,255,255,.5)"/>
+      </svg>`,
+    },
+    {
+      id: 'barra',
+      name: 'Barra inferior',
+      mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
+        <rect x=".5" y=".5" width="65" height="117" rx="7" fill="#0b0e13" stroke="rgba(255,255,255,.12)"/>
+        <rect x="3" y="3" width="60" height="82" rx="5" fill="rgba(255,255,255,.07)"/>
+        <circle cx="33" cy="38" r="12" fill="rgba(255,255,255,.16)"/>
+        <path d="M14 85a19 19 0 0138 0z" fill="rgba(255,255,255,.16)"/>
+        <path d="M3 85.5h60" stroke="rgba(255,255,255,.4)" stroke-width="1"/>
+        <rect x="3" y="87" width="60" height="28" rx="5" fill="rgba(255,255,255,.03)"/>
+        <rect x="12" y="94" width="42" height="11" rx="5.5" fill="#0b0e13" stroke="rgba(9,181,183,.65)"/>
+        <rect x="16" y="98.5" width="12" height="2.4" rx="1.2" fill="rgba(9,181,183,.9)"/>
+        <rect x="30" y="98.5" width="8" height="2.4" rx="1.2" fill="rgba(255,255,255,.5)"/>
+        <rect x="40" y="98.5" width="10" height="2.4" rx="1.2" fill="rgba(255,255,255,.5)"/>
+      </svg>`,
+    },
+    {
+      id: 'desfocado',
+      name: 'Fundo desfocado',
+      mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
+        <rect x=".5" y=".5" width="65" height="117" rx="7" fill="#0b0e13" stroke="rgba(255,255,255,.12)"/>
+        <rect x="2" y="2" width="62" height="114" rx="6" fill="rgba(255,255,255,.05)"/>
+        <circle cx="14" cy="20" r="10" fill="rgba(255,255,255,.06)"/>
+        <circle cx="55" cy="45" r="13" fill="rgba(255,255,255,.05)"/>
+        <circle cx="12" cy="96" r="12" fill="rgba(255,255,255,.06)"/>
+        <rect x="9" y="12" width="48" height="94" rx="7" fill="rgba(255,255,255,.10)" stroke="rgba(255,255,255,.2)"/>
+        <circle cx="33" cy="48" r="10" fill="rgba(255,255,255,.18)"/>
+        <path d="M17 106a16 16 0 0132 0z" fill="rgba(255,255,255,.18)"/>
+        <rect x="15" y="74" width="36" height="10" rx="5" fill="#0b0e13" stroke="rgba(9,181,183,.65)"/>
+        <rect x="19" y="78" width="10" height="2.4" rx="1.2" fill="rgba(9,181,183,.9)"/>
+        <rect x="31" y="78" width="8" height="2.4" rx="1.2" fill="rgba(255,255,255,.5)"/>
+      </svg>`,
+    },
+    {
+      id: 'degrade',
+      name: 'Degradê',
+      mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
+        <defs><linearGradient id="gDeg" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0.5" stop-color="rgba(0,0,0,0)"/>
+          <stop offset="1" stop-color="rgba(0,0,0,.8)"/>
+        </linearGradient></defs>
+        <rect x=".5" y=".5" width="65" height="117" rx="7" fill="#0b0e13" stroke="rgba(255,255,255,.12)"/>
+        <rect x="3" y="3" width="60" height="112" rx="5" fill="rgba(255,255,255,.07)"/>
+        <circle cx="33" cy="44" r="13" fill="rgba(255,255,255,.16)"/>
+        <path d="M12 112a21 21 0 0142 0z" fill="rgba(255,255,255,.16)"/>
+        <rect x="3" y="3" width="60" height="112" rx="5" fill="url(#gDeg)"/>
+        <rect x="12" y="92" width="42" height="11" rx="5.5" fill="#0b0e13" stroke="rgba(9,181,183,.65)"/>
+        <rect x="16" y="96.5" width="12" height="2.4" rx="1.2" fill="rgba(9,181,183,.9)"/>
+        <rect x="30" y="96.5" width="8" height="2.4" rx="1.2" fill="rgba(255,255,255,.5)"/>
+        <rect x="40" y="96.5" width="10" height="2.4" rx="1.2" fill="rgba(255,255,255,.5)"/>
+      </svg>`,
+    },
   ],
   // No names on purpose: the sample headline IS the label. Ids and geometry
   // mirror HL_STYLES in the template's Main.tsx — keep the two in step.

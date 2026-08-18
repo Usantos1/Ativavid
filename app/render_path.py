@@ -89,6 +89,11 @@ def classify_render_path(
         full.append("tracking")
     if data.get("splitInserts"):
         full.append("split")
+    # Layouts que TRANSFORMAM o vídeo (moldura/barra/desfocado) precisam do
+    # Remotion compondo o próprio vídeo — não dá para colar por cima no
+    # FFmpeg. "degrade" é só um scrim gráfico e continua overlay-elegível.
+    if str(data.get("videoLayout") or "limpa") in ("moldura", "barra", "desfocado"):
+        full.append("video_layout")
     behind = data.get("behind") or []
     if behind:
         full.append("matte_behind")
