@@ -1445,7 +1445,13 @@ def build_edit_data(cut: Path, preset: dict, hook: list[str], duration: float, f
         },
         "hook": {
             "enabled": hook_enabled,
-            "endSec": min(4.0, max(1.5, duration * 0.25)),
+            # "pilula" é barra de contexto, não momento de abertura — fica o
+            # vídeo inteiro. Os demais estilos mantêm a janela de gancho.
+            "endSec": (
+                round(duration, 3)
+                if headline == "pilula" and hook_enabled
+                else min(4.0, max(1.5, duration * 0.25))
+            ),
             "style": headline if hook_enabled else "outline",
             "lines": hook if hook_enabled else ["", ""],
             "accent": accent,
@@ -1535,7 +1541,9 @@ def _attach_auto_broll(edit_data: dict, public: Path, preset: dict, transcript: 
         query = " ".join(kws) if kws else "produto"
         local = pick_for_query(query, limit=2)
         if local:
-            hook_end = float((edit_data.get("hook") or {}).get("endSec") or 3.0)
+            # pilula estica endSec para o vídeo inteiro — para o espaço de b-roll
+            # vale a janela clássica de gancho, nunca a persistência da barra.
+            hook_end = min(4.0, float((edit_data.get("hook") or {}).get("endSec") or 3.0))
             end_card = float((edit_data.get("endCard") or {}).get("lastSec") or 2.5)
             inserts = []
             pexels_dir = public / "pexels"
@@ -1568,7 +1576,7 @@ def _attach_auto_broll(edit_data: dict, public: Path, preset: dict, transcript: 
         sys.path.insert(0, str(HELPERS))
         from auto_broll import build_auto_inserts  # type: ignore
 
-        hook_end = float((edit_data.get("hook") or {}).get("endSec") or 3.0)
+        hook_end = min(4.0, float((edit_data.get("hook") or {}).get("endSec") or 3.0))
         end_card = float((edit_data.get("endCard") or {}).get("lastSec") or 2.5)
         inserts = build_auto_inserts(
             public_dir=public,

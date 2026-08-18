@@ -320,9 +320,13 @@ and the UI opens its own tab, sitting between FASE 1 and FASE 2:
   `realce`/`misto` headlines paint it, so the save also carries **`accentUsed`**;
   when it is `false` the picked headline style has none and the colour is not an
   instruction to invent a place for one.
-- **Estilo de headline** — `outline`, `card`, `realce`, `misto`, or `nenhuma`
-  ("Nenhuma" — no hook at all, `hook.enabled:false`). Always two lines, size
-  fitted to the text (see the track reference).
+- **Estilo de headline** — `outline`, `card`, `realce`, `misto`, `sombra`,
+  `sublinhado`, `pilula` (one-line context pill pinned at the top for the
+  WHOLE video — the pipeline stretches `hook.endSec` to the full duration),
+  `manchete` (news band at the base, below the caption area), `carimbo`
+  (accent stamp with a slam entrance), or `nenhuma` ("Nenhuma" — no hook at
+  all, `hook.enabled:false`). Two lines fitted to the text, except `pilula`
+  (always one line).
 - **Estilo de legenda** — four animated (`karaoke`, `stacked`/"Empilhado",
   `scatter`/"Disperso", `impacto`/"Impacto" — UPPERCASE cues where the word
   being spoken sits in a solid emphasis-coloured box that pops in), five

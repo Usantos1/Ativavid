@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.91
+
+Três estilos novos de headline.
+
+- **Pílula**: uma barra compacta no topo que fica o vídeo inteiro — boa para dar contexto ("Parte 3", "Teste real")
+- **Manchete**: faixa estilo jornal na base do vídeo, abaixo da legenda
+- **Carimbo**: carimbo girado com borda grossa que entra com impacto
+- A cor da headline da marca pinta o ponto da Pílula, a barra da Manchete e o Carimbo inteiro
+- Espaço do b-roll continua certo mesmo com a Pílula fixa na tela
+
 ## 1.90
 
 Recursos novos no visual: mais estilos de legenda, headlines para escolher e trilha que combina com o conteúdo.

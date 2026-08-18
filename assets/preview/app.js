@@ -160,6 +160,9 @@ const STYLE_CATALOG = {
     {id: 'misto', name: 'Misto', hl: 'misto', default: true},
     {id: 'sombra', name: 'Sombra dura', hl: 'sombra'},
     {id: 'sublinhado', name: 'Sublinhado', hl: 'sublinhado'},
+    {id: 'pilula', name: 'Pílula', hl: 'pilula'},
+    {id: 'manchete', name: 'Manchete', hl: 'manchete'},
+    {id: 'carimbo', name: 'Carimbo', hl: 'carimbo'},
     // opts out of the hook entirely (hook.enabled:false in edit-data.json) — a
     // real final look (talking-head cut, images placed by hand later), not a
     // placeholder, so it earns its own card and label like the mockups do.
@@ -369,6 +372,9 @@ const HL_STYLES = {
   misto: { weights: [400, 900], cap: 98, safeW: 900, lh: 0.98 },
   sombra: { weights: [900, 900], cap: 92, safeW: 860, lh: 1.02 },
   sublinhado: { weights: [900, 900], cap: 84, safeW: 850, lh: 1.0 },
+  pilula: { weights: [700, 700], cap: 44, safeW: 780, lh: 1.1 },
+  manchete: { weights: [800, 800], cap: 54, safeW: 780, lh: 1.14 },
+  carimbo: { weights: [900, 900], cap: 80, safeW: 720, lh: 1.05 },
 };
 
 // Measured in RENDER units (1080-wide), scaled to the box only at the end — the
@@ -422,12 +428,59 @@ function buildHeadlineDemo(host, styleId) {
   const S = HL_STYLES[styleId];
   host.innerHTML = '';
   const wrap = el('div', 'cap-demo', host);
-  const raw = styleId === 'card' ? HEADLINE_TEXT.toUpperCase() : HEADLINE_TEXT;
+  const upperHl = styleId === 'card' || styleId === 'manchete' || styleId === 'carimbo';
+  const raw = upperHl ? HEADLINE_TEXT.toUpperCase() : HEADLINE_TEXT;
   const lines = hlTwoLines(raw, S.weights);
   const size = hlFit(lines, S) * s;
   const box = el('div', `hl-demo hl-${styleId}`, wrap);
   box.style.lineHeight = String(S.lh);
   box.style.letterSpacing = `${-1 * s}px`;
+
+  if (styleId === 'pilula') {
+    // uma linha só, no pill escuro com o ponto na cor da headline
+    const one = HEADLINE_TEXT;
+    const sz = hlFit([one, ''], S) * s;
+    box.style.borderRadius = '999px';
+    box.style.padding = `${sz * 0.3}px ${sz * 0.6}px`;
+    box.style.gap = `${sz * 0.35}px`;
+    const dot = el('span', 'hl-pilula-dot', box);
+    dot.style.width = `${sz * 0.3}px`;
+    dot.style.height = `${sz * 0.3}px`;
+    const t = el('span', 'hl-pilula-text', box);
+    t.style.fontSize = `${sz}px`;
+    t.textContent = one;
+    return;
+  }
+  if (styleId === 'manchete') {
+    box.style.borderRadius = `${18 * s}px`;
+    box.style.padding = `${26 * s}px ${44 * s}px`;
+    box.style.gap = `${26 * s}px`;
+    const bar = el('span', 'hl-manchete-bar', box);
+    bar.style.width = `${12 * s}px`;
+    bar.style.borderRadius = `${6 * s}px`;
+    const col = el('span', 'hl-manchete-lines', box);
+    for (const l of lines) {
+      if (!l) continue;
+      const d = el('div', '', col);
+      d.style.fontSize = `${size}px`;
+      d.textContent = l;
+    }
+    return;
+  }
+  if (styleId === 'carimbo') {
+    const bw = Math.max(3 * s, size * 0.09);
+    box.style.border = `${bw}px solid var(--hl-accent)`;
+    box.style.borderRadius = `${18 * s}px`;
+    box.style.padding = `${size * 0.18}px ${size * 0.4}px`;
+    box.style.transform = 'rotate(-6deg)';
+    for (const l of lines) {
+      if (!l) continue;
+      const d = el('div', 'hl-carimbo-line', box);
+      d.style.fontSize = `${size}px`;
+      d.textContent = l;
+    }
+    return;
+  }
 
   if (styleId === 'realce') {
     for (const l of lines) {
@@ -2389,7 +2442,7 @@ const normHex = (v) => {
 // sombra paints its offset with the accent, sublinhado paints the bar — both
 // genuinely consume the pick, so leaving them out would have the Estilo tab
 // report "este estilo não usa destaque" while the render plainly used it
-const HL_ACCENT_USERS = ['realce', 'misto', 'sombra', 'sublinhado'];
+const HL_ACCENT_USERS = ['realce', 'misto', 'sombra', 'sublinhado', 'pilula', 'manchete', 'carimbo'];
 const ACCENT_DEFAULT = '#FF0000';
 
 /* Three independent caption colour channels, each painting a different set of

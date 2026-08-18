@@ -1688,6 +1688,31 @@ kbd {
    fitted size), so only the weight/colour live here */
 .hl-sombra { font-weight: 900; color: #fff; }
 
+/* "pilula": pill escuro compacto, ponto na cor da headline, uma linha */
+.hl-pilula {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(17, 18, 20, 0.78);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
+}
+.hl-pilula-dot { display: inline-block; border-radius: 50%; background: var(--hl-accent); flex: 0 0 auto; }
+.hl-pilula-text { font-weight: 700; color: #fff; line-height: 1.1; }
+
+/* "manchete": faixa de notícia — barra vertical na cor + linhas à esquerda */
+.hl-manchete {
+  display: inline-flex;
+  align-items: stretch;
+  background: rgba(12, 13, 15, 0.86);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.45);
+  text-align: left;
+}
+.hl-manchete-bar { display: inline-block; background: var(--hl-accent); flex: 0 0 auto; }
+.hl-manchete-lines { font-weight: 800; color: #fff; }
+
+/* "carimbo": borda grossa e texto na cor da headline, levemente girado */
+.hl-carimbo { background: rgba(10, 10, 12, 0.25); }
+.hl-carimbo-line { font-weight: 900; color: var(--hl-accent); text-shadow: 0 2px 6px rgba(0, 0, 0, 0.45); }
+
 /* "sublinhado": bar behind the descenders, text above it */
 .hl-sublinhado { display: flex; flex-direction: column; align-items: center; }
 .hl-under { position: relative; display: inline-block; }

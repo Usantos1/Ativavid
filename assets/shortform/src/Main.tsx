@@ -64,13 +64,15 @@ export type EditData = {
     // "misto": line 1 light white, line 2 heavy orange.
     // "sombra": white text with a hard un-blurred offset in the accent.
     // "sublinhado": white text over a thick accent bar under each line.
-    style?: 'outline' | 'card' | 'realce' | 'misto' | 'sombra' | 'sublinhado';
+    style?: 'outline' | 'card' | 'realce' | 'misto' | 'sombra' | 'sublinhado'
+      | 'pilula' | 'manchete' | 'carimbo';
     accent?: string;        // realce/misto marker + text colour (default #ff5200)
     fontSizePx?: number;   // auto-fit CEILING (alias of maxFontPx, kept for compat)
     maxFontPx?: number;    // auto-fit ceiling (per-style default)
     safeWidth?: number;    // auto-fit width budget (per-style default)
     strokePx?: number;     // outline: black stroke width (default 12)
     paddingTop?: number;   // distance from top (per-style default)
+    paddingBottom?: number; // manchete only: distance from the base (default 140)
     lineHeight?: number;
   };
   captions: {
@@ -580,6 +582,14 @@ const HL_STYLES: Record<string, HlStyle> = {
   // gap between lines is generous (the bar lives in it), so the cap is lower
   // to keep two lines + two bars inside the same band as the other styles.
   sublinhado: {weights: [900, 900], cap: 84, safeW: 850, lh: 1.0, top: 305},
+  // "pilula": ONE-line context pill pinned high; the pipeline stretches
+  // hook.endSec to the whole video for this style — it is a context bar,
+  // not an opening moment.
+  pilula: {weights: [700, 700], cap: 44, safeW: 780, lh: 1.1, top: 130},
+  // "manchete": news band at the BASE (flex-end; `top` unused). safeW leaves
+  // room for the band's own margins + accent bar inside the 1080 frame.
+  manchete: {weights: [800, 800], cap: 54, safeW: 780, lh: 1.14, top: 0},
+  carimbo: {weights: [900, 900], cap: 80, safeW: 720, lh: 1.05, top: 300},
 };
 
 const hlWidth = (text: string, size: number, weight: number) =>
@@ -629,7 +639,8 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
   const styleId = H.style ?? 'outline';
   const S = HL_STYLES[styleId] ?? HL_STYLES.outline;
   const raw = (H.text ?? (H.lines || []).join(' ')).trim();
-  const lines = twoLines(styleId === 'card' ? raw.toUpperCase() : raw, S.weights);
+  const isUpper = styleId === 'card' || styleId === 'manchete' || styleId === 'carimbo';
+  const lines = twoLines(isUpper ? raw.toUpperCase() : raw, S.weights);
   // fontSizePx is a CEILING, never a fixed size. As a hard override it silently
   // defeats the whole point: at a size the text cannot fit in, the line wraps and
   // the headline becomes three lines again — which is exactly what happened with
@@ -649,6 +660,106 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
     // visibly instead of quietly wrapping into a third line
     whiteSpace: 'nowrap',
   };
+
+  // "pilula": one compact line in a dark pill with an accent dot, pinned high
+  // and PERSISTENT (endSec = whole video, set by the pipeline). No Sfx — a
+  // context bar has no "moment"; a whoosh would announce one.
+  if (styleId === 'pilula') {
+    const one = raw;
+    const sz = fitHeadline([one, ''], {...S, cap, safeW: H.safeWidth ?? S.safeW});
+    return (
+      <AbsoluteFill style={{justifyContent: 'flex-start', alignItems: 'center', paddingTop: top}}>
+        <div
+          style={{
+            opacity: op,
+            translate: `0px ${y}px`,
+            display: 'flex',
+            alignItems: 'center',
+            gap: Math.round(sz * 0.35),
+            background: 'rgba(17,18,20,0.78)',
+            borderRadius: 999,
+            padding: `${Math.round(sz * 0.3)}px ${Math.round(sz * 0.6)}px`,
+            boxShadow: '0 10px 30px rgba(0,0,0,0.35)',
+          }}
+        >
+          <div
+            style={{
+              width: Math.round(sz * 0.3),
+              height: Math.round(sz * 0.3),
+              borderRadius: '50%',
+              background: H.accent ?? '#ff5200',
+              flex: '0 0 auto',
+            }}
+          />
+          <div style={{fontFamily, fontWeight: 700, fontSize: sz, color: '#fff', letterSpacing: -0.5, whiteSpace: 'nowrap', lineHeight: 1.1}}>
+            {one}
+          </div>
+        </div>
+      </AbsoluteFill>
+    );
+  }
+
+  // "manchete": breaking-news band at the base — dark slab, accent bar on the
+  // left, UPPERCASE left-aligned lines. Sits BELOW the caption band (430), so
+  // the two never collide.
+  if (styleId === 'manchete') {
+    return (
+      <AbsoluteFill style={{justifyContent: 'flex-end', alignItems: 'center', paddingBottom: H.paddingBottom ?? 140}}>
+        <Sfx src="whoosh.mp3" volume={0.1} />
+        <div
+          style={{
+            opacity: op,
+            translate: `0px ${(-y).toFixed(1)}px`,
+            display: 'flex',
+            alignItems: 'stretch',
+            gap: 26,
+            background: 'rgba(12,13,15,0.86)',
+            padding: '26px 44px',
+            borderRadius: 18,
+            boxShadow: '0 14px 40px rgba(0,0,0,0.45)',
+            maxWidth: 1000,
+          }}
+        >
+          <div style={{width: 12, borderRadius: 6, background: H.accent ?? '#ff5200', flex: '0 0 auto'}} />
+          <div style={{fontFamily, fontWeight: 800, fontSize: size, color: '#fff', lineHeight: lh, letterSpacing: -1, textAlign: 'left', whiteSpace: 'nowrap'}}>
+            {lines.filter(Boolean).map((l, i) => (<div key={i}>{l}</div>))}
+          </div>
+        </div>
+      </AbsoluteFill>
+    );
+  }
+
+  // "carimbo": accent-coloured stamp — thick border, slight rotation, and a
+  // slam entrance (starts big and transparent, lands fast). The slam replaces
+  // the shared fade+rise; the exit fade is shared.
+  if (styleId === 'carimbo') {
+    const slam = interpolate(f, [0, 7], [0, 1], {
+      extrapolateLeft: 'clamp',
+      extrapolateRight: 'clamp',
+      easing: Easing.out(Easing.cubic),
+    });
+    const acc = H.accent ?? '#ff5200';
+    const bw = Math.max(6, Math.round(size * 0.09));
+    return (
+      <AbsoluteFill style={{justifyContent: 'flex-start', alignItems: 'center', paddingTop: top}}>
+        <Sfx src="whoosh.mp3" volume={0.12} />
+        <div
+          style={{
+            opacity: Math.min(slam, exit),
+            transform: `rotate(-6deg) scale(${(1.9 - 0.9 * slam).toFixed(3)})`,
+            border: `${bw}px solid ${acc}`,
+            borderRadius: 18,
+            padding: `${Math.round(size * 0.18)}px ${Math.round(size * 0.4)}px`,
+            background: 'rgba(10,10,12,0.25)',
+          }}
+        >
+          <div style={{...shell, opacity: 1, translate: '0px 0px', fontWeight: 900, fontSize: size, color: acc, textShadow: '0 4px 14px rgba(0,0,0,0.45)'}}>
+            {lines.filter(Boolean).map((l, i) => (<div key={i}>{l}</div>))}
+          </div>
+        </div>
+      </AbsoluteFill>
+    );
+  }
 
   if (styleId === 'realce') {
     return (
