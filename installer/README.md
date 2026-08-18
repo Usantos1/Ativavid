@@ -5,7 +5,7 @@ App Windows para editar vídeo com IA: arraste o arquivo → 1 clique → `final
 ## Baixar e instalar
 
 1. Abra a [release mais recente](https://github.com/Usantos1/Ativavid/releases/latest)
-2. Baixe **[Instalar.ATIVAVID.1.95.exe](https://github.com/Usantos1/Ativavid/releases/download/v1.95/Instalar.ATIVAVID.1.95.exe)**
+2. Baixe **[Instalar.ATIVAVID.1.96.exe](https://github.com/Usantos1/Ativavid/releases/download/v1.96/Instalar.ATIVAVID.1.96.exe)**
 3. Execute o instalador (pede admin uma vez)
 4. Destino padrão: `C:\Program Files\ATIVAVID`
 5. Abra pelo atalho **ATIVAVID** (sem janela CMD)

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.96
+
+Render incremental: corrigir headline ou palavra da legenda re-renderiza só o trecho afetado.
+
+- Trocar a headline re-renderiza apenas os primeiros segundos do vídeo; corrigir uma palavra da legenda, só dali para a frente — o resto é reaproveitado do render anterior, sem perda de qualidade (emenda exata, frame a frame)
+- Medido: correção de headline num vídeo de teste caiu de ~55s para ~26s de render — e o ganho cresce com a duração do vídeo
+- O sistema guarda o último render de efeitos de cada projeto (limite de 3 GB no disco, os mais antigos saem sozinhos)
+- Qualquer mudança maior (estilo, cores, cortes, posição) volta ao render completo automaticamente — na dúvida, refaz tudo
+
 ## 1.95
 
 Mais velocidade de verdade e o novo tipo Anúncio (AIDA).
