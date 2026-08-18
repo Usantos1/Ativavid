@@ -2084,6 +2084,10 @@ def run(
     _TIMING.clear()
     _RENDER_META.clear()
     _t_job = time.perf_counter()
+    # Fase-a-fase: sem estas marcas o timing.json não enxergava a metade
+    # inicial do job (transcrição/IA/legendas caíam todas em OTHER) e a ETA
+    # da Fila chutava. Medição, não otimização.
+    _t_phase = time.perf_counter()
     try:
         from app.win_process import refresh_path_env  # type: ignore
         refresh_path_env()
@@ -2241,6 +2245,8 @@ def run(
     _helper("pack_transcripts.py", "--edit-dir", str(edit_dir))
     cut_spoken_join = "\n".join(spoken_parts).strip()
 
+    _timing_mark("ANALYZE", _t_phase)  # probes + transcrição + regiões/voz/cor
+    _t_phase = time.perf_counter()
     print("[2b/9] montando corte", flush=True)
     set_stage(edit_dir, "planning", "Montando o corte…", 35)
     llm_meta: dict = {"ok": False}
@@ -2408,6 +2414,7 @@ def run(
         target=_scaffold_worker, daemon=True, name="scaffold")
     scaffold_thread.start()
 
+    _timing_mark("PLAN", _t_phase)  # plano LLM + EDL + zoom + antecipações
     print("[3/9] render cut.mp4")
     set_stage(edit_dir, "cutting", "Criando a edição…", 48)
     cut_path = edit_dir / "cut.mp4"
@@ -2497,6 +2504,7 @@ def run(
     _timing_mark("REMOTION_GATE", _t_gate)
 
     print("[5/9] captions from cut")
+    _t_phase = time.perf_counter()
     if is_longform:
         # Longform gera .srt/chapters do transcript do corte — precisa transcrever.
         _helper("transcribe.py", str(cut_path), "--edit-dir", str(edit_dir), "--language", language)
@@ -2667,6 +2675,8 @@ def run(
             if not cues.exists():
                 cues.write_text("[]", encoding="utf-8")
 
+    _timing_mark("CAPTIONS", _t_phase)
+    _t_phase = time.perf_counter()
     print("[6/9] segments + edit-data")
     set_stage(edit_dir, "preview", "Preparando preview…", 70)
     if not is_longform:
@@ -2737,6 +2747,8 @@ def run(
     elif not is_longform:
         write_neutral_track(public, edit_data)
 
+    _timing_mark("SEGMENTS", _t_phase)  # segments.json + broll + proxy + track
+    _t_phase = time.perf_counter()
     music = bool(elems.get("musicAI"))
     if music:
         print("[7/9] soundtrack")
@@ -2764,6 +2776,7 @@ def run(
         music_tmp.unlink(missing_ok=True)
         print("[7/9] soundtrack skipped")
 
+    _timing_mark("MUSIC_WAIT", _t_phase)  # espera da trilha antecipada (0s ideal)
     print("[8/9] Remotion render")
     set_stage(edit_dir, "waiting_render", "Aguardando slot Remotion…", 82)
     _helper("check_template_integrity.py", str(remotion), "--track", track)

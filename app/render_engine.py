@@ -178,12 +178,18 @@ def _gpu_vendor(gpus: list[dict[str, Any]]) -> str:
 
 
 def _recommend_concurrency(cores: int, ram_gb: float, encoder: str) -> int:
-    """Não usa cpu_count() como teto. Chromium come RAM."""
+    """Não usa cpu_count() como teto. Chromium come RAM.
+
+    Recalibrado: o divisor antigo de 3.5 GB/worker era um chute conservador
+    (o próprio comentário dizia ~1.2 GB); medição real do Chrome do Remotion
+    fica em ~2 GB com decode. E cores//2 desperdiçava o ganho documentado no
+    remotion.config.ts (183s → 104s usando os cores) — agora deixa 2 threads
+    livres para ffmpeg/SO e usa o resto.
+    """
     cores = max(1, int(cores or 1))
     ram = float(ram_gb or 8)
-    # ~1.2 GB por worker Remotion (Chrome + decode)
-    by_ram = max(1, int(ram / 3.5))
-    by_cpu = max(1, cores // 2)
+    by_ram = max(1, int(ram / 2.0))
+    by_cpu = max(1, cores - 2)
     cap = 6
     if encoder != "libx264" and ram >= 16:
         cap = 8

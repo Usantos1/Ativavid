@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.94
+
+Medição de verdade e render respeitando o perfil da máquina.
+
+- Cada etapa do processamento agora é cronometrada por inteiro (análise, plano da IA, legendas, espera da trilha) — a estimativa de tempo da Fila fica realista depois de alguns vídeos na versão nova
+- O render de efeitos passa a respeitar o perfil de desempenho escolhido em Sistema (antes usava um número fixo de trabalhadores, mesmo no perfil Econômico)
+- Máquinas com mais núcleos usam mais trabalhadores no render; máquinas fracas continuam protegidas
+
 ## 1.93
 
 Galeria de modelos prontos: um clique monta o visual completo.

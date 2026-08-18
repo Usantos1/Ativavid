@@ -33,9 +33,10 @@ def remotion_concurrency() -> int:
         ram_hint = float((detect_machine(quick=True) or {}).get("ramGb") or 8)
     except Exception:
         pass
-    # Não usa cpu_count como teto: Chromium come RAM.
-    by_ram = max(1, int(ram_hint / 3.5))
-    return max(1, min(6, cores // 2, by_ram, cores))
+    # Não usa cpu_count como teto: Chromium come RAM (~2 GB/worker medido).
+    # Mesma calibração de render_engine._recommend_concurrency.
+    by_ram = max(1, int(ram_hint / 2.0))
+    return max(1, min(6, max(1, cores - 2), by_ram, cores))
 
 
 def remotion_slots() -> int:

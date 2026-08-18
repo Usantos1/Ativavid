@@ -164,12 +164,26 @@ def render_overlay(remotion: Path, out: Path) -> Path:
 
     out.parent.mkdir(parents=True, exist_ok=True)
 
+    # Concorrência do perfil, não um 4 fixo — o overlay é o mesmo Chrome do
+    # caminho FULL e ignorava o perfil de desempenho inteiro.
+    try:
+        import sys as _sys
+
+        _helpers = str(Path(__file__).resolve().parent.parent / "helpers")
+        if _helpers not in _sys.path:
+            _sys.path.insert(0, _helpers)
+        from remotion_gate import remotion_concurrency  # type: ignore
+
+        conc = remotion_concurrency()
+    except Exception:
+        conc = 4
+
     def _one(path: Path, extra: list[str]) -> subprocess.CompletedProcess:
         cmd = resolve_remotion_argv(
             remotion, "render", "Overlay", str(path),
-            "--concurrency=4", *extra,
+            f"--concurrency={conc}", *extra,
         )
-        print("RENDER Overlay", path.name, flush=True)
+        print(f"RENDER Overlay {path.name} conc={conc}", flush=True)
         return subprocess.run(cmd, cwd=str(remotion), **_hide())
 
     mov = out.with_suffix(".mov")
