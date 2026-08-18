@@ -44,6 +44,14 @@ EXPORT_PRESETS = {
         "height": 1080,
         "videoGoal": "anuncio",
     },
+    "feed": {
+        "id": "feed",
+        "label": "Feed 4:5",
+        "aspect": "4:5",
+        "width": 1080,
+        "height": 1350,
+        "videoGoal": "reels",
+    },
 }
 
 

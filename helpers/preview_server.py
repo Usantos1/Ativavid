@@ -622,6 +622,9 @@ class Handler(BaseHTTPRequestHandler):
         if route == "/api/corrections":
             self._corrections_post()
             return
+        if route == "/api/style-export":
+            self._style_export()
+            return
         if route == "/api/apply-plan":
             self._apply_plan_get()
             return
@@ -1355,6 +1358,33 @@ class Handler(BaseHTTPRequestHandler):
             "headlineOptions": headline_options,
             "now": time.time(),
         })
+
+    def _style_export(self) -> None:
+        """Grava o estilo atual como JSON em ~/ATIVAVID/presets-exportados/."""
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            body = json.loads(self.rfile.read(length) or b"{}")
+        except (ValueError, json.JSONDecodeError):
+            self._json({"ok": False, "error": "invalid JSON"}, 400)
+            return
+        style = body.get("style")
+        if not isinstance(style, dict) or not style:
+            self._json({"ok": False, "error": "estilo vazio"}, 400)
+            return
+        import re as _re
+
+        name = _re.sub(r"[^\w\- ]+", "", str(body.get("name") or "preset"), flags=_re.UNICODE)
+        name = _re.sub(r"\s+", "_", name.strip())[:48] or "preset"
+        out_dir = Path.home() / "ATIVAVID" / "presets-exportados"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        path = out_dir / f"{name}.json"
+        n = 2
+        while path.exists():
+            path = out_dir / f"{name}_{n}.json"
+            n += 1
+        payload = {"ativavidPreset": 1, "name": str(body.get("name") or name), "style": style}
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        self._json({"ok": True, "path": str(path), "folder": str(out_dir)})
 
     def _intent_get(self) -> None:
         from app.editing_intent import load as load_intent

@@ -356,7 +356,15 @@ def main() -> None:
     ap.add_argument("--lang", default="pt", help="Language hint for accent/negation lists (default pt)")
     ap.add_argument("--max-sec", type=float, default=None,
                     help="Clamp last cue endMs to cut duration")
+    ap.add_argument("--emphasis", default="",
+                    help="Palavras extras de ênfase da MARCA, separadas por vírgula "
+                         "(produtos, números, bordões) — somam à lista genérica")
     args = ap.parse_args()
+
+    for w in str(args.emphasis or "").split(","):
+        w = norm(w)
+        if w and w not in STOP:
+            EMPH.add(w)
 
     if args.captions:
         words = load_words_from_captions(args.captions.resolve())

@@ -67,3 +67,41 @@ def test_brand_fonts_validated_against_catalog():
     _apply_brand_fonts(ed2, {"captionFont": "comic-sans", "headlineFont": ""})
     assert "fontFamily" not in ed2["captions"]
     assert "hook" not in ed2
+
+
+def test_brand_emphasis_words_marks_line(tmp_path):
+    """--emphasis da marca marca a linha (lineEmph) que a lista genérica não pega."""
+    import json
+    import subprocess
+    import sys as _sys
+
+    exe = _sys.executable
+    cs = str(REPO / "helpers" / "caption_style.py")
+    words = ["nossa", "loja", "tem", "pelicula", "blindada", "muito",
+             "boa", "pra", "voce", "hoje", "mesmo", "viu"]
+    caps = [{"text": w, "startMs": i * 450, "endMs": i * 450 + 380}
+            for i, w in enumerate(words)]
+    src = tmp_path / "captions.json"
+    src.write_text(json.dumps(caps), encoding="utf-8")
+
+    def run(extra):
+        out = tmp_path / f"cues{len(extra)}.json"
+        r = subprocess.run([exe, cs, "--captions", str(src), "-o", str(out), *extra],
+                           capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr[-400:]
+        return json.loads(out.read_text(encoding="utf-8"))
+
+    def emph_texts(cues):
+        """Texto das linhas marcadas como ênfase."""
+        out = []
+        for c in cues:
+            for flag, line in zip(c.get("lineEmph") or [], c.get("lines") or []):
+                if flag:
+                    out.append(" ".join(t.get("text", "") for t in line))
+        return out
+
+    base = emph_texts(run([]))
+    branded = emph_texts(run(["--emphasis", "pelicula, blindada"]))
+    # a palavra da marca vira ênfase só quando declarada
+    assert not any("pelicula" in t for t in base)
+    assert any("pelicula" in t for t in branded)

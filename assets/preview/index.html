@@ -162,6 +162,9 @@
             <button type="button" class="btn ghost small" id="btnPresetRename">Renomear</button>
             <button type="button" class="btn ghost small" id="btnPresetDel">Excluir</button>
             <button type="button" class="btn ghost small" id="btnPresetDefault">Definir como padrão</button>
+            <button type="button" class="btn ghost small" id="btnPresetExport">Exportar</button>
+            <button type="button" class="btn ghost small" id="btnPresetImport">Importar</button>
+            <input type="file" id="presetImportFile" accept=".json,application/json" class="hidden">
           </div>
         </div>
       </div>
@@ -335,6 +338,7 @@
               <option value="reels" selected>Vertical 9:16</option>
               <option value="youtube">Horizontal 16:9</option>
               <option value="square">Quadrado 1:1</option>
+              <option value="feed">Feed 4:5</option>
             </select>
           </label>
           <label class="auto-field">B-roll
@@ -378,6 +382,9 @@
               <option value="bebas">Bebas Neue</option>
               <option value="archivo">Archivo Black</option>
             </select>
+          </label>
+          <label class="auto-field">Palavras de destaque da marca
+            <input type="text" id="autoEmphWords" placeholder="ex.: película, 3D, blindada, 90 dias">
           </label>
           <label class="auto-field">Fonte da headline
             <select id="autoHlFont">

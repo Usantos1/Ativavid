@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.00
+
+Marca com voz própria: destaque suas palavras, leve seu preset e publique no feed.
+
+- **Palavras de destaque da marca**: liste seus produtos, números e bordões (ex.: "película, 3D, blindada, 90 dias") e a legenda Empilhado passa a destacar essas palavras
+- **Exportar e importar preset**: salve o estilo num arquivo e leve para outra máquina, ou receba um pronto — o botão Exportar grava em `Documentos do ATIVAVID → presets-exportados`
+- **Novo formato Feed 4:5** (1080×1350), o tamanho que ocupa mais tela no feed do Instagram
+- Disponíveis na importação e em Estilos, junto com os formatos que já existiam
+
 ## 1.99
 
 Fonte da marca: escolha a tipografia das legendas e das headlines.

@@ -2775,12 +2775,14 @@ def run(
         if cap_style == "stacked":
             # Prefer captions.json timings (already clamped / EDL-mapped) over a
             # stretched cut.json so stacked cues stay in sync with the audio.
+            brand_emph = str(preset.get("emphasisWords") or "").strip()
             _helper(
                 "caption_style.py",
                 "--captions", str(public / "captions.json"),
                 "-o", str(public / "caption-cues.json"),
                 "--lang", language,
                 "--max-sec", f"{duration:.6f}",
+                *(["--emphasis", brand_emph] if brand_emph else []),
             )
         else:
             cues = public / "caption-cues.json"

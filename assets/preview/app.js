@@ -2900,6 +2900,7 @@ $('setupGo').addEventListener('click', async () => {
       captionSize: S.style.captionSize || 'm',
       captionFont: S.style.captionFont || null,
       headlineFont: S.style.headlineFont || null,
+      emphasisWords: S.style.emphasisWords || null,
       exportPreset: S.style.exportPreset || 'reels',
       colorGrade: S.style.colorGrade || 'marca',
       endCardCopy: S.endCardCopy || null,
@@ -2992,6 +2993,7 @@ $('setupGo').addEventListener('click', async () => {
     captionSize: S.style.captionSize || 'm',
     captionFont: S.style.captionFont || null,
     headlineFont: S.style.headlineFont || null,
+    emphasisWords: S.style.emphasisWords || null,
     exportPreset: S.style.exportPreset || 'reels',
     colorGrade: S.style.colorGrade || 'marca',
   };
@@ -3097,6 +3099,7 @@ $('setupSaveDefault').addEventListener('click', async () => {
     captionSize: S.style.captionSize || 'm',
     captionFont: S.style.captionFont || null,
     headlineFont: S.style.headlineFont || null,
+    emphasisWords: S.style.emphasisWords || null,
     exportPreset: S.style.exportPreset || 'reels',
     colorGrade: S.style.colorGrade || 'marca',
     smartEmphasis: S.style.smartEmphasis !== false,
@@ -4691,6 +4694,7 @@ function refreshAutoControls() {
     ['autoCapSize', 'captionSize', 'm'],
     ['autoCapFont', 'captionFont', ''],
     ['autoHlFont', 'headlineFont', ''],
+    ['autoEmphWords', 'emphasisWords', ''],
     ['autoContentType', 'contentType', 'informational'],
   ];
   for (const [id, key, def] of map) {
@@ -4799,6 +4803,7 @@ function wireAutoControls() {
     ['autoCapSize', 'captionSize'],
     ['autoCapFont', 'captionFont'],
     ['autoHlFont', 'headlineFont'],
+    ['autoEmphWords', 'emphasisWords'],
     ['autoContentType', 'contentType'],
   ];
   for (const [id, key] of map) {
@@ -5582,6 +5587,7 @@ function currentStyleSnapshot() {
     captionSize: S.style?.captionSize,
     captionFont: S.style?.captionFont,
     headlineFont: S.style?.headlineFont,
+    emphasisWords: S.style?.emphasisWords,
     exportPreset: S.style?.exportPreset,
     colorGrade: S.style?.colorGrade,
     endCardCopy: S.endCardCopy || null,
@@ -5702,6 +5708,73 @@ function wirePresets() {
   for (const [id, action] of Object.entries(map)) {
     const b = $(id);
     if (b) b.onclick = () => presetAction(action);
+  }
+  wirePresetShare();
+}
+
+// Exportar grava um .json em ~/ATIVAVID/presets-exportados (via servidor —
+// download direto não é confiável no WebView2); Importar lê o arquivo no
+// cliente e aplica como um modelo (mesma semântica da galeria).
+const PRESET_SHARE_KEYS = [
+  'edit', 'headline', 'captions', 'accent', 'captionAccent', 'emphasisAccent',
+  'circleAccent', 'elements', 'rhythm', 'intensity', 'speechClean', 'videoGoal',
+  'brollMode', 'captionChunk', 'exportPreset', 'colorGrade', 'endCardCopy',
+  'contentType', 'captionPosition', 'captionSize', 'captionFont',
+  'headlineFont', 'emphasisWords',
+];
+
+function wirePresetShare() {
+  const exp = $('btnPresetExport');
+  if (exp) exp.onclick = async () => {
+    const style = {};
+    for (const k of PRESET_SHARE_KEYS) {
+      if (S.style && S.style[k] != null) style[k] = S.style[k];
+    }
+    const sel = $('presetSelect');
+    const name = (sel && sel.selectedOptions[0]?.textContent) || 'preset';
+    try {
+      const r = await fetch(`${BASE}/api/style-export`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, style }),
+      });
+      const data = await r.json();
+      if (data.ok) toast(`Preset exportado: ${data.path}`);
+      else toast(data.error || 'Não deu para exportar');
+    } catch {
+      toast('Não deu para exportar o preset');
+    }
+  };
+  const imp = $('btnPresetImport');
+  const file = $('presetImportFile');
+  if (imp && file) {
+    imp.onclick = () => file.click();
+    file.onchange = () => {
+      const f = file.files && file.files[0];
+      if (!f) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const data = JSON.parse(String(reader.result || '{}'));
+          const style = data.style || data; // aceita o arquivo cru também
+          const clean = {};
+          for (const k of PRESET_SHARE_KEYS) {
+            if (style[k] != null) clean[k] = style[k];
+          }
+          if (!Object.keys(clean).length) { toast('Arquivo sem estilo válido'); return; }
+          if (!S.style) S.style = defaultStyle();
+          Object.assign(S.style, clean);
+          if (clean.contentType) { S.contentType = clean.contentType; persistIntent(); }
+          refreshAutoControls();
+          renderSetup();
+          toast(`Preset "${data.name || f.name}" aplicado — ajuste e salve`);
+        } catch {
+          toast('Arquivo de preset inválido');
+        }
+      };
+      reader.readAsText(f);
+      file.value = '';
+    };
   }
 }
 
