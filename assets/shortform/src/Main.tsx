@@ -35,6 +35,7 @@ import {StackedCaptions} from './StackedCaptions';
 import {ScatterCaptions} from './ScatterCaptions';
 import {SimpleCaptions, SIMPLE_VARIANTS} from './SimpleCaptions';
 import {ImpactCaptions} from './ImpactCaptions';
+import {ListCounter} from './ListCounter';
 
 const {fontFamily} = loadFont('normal', {weights: ['400', '600', '900']});
 
@@ -147,6 +148,9 @@ export type EditData = {
     fontScale?: number;
     sfx?: {enabled?: boolean; clickVolume?: number; scratchVolume?: number};
   };
+  // Contador de lista (Top N): badge "1º/2º…" no canto, sincronizado com a
+  // enumeração falada — detectado das legendas por app/list_counter.py.
+  listMarkers?: {n: number; atSec: number}[];
   inserts: Insert[];
   behind: Behind[];
   soundtrack: {enabled: boolean; file: string; volume: number};
@@ -1061,6 +1065,7 @@ export const Main: React.FC = () => {
       <BehindSubject />
       <Inserts />
       <CustomGraphics />
+      <ListCounter />
       {D.hook.enabled ? <HookIntro /> : null}
       {D.captions.enabled
         ? D.captions.style === 'stacked'

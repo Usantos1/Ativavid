@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.05
+
+Contador de lista: o 1º, 2º, 3º aparece na tela sozinho.
+
+- Novo elemento **"Contador de lista"** (desligado por padrão): quando a fala enumera — "primeiro…", "segundo…", "motivo um…" — um selo com o número aparece no canto, na cor da marca, sincronizado com cada item
+- Detecção direto das legendas, sem custo de IA, com proteção contra falsos positivos ("trinta segundos" não vira lista; a sequência precisa começar no primeiro)
+- Só ativa quando encontra 2 ou mais itens de verdade
+
 ## 2.04
 
 Entrada da headline do seu jeito.

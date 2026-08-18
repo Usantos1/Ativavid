@@ -208,6 +208,14 @@ const STYLE_CATALOG = {
       icon: '<svg viewBox="0 0 16 16"><path d="M3 13.2L13 3.2" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" fill="none"/><path d="M6.6 14L9.4 11.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none" opacity=".55"/><path d="M6.6 4.8L3.8 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none" opacity=".55"/></svg>',
     },
     {
+      // OFF por padrão: só faz sentido em vídeo de lista ("3 motivos…").
+      // Liga → badge 1º/2º/3º aparece sincronizado com a enumeração falada.
+      id: 'listCounter',
+      name: 'Contador de lista (1º, 2º…)',
+      def: false,
+      icon: '<svg viewBox="0 0 16 16"><rect x="1.6" y="2.2" width="4.4" height="4.4" rx="1.2"/><path d="M8.4 4.4h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/><rect x="1.6" y="9.4" width="4.4" height="4.4" rx="1.2" opacity=".55"/><path d="M8.4 11.6h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none" opacity=".55"/></svg>',
+    },
+    {
       // OFF por padrão: emoji divide opiniões — é uma decisão da marca,
       // não um padrão do produto. Mapa curado PT, no máximo 1 a cada 6s.
       id: 'emojiCaptions',

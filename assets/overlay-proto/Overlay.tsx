@@ -9,6 +9,7 @@ import {StackedCaptions} from './StackedCaptions';
 import {ScatterCaptions} from './ScatterCaptions';
 import {SimpleCaptions, SIMPLE_VARIANTS} from './SimpleCaptions';
 import {ImpactCaptions} from './ImpactCaptions';
+import {ListCounter} from './ListCounter';
 import {EndCard, HookIntro, Inserts, Karaoke} from './Main';
 import editData from '../public/edit-data.json';
 
@@ -23,6 +24,7 @@ export const Overlay: React.FC = () => {
     <AbsoluteFill style={{backgroundColor: 'transparent'}}>
       <Inserts />
       <CustomGraphics />
+      <ListCounter />
       {D.hook?.enabled ? <HookIntro /> : null}
       {D.captions?.enabled
         ? D.captions.style === 'stacked'

@@ -2900,6 +2900,20 @@ def run(
             hk["answerAtSec"] = round(answer_at, 3)
             hk["endSec"] = round(
                 min(duration, max(float(hk.get("endSec") or 4.0), answer_at + 3.0)), 3)
+        if (preset.get("elements") or {}).get("listCounter"):
+            try:
+                from app.list_counter import detect_list_markers
+
+                _lc_words = json.loads(caps_path.read_text(encoding="utf-8-sig"))
+                _lc = detect_list_markers(_lc_words if isinstance(_lc_words, list) else [])
+                if _lc:
+                    edit_data["listMarkers"] = _lc
+                    print(f"[lista] {len(_lc)} marcadores: "
+                          + ", ".join(f"{m['n']}º@{m['atSec']:.1f}s" for m in _lc), flush=True)
+                else:
+                    print("[lista] contador ligado, mas sem enumeração na fala", flush=True)
+            except Exception as e:  # noqa: BLE001
+                print(f"[warn] contador de lista: {e}", flush=True)
         edit_data = _attach_auto_broll(edit_data, public, preset, cut_spoken, duration)
         if zoom_baked:
             from app.ffmpeg_zoom import flatten_remotion_camera
