@@ -226,6 +226,9 @@ def _system_prompt(preset: dict | None = None) -> str:
         "- Também devolva headline curta (máx 6 palavras) em \"headline\" E mais "
         "2 alternativas com ângulos DIFERENTES (curiosidade, benefício, urgência…) "
         "em \"headlineAlts\".\n"
+        "- Devolva também \"headlineQuestion\" (pergunta curta que o vídeo "
+        "responde, máx 6 palavras, terminada em ?) e \"headlineAnswer\" "
+        "(a resposta em máx 5 palavras).\n"
         "- Responda SOMENTE JSON válido (sem markdown, sem prosa).\n\n"
         f"PARÂMETROS DO PRESET:\n{extra}\n"
         "FORMATO:\n"
@@ -454,6 +457,14 @@ def plan_cut(
         "hook": (parsed.get("hook") if isinstance(parsed, dict) else None),
         "headline": (parsed.get("headline") if isinstance(parsed, dict) else None),
         "headlineAlts": alts,
+        "headlineQuestion": (
+            str(parsed.get("headlineQuestion") or "").strip()[:80]
+            if isinstance(parsed, dict) else ""
+        ),
+        "headlineAnswer": (
+            str(parsed.get("headlineAnswer") or "").strip()[:80]
+            if isinstance(parsed, dict) else ""
+        ),
         "notes": (parsed.get("notes") if isinstance(parsed, dict) else None),
         "rangeCount": len(ranges),
         "rawChars": len(text or ""),

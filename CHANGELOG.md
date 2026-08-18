@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.97
+
+Nova headline Pergunta → Resposta: o gancho de retenção clássico.
+
+- A pergunta abre o vídeo em branco; no momento em que a fala começa a responder, a **resposta entra numa pílula colorida** com efeito — a IA gera pergunta e resposta, e a virada é cronometrada pelo primeiro corte
+- No editor, clique na headline para editar **o que está na tela**: antes da virada edita a pergunta, depois edita a resposta
+- O "?" da pergunta é garantido automaticamente
+- Estilo disponível na aba Estilos, com preview do conceito
+
 ## 1.96
 
 Render incremental: corrigir headline ou palavra da legenda re-renderiza só o trecho afetado.

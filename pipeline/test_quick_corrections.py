@@ -414,3 +414,18 @@ if __name__ == "__main__":
     with tempfile.TemporaryDirectory() as d:
         test_legacy_project_opens_without_new_fields(Path(d))
     print("ok")
+
+
+def test_set_headline_answer_writes_hook_answer_lines(tmp_path):
+    import json
+    from app.quick_corrections import set_headline_answer
+
+    edit = tmp_path / "edit"
+    (edit / "remotion" / "public").mkdir(parents=True)
+    ed_path = edit / "remotion" / "public" / "edit-data.json"
+    ed_path.write_text(json.dumps({"hook": {"enabled": True, "lines": ["P?"]}}), encoding="utf-8")
+    r = set_headline_answer(edit, "Aguenta sim olha isso")
+    assert r["ok"] is True
+    data = json.loads(ed_path.read_text(encoding="utf-8"))
+    assert data["hook"]["answerLines"]
+    assert data["hook"]["lines"] == ["P?"]  # pergunta intacta

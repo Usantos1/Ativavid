@@ -65,7 +65,13 @@ export type EditData = {
     // "sombra": white text with a hard un-blurred offset in the accent.
     // "sublinhado": white text over a thick accent bar under each line.
     style?: 'outline' | 'card' | 'realce' | 'misto' | 'sombra' | 'sublinhado'
-      | 'pilula' | 'manchete' | 'carimbo';
+      | 'pilula' | 'manchete' | 'carimbo' | 'pergunta';
+    // "pergunta": two-phase hook. `lines` is the QUESTION (shown from 0);
+    // at answerAtSec the ANSWER pops in and holds until endSec. The pipeline
+    // aims answerAtSec at the end of the first kept range — where the speech
+    // starts answering.
+    answerLines?: string[];
+    answerAtSec?: number;
     accent?: string;        // realce/misto marker + text colour (default #ff5200)
     fontSizePx?: number;   // auto-fit CEILING (alias of maxFontPx, kept for compat)
     maxFontPx?: number;    // auto-fit ceiling (per-style default)
@@ -598,6 +604,10 @@ const HL_STYLES: Record<string, HlStyle> = {
   // room for the band's own margins + accent bar inside the 1080 frame.
   manchete: {weights: [800, 800], cap: 54, safeW: 780, lh: 1.14, top: 0},
   carimbo: {weights: [900, 900], cap: 80, safeW: 720, lh: 1.05, top: 300},
+  // "pergunta": weights[0] veste a pergunta (branca), weights[1] a resposta
+  // (pílula no accent). O cap fica abaixo dos irmãos porque as duas fases
+  // dividem a mesma banda e a resposta ganha padding próprio.
+  pergunta: {weights: [800, 900], cap: 84, safeW: 840, lh: 1.05, top: 300},
 };
 
 const hlWidth = (text: string, size: number, weight: number) =>
@@ -638,6 +648,7 @@ function fitHeadline(lines: [string, string], s: HlStyle): number {
 
 const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
   const f = useCurrentFrame();
+  const {fps} = useVideoConfig();
   const H = D.hook;
   const enter = interpolate(f, [0, 8], [0, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic)});
   const exit = interpolate(f, [totalFrames - 9, totalFrames], [1, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
@@ -668,6 +679,85 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
     // visibly instead of quietly wrapping into a third line
     whiteSpace: 'nowrap',
   };
+
+  // "pergunta": two-phase retention hook. The QUESTION opens the video in
+  // plain white; at answerAtSec it hands off to the ANSWER, a realce-style
+  // pill in the accent that pops in — timed by the pipeline to land where
+  // the speech starts answering.
+  if (styleId === 'pergunta') {
+    const answerAt = Math.max(1, Math.round((H.answerAtSec ?? 2.5) * fps));
+    const inAnswer = f >= answerAt;
+    const aRaw = (H.answerLines || []).join(' ').trim() || raw;
+    const aLines = twoLines(aRaw, [900, 900]);
+    const aSize = fitHeadline(aLines, {...S, weights: [900, 900], cap});
+    const qOut = interpolate(f, [answerAt - 6, answerAt], [1, 0], {
+      extrapolateLeft: 'clamp',
+      extrapolateRight: 'clamp',
+    });
+    const aPop = interpolate(f, [answerAt, answerAt + 7], [0, 1], {
+      extrapolateLeft: 'clamp',
+      extrapolateRight: 'clamp',
+      easing: Easing.out(Easing.back(1.8)),
+    });
+    return (
+      <AbsoluteFill style={{justifyContent: 'flex-start', alignItems: 'center', paddingTop: top}}>
+        <Sfx src="whoosh.mp3" volume={0.1} />
+        {!inAnswer || qOut > 0.01 ? (
+          <div
+            style={{
+              ...shell,
+              opacity: Math.min(op, qOut),
+              fontWeight: 800,
+              fontSize: size,
+              color: '#fff',
+              padding: '0 60px',
+              textShadow: '0 6px 18px rgba(0,0,0,0.55)',
+              position: 'absolute',
+              top,
+            }}
+          >
+            {lines.filter(Boolean).map((l, i) => (<div key={i}>{l}</div>))}
+          </div>
+        ) : null}
+        {inAnswer ? (
+          <div
+            style={{
+              opacity: Math.min(aPop, exit),
+              transform: `scale(${(0.8 + 0.2 * aPop).toFixed(3)})`,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 10,
+              position: 'absolute',
+              top,
+              textAlign: 'center',
+              fontFamily,
+              lineHeight: lh,
+              letterSpacing: -1,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {aLines.filter(Boolean).map((l, i) => (
+              <div
+                key={i}
+                style={{
+                  background: H.accent ?? '#ff5200',
+                  color: '#fff',
+                  fontWeight: 900,
+                  fontSize: aSize,
+                  padding: '0.08em 0.3em 0.16em',
+                  borderRadius: 12,
+                  boxShadow: '0 10px 28px rgba(0,0,0,0.45)',
+                }}
+              >
+                {l}
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </AbsoluteFill>
+    );
+  }
 
   // "pilula": one compact line in a dark pill with an accent dot, pinned high
   // and PERSISTENT (endSec = whole video, set by the pipeline). No Sfx — a

@@ -2770,6 +2770,44 @@ def run(
         except Exception as e:  # noqa: BLE001
             print(f"[warn] headline options: {e}", flush=True)
         edit_data = build_edit_data(cut_path, preset, hook, duration, fps)
+        if str(preset.get("headline") or "") == "pergunta" and (edit_data.get("hook") or {}).get("enabled"):
+            # Duas fases: lines = PERGUNTA (com ? garantido), answerLines =
+            # RESPOSTA, e a virada mira o fim do primeiro corte — onde a fala
+            # começa a responder.
+            hk = edit_data["hook"]
+            q = apply_replacements_to_text(
+                str(llm_meta.get("headlineQuestion") or "").strip(), _text_fixes)
+            if q:
+                if not q.endswith("?"):
+                    q += "?"
+                qw = q.split()
+                qm = max(1, len(qw) // 2)
+                hk["lines"] = [" ".join(qw[:qm]), " ".join(qw[qm:]) or qw[-1]]
+            elif hk.get("lines"):
+                ls = [str(x) for x in hk["lines"]]
+                if ls and not ls[-1].strip().endswith("?"):
+                    ls[-1] = ls[-1].rstrip(".!…") + "?"
+                hk["lines"] = ls
+            ans = apply_replacements_to_text(
+                str(llm_meta.get("headlineAnswer") or "").strip(), _text_fixes)
+            if not ans:
+                alts = llm_meta.get("headlineAlts") or []
+                ans = str(alts[0]).strip() if alts else "A resposta está no vídeo"
+            aw = ans.split()
+            am = max(1, len(aw) // 2)
+            hk["answerLines"] = (
+                [" ".join(aw[:am]), " ".join(aw[am:])] if len(aw) > 3 else [ans]
+            )
+            first_len = 0.0
+            try:
+                r0 = (edl_ranges or [])[0]
+                first_len = max(0.0, float(r0.get("end") or 0) - float(r0.get("start") or 0))
+            except (IndexError, TypeError, ValueError, AttributeError):
+                first_len = 0.0
+            answer_at = max(1.5, min(first_len or 2.5, 6.0, duration * 0.4))
+            hk["answerAtSec"] = round(answer_at, 3)
+            hk["endSec"] = round(
+                min(duration, max(float(hk.get("endSec") or 4.0), answer_at + 3.0)), 3)
         edit_data = _attach_auto_broll(edit_data, public, preset, cut_spoken, duration)
         if zoom_baked:
             from app.ffmpeg_zoom import flatten_remotion_camera

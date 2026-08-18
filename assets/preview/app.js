@@ -163,6 +163,7 @@ const STYLE_CATALOG = {
     {id: 'pilula', name: 'Pílula', hl: 'pilula'},
     {id: 'manchete', name: 'Manchete', hl: 'manchete'},
     {id: 'carimbo', name: 'Carimbo', hl: 'carimbo'},
+    {id: 'pergunta', name: 'Pergunta → Resposta', hl: 'pergunta'},
     // opts out of the hook entirely (hook.enabled:false in edit-data.json) — a
     // real final look (talking-head cut, images placed by hand later), not a
     // placeholder, so it earns its own card and label like the mockups do.
@@ -375,6 +376,7 @@ const HL_STYLES = {
   pilula: { weights: [700, 700], cap: 44, safeW: 780, lh: 1.1 },
   manchete: { weights: [800, 800], cap: 54, safeW: 780, lh: 1.14 },
   carimbo: { weights: [900, 900], cap: 80, safeW: 720, lh: 1.05 },
+  pergunta: { weights: [800, 900], cap: 84, safeW: 840, lh: 1.05 },
 };
 
 // Measured in RENDER units (1080-wide), scaled to the box only at the end — the
@@ -482,6 +484,19 @@ function buildHeadlineDemo(host, styleId) {
     return;
   }
 
+  if (styleId === 'pergunta') {
+    // fase 1 (pergunta branca) + fase 2 (resposta na pílula do accent),
+    // empilhadas no card para comunicar a virada
+    const q = el('div', 'hl-pergunta-q', box);
+    q.style.fontSize = `${size * 0.72}px`;
+    q.textContent = 'Aguenta martelada?';
+    const a = el('div', 'hl-block hl-pergunta-a', box);
+    a.style.fontSize = `${size * 0.86}px`;
+    a.style.borderRadius = `${12 * s}px`;
+    a.style.marginTop = `${10 * s}px`;
+    a.textContent = 'Aguenta. Olha isso';
+    return;
+  }
   if (styleId === 'realce') {
     for (const l of lines) {
       if (!l) continue;
@@ -1631,9 +1646,36 @@ function isTypingContext() {
 }
 function isQuickEditing() { return isTypingContext(); }
 
-function commitHeadline(text) {
+// Estilo "pergunta": a headline tem duas fases; o editor edita a que está
+// NA TELA (pergunta antes de answerAtSec, resposta depois).
+function hlAnswerMode() {
+  if (((S.style && S.style.headline) || '') !== 'pergunta') return false;
+  const hook = (S.editData && S.editData.hook) || {};
+  const at = Number(hook.answerAtSec) || 2.5;
+  return (video.currentTime || 0) >= at;
+}
+
+function hlAnswerLines() {
+  const hook = (S.editData && S.editData.hook) || {};
+  return Array.isArray(hook.answerLines)
+    ? hook.answerLines.map((s) => String(s).trim()).filter(Boolean)
+    : [];
+}
+
+function commitHeadline(text, isAnswer) {
   const lines = String(text || '').split('\n').map((s) => s.trim()).filter(Boolean);
   if (!lines.length) return;
+  if (isAnswer) {
+    if (lines.join('\n') === hlAnswerLines().join('\n')) return;
+    pushHistory();
+    if (!S.editData) S.editData = {};
+    S.editData.hook = { ...(S.editData.hook || {}), answerLines: lines };
+    persistCorrection({ op: 'set_headline_answer', lines });
+    renderAll();
+    refreshHeader();
+    refreshProjectChrome();
+    return;
+  }
   if (lines.join('\n') === headlineLines().join('\n')) return;
   pushHistory();
   if (!S.editData) S.editData = {};
@@ -1647,7 +1689,8 @@ function commitHeadline(text) {
 function beginHeadlineEdit() {
   if (S.applying) return;
   const box = $('hlOverlay');
-  const cur = headlineLines().join('\n');
+  const answerMode = hlAnswerMode();
+  const cur = (answerMode && hlAnswerLines().length ? hlAnswerLines() : headlineLines()).join('\n');
   S.editingHeadline = true;
   if (box) {
     box.classList.remove('hidden');
@@ -1669,7 +1712,7 @@ function beginHeadlineEdit() {
       S.editingHeadline = false;
       line.contentEditable = 'false';
       line.removeEventListener('blur', finish);
-      if (!cancelled) commitHeadline(line.textContent);
+      if (!cancelled) commitHeadline(line.textContent, answerMode);
       else line.textContent = cur;
     };
     line.addEventListener('blur', finish);
@@ -1686,8 +1729,9 @@ function beginHeadlineEdit() {
     return;
   }
   S.editingHeadline = false;
-  const next = window.prompt('Headline deste vídeo', cur);
-  if (next != null) commitHeadline(next);
+  const next = window.prompt(
+    answerMode ? 'Resposta desta headline' : 'Headline deste vídeo', cur);
+  if (next != null) commitHeadline(next, answerMode);
 }
 
 function refreshQuickFixes() {
@@ -2442,7 +2486,7 @@ const normHex = (v) => {
 // sombra paints its offset with the accent, sublinhado paints the bar — both
 // genuinely consume the pick, so leaving them out would have the Estilo tab
 // report "este estilo não usa destaque" while the render plainly used it
-const HL_ACCENT_USERS = ['realce', 'misto', 'sombra', 'sublinhado', 'pilula', 'manchete', 'carimbo'];
+const HL_ACCENT_USERS = ['realce', 'misto', 'sombra', 'sublinhado', 'pilula', 'manchete', 'carimbo', 'pergunta'];
 const ACCENT_DEFAULT = '#FF0000';
 
 /* Three independent caption colour channels, each painting a different set of
@@ -3466,7 +3510,8 @@ function updateHlOverlay() {
   }
   box.classList.remove('hidden');
   if (editing) return;
-  const want = lines.join('\n');
+  const showLines = hlAnswerMode() && hlAnswerLines().length ? hlAnswerLines() : lines;
+  const want = showLines.join('\n');
   let line = box.querySelector('.hl-overlay-line');
   if (!line) {
     box.innerHTML = '';

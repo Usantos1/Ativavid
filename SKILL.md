@@ -324,9 +324,12 @@ and the UI opens its own tab, sitting between FASE 1 and FASE 2:
   `sublinhado`, `pilula` (one-line context pill pinned at the top for the
   WHOLE video — the pipeline stretches `hook.endSec` to the full duration),
   `manchete` (news band at the base, below the caption area), `carimbo`
-  (accent stamp with a slam entrance), or `nenhuma` ("Nenhuma" — no hook at
-  all, `hook.enabled:false`). Two lines fitted to the text, except `pilula`
-  (always one line).
+  (accent stamp with a slam entrance), `pergunta` (two-phase: `hook.lines`
+  is the QUESTION shown from 0; at `hook.answerAtSec` — aimed at the end of
+  the first kept range — the ANSWER in `hook.answerLines` pops in as an
+  accent pill and holds until `endSec`), or `nenhuma` ("Nenhuma" — no hook
+  at all, `hook.enabled:false`). Two lines fitted to the text, except
+  `pilula` (always one line).
 - **Estilo de legenda** — four animated (`karaoke`, `stacked`/"Empilhado",
   `scatter`/"Disperso", `impacto`/"Impacto" — UPPERCASE cues where the word
   being spoken sits in a solid emphasis-coloured box that pops in), five

@@ -220,6 +220,24 @@ def set_headline(edit_dir: Path, text_or_lines: Any) -> dict[str, Any]:
     return {"ok": True, "headline": lines, "corrections": corr}
 
 
+def set_headline_answer(edit_dir: Path, text_or_lines: Any) -> dict[str, Any]:
+    """Grava a RESPOSTA do estilo pergunta (hook.answerLines) neste projeto."""
+    lines = as_headline_lines(text_or_lines)
+    if not lines:
+        return {"ok": False, "error": "resposta vazia"}
+    prepare_correction(edit_dir)
+    path = edit_data_path(edit_dir)
+    data = _read_json(path, {})
+    if not isinstance(data, dict):
+        data = {}
+    hook = dict(data.get("hook") or {}) if isinstance(data.get("hook"), dict) else {}
+    hook["answerLines"] = lines
+    data["hook"] = hook
+    _write_json(path, data)
+    corr = mark_dirty(edit_dir, "headline")
+    return {"ok": True, "answer": lines, "corrections": corr}
+
+
 def fix_caption(edit_dir: Path, *, src: str, dst: str, **target: Any) -> dict[str, Any]:
     """Aplica o texto corrigido na fonte real da legenda. Preserva timings."""
     from app.caption_fixes import apply_caption_fixes
@@ -457,6 +475,8 @@ def handle(edit_dir: Path, body: dict[str, Any], *, hooks: Any = None) -> dict[s
         return busy
     if op in ("set_headline", "headline"):
         return set_headline(edit, body.get("lines") or body.get("text") or body.get("headline"))
+    if op in ("set_headline_answer", "headline_answer"):
+        return set_headline_answer(edit, body.get("lines") or body.get("text") or body.get("answer"))
     if op in ("fix_caption", "caption", "captions"):
         return fix_caption(
             edit,
