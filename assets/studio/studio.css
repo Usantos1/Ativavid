@@ -935,8 +935,10 @@ body.view-estilo-on .ws-head {
   gap: 8px;
   align-content: center;
   min-width: 0;
+  min-width: 0;
 }
-.pc-top { display: flex; justify-content: space-between; gap: 8px; align-items: start; }
+.pc-top { display: flex; justify-content: space-between; gap: 8px; align-items: start; min-width: 0; }
+.pc-top .chip { flex: 0 0 auto; }
 .pc-title-block {
   min-width: 0;
   display: grid;
@@ -1011,9 +1013,10 @@ body.view-estilo-on .ws-head {
   text-decoration-color: currentColor;
 }
 .project-card.error .pc-detail-btn { color: var(--bad); }
-.pc-actions { display: flex; gap: 8px; align-items: center; }
+.pc-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; min-width: 0; }
 .pc-actions .chip-btn.primary { flex: 1 1 auto; width: auto; min-width: 0; }
 .pc-actions .pc-more { flex: 0 0 auto; }
+.pc-actions .chip-btn.ghostish { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pc-links {
   display: flex;
   flex-wrap: wrap;

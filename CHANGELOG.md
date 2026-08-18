@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.11
+
+Correção: cards de Concluídos não estouram mais a borda.
+
+- Os botões novos (Pasta, Legenda) quebram linha quando o card é estreito, em vez de vazar para fora
+- O selo "CONCLUÍDO" não é mais cortado na borda do card
+
 ## 2.10
 
 Mais ritmos de corte, tipo Viral e a SUA fonte no sistema.
