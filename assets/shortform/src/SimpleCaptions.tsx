@@ -22,6 +22,7 @@ import {loadFont as loadInter} from '@remotion/google-fonts/Inter';
 import {measureText} from '@remotion/layout-utils';
 import captions from '../public/captions.json';
 import editData from '../public/edit-data.json';
+import {capFamily, capWeight} from './fonts';
 
 const POPPINS = loadPoppins('normal', {weights: ['600']}).fontFamily;
 const BASKERVILLE = loadBaskerville('normal', {weights: ['700']}).fontFamily;
@@ -211,6 +212,10 @@ export const SimpleCaptions: React.FC<{variant: string}> = ({variant}) => {
   const base = SIMPLE_VARIANTS[variant] ?? SIMPLE_VARIANTS.simples;
   const V: Variant = {
     ...base,
+    // fonte da marca (fonts.ts) — a medição de largura usa a MESMA família
+    // e peso efetivos, então as quebras de linha acompanham a troca
+    family: capFamily(base.family),
+    weight: capWeight(base.weight),
     size: Math.round(base.size * CAP_SCALE),
     bottom: POS_BOTTOM[(C as any).position as string] ?? base.bottom,
   };

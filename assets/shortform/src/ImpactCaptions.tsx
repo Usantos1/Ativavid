@@ -24,8 +24,11 @@ import {loadFont} from '@remotion/google-fonts/Poppins';
 import {measureText} from '@remotion/layout-utils';
 import captions from '../public/captions.json';
 import editData from '../public/edit-data.json';
+import {capFamily, capWeight} from './fonts';
 
-const {fontFamily} = loadFont('normal', {weights: ['800', '900']});
+const {fontFamily: _poppins} = loadFont('normal', {weights: ['800', '900']});
+const fontFamily = capFamily(_poppins);
+const W900 = capWeight(900);
 
 type Word = {text: string; startMs: number; endMs: number};
 
@@ -57,7 +60,7 @@ const widthOf = (words: Word[]) =>
     text: words.map((w) => clean(w.text)).join(' '),
     fontFamily,
     fontSize: SIZE,
-    fontWeight: 900,
+    fontWeight: W900,
   }).width;
 
 // One line per cue, grouped by measured width first, count second, breath
@@ -118,7 +121,7 @@ export const ImpactCaptions: React.FC = () => {
           gap: Math.round(SIZE * 0.22),
           alignItems: 'center',
           fontFamily,
-          fontWeight: 900,
+          fontWeight: W900,
           fontSize: SIZE,
           lineHeight: 1.08,
           whiteSpace: 'pre',

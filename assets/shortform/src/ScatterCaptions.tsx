@@ -28,7 +28,9 @@ import {measureText} from '@remotion/layout-utils';
 import captions from '../public/captions.json';
 import editData from '../public/edit-data.json';
 
-const {fontFamily} = loadFont('normal', {weights: ['400', '600']});
+const {fontFamily: _lora} = loadFont('normal', {weights: ['400', '600']});
+import {capFamily, capWeight} from './fonts';
+const fontFamily = capFamily(_lora);
 loadFont('italic', {weights: ['400', '600']});
 
 type Word = {text: string; startMs: number; endMs: number};
@@ -135,7 +137,7 @@ function buildCues(words: Word[]): Cue[] {
       const w = ln.reduce(
         (acc, p, k) =>
           acc +
-          measureText({text: clean(p.text), fontFamily, fontSize: p.size, fontWeight: 400}).width +
+          measureText({text: clean(p.text), fontFamily, fontSize: p.size, fontWeight: capWeight(400)}).width +
           (k ? WORD_GAP : 0),
         0,
       );
@@ -214,7 +216,7 @@ const CueView: React.FC<{cue: Cue; endFrame: number}> = ({cue, endFrame}) => {
                   style={{
                     ...(p.hi && HI_COLOR ? {color: HI_COLOR} : INK),
                     fontSize: p.size,
-                    fontWeight: p.hi ? 600 : 400,
+                    fontWeight: p.hi ? capWeight(600) : capWeight(400),
                     fontStyle: p.hi && hash(li * 7 + wi) > 0.65 ? 'italic' : 'normal',
                     opacity: t * (1 - out),
                     filter: `${blur > 0.4 ? `blur(${blur.toFixed(1)}px) ` : ''}drop-shadow(0 4px 14px rgba(0,0,0,0.5))`,

@@ -38,6 +38,13 @@ import {ImpactCaptions} from './ImpactCaptions';
 
 const {fontFamily} = loadFont('normal', {weights: ['400', '600', '900']});
 
+// Fonte da marca (edit-data → captions/hook.fontFamily). CAP_FF veste o
+// karaokê; HL_FF veste todas as headlines. Elementos gráficos (contador,
+// end card) e o stacked mantêm a tipografia assinada do template.
+import {capFamily, capWeight, hookFamily, hookWeight} from './fonts';
+const CAP_FF = capFamily(fontFamily);
+const HL_FF = hookFamily(fontFamily);
+
 // ============ TYPES + DATA ====================================================
 type Caption = {text: string; startMs: number; endMs: number};
 type Insert = {src: string; start: number; end: number};
@@ -73,6 +80,10 @@ export type EditData = {
     answerLines?: string[];
     answerAtSec?: number;
     accent?: string;        // realce/misto marker + text colour (default #ff5200)
+    // Fonte da marca para TODAS as headlines (id do catálogo em fonts.ts:
+    // poppins/inter/montserrat/playfair/lora/anton/bebas/archivo). Ausente =
+    // tipografia própria do template.
+    fontFamily?: string;
     fontSizePx?: number;   // auto-fit CEILING (alias of maxFontPx, kept for compat)
     maxFontPx?: number;    // auto-fit ceiling (per-style default)
     safeWidth?: number;    // auto-fit width budget (per-style default)
@@ -95,6 +106,9 @@ export type EditData = {
     // multiplicam a fonte por ele; karaoke/stacked/scatter recebem os knobs
     // próprios (fontSize/fontScale/scatterFontSize) já escalados.
     sizeScale?: number;
+    // Fonte da marca para as legendas (mesmo catálogo de fonts.ts). O
+    // "stacked" fica FORA — o empilhado é um design tipográfico próprio.
+    fontFamily?: string;
     // "Legenda" colour — the BASE text: karaoke's whole line, and the three
     // static styles (simples/serifada/classica). Stacked's white lines and
     // scatter's ink-gradient words are deliberately NOT tied to this — they
@@ -368,9 +382,9 @@ const Karaoke: React.FC = () => {
         const lineText = line.map((w) => cleanW(w.text)).join(' ');
         const {width} = measureText({
           text: lineText,
-          fontFamily,
+          fontFamily: CAP_FF,
           fontSize: C.fontSize,
-          fontWeight: 900,
+          fontWeight: capWeight(900),
           letterSpacing: '-1px',
         });
         // safe-margin fit: scale down so the line clears the platform action rail
@@ -380,8 +394,8 @@ const Karaoke: React.FC = () => {
             <CaptionShell fromFrame={from}>
               <div
                 style={{
-                  fontFamily,
-                  fontWeight: 900,
+                  fontFamily: CAP_FF,
+                  fontWeight: capWeight(900),
                   fontSize: C.fontSize,
                   color: C.accent ?? 'white',
                   lineHeight: 1,
@@ -612,7 +626,7 @@ const HL_STYLES: Record<string, HlStyle> = {
 
 const hlWidth = (text: string, size: number, weight: number) =>
   text
-    ? measureText({text, fontFamily, fontSize: size, fontWeight: weight, letterSpacing: '-1px'}).width
+    ? measureText({text, fontFamily: HL_FF, fontSize: size, fontWeight: hookWeight(weight), letterSpacing: '-1px'}).width
     : 0;
 
 // Balance by MEASURED width, not word count: "É assim que vai" and "ficar a sua
@@ -672,7 +686,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
     opacity: op,
     translate: `0px ${y}px`,
     textAlign: 'center',
-    fontFamily,
+    fontFamily: HL_FF,
     lineHeight: lh,
     letterSpacing: -1,
     // the two-line promise is structural: if a fit is ever off, this overflows
@@ -707,7 +721,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
             style={{
               ...shell,
               opacity: Math.min(op, qOut),
-              fontWeight: 800,
+              fontWeight: hookWeight(800),
               fontSize: size,
               color: '#fff',
               padding: '0 60px',
@@ -731,7 +745,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
               position: 'absolute',
               top,
               textAlign: 'center',
-              fontFamily,
+              fontFamily: HL_FF,
               lineHeight: lh,
               letterSpacing: -1,
               whiteSpace: 'nowrap',
@@ -743,7 +757,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
                 style={{
                   background: H.accent ?? '#ff5200',
                   color: '#fff',
-                  fontWeight: 900,
+                  fontWeight: hookWeight(900),
                   fontSize: aSize,
                   padding: '0.08em 0.3em 0.16em',
                   borderRadius: 12,
@@ -789,7 +803,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
               flex: '0 0 auto',
             }}
           />
-          <div style={{fontFamily, fontWeight: 700, fontSize: sz, color: '#fff', letterSpacing: -0.5, whiteSpace: 'nowrap', lineHeight: 1.1}}>
+          <div style={{fontFamily: HL_FF, fontWeight: hookWeight(700), fontSize: sz, color: '#fff', letterSpacing: -0.5, whiteSpace: 'nowrap', lineHeight: 1.1}}>
             {one}
           </div>
         </div>
@@ -819,7 +833,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
           }}
         >
           <div style={{width: 12, borderRadius: 6, background: H.accent ?? '#ff5200', flex: '0 0 auto'}} />
-          <div style={{fontFamily, fontWeight: 800, fontSize: size, color: '#fff', lineHeight: lh, letterSpacing: -1, textAlign: 'left', whiteSpace: 'nowrap'}}>
+          <div style={{fontFamily: HL_FF, fontWeight: hookWeight(800), fontSize: size, color: '#fff', lineHeight: lh, letterSpacing: -1, textAlign: 'left', whiteSpace: 'nowrap'}}>
             {lines.filter(Boolean).map((l, i) => (<div key={i}>{l}</div>))}
           </div>
         </div>
@@ -870,7 +884,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
               style={{
                 background: H.accent ?? '#ff5200',
                 color: '#fff',
-                fontWeight: 900,
+                fontWeight: hookWeight(900),
                 fontSize: size,
                 padding: '0.08em 0.3em 0.16em',
                 borderRadius: 12,
@@ -890,8 +904,8 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
       <AbsoluteFill style={{justifyContent: 'flex-start', alignItems: 'center', paddingTop: top}}>
         <Sfx src="whoosh.mp3" volume={0.1} />
         <div style={{...shell, filter: 'drop-shadow(0 6px 16px rgba(0,0,0,0.55))'}}>
-          <div style={{fontWeight: 400, fontSize: size, color: '#fff'}}>{lines[0]}</div>
-          <div style={{fontWeight: 900, fontSize: size, color: H.accent ?? '#ff5200'}}>{lines[1]}</div>
+          <div style={{fontWeight: hookWeight(400), fontSize: size, color: '#fff'}}>{lines[0]}</div>
+          <div style={{fontWeight: hookWeight(900), fontSize: size, color: H.accent ?? '#ff5200'}}>{lines[1]}</div>
         </div>
       </AbsoluteFill>
     );
@@ -908,7 +922,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
               {H.sign ? <Img src={staticFile(H.sign)} style={{width: 128, filter: 'drop-shadow(0 8px 20px rgba(0,0,0,0.45))'}} /> : null}
             </div>
           ) : null}
-          <div style={{background: '#232326', borderRadius: 24, padding: '28px 46px', textAlign: 'center', fontFamily, fontWeight: 900, fontSize: size, color: '#fff', lineHeight: lh, letterSpacing: -1, textShadow: '0 4px 20px rgba(0,0,0,0.55)', boxShadow: '0 18px 50px rgba(0,0,0,0.45)'}}>
+          <div style={{background: '#232326', borderRadius: 24, padding: '28px 46px', textAlign: 'center', fontFamily: HL_FF, fontWeight: hookWeight(900), fontSize: size, color: '#fff', lineHeight: lh, letterSpacing: -1, textShadow: '0 4px 20px rgba(0,0,0,0.55)', boxShadow: '0 18px 50px rgba(0,0,0,0.45)'}}>
             {lines.filter(Boolean).map((l, i) => (<div key={i}>{l}</div>))}
           </div>
         </div>
@@ -928,7 +942,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
         <div
           style={{
             ...shell,
-            fontWeight: 900,
+            fontWeight: hookWeight(900),
             fontSize: size,
             color: '#fff',
             padding: '0 60px',
@@ -971,7 +985,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
               <div
                 style={{
                   position: 'relative',
-                  fontWeight: 900,
+                  fontWeight: hookWeight(900),
                   fontSize: size,
                   color: '#fff',
                   textShadow: '0 4px 16px rgba(0,0,0,0.55)',
@@ -993,7 +1007,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
       <div
         style={{
           ...shell,
-          fontWeight: 800,
+          fontWeight: hookWeight(800),
           fontSize: size,
           color: '#fff',
           WebkitTextStroke: `${stroke}px #000`,

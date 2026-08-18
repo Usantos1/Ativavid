@@ -20,7 +20,7 @@
 <!-- Poppins italic 900 + Playfair italic 900 are NOT decoration here: the caption
      previews render the real template styles, and the stacked style is built out
      of exactly these faces (see STACK_MIXED in StackedCaptions.tsx). -->
-<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Sora:wght@600;700;800&family=Poppins:ital,wght@0,400;0,600;0,700;0,800;0,900;1,900&family=Playfair+Display:ital,wght@1,900&family=Lora:ital,wght@0,400;0,600;1,400;1,600&family=Libre+Baskerville:wght@700&family=Inter:wght@500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Sora:wght@600;700;800&family=Poppins:ital,wght@0,400;0,600;0,700;0,800;0,900;1,900&family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,900&family=Lora:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Libre+Baskerville:wght@700&family=Inter:wght@400;500;600;800;900&family=Montserrat:wght@400;600;800;900&family=Anton&family=Bebas+Neue&family=Archivo+Black&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/studio/studio.css">
 <link rel="stylesheet" href="/assets/app.css">
 </head>
@@ -364,6 +364,32 @@
               <option value="p">Pequena</option>
               <option value="m" selected>Média</option>
               <option value="g">Grande</option>
+            </select>
+          </label>
+          <label class="auto-field">Fonte da legenda
+            <select id="autoCapFont">
+              <option value="" selected>Padrão do estilo</option>
+              <option value="poppins">Poppins</option>
+              <option value="inter">Inter</option>
+              <option value="montserrat">Montserrat</option>
+              <option value="playfair">Playfair Display</option>
+              <option value="lora">Lora</option>
+              <option value="anton">Anton</option>
+              <option value="bebas">Bebas Neue</option>
+              <option value="archivo">Archivo Black</option>
+            </select>
+          </label>
+          <label class="auto-field">Fonte da headline
+            <select id="autoHlFont">
+              <option value="" selected>Padrão do estilo</option>
+              <option value="poppins">Poppins</option>
+              <option value="inter">Inter</option>
+              <option value="montserrat">Montserrat</option>
+              <option value="playfair">Playfair Display</option>
+              <option value="lora">Lora</option>
+              <option value="anton">Anton</option>
+              <option value="bebas">Bebas Neue</option>
+              <option value="archivo">Archivo Black</option>
             </select>
           </label>
         </div>

@@ -2898,6 +2898,8 @@ $('setupGo').addEventListener('click', async () => {
       captionChunk: S.style.captionChunk || 'frase_curta',
       captionPosition: S.style.captionPosition || 'baixo',
       captionSize: S.style.captionSize || 'm',
+      captionFont: S.style.captionFont || null,
+      headlineFont: S.style.headlineFont || null,
       exportPreset: S.style.exportPreset || 'reels',
       colorGrade: S.style.colorGrade || 'marca',
       endCardCopy: S.endCardCopy || null,
@@ -2988,6 +2990,8 @@ $('setupGo').addEventListener('click', async () => {
     captionChunk: S.style.captionChunk || 'frase_curta',
     captionPosition: S.style.captionPosition || 'baixo',
     captionSize: S.style.captionSize || 'm',
+    captionFont: S.style.captionFont || null,
+    headlineFont: S.style.headlineFont || null,
     exportPreset: S.style.exportPreset || 'reels',
     colorGrade: S.style.colorGrade || 'marca',
   };
@@ -3091,6 +3095,8 @@ $('setupSaveDefault').addEventListener('click', async () => {
     captionChunk: S.style.captionChunk || 'frase_curta',
     captionPosition: S.style.captionPosition || 'baixo',
     captionSize: S.style.captionSize || 'm',
+    captionFont: S.style.captionFont || null,
+    headlineFont: S.style.headlineFont || null,
     exportPreset: S.style.exportPreset || 'reels',
     colorGrade: S.style.colorGrade || 'marca',
     smartEmphasis: S.style.smartEmphasis !== false,
@@ -3463,6 +3469,13 @@ function updateCapOverlay() {
   const ink = V.ink === 'slab' ? inkOn(S.style.captionAccent || '#111214')
             : V.ink === 'accent' ? (S.style.captionAccent || '#f4f1e9')
             : '#fff';
+  // fonte da marca — mesmo catálogo do render (fonts.ts)
+  const FONT_CSS = {
+    poppins: "'Poppins',sans-serif", inter: "'Inter',sans-serif",
+    montserrat: "'Montserrat',sans-serif", playfair: "'Playfair Display',serif",
+    lora: "'Lora',serif", anton: "'Anton',sans-serif",
+    bebas: "'Bebas Neue',sans-serif", archivo: "'Archivo Black',sans-serif",
+  };
   // posição/tamanho do preset — mesmo mapa do render (_apply_caption_geometry)
   const capPos = S.style.captionPosition || 'baixo';
   const posBottom = capPos === 'centro' ? 900 : capPos === 'alto' ? 1330 : V.bottom;
@@ -3478,7 +3491,7 @@ function updateCapOverlay() {
   box.dataset.sig = sig;
   box.innerHTML = '';
   const line = el('div', 'cap-overlay-line' + (V.ink === 'slab' ? ' slab' : ''), box);
-  line.style.fontFamily = V.family;
+  line.style.fontFamily = (style !== 'stacked' && FONT_CSS[S.style.captionFont]) || V.family;
   line.style.fontWeight = String(V.weight);
   line.style.fontSize = `${V.size * capScale * s}px`;
   line.style.color = ink;
@@ -4676,6 +4689,8 @@ function refreshAutoControls() {
     ['autoCaptionChunk', 'captionChunk', 'frase_curta'],
     ['autoCapPosition', 'captionPosition', 'baixo'],
     ['autoCapSize', 'captionSize', 'm'],
+    ['autoCapFont', 'captionFont', ''],
+    ['autoHlFont', 'headlineFont', ''],
     ['autoContentType', 'contentType', 'informational'],
   ];
   for (const [id, key, def] of map) {
@@ -4782,6 +4797,8 @@ function wireAutoControls() {
     ['autoCaptionChunk', 'captionChunk'],
     ['autoCapPosition', 'captionPosition'],
     ['autoCapSize', 'captionSize'],
+    ['autoCapFont', 'captionFont'],
+    ['autoHlFont', 'headlineFont'],
     ['autoContentType', 'contentType'],
   ];
   for (const [id, key] of map) {
@@ -5563,6 +5580,8 @@ function currentStyleSnapshot() {
     captionChunk: S.style?.captionChunk,
     captionPosition: S.style?.captionPosition,
     captionSize: S.style?.captionSize,
+    captionFont: S.style?.captionFont,
+    headlineFont: S.style?.headlineFont,
     exportPreset: S.style?.exportPreset,
     colorGrade: S.style?.colorGrade,
     endCardCopy: S.endCardCopy || null,

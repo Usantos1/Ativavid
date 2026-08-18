@@ -1505,6 +1505,7 @@ def build_edit_data(cut: Path, preset: dict, hook: list[str], duration: float, f
     if circ and captions == "stacked":
         ed["captions"]["circleAccent"] = circ
     _apply_caption_geometry(ed, preset)
+    _apply_brand_fonts(ed, preset)
 
     chunk = (preset.get("captionChunk") or "frase_curta").lower()
     if chunk in ("palavra", "word"):
@@ -1890,6 +1891,21 @@ def _apply_caption_geometry(ed: dict, preset: dict) -> None:
         cap["scatterOffsetY"] = _CAP_POS_SCATTER[pos]
     cap["position"] = pos
     ed["captions"] = cap
+
+
+# IDs do catálogo de fontes do template (assets/shortform/src/fonts.ts).
+# Valor fora do catálogo é descartado — o template ignoraria e a UI mentiria.
+_FONT_IDS = {"poppins", "inter", "montserrat", "playfair", "lora", "anton", "bebas", "archivo"}
+
+
+def _apply_brand_fonts(ed: dict, preset: dict) -> None:
+    """captionFont/headlineFont do preset → fontFamily no edit-data."""
+    cf = str(preset.get("captionFont") or "").strip().lower()
+    hf = str(preset.get("headlineFont") or "").strip().lower()
+    if cf in _FONT_IDS:
+        ed.setdefault("captions", {})["fontFamily"] = cf
+    if hf in _FONT_IDS:
+        ed.setdefault("hook", {})["fontFamily"] = hf
 
 
 _MUSIC_VIBES = {

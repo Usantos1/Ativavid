@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.99
+
+Fonte da marca: escolha a tipografia das legendas e das headlines.
+
+- Em Estilos → Personalizar: **Fonte da legenda** e **Fonte da headline**, com 8 opções (Poppins, Inter, Montserrat, Playfair Display, Lora, Anton, Bebas Neue, Archivo Black) ou "Padrão do estilo"
+- Vale para todos os estilos de headline e de legenda — as quebras de linha são medidas na fonte escolhida, nada estoura
+- Fontes de peso único (Anton, Bebas, Archivo Black) nunca ganham negrito falso borrado
+- O estilo Empilhado mantém a tipografia própria (ele é um design de fontes por natureza)
+- O preview do editor mostra a fonte real; a escolha fica salva no preset da marca
+
 ## 1.98
 
 Clipes de podcast: um vídeo longo vira vários Reels de uma vez.

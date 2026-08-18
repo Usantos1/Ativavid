@@ -54,3 +54,16 @@ def test_valores_invalidos_caem_no_padrao():
     cap = ed["captions"]
     assert cap["fontSize"] == 76
     assert cap["paddingBottom"] == 420
+
+
+def test_brand_fonts_validated_against_catalog():
+    from run_fast import _apply_brand_fonts
+
+    ed = _base_ed()
+    _apply_brand_fonts(ed, {"captionFont": "bebas", "headlineFont": "Archivo"})
+    assert ed["captions"]["fontFamily"] == "bebas"
+    assert ed["hook"]["fontFamily"] == "archivo"
+    ed2 = _base_ed()
+    _apply_brand_fonts(ed2, {"captionFont": "comic-sans", "headlineFont": ""})
+    assert "fontFamily" not in ed2["captions"]
+    assert "hook" not in ed2
