@@ -58,6 +58,8 @@ REASON_LABELS = {
     "color_uncertain": "Cor ambígua (LOG?) — precisa revisão",
     "no_speech": "Não achou fala no áudio",
     "black_frames": "Frames pretos no corte",
+    "clips_plan_failed": "A IA não conseguiu dividir em clipes — tente de novo",
+    "clips_spawn_failed": "Falha ao criar os clipes na Fila",
 }
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]|\x1b\].*?\x07|\x1b.")
@@ -1101,6 +1103,72 @@ class Worker:
                 result = json.loads((edit_dir / "result.json").read_text(encoding="utf-8-sig"))
             except json.JSONDecodeError:
                 result = {}
+
+        if returncode == 0 and result.get("status") == "clips_planned":
+            # Job mãe de "Clipes de podcast": materializa um projeto por clipe
+            # e enfileira cada um como job comum. Idempotente via marker.
+            spawned_marker = edit_dir / "clips_spawned.json"
+            children: list[dict] = []
+            if not spawned_marker.exists():
+                try:
+                    from app.podcast_clips import materialize_clip_projects
+
+                    plan_data = json.loads(
+                        (edit_dir / "clips_plan.json").read_text(encoding="utf-8-sig"))
+                    from app.editing_intent import load as load_intent_clips
+
+                    mother_intent = load_intent_clips(edit_dir) or {}
+                    children = materialize_clip_projects(
+                        self.store.root,
+                        Path(job["source"]),
+                        plan_data.get("clips") or [],
+                        intent=mother_intent,
+                    )
+                    created = _utc()
+                    for ch in children:
+                        child_job = {
+                            "id": ch["id"],
+                            "name": ch["name"],
+                            "title": ch["name"],
+                            "titleLocked": True,
+                            "source": ch["source"],
+                            "sources": [ch["source"]],
+                            "editDir": ch["editDir"],
+                            "projectDir": ch["projectDir"],
+                            "status": "queued",
+                            "message": "Na fila · clipe",
+                            "phase": 0,
+                            "createdAt": created,
+                            "updatedAt": created,
+                        }
+                        self.store.upsert(child_job)
+                        self.enqueue(ch["id"])
+                        threading.Thread(
+                            target=ensure_job_thumb, args=(child_job,),
+                            daemon=True, name=f"thumb-{ch['id']}",
+                        ).start()
+                    spawned_marker.write_text(
+                        json.dumps({"jobs": [c["id"] for c in children]}),
+                        encoding="utf-8",
+                    )
+                except Exception as e:  # noqa: BLE001
+                    self.store.update(
+                        job_id,
+                        status="error",
+                        message=friendly_error(f"clipes: {e}"),
+                        reason="clips_spawn_failed",
+                        detail=strip_ansi(str(e))[:2000],
+                    )
+                    return
+            n = len(children) or int(result.get("clips") or 0)
+            self.store.update(
+                job_id,
+                status="done",
+                message=f"Dividido em {n} clipes — veja a Fila",
+                phase=3,
+                finishedAt=_utc(),
+            )
+            return
 
         if returncode == 0 and result.get("status") in ("done", "cut_ready"):
             legenda = ""

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.98
+
+Clipes de podcast: um vídeo longo vira vários Reels de uma vez.
+
+- Nova opção na importação: **Clipes de podcast** — a IA analisa o vídeo inteiro (até 2 horas), separa de 2 a 6 clipes independentes e cria **um vídeo próprio na Fila para cada um**, com headline própria
+- Cada clipe começa num gancho e termina numa conclusão — nunca no meio de uma frase, e sem sobreposição entre clipes
+- Os clipes herdam a marca, o tipo de conteúdo e as proteções escolhidas na importação
+- O vídeo original não é duplicado no disco (os clipes apontam para o mesmo arquivo)
+- Por enquanto funciona com vídeos verticais (9:16); vídeo de câmera deitada segue a regra atual
+
 ## 1.97
 
 Nova headline Pergunta → Resposta: o gancho de retenção clássico.

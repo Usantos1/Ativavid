@@ -10,7 +10,7 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 
-INTENTS = ("complete", "dynamic", "shorts")
+INTENTS = ("complete", "dynamic", "shorts", "clips")
 INTENT_FILE = "job_intent.json"
 
 # Vídeo ≥ isto (segundos) recomenda "Editar vídeo completo"
@@ -41,6 +41,14 @@ DEFAULTS = {
         "preserveContext": True,
     },
     "shorts": {
+        "preserveHook": False,
+        "preserveCTA": False,
+        "preserveCompleteSentences": True,
+        "preserveContext": True,
+    },
+    # "clips": o job mãe só analisa e divide — cada clipe filho roda como
+    # "dynamic". As flags valem para os filhos.
+    "clips": {
         "preserveHook": False,
         "preserveCTA": False,
         "preserveCompleteSentences": True,

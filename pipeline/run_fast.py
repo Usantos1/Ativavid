@@ -2170,7 +2170,9 @@ def run(
     except Exception:
         _intent = None
     intent_mode = str((preset or {}).get("editingIntent") or "").lower()
-    if allow_landscape:
+    if intent_mode == "clips":
+        max_dur = 7200  # podcast/aula: o job mãe só analisa e divide
+    elif allow_landscape:
         max_dur = 1800
     elif intent_mode == "complete":
         max_dur = 1800
@@ -2302,6 +2304,34 @@ def run(
 
     _timing_mark("ANALYZE", _t_phase)  # probes + transcrição + regiões/voz/cor
     _t_phase = time.perf_counter()
+
+    if intent_mode == "clips":
+        # Job mãe: só divide. O Worker materializa um projeto por clipe
+        # (preview_edits.json com os ranges) e cada filho roda como job comum.
+        print("[clips] dividindo o vídeo em clipes independentes", flush=True)
+        set_stage(edit_dir, "planning", "Separando os clipes…", 45)
+        packed_p = edit_dir / "takes_packed.md"
+        try:
+            packed = packed_p.read_text(encoding="utf-8-sig") if packed_p.exists() else spoken
+        except OSError:
+            packed = spoken
+        try:
+            from app.llm_session import chat as _clips_chat
+            from app.podcast_clips import plan_clips
+
+            clips = plan_clips(
+                edit_dir, packed=packed, duration=dur,
+                regions=regions, chat_fn=_clips_chat,
+            )
+        except Exception as e:  # noqa: BLE001
+            raise NeedsReview("clips_plan_failed", str(e)[:300])
+        _timing_mark("PLAN", _t_phase)
+        set_stage(edit_dir, "exporting", f"Criando {len(clips)} clipes na Fila…", 96)
+        status["status"] = "clips_planned"
+        status["clips"] = len(clips)
+        print(f"[clips] {len(clips)} clipes planejados", flush=True)
+        return status
+
     print("[2b/9] montando corte", flush=True)
     set_stage(edit_dir, "planning", "Montando o corte…", 35)
     llm_meta: dict = {"ok": False}
@@ -2310,6 +2340,17 @@ def run(
     ranges = load_preview_edit_ranges(edit_dir, source_key)
     if ranges:
         llm_meta = {"ok": True, "backend": "preview_edits"}
+        # Clipe de podcast: o preview_edits do filho carrega a headline do
+        # clipe — vira o hook em vez do fallback de primeiras palavras.
+        try:
+            pe_applied = edit_dir / "preview_edits.applied.json"
+            if pe_applied.exists():
+                pe_data = json.loads(pe_applied.read_text(encoding="utf-8-sig"))
+                pe_hl = str(pe_data.get("headline") or "").strip()
+                if pe_hl:
+                    llm_meta["headline"] = pe_hl[:80]
+        except (OSError, json.JSONDecodeError):
+            pass
         print(f"[edits] corte do editor · {len(ranges)} takes", flush=True)
         set_stage(edit_dir, "planning", "Aplicando seus ajustes…", 38)
     elif len(sources) == 1:
