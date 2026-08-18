@@ -89,6 +89,12 @@ class DesktopHandler(ps.Handler):
         if not path.exists() or not path.is_file():
             self._json({"error": "not found"}, 404)
             return
+        # Vídeo/arquivo grande: streaming com HTTP Range (herdado do preview
+        # server). O caminho antigo lia o MP4 INTEIRO para a RAM (300 MB por
+        # request) e sem Accept-Ranges o player não conseguia pular de posição.
+        if path.suffix.lower() in (".mp4", ".mov", ".webm", ".m4v") or path.stat().st_size > (4 << 20):
+            self._send_file(path)
+            return
         data = path.read_bytes()
         ctype = ctype or mimetypes.guess_type(str(path))[0] or "application/octet-stream"
         self.send_response(200)

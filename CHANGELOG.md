@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.06
+
+Vídeo em Concluídos com seek instantâneo e sem pesar na memória.
+
+- Dá para **pular para qualquer ponto** do vídeo pronto na visualização — antes o player só tocava do início
+- O app **não carrega mais o vídeo inteiro na memória** para exibir (um final de 300 MB usava 300 MB de RAM por visualização; agora vai em pedaços de 64 KB)
+- Verificado byte a byte no servidor real
+
 ## 2.05
 
 Contador de lista: o 1º, 2º, 3º aparece na tela sozinho.
