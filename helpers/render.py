@@ -429,7 +429,8 @@ def _memo_by_stat(fn):
             st = Path(video).stat()
         except OSError:
             return fn(video, *args, **kwargs)
-        key = (str(video), st.st_mtime_ns, st.st_size)
+        key = (str(video), st.st_mtime_ns, st.st_size,
+               args, tuple(sorted(kwargs.items())))
         if key not in cache:
             cache[key] = fn(video, *args, **kwargs)
         return cache[key]
@@ -598,6 +599,23 @@ def shortform_target_fps(video: Path) -> str:
     matches Instagram/TikTok/Shorts capture); slower sources keep the 24 standard.
     """
     return "30" if source_fps(video) >= 29.5 else "24"
+
+
+def _auto_extract_jobs() -> int:
+    """Parallel extraction slots when --jobs isn't given.
+
+    The app exports the performance profile's choice as ATIVAVID_EXTRACT_JOBS
+    (Econômico=1, Balanceado≈cores/3, Desempenho≈cores/2); honoring it here is
+    what makes the profile actually change extraction. Standalone runs keep the
+    historical cores/3 heuristic, capped at 4.
+    """
+    try:
+        n = int(os.environ.get("ATIVAVID_EXTRACT_JOBS", "0"))
+        if n > 0:
+            return n
+    except ValueError:
+        pass
+    return max(1, min(4, (os.cpu_count() or 4) // 3))
 
 
 # -------- Per-segment extraction (Rule 2 + Rule 3) --------------------------
@@ -887,7 +905,7 @@ def extract_all_segments(
         stale.unlink(missing_ok=True)
 
     if jobs <= 0:
-        jobs = max(1, min(4, (os.cpu_count() or 4) // 3))
+        jobs = _auto_extract_jobs()
     print(f"extracting {len(ranges)} segment(s) → {clips_dir.name}/  ({jobs} parallel)")
     try:
         from app.ffmpeg_zoom import zoom_enabled, zoom_for_index
@@ -1006,15 +1024,19 @@ def jcut_settings(edl: dict, fps: int) -> dict | None:
     }
 
 
-def _silence_edges(source: Path, start: float, end: float,
-                   noise_db: int = -35) -> tuple[list[float], list[float], float]:
-    """Return (silence_starts, silence_ends, clip_dur) relative to the extract."""
-    dur = max(0.0, end - start)
-    if dur <= 0.02:
-        return [], [], dur
+@_memo_by_stat
+def _full_silence_edges(source: Path,
+                        noise_db: int = -35) -> tuple[list[float], list[float], float]:
+    """silencedetect over the WHOLE source, once, at the J-cut's own params.
+
+    plan_jcut queries one range at a time, which used to spawn one serial
+    ffmpeg decode per range over the same file. The full-file scan costs one
+    audio decode and every range projects its answer from it. Phase-1's
+    speech_regions map is NOT reused here on purpose: it detects at
+    -33dB/d=0.10 while the tail trim needs -35dB/d=0.02.
+    """
     r = _run(
-        ["ffmpeg", "-hide_banner", "-nostats", "-ss", f"{start:.6f}",
-         "-t", f"{dur:.6f}", "-i", str(source), "-vn",
+        ["ffmpeg", "-hide_banner", "-nostats", "-i", str(source), "-vn",
          "-af", f"silencedetect=noise={noise_db}dB:d=0.02", "-f", "null", "-"],
         capture_output=True, text=True)
     starts: list[float] = []
@@ -1030,6 +1052,42 @@ def _silence_edges(source: Path, start: float, end: float,
                 ends.append(float(line.rsplit("silence_end:", 1)[1].split()[0]))
             except (ValueError, IndexError):
                 pass
+    try:
+        src_dur = probe_duration(source)
+    except Exception:
+        src_dur = 0.0
+    return starts, ends, src_dur
+
+
+def _silence_edges(source: Path, start: float, end: float,
+                   noise_db: int = -35) -> tuple[list[float], list[float], float]:
+    """Return (silence_starts, silence_ends, clip_dur) relative to the extract.
+
+    Projected from the cached full-file scan: silences are clamped to the
+    window and shifted to extract-relative time. A silence still running at
+    the window's end yields a start with no matching end — the same shape the
+    old per-range detector produced.
+    """
+    dur = max(0.0, end - start)
+    if dur <= 0.02:
+        return [], [], dur
+    abs_starts, abs_ends, src_dur = _full_silence_edges(source, noise_db=noise_db)
+    # silencedetect alternates start/end; a file that ends in silence has one
+    # unmatched start, whose silence runs to EOF.
+    eof = src_dur if src_dur > 0 else end
+    intervals = [
+        (s, abs_ends[i] if i < len(abs_ends) else eof)
+        for i, s in enumerate(abs_starts)
+    ]
+    starts: list[float] = []
+    ends: list[float] = []
+    for a, b in intervals:
+        lo, hi = max(a, start), min(b, end)
+        if hi - lo < 0.02:  # same d=0.02 floor the per-range detector applied
+            continue
+        starts.append(lo - start)
+        if b <= end - 1e-6:  # speech resumed inside the window → end event
+            ends.append(hi - start)
     return starts, ends, dur
 
 
@@ -1208,6 +1266,74 @@ def extract_and_assemble_jcut(
         "clips_draft" if draft else ("clips_preview" if preview else "clips_graded"))
     clips_dir.mkdir(parents=True, exist_ok=True)
 
+    plan = plan_jcut(edl, edit_dir, cfg)
+    if jobs <= 0:
+        jobs = _auto_extract_jobs()
+
+    # Render incremental: um re-render que só mudou parte do corte reaproveita
+    # os segmentos idênticos da extração anterior (casados por CHAVE de
+    # conteúdo — fonte+mtime+range+grade+zoom+flags — nunca por nome).
+    # A extração é determinística por chave, então o arquivo é byte-equivalente.
+    encoder_env = os.environ.get("ATIVAVID_ENCODER") or ""
+
+    def _seg_key(kind: str, src: Path, a: float, b: float, extra: list) -> str:
+        try:
+            st = src.stat()
+            ident = f"{src}|{st.st_mtime_ns}|{st.st_size}"
+        except OSError:
+            ident = str(src)
+        return json.dumps(
+            [kind, ident, round(a, 6), round(b, 6), extra],
+            sort_keys=True, default=str,
+        )
+
+    try:
+        from app.ffmpeg_zoom import zoom_for_index as _zoom_key_fn
+    except ImportError:
+        _zoom_key_fn = lambda _edl, _i: None  # noqa: E731
+
+    # Sobra de um crash entre o rename para .keep e a restauração — só lixo.
+    for orphan in clips_dir.glob("seg_*.keep"):
+        orphan.unlink(missing_ok=True)
+
+    old_by_key: dict[str, Path] = {}
+    for sidecar in clips_dir.glob("seg_*.segkey"):
+        media = sidecar.with_suffix("")
+        if media.exists():
+            try:
+                old_by_key[sidecar.read_text(encoding="utf-8")] = media
+            except OSError:
+                pass
+
+    keep: list[tuple[Path, Path]] = []  # (temp, destino final)
+    reuse_hits = 0
+    for p in plan:
+        i, r = p["i"], p["range"]
+        vkey = _seg_key(
+            "v", p["src"], p["v_in"], p["v_out"],
+            [str(edl.get("grade") or ""), _zoom_key_fn(edl, i),
+             preview, draft, keep_resolution, encoder_env],
+        )
+        akey = _seg_key(
+            "a", p["src"], p["a_in"], p["a_out"],
+            [float(r.get("gain_db", 0.0) or 0.0), r.get("gain_windows") or [],
+             r.get("bleep_windows") or [], preview, draft],
+        )
+        p["_vkey"], p["_akey"] = vkey, akey
+        vpath = clips_dir / f"seg_{i:02d}_{r['source']}_v.mp4"
+        apath = clips_dir / f"seg_{i:02d}_{r['source']}_a.wav"
+        for key, dest, flag in ((vkey, vpath, "reuse_v"), (akey, apath, "reuse_a")):
+            srcf = old_by_key.pop(key, None)
+            if srcf is not None:
+                tmp = clips_dir / (dest.name + ".keep")
+                try:
+                    os.replace(srcf, tmp)
+                except OSError:
+                    continue
+                keep.append((tmp, dest))
+                p[flag] = True
+                reuse_hits += 1
+
     # Clear EVERY old segment, not just the other mode's. Two ways this folder goes
     # stale and both are invisible downstream, because segments.json is built by
     # globbing it: the butt-join mode writes seg_NN_*.mp4 next to the J-cut's
@@ -1215,12 +1341,18 @@ def extract_and_assemble_jcut(
     # leaves the higher-numbered segments of the previous cut behind. Measured: a
     # 3-range EDL over a stale 4th segment gave segments.json 9.23s for a 7.57s
     # video — it renders without error and every overlay lands wrong.
-    for stale in list(clips_dir.glob("seg_*.mp4")) + list(clips_dir.glob("seg_*.wav")):
+    # (Os reusados já foram movidos para *.keep e voltam com o nome NOVO abaixo,
+    # então o invariante "a pasta contém exatamente o plano atual" se mantém.)
+    for stale in (
+        list(clips_dir.glob("seg_*.mp4")) + list(clips_dir.glob("seg_*.wav"))
+        + list(clips_dir.glob("seg_*.segkey"))
+    ):
         stale.unlink(missing_ok=True)
-
-    plan = plan_jcut(edl, edit_dir, cfg)
-    if jobs <= 0:
-        jobs = max(1, min(4, (os.cpu_count() or 4) // 3))
+    for tmp, dest in keep:
+        os.replace(tmp, dest)
+    if reuse_hits:
+        print(f"  reuso: {reuse_hits}/{2 * len(plan)} segmentos aproveitados da extração anterior",
+              flush=True)
 
     lead_ms = round(cfg["lead_frames"] / cfg["fps"] * 1000)
     print(f"J-cut: áudio entra {cfg['lead_frames']}f ({lead_ms}ms) antes da imagem"
@@ -1244,15 +1376,17 @@ def extract_and_assemble_jcut(
         bleep_windows = r.get("bleep_windows") or []
         vpath = clips_dir / f"seg_{i:02d}_{r['source']}_v.mp4"
         apath = clips_dir / f"seg_{i:02d}_{r['source']}_a.wav"
-        extract_segment(p["src"], p["v_in"], p["v_out"] - p["v_in"], seg_filter,
-                        vpath, preview=preview, draft=draft,
-                        keep_resolution=keep_resolution, streams="v",
-                        zoom=zoom_for_index(edl, i))
-        extract_segment(p["src"], p["a_in"], p["a_out"] - p["a_in"], "",
-                        apath, preview=preview, draft=draft,
-                        keep_resolution=keep_resolution, gain_db=gain_db,
-                        gain_windows=gain_windows, bleep_windows=bleep_windows,
-                        streams="a")
+        if not p.get("reuse_v"):
+            extract_segment(p["src"], p["v_in"], p["v_out"] - p["v_in"], seg_filter,
+                            vpath, preview=preview, draft=draft,
+                            keep_resolution=keep_resolution, streams="v",
+                            zoom=zoom_for_index(edl, i))
+        if not p.get("reuse_a"):
+            extract_segment(p["src"], p["a_in"], p["a_out"] - p["a_in"], "",
+                            apath, preview=preview, draft=draft,
+                            keep_resolution=keep_resolution, gain_db=gain_db,
+                            gain_windows=gain_windows, bleep_windows=bleep_windows,
+                            streams="a")
         p["video_path"], p["audio_path"] = vpath, apath
 
         tail_note = ""
@@ -1266,9 +1400,13 @@ def extract_and_assemble_jcut(
             gain_note += f"  +{len(gain_windows)} janela(s)"
         if bleep_windows:
             gain_note += f"  {len(bleep_windows)} apito(s)"
+        reuse_note = ""
+        if p.get("reuse_v") or p.get("reuse_a"):
+            reuse_note = "  reuso:" + ("v" if p.get("reuse_v") else "") + \
+                ("a" if p.get("reuse_a") else "")
         print(f"  [{i:02d}] {r['source']}  v {p['v_in']:7.2f}-{p['v_out']:7.2f}"
               f"  a {p['a_in']:7.2f}-{p['a_out']:7.2f}"
-              f"  {r.get('beat') or ''}{tail_note}{gain_note}", flush=True)
+              f"  {r.get('beat') or ''}{tail_note}{gain_note}{reuse_note}", flush=True)
         return p
 
     if jobs == 1 or len(plan) == 1:
@@ -1276,6 +1414,15 @@ def extract_and_assemble_jcut(
     else:
         with ThreadPoolExecutor(max_workers=jobs) as ex:
             plan = list(ex.map(work, plan))
+
+    # Sidecars de chave só depois da extração bem-sucedida: um crash no meio
+    # nunca deixa chave apontando para arquivo incompleto.
+    for p in plan:
+        for flag_key, media in (("_vkey", p["video_path"]), ("_akey", p["audio_path"])):
+            try:
+                Path(str(media) + ".segkey").write_text(p[flag_key], encoding="utf-8")
+            except OSError:
+                pass
 
     assemble_jcut(plan, base_path, edit_dir)
     return plan
@@ -1392,14 +1539,18 @@ LOUDNORM_TP = -1.0
 LOUDNORM_LRA = 11.0
 
 
-def measure_loudness(video_path: Path) -> dict[str, str] | None:
+def measure_loudness(video_path: Path, pre_chain: str = "") -> dict[str, str] | None:
     """Run ffmpeg loudnorm first pass and parse the JSON measurement.
+
+    `pre_chain` (e.g. the voice-master chain) is applied before the meter, so
+    the measurement matches what the fused apply pass will normalize.
 
     Returns a dict with measured_i, measured_tp, measured_lra, measured_thresh,
     target_offset, or None if measurement failed.
     """
     filter_str = (
-        f"loudnorm=I={LOUDNORM_I}:TP={LOUDNORM_TP}:LRA={LOUDNORM_LRA}:print_format=json"
+        (f"{pre_chain}," if pre_chain else "")
+        + f"loudnorm=I={LOUDNORM_I}:TP={LOUDNORM_TP}:LRA={LOUDNORM_LRA}:print_format=json"
     )
     cmd = [
         "ffmpeg", "-y", "-hide_banner", "-nostats",
@@ -1474,8 +1625,13 @@ def apply_loudnorm_two_pass(
     input_path: Path,
     output_path: Path,
     preview: bool = False,
+    pre_chain: str = "",
 ) -> bool:
     """Run two-pass loudnorm on input_path, write normalized copy to output_path.
+
+    `pre_chain` fuses an upstream filter chain (voice master) into the same
+    encode: the measurement pass meters through it and the apply pass runs it
+    before loudnorm — one AAC encode instead of two files and two encodes.
 
     Returns True on success, False if measurement failed (caller should fall
     back to copying the input unchanged).
@@ -1483,6 +1639,7 @@ def apply_loudnorm_two_pass(
     In preview mode, skips the measurement pass and uses a one-pass approximation
     for speed. Final mode always does the proper two-pass.
     """
+    pre = f"{pre_chain}," if pre_chain else ""
     if preview:
         # One-pass approximation — faster, slightly less accurate.
         filter_str = f"loudnorm=I={LOUDNORM_I}:TP={LOUDNORM_TP}:LRA={LOUDNORM_LRA}"
@@ -1492,7 +1649,7 @@ def apply_loudnorm_two_pass(
             "-c:v", "copy",
             # apad: if loudnorm audio ends a few ms early, -shortest must NOT
             # amputate video frames (that caused "segments sum Nf != cut.mp4 Mf").
-            "-af", f"{filter_str},apad",
+            "-af", f"{pre}{filter_str},apad",
             "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
             "-shortest",
             "-movflags", "+faststart",
@@ -1504,10 +1661,11 @@ def apply_loudnorm_two_pass(
 
     # Full two-pass
     print(f"  loudnorm pass 1: measuring {input_path.name}")
-    measurement = measure_loudness(input_path)
+    measurement = measure_loudness(input_path, pre_chain=pre_chain)
     if measurement is None:
         print("  loudnorm measurement failed — falling back to 1-pass")
-        return apply_loudnorm_two_pass(input_path, output_path, preview=True)
+        return apply_loudnorm_two_pass(
+            input_path, output_path, preview=True, pre_chain=pre_chain)
 
     print(f"    measured: I={measurement['input_i']} LUFS  "
           f"TP={measurement['input_tp']}  LRA={measurement['input_lra']}")
@@ -1525,7 +1683,7 @@ def apply_loudnorm_two_pass(
         "ffmpeg", "-y", "-hide_banner", "-nostats",
         "-i", str(input_path),
         "-c:v", "copy",
-        "-af", f"{filter_str},apad",
+        "-af", f"{pre}{filter_str},apad",
         "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
         # With apad, audio never ends first — -shortest stops on video end,
         # so we keep every picture frame and still clip any audio overrun.
@@ -1556,8 +1714,10 @@ def build_final_composite(
     has_subs = subtitles_path is not None and subtitles_path.exists()
 
     if not has_overlays and not has_subs:
-        # Nothing to do — just rename/copy base to final name
-        run(["ffmpeg", "-y", "-i", str(base_path), "-c", "copy", str(out_path)], quiet=True)
+        # Nothing to draw — a remux here rewrites the whole file for identical
+        # bytes, so just move it. base.mp4 has no consumers after this point
+        # (it only appears in skip-lists) and is rebuilt fresh on every run.
+        os.replace(base_path, out_path)
         return
 
     inputs: list[str] = ["-i", str(base_path)]
@@ -1803,26 +1963,25 @@ def main() -> None:
         # Composite directly to final output
         build_final_composite(base_path, overlays, subs_path, out_path, edit_dir)
     else:
-        # Composite to a temp file, then optional voice master → optional loudnorm.
+        # Composite to a temp file, then voice master + loudnorm in ONE encode.
         tmp_composite = out_path.with_suffix(".prenorm.mp4")
         build_final_composite(base_path, overlays, subs_path, tmp_composite, edit_dir)
         temps = [tmp_composite]
 
-        norm_input = tmp_composite
-        if voice_master:
-            print("voice mastering → EQ + compression + de-ess (spoken word)")
-            voiced = out_path.with_suffix(".voiced.mp4")
-            apply_voice_master(tmp_composite, voiced)
-            norm_input = voiced
-            temps.append(voiced)
-
         if args.no_loudnorm:
-            # Voice master requested but loudnorm skipped: the mastered file is final.
-            norm_input.replace(out_path)
-            temps = [t for t in temps if t != norm_input]
+            # Voice master requested but loudnorm skipped: master alone is final.
+            print("voice mastering → EQ + compression + de-ess (spoken word)")
+            apply_voice_master(tmp_composite, out_path)
         else:
-            print("loudness normalization → social-ready (-14 LUFS / -1 dBTP / LRA 11)")
-            apply_loudnorm_two_pass(norm_input, out_path, preview=args.draft)
+            # Fusing the chains avoids writing a .voiced.mp4 intermediate AND
+            # re-encoding its AAC a second time in the loudnorm pass.
+            if voice_master:
+                print("voice mastering + loudness normalization (fused, one encode)")
+            else:
+                print("loudness normalization → social-ready (-14 LUFS / -1 dBTP / LRA 11)")
+            apply_loudnorm_two_pass(
+                tmp_composite, out_path, preview=args.draft,
+                pre_chain=VOICE_MASTER_CHAIN if voice_master else "")
 
         for t in temps:
             t.unlink(missing_ok=True)

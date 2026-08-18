@@ -160,9 +160,16 @@
     refreshJobCounts();
     wireWindowChrome();
     setInterval(() => {
+      // /api/jobs varre o disco no servidor — não martelar com o app oculto.
+      if (document.hidden) return;
       refreshJobCounts().catch(() => {});
       refreshHint().catch(() => {});
     }, 2500);
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) return;
+      refreshJobCounts().catch(() => {});
+      refreshHint().catch(() => {});
+    });
   };
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", boot);

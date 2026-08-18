@@ -53,6 +53,7 @@ MIN_KEEP_SEC = 3.0
 CUT_ACTIONS = {"trim_range", "remove_range", "set_duration_max"}
 CUT_INTENT_RE = re.compile(
     r"\b(corta|cortar|tira|tirar|remove|remover|apaga|apagar|"
+    r"exclui|excluir|elimina|eliminar|reduz|reduzir|"
     r"encurta|encurtar|diminui|diminuir|trim|"
     r"deixa\s+s[oó]|s[oó]\s+os?\s+(primeiros?|[uú]ltimos?)|"
     r"[uú]ltimos?\s+\d+|primeiros?\s+\d+|no\s+m[aá]ximo\s+\d+)\b",

@@ -902,6 +902,135 @@ def _jpeg_is_dark(jpg: Path) -> bool:
     return False
 
 
+def _second_keyframe_time(path: Path) -> float:
+    """pts do 2º keyframe do vídeo (0.0 se não houver um nos primeiros ~15s)."""
+    try:
+        proc = _run_tool(
+            [
+                _ffprobe_exe(), "-v", "error", "-select_streams", "v:0",
+                "-read_intervals", "%+15",
+                "-show_entries", "packet=pts_time,flags",
+                "-of", "csv=p=0", str(path),
+            ],
+            capture_output=True, text=True, timeout=30,
+        )
+        for line in (proc.stdout or "").splitlines():
+            parts = line.strip().split(",")
+            if len(parts) >= 2 and "K" in parts[1]:
+                try:
+                    t = float(parts[0])
+                except ValueError:
+                    continue
+                if t > 0.01:
+                    return t
+    except Exception:
+        pass
+    return 0.0
+
+
+def _seal_cover_head_splice(final: Path, cover: Path, edit_dir: Path) -> bool:
+    """Carimba a capa no frame 0 re-encodando SÓ o primeiro GOP.
+
+    A cauda entra por -c copy a partir do 2º keyframe e o áudio original é
+    reaproveitado intacto. O resultado só substitui o final se a contagem de
+    frames, a duração E um decode completo sem erros baterem — qualquer falha
+    devolve False e o chamador cai no re-encode total (comportamento antigo).
+    """
+    kf = _second_keyframe_time(final)
+    if not (0.1 < kf < 15.0):
+        return False
+    head = edit_dir / "_seal_head.mp4"
+    tail = edit_dir / "_seal_tail.mp4"
+    joined = edit_dir / "_seal_join.mp4"
+    lst = edit_dir / "_seal_concat.txt"
+    work = edit_dir / "_final_cover.mp4"
+    tmp = [head, tail, joined, lst, work]
+    try:
+        want_frames = _count_frames(final)
+        want_dur = _ffprobe_duration(final)
+        r1 = _run_tool(
+            [
+                _ffmpeg_exe(), "-y", "-hide_banner", "-loglevel", "error",
+                "-i", str(final), "-i", str(cover),
+                "-filter_complex", "[0:v][1:v]overlay=0:0:enable='eq(n,0)'[v]",
+                "-map", "[v]", "-an", "-t", f"{kf:.6f}",
+                "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+                "-pix_fmt", "yuv420p", str(head),
+            ],
+            capture_output=True, timeout=120,
+        )
+        r2 = _run_tool(
+            [
+                _ffmpeg_exe(), "-y", "-hide_banner", "-loglevel", "error",
+                "-ss", f"{kf:.6f}", "-i", str(final),
+                "-map", "0:v", "-c:v", "copy", "-an", str(tail),
+            ],
+            capture_output=True, timeout=60,
+        )
+        if r1.returncode != 0 or r2.returncode != 0:
+            return False
+        lst.write_text(
+            f"file '{head.resolve()}'\nfile '{tail.resolve()}'\n", encoding="utf-8"
+        )
+        r3 = _run_tool(
+            [
+                _ffmpeg_exe(), "-y", "-hide_banner", "-loglevel", "error",
+                "-f", "concat", "-safe", "0", "-i", str(lst),
+                "-c", "copy", str(joined),
+            ],
+            capture_output=True, timeout=60,
+        )
+        if r3.returncode != 0 or not joined.is_file():
+            return False
+        r4 = _run_tool(
+            [
+                _ffmpeg_exe(), "-y", "-hide_banner", "-loglevel", "error",
+                "-i", str(joined), "-i", str(final),
+                "-map", "0:v", "-map", "1:a?",
+                "-c", "copy", "-movflags", "+faststart", str(work),
+            ],
+            capture_output=True, timeout=60,
+        )
+        if r4.returncode != 0 or not work.is_file() or work.stat().st_size < 1000:
+            return False
+        got_frames = _count_frames(work)
+        got_dur = _ffprobe_duration(work)
+        if want_frames and got_frames != want_frames:
+            print(
+                f"[warn] cover splice: frames {got_frames} != {want_frames} — re-encode total",
+                flush=True,
+            )
+            return False
+        if want_dur and abs(got_dur - want_dur) > 0.05:
+            print(
+                f"[warn] cover splice: duração {got_dur:.3f}s != {want_dur:.3f}s — re-encode total",
+                flush=True,
+            )
+            return False
+        # A emenda mistura extradata de encoders diferentes; um decode completo
+        # sem erros é o que garante que players não vão quebrar depois do corte.
+        chk = _run_tool(
+            [
+                _ffmpeg_exe(), "-v", "error", "-i", str(work), "-f", "null", "-",
+            ],
+            capture_output=True, text=True, timeout=300,
+        )
+        if chk.returncode != 0 or (chk.stderr or "").strip():
+            print("[warn] cover splice: decode com erros — re-encode total", flush=True)
+            return False
+        work.replace(final)
+        return True
+    except Exception as e:
+        print(f"[warn] cover splice: {e}", flush=True)
+        return False
+    finally:
+        for p in tmp:
+            try:
+                p.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+
 def seal_delivery_cover(edit_dir: Path, final: Path) -> Path:
     """Capa = primeiro frame com imagem. Grava cover.jpg, thumb e embute no MP4.
 
@@ -938,7 +1067,8 @@ def seal_delivery_cover(edit_dir: Path, final: Path) -> Path:
         pass
 
     work = edit_dir / "_final_cover.mp4"
-    if chosen_t > 0:
+    if chosen_t > 0 and not _seal_cover_head_splice(final, cover, edit_dir):
+        # Fallback: re-encode total (comportamento antigo).
         try:
             proc = _run_tool(
                 [
@@ -2115,6 +2245,53 @@ def run(
                 zoom_baked = True
                 print("FFMPEG_ZOOM extract=on", flush=True)
 
+    # Antecipações: trilha IA (rede, 20-60s) e scaffold Remotion (disco) não
+    # dependem do cut — rodam em paralelo com o render do corte e as legendas.
+    import threading as _threading
+
+    music_thread = None
+    music_tmp = edit_dir / "_trilha_ai.mp3"
+    music_tmp.unlink(missing_ok=True)
+    music_vibe = (
+        "calm cinematic instrumental bed, soft piano and pads, 90 bpm, no vocals"
+        if is_longform else
+        "upbeat modern brazilian pop instrumental, light guitars and soft drums, "
+        "120 bpm, warm confident mood, no vocals"
+    )
+    if elems.get("musicAI"):
+        # O J-cut e o polimento só ENCURTAM a timeline, então a duração
+        # planejada é >= a final e a trilha nunca sai curta (+2s de margem).
+        planned_keep = sum(
+            max(0.0, float(r.get("end") or 0) - float(r.get("start") or 0))
+            for r in ranges
+        )
+        if planned_keep >= 3:
+            def _music_worker() -> None:
+                _helper(
+                    "elevenlabs_music.py", music_vibe,
+                    "-o", str(music_tmp),
+                    "--length-sec", str(int(planned_keep) + 2),
+                    check=False,
+                )
+
+            music_thread = _threading.Thread(
+                target=_music_worker, daemon=True, name="music-ai")
+            music_thread.start()
+            print("[7/9] soundtrack antecipada (em paralelo)", flush=True)
+
+    _scaffold_box: dict = {}
+
+    def _scaffold_worker() -> None:
+        try:
+            _scaffold_box["remotion"] = scaffold_remotion(
+                edit_dir, track="longform" if is_longform else "shortform")
+        except Exception as e:  # noqa: BLE001
+            _scaffold_box["error"] = e
+
+    scaffold_thread = _threading.Thread(
+        target=_scaffold_worker, daemon=True, name="scaffold")
+    scaffold_thread.start()
+
     print("[3/9] render cut.mp4")
     set_stage(edit_dir, "cutting", "Criando a edição…", 48)
     cut_path = edit_dir / "cut.mp4"
@@ -2166,6 +2343,11 @@ def run(
     )
 
     if skip_phase2:
+        # Não deixar as antecipações órfãs: o scaffold parcial seria refeito,
+        # mas esperar aqui mantém o estado em disco consistente.
+        scaffold_thread.join(timeout=120)
+        if music_thread is not None:
+            music_thread.join(timeout=240)
         status["status"] = "cut_ready"
         return status
 
@@ -2174,7 +2356,14 @@ def run(
     print(f"[4/9] scaffold Remotion ({track})")
     set_stage(edit_dir, "visuals", "Preparando legendas e visual…", 62)
     _t_bundle = time.perf_counter()
-    remotion = scaffold_remotion(edit_dir, track=track)
+    scaffold_thread.join(timeout=300)
+    remotion = _scaffold_box.get("remotion")
+    if remotion is None:
+        # Thread falhou ou estourou o tempo — tentativa síncrona (a antiga).
+        err = _scaffold_box.get("error")
+        if err:
+            print(f"[warn] scaffold antecipado falhou: {err} — refazendo", flush=True)
+        remotion = scaffold_remotion(edit_dir, track=track)
     _timing_mark("REMOTION_BUNDLE", _t_bundle)
     public = remotion / "public"
     # Dense keyframes matter for OffthreadVideo; sparse GOPs from concat fail mid-render.
@@ -2192,8 +2381,15 @@ def run(
     _timing_mark("REMOTION_GATE", _t_gate)
 
     print("[5/9] captions from cut")
-    _helper("transcribe.py", str(cut_path), "--edit-dir", str(edit_dir), "--language", language)
-    cut_spoken = transcript_text(edit_dir, "cut") or spoken
+    if is_longform:
+        # Longform gera .srt/chapters do transcript do corte — precisa transcrever.
+        _helper("transcribe.py", str(cut_path), "--edit-dir", str(edit_dir), "--language", language)
+        cut_spoken = transcript_text(edit_dir, "cut") or spoken
+    else:
+        # Shortform: as palavras da fonte já foram transcritas na fase 1 e o
+        # remap pelo EDL não custa rede. Transcrever o corte de novo virou
+        # fallback (abaixo). cut_spoken é refinado após gerar as legendas.
+        cut_spoken = spoken
 
     fps_raw = _ffprobe_fps(cut_path)
     if is_longform:
@@ -2233,31 +2429,16 @@ def run(
     else:
         cut_tr = edit_dir / "transcripts" / "cut.json"
         edl_path = edit_dir / "edl.json"
-        # Groq/Whisper often stretches OR truncates word times vs the real cut —
-        # either breaks full-video karaoke. Prefer EDL remap from the source then.
-        use_edl_caps = False
-        timing_issue = None
-        if cut_tr.exists() and duration > 0:
-            try:
-                sys.path.insert(0, str(HELPERS))
-                from captions_for_remotion import transcript_timing_issue  # type: ignore
-
-                timing_issue = transcript_timing_issue(cut_tr, duration)
-                if timing_issue in ("overrun", "underrun", "empty"):
-                    use_edl_caps = True
-                    print(
-                        f"[warn] transcript do cut ({timing_issue}) — "
-                        "legendas via EDL (fonte)",
-                        flush=True,
-                    )
-            except Exception as e:  # noqa: BLE001
-                print(f"[warn] caption mode check: {e}", flush=True)
+        caps_path = public / "captions.json"
+        # ATIVAVID_TRANSCRIBE_CUT=1 força o comportamento antigo (sempre
+        # transcrever o corte) — válvula de escape do rollout do remap-first.
+        force_cut_tr = os.environ.get("ATIVAVID_TRANSCRIBE_CUT") == "1"
 
         def _write_caps_from_edl() -> None:
             _helper(
                 "captions_for_remotion.py",
                 str(edl_path),
-                "-o", str(public / "captions.json"),
+                "-o", str(caps_path),
                 "--max-sec", f"{duration:.6f}",
             )
 
@@ -2265,39 +2446,77 @@ def run(
             _helper(
                 "captions_for_remotion.py",
                 "--transcript", str(cut_tr),
-                "-o", str(public / "captions.json"),
+                "-o", str(caps_path),
                 "--max-sec", f"{duration:.6f}",
             )
 
-        if use_edl_caps and edl_path.exists():
+        def _caps_data() -> list:
+            try:
+                return json.loads(caps_path.read_text(encoding="utf-8")) if caps_path.exists() else []
+            except Exception:
+                return []
+
+        def _coverage_ok() -> bool:
+            try:
+                sys.path.insert(0, str(HELPERS))
+                from captions_for_remotion import captions_coverage_ok  # type: ignore
+
+                data = _caps_data()
+                if not data:
+                    return False
+                return duration <= 1 or captions_coverage_ok(data, duration)
+            except Exception as e:  # noqa: BLE001
+                print(f"[warn] caption coverage check: {e}", flush=True)
+                return True
+
+        # Remap-first: reusa o transcript da fonte (fase 1) remapeado pelo EDL —
+        # zero rede. Transcrever o corte é o fallback quando o remap não cobre.
+        edl_ok = False
+        if edl_path.exists() and not force_cut_tr:
             _write_caps_from_edl()
+            edl_ok = _coverage_ok()
+            if not edl_ok:
+                print("[warn] remap via EDL cobre pouco — transcrevendo o corte", flush=True)
+
+        if edl_ok:
+            # cut_spoken deve refletir só as palavras que FICARAM no corte
+            # (b-roll, gancho, legenda do post e score dependem disso).
+            joined = " ".join(
+                str(c.get("text") or "").strip() for c in _caps_data() if c.get("text")
+            ).strip()
+            if joined:
+                cut_spoken = joined
         else:
-            _write_caps_from_cut()
+            _helper("transcribe.py", str(cut_path), "--edit-dir", str(edit_dir), "--language", language)
+            cut_spoken = transcript_text(edit_dir, "cut") or spoken
+            # Groq/Whisper often stretches OR truncates word times vs the real
+            # cut — either breaks full-video karaoke. Prefer EDL remap then.
+            timing_issue = None
+            if cut_tr.exists() and duration > 0:
+                try:
+                    sys.path.insert(0, str(HELPERS))
+                    from captions_for_remotion import transcript_timing_issue  # type: ignore
 
-        # If captions still stop early, force EDL remap once.
-        try:
-            sys.path.insert(0, str(HELPERS))
-            from captions_for_remotion import captions_coverage_ok  # type: ignore
-
-            caps_path = public / "captions.json"
-            caps_data = json.loads(caps_path.read_text(encoding="utf-8")) if caps_path.exists() else []
-            if duration > 1 and not captions_coverage_ok(caps_data, duration):
-                if edl_path.exists() and not use_edl_caps:
-                    print(
-                        "[warn] legendas cobrem só o começo — regenerando via EDL",
-                        flush=True,
-                    )
-                    _write_caps_from_edl()
-                    caps_data = json.loads(caps_path.read_text(encoding="utf-8"))
-                if not captions_coverage_ok(caps_data, duration):
-                    last = max((c.get("endMs") or 0) for c in caps_data) / 1000 if caps_data else 0
-                    print(
-                        f"[warn] cobertura de legendas fraca "
-                        f"(última palavra {last:.1f}s / cut {duration:.1f}s)",
-                        flush=True,
-                    )
-        except Exception as e:  # noqa: BLE001
-            print(f"[warn] caption coverage check: {e}", flush=True)
+                    timing_issue = transcript_timing_issue(cut_tr, duration)
+                except Exception as e:  # noqa: BLE001
+                    print(f"[warn] caption mode check: {e}", flush=True)
+            if timing_issue in ("overrun", "underrun", "empty") and edl_path.exists():
+                print(
+                    f"[warn] transcript do cut ({timing_issue}) — "
+                    "legendas via EDL (fonte)",
+                    flush=True,
+                )
+                _write_caps_from_edl()
+            else:
+                _write_caps_from_cut()
+            if not _coverage_ok():
+                data = _caps_data()
+                last = max((c.get("endMs") or 0) for c in data) / 1000 if data else 0
+                print(
+                    f"[warn] cobertura de legendas fraca "
+                    f"(última palavra {last:.1f}s / cut {duration:.1f}s)",
+                    flush=True,
+                )
 
         try:
             from app.caption_fixes import apply_caption_fixes, load_stored_fixes
@@ -2389,19 +2608,20 @@ def run(
     music = bool(elems.get("musicAI"))
     if music:
         print("[7/9] soundtrack")
-        vibe = (
-            "calm cinematic instrumental bed, soft piano and pads, 90 bpm, no vocals"
-            if is_longform else
-            "upbeat modern brazilian pop instrumental, light guitars and soft drums, "
-            "120 bpm, warm confident mood, no vocals"
-        )
-        _helper(
-            "elevenlabs_music.py", vibe,
-            "-o", str(public / "trilha.mp3"),
-            "--length-sec", str(int(duration) + 2),
-            check=False,
-        )
-        if (public / "trilha.mp3").exists():
+        trilha = public / "trilha.mp3"
+        if music_thread is not None:
+            music_thread.join(timeout=240)
+        if music_tmp.exists() and music_tmp.stat().st_size > 1000:
+            os.replace(music_tmp, trilha)
+        else:
+            # Antecipada falhou (rede/planned<3s) — chamada síncrona antiga.
+            _helper(
+                "elevenlabs_music.py", music_vibe,
+                "-o", str(trilha),
+                "--length-sec", str(int(duration) + 2),
+                check=False,
+            )
+        if trilha.exists():
             edit_data["soundtrack"]["enabled"] = True
             (public / "edit-data.json").write_text(
                 json.dumps(edit_data, indent=2, ensure_ascii=False), encoding="utf-8"
@@ -2409,6 +2629,7 @@ def run(
         else:
             music = False
     else:
+        music_tmp.unlink(missing_ok=True)
         print("[7/9] soundtrack skipped")
 
     print("[8/9] Remotion render")

@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.89
+
+Velocidade: o mesmo vídeo fica pronto bem mais rápido, com a mesma qualidade.
+
+- O vídeo não é mais transcrito duas vezes — menos espera e menos custo de API
+- Cortes manuais reaproveitam os trechos que não mudaram: aplicar um ajuste pequeno não refaz a extração inteira
+- A trilha sonora IA e a preparação do render começam em paralelo com o corte
+- Gravar a capa no vídeo não regrava mais o arquivo inteiro (só o comecinho)
+- A pré-visualização leve agora usa a placa de vídeo de verdade — antes falhava em silêncio e caía no modo lento
+- O perfil de desempenho passa a valer também na extração paralela dos trechos
+- Desperdícios internos removidos: sondas repetidas do mesmo arquivo, cópias e regravações desnecessárias, áudio normalizado uma vez só
+- Fila e editor não pesam mais no disco com o app minimizado
+- Correção em projeto antigo não usa mais legenda desatualizada do corte anterior
+- "Excluir", "eliminar" e "reduzir" agora são entendidos como pedido de corte no Editar com IA
+
 ## 1.88
 
 Consertos de confiança: o que estava vendido e o que podia apagar trabalho.

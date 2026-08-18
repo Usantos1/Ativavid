@@ -3366,10 +3366,22 @@ async function boot() {
     await checkCrashRecovery();
   } catch { /* ignore */ }
   await refreshJobs();
-  setInterval(() => {
-    refreshJobs().catch(() => {});
-    refreshHealth().catch(() => {});
+  let pollBusy = false;
+  setInterval(async () => {
+    // /api/jobs varre o disco no servidor: pular com o app oculto e nunca
+    // empilhar uma rodada nova em cima de uma que ainda não respondeu.
+    if (document.hidden || pollBusy) return;
+    pollBusy = true;
+    try {
+      await refreshJobs().catch(() => {});
+      await refreshHealth().catch(() => {});
+    } finally {
+      pollBusy = false;
+    }
   }, 2500);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) refreshJobs().catch(() => {});
+  });
 }
 
 boot();

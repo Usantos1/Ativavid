@@ -3285,7 +3285,15 @@ function updateHlOverlay() {
   if (line.textContent !== want) line.textContent = want;
 }
 
+let rafTick = 0;
 function rafLoop() {
+  rafTick++;
+  // Página oculta: nada disso é visível — só mantém o agendamento vivo.
+  if (document.hidden) { requestAnimationFrame(rafLoop); return; }
+  // Pausado e sem demos de estilo animando, 10Hz basta para manter agulha e
+  // overlays em dia com seeks; 60Hz só quando algo se move de verdade.
+  const rafActive = (!video.paused && !video.ended) || capAnims.length;
+  if (!rafActive && (rafTick % 6)) { requestAnimationFrame(rafLoop); return; }
   updateCapOverlay();
   updateHlOverlay();
   highlightCurrentCaption(currentCaptionIndex());

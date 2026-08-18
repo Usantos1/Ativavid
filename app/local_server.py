@@ -912,7 +912,10 @@ class Worker:
 
         try:
             save_preset_snap = resolve_for_edit(edit_dir, job=job, write=False)
-        except Exception:
+        except Exception as e:  # noqa: BLE001
+            # Cair no estilo global silenciosamente foi o bug que matou o
+            # preset da marca — se a cadeia falhar, tem que aparecer no log.
+            print(f"[warn] preset chain falhou ({e}) — usando estilo global", flush=True)
             save_preset_snap = load_preset()
         try:
             from app.editing_intent import load as load_intent, merge_into_preset

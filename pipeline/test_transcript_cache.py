@@ -39,3 +39,24 @@ def test_missing_transcript_misses(tmp_path: Path):
     video = tmp_path / "clip.mp4"
     video.write_bytes(b"AAAA")
     assert transcript_cache_hit(tmp_path / "clip.json", video) is False
+
+
+def test_legacy_source_without_signature_hits_and_adopts(tmp_path: Path):
+    # Fonte não muda depois do import: transcript pré-1.88 (sem .srcsig)
+    # é aproveitado e a assinatura atual é adotada.
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"AAAA")
+    out = tmp_path / "clip.json"
+    out.write_text("{}", encoding="utf-8")
+    assert transcript_cache_hit(out, video) is True
+    assert (tmp_path / "clip.srcsig").exists()
+
+
+def test_legacy_cut_without_signature_misses(tmp_path: Path):
+    # cut.mp4 é regravado a cada render: transcript de cut sem assinatura
+    # pode ser de um corte antigo — nunca confiar (bug da legenda velha).
+    video = tmp_path / "cut.mp4"
+    video.write_bytes(b"AAAA")
+    out = tmp_path / "cut.json"
+    out.write_text("{}", encoding="utf-8")
+    assert transcript_cache_hit(out, video) is False

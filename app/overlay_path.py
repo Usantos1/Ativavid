@@ -88,7 +88,10 @@ def prepare_overlay_remotion(src_remotion: Path, dest: Path) -> Path:
     for name in ("src", "public", "package.json", "remotion.config.ts", "tsconfig.json"):
         p = src_remotion / name
         if p.is_dir():
-            shutil.copytree(p, dest / name)
+            # A composição Overlay é só gráfica (sem cut.mp4/OffthreadVideo);
+            # copiar os .mp4 do public/ duplicaria o vídeo inteiro à toa.
+            ignore = shutil.ignore_patterns("*.mp4") if name == "public" else None
+            shutil.copytree(p, dest / name, ignore=ignore)
         elif p.exists():
             shutil.copy2(p, dest / name)
     nm = dest / "node_modules"

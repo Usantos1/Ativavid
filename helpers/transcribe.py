@@ -674,6 +674,13 @@ def transcript_cache_hit(out_path: Path, video: Path) -> bool:
     if have and have != wanted:
         return False
     if not have:
+        # Transcript legado (pré-assinatura). Fontes nunca mudam depois do
+        # import — adotar a assinatura atual é seguro e evita re-transcrever
+        # (custo de API) todos os projetos antigos. O cut.mp4 é REGRAVADO a
+        # cada render: sem assinatura não dá para saber de qual cut esse
+        # transcript veio, e confiar nele é exatamente o bug da legenda velha.
+        if Path(video).stem == "cut":
+            return False
         try:
             sig_path.write_text(wanted, encoding="utf-8")
         except OSError:
