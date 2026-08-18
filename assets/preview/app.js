@@ -3118,6 +3118,26 @@ $('setupSaveDefault').addEventListener('click', async () => {
   }
 });
 
+// Arrastar a borda de um take disparava renderClips() a cada pointermove:
+// a lane inteira era destruída e recriada, com TODAS as imagens do filmstrip
+// (1 a cada 2s de vídeo), 60x por segundo. Durante o arrasto só a geometria
+// muda — o conteúdo do filmstrip vem do corte JÁ RENDERIZADO e não responde
+// ao rascunho — então mexer em left/width dos nós existentes basta.
+function updateClipGeometry() {
+  const dl = draftLayout();
+  const nodes = laneVideo.querySelectorAll('.clip');
+  for (const node of nodes) {
+    const i = Number(node.dataset.i);
+    const r = dl[i];
+    if (!r) continue;
+    node.style.left = `${r.out * S.pps}px`;
+    if (!node.classList.contains('removed')) {
+      node.style.width = `${Math.max(r.dur * S.pps, 0)}px`;
+      node.classList.toggle('dirty', r.start !== r.orig.start || r.end !== r.orig.end);
+    }
+  }
+}
+
 function renderClips() {
   laneVideo.innerHTML = '';
   const dl = draftLayout();
@@ -3655,9 +3675,15 @@ panel.addEventListener('pointermove', (e) => {
       const srcDur = (S.state.sourceDurations || {})[r.source];
       if (srcDur) r.end = Math.min(r.end, srcDur);
     }
-    renderClips();
-    drawWave();
-    refreshHeader();
+    // uma atualização por frame de vídeo, não uma por evento do mouse
+    if (!drag.raf) {
+      drag.raf = requestAnimationFrame(() => {
+        drag.raf = 0;
+        updateClipGeometry();
+        drawWave();
+        refreshHeader();
+      });
+    }
     const d = drag.side === 'l' ? r.start - r.orig.start : r.end - r.orig.end;
     showTooltip(e, `${fmt(r.start)} → ${fmt(r.end)} <span class="delta">(${d >= 0 ? '+' : ''}${d.toFixed(2)}s)</span>`);
   } else if (drag.type === 'chip-trim') {
@@ -3704,6 +3730,14 @@ panel.addEventListener('pointermove', (e) => {
       if (drag.moved) deleteClipRange(drag.i, drag.x0, drag.x1);
       else { S.selected = drag.i; renderClips(); }
       hideClipRangeSelection();
+    }
+    if (drag && drag.type === 'trim') {
+      // solta o frame pendente e assenta a lane de verdade (filmstrip,
+      // rótulos e classes voltam a bater com o rascunho final)
+      if (drag.raf) cancelAnimationFrame(drag.raf);
+      renderClips();
+      drawWave();
+      refreshHeader();
     }
     drag = null; hideTooltip();
   })

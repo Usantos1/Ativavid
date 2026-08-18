@@ -1521,19 +1521,25 @@ def build_edit_data(cut: Path, preset: dict, hook: list[str], duration: float, f
 def _attach_auto_broll(edit_data: dict, public: Path, preset: dict, transcript: str, duration: float) -> dict:
     """Auto image cards / B-roll.
 
-    Style `limpa` is full-frame talking-head — no automatic inserts (skill +
-    references/shortform.md). Images only belong there when the user places
-    them by hand. Auto B-roll is for split styles (or an explicit non-limpa edit).
+    Quem decide é o `brollMode`, não o layout. O layout `limpa` (quadro cheio,
+    o PADRÃO) segue sem inserts enquanto o b-roll está no valor padrão — é o
+    talking-head limpo da skill. Mas escolher "Sempre" ou "Raro" é um pedido
+    explícito de imagens, e antes isso era engolido em silêncio só porque o
+    layout era o padrão: o usuário ligava b-roll e nada aparecia.
     """
     edit_style = (preset.get("edit") or "limpa").lower().strip()
-    if edit_style in ("limpa", "clean", "limpo"):
-        edit_data["inserts"] = []
-        print("[broll] estilo limpa — sem inserts automáticos", flush=True)
-        return edit_data
-
-    mode = (preset.get("brollMode") or "quando_necessario").lower()
+    mode = (preset.get("brollMode") or "quando_necessario").lower().strip()
     if mode in ("off", "nenhum", "none", "desligado"):
+        edit_data["inserts"] = []
+        print("[broll] desligado no estilo", flush=True)
         return edit_data
+    explicit = mode not in ("quando_necessario", "", "auto")
+    if edit_style in ("limpa", "clean", "limpo") and not explicit:
+        edit_data["inserts"] = []
+        print("[broll] estilo limpa + b-roll no padrão — sem inserts automáticos", flush=True)
+        return edit_data
+    if edit_style in ("limpa", "clean", "limpo"):
+        print(f"[broll] estilo limpa, mas b-roll={mode} pedido — inserts ligados", flush=True)
     # 1) biblioteca local
     try:
         from app.broll_library import pick_for_query  # type: ignore

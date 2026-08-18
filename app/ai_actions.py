@@ -295,10 +295,16 @@ def apply_actions_to_edits(
                 "kind": act,
                 "fromAI": True,
             })
-            # Estilo limpa = quadro cheio; inserts flutuantes/split só com tela dividida
-            # (ou quando o usuário coloca à mão). Em limpa, fica só a nota.
+            # Quem decide é o brollMode (mesma regra do pipeline): em `limpa`
+            # com b-roll no padrão fica só a nota; b-roll pedido de propósito
+            # ("Sempre"/"Raro") coloca o insert mesmo em quadro cheio.
             edit_style = (style.get("edit") or "limpa").lower().strip()
-            if edit_style not in ("limpa", "clean", "limpo") and a.get("query"):
+            _bm = str(style.get("brollMode") or "quando_necessario").lower().strip()
+            _broll_ok = _bm not in ("off", "nenhum", "none", "desligado") and (
+                edit_style not in ("limpa", "clean", "limpo")
+                or _bm not in ("quando_necessario", "", "auto")
+            )
+            if _broll_ok and a.get("query"):
                 inserts = list(edit_data.get("inserts") or [])
                 inserts.append({
                     "src": "",

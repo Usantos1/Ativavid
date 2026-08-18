@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.01
+
+Imagens de apoio quando você pede, e timeline leve para arrastar.
+
+- **B-roll deixa de depender do layout**: escolher "Poucas, sempre" ou "Várias, sempre" agora coloca imagens mesmo no vídeo de quadro cheio — antes o pedido era ignorado em silêncio porque o layout padrão desligava tudo
+- O seletor ficou honesto: **Nunca · Só na tela dividida · Poucas, sempre · Várias, sempre** (quem não mexer continua com o quadro cheio limpo de hoje)
+- **Arrastar a borda de um take ficou ~50× mais leve** — a timeline não é mais reconstruída (com todas as miniaturas) a cada movimento do mouse
+
 ## 2.00
 
 Marca com voz própria: destaque suas palavras, leve seu preset e publique no feed.

@@ -105,3 +105,25 @@ def test_brand_emphasis_words_marks_line(tmp_path):
     # a palavra da marca vira ênfase só quando declarada
     assert not any("pelicula" in t for t in base)
     assert any("pelicula" in t for t in branded)
+
+
+def _broll_preset(edit, mode):
+    return {"edit": edit, "brollMode": mode, "videoGoal": "reels"}
+
+
+def test_broll_gate_respects_explicit_choice(monkeypatch, tmp_path):
+    """Layout `limpa` com b-roll no padrão segue sem inserts; pedido explícito passa."""
+    from run_fast import _attach_auto_broll
+
+    # sem chaves de API a busca não roda, mas o GATE (inserts zerados ou não)
+    # é o que importa aqui — o caminho de download é testado em outro lugar
+    ed = {"inserts": [{"src": "x.jpg", "start": 1, "end": 3}]}
+    out = _attach_auto_broll(dict(ed), tmp_path, _broll_preset("limpa", "quando_necessario"), "fala", 30)
+    assert out["inserts"] == []  # padrão: quadro cheio limpo
+
+    out = _attach_auto_broll(dict(ed), tmp_path, _broll_preset("limpa", "off"), "fala", 30)
+    assert out["inserts"] == []  # desligado explicitamente
+
+    # "sempre" em limpa NÃO zera mais os inserts — o pedido do usuário vale
+    out = _attach_auto_broll(dict(ed), tmp_path, _broll_preset("limpa", "sempre"), "fala", 30)
+    assert out["inserts"] != []
