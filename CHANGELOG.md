@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.15
+
+Correção grave: o app estava derrubando os próprios vídeos.
+
+- Ao reaproveitar um projeto, a limpeza de arquivos antigos encerrava processos "pelo nome" — e acabava **encerrando a própria edição em andamento**, além das edições dos outros vídeos rodando em paralelo. O vídeo morria no meio, sem mensagem, e o card ia para erro
+- Era por isso que **reprocessar quase sempre falhava**: a pasta de trabalho já existia, então a limpeza rodava e matava a edição toda vez
+- Também explicava erros "em cadeia" quando vários vídeos eram processados juntos: limpar um derrubava o render do outro
+- Agora a limpeza só encerra o programa que realmente está segurando aquele arquivo, nunca a edição em andamento nem a dos vizinhos
+
 ## 2.14
 
 Nenhum card fica preso na Fila.

@@ -1924,12 +1924,15 @@ def _clear_dir_windows(dest: Path) -> None:
 
     if not dest.exists():
         return
-    needle = dest.name
-    parent_token = dest.parent.parent.name if dest.parent else ""
+    # NUNCA passe apelido curto aqui (o nome da pasta, "remotion", o id do
+    # job): o matcher é por substring da linha de comando, então um apelido
+    # casava com o próprio run_fast — que cita a pasta do projeto nos
+    # argumentos — e com os jobs vizinhos rodando em paralelo. O pipeline se
+    # matava sozinho a cada reprocessada, mudo, com exit -1.
     try:
         from app.win_process import kill_processes_holding_path  # type: ignore
 
-        kill_processes_holding_path(dest, extra_needles=[parent_token, needle])
+        kill_processes_holding_path(dest)
     except Exception:
         pass
 
@@ -1942,7 +1945,7 @@ def _clear_dir_windows(dest: Path) -> None:
             try:
                 from app.win_process import kill_processes_holding_path  # type: ignore
 
-                kill_processes_holding_path(dest, extra_needles=[parent_token])
+                kill_processes_holding_path(dest)
             except Exception:
                 pass
 

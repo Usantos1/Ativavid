@@ -1,7 +1,9 @@
 """Windows process helpers — hide console windows for child tools."""
 from __future__ import annotations
 
+import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -302,60 +304,138 @@ def resolve_python_cmd(repo: Path | None = None) -> list[str]:
     return ["python"]
 
 
-def kill_processes_holding_path(path: Path | str, *, extra_needles: list[str] | None = None) -> list[int]:
-    """Mata processos Windows cuja linha de comando cita o caminho (node/ffmpeg/etc.).
+# Só estes seguram arquivo dentro de edit/remotion. python.exe NUNCA entra:
+# a linha de comando do próprio run_fast cita a pasta do projeto, então
+# incluí-lo fazia o pipeline se matar sozinho (visto em produção: jobs
+# morrendo mudos com exit -1 em toda reprocessada).
+_HOLDER_NAMES = frozenset({
+    "node.exe", "ffmpeg.exe", "ffprobe.exe", "esbuild.exe",
+    "chrome.exe", "chrome-headless-shell.exe",
+})
 
-    Usado antes de apagar edit/remotion — sem isso o rmtree falha com EPERM.
-    """
+
+def _is_path_needle(raw: str) -> bool:
+    """Só caminho absoluto vira alvo. Um token curto ("remotion", nome da
+    pasta do projeto) casa com processos que nada têm a ver com a pasta —
+    inclusive os de OUTROS jobs rodando em paralelo."""
+    s = str(raw or "").strip()
+    if len(s) < 8:
+        return False
+    return bool(re.match(r"^[a-zA-Z]:[\\/]", s)) or s.startswith("\\\\") or s.startswith("/")
+
+
+def _protected_pids(rows: list[dict]) -> set[int]:
+    """Eu, meus ancestrais e todos os meus descendentes. Matar qualquer um
+    deles é suicídio do pipeline que está pedindo a limpeza."""
+    by_pid = {int(r["pid"]): int(r.get("ppid") or 0) for r in rows if r.get("pid") is not None}
+    me = os.getpid()
+    safe = {me}
+    cur = me
+    for _ in range(24):  # ancestrais
+        parent = by_pid.get(cur)
+        if not parent or parent in safe:
+            break
+        safe.add(parent)
+        cur = parent
+    # Descendentes saem SÓ de mim: propagar a partir dos ancestrais faria o
+    # pid 1 (ou o explorer) adotar a máquina inteira e a limpeza nunca mataria
+    # ninguém — inclusive quem de fato segura a pasta.
+    mine = {me}
+    for _ in range(24):
+        grew = False
+        for pid, ppid in by_pid.items():
+            if ppid in mine and pid not in mine:
+                mine.add(pid)
+                grew = True
+        if not grew:
+            break
+    return safe | mine
+
+
+def select_kill_targets(rows: list[dict], needles: list[str]) -> list[int]:
+    """Quem realmente segura a pasta: processo da allowlist, citando um
+    caminho absoluto alvo, e fora da minha própria árvore."""
+    needles_l = [n.lower() for n in needles if _is_path_needle(n)]
+    if not needles_l:
+        return []
+    safe = _protected_pids(rows)
+    out: list[int] = []
+    for r in rows:
+        try:
+            pid = int(r["pid"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if pid in safe:
+            continue
+        if str(r.get("name") or "").lower() not in _HOLDER_NAMES:
+            continue
+        cmd = str(r.get("cmd") or "").lower().replace("/", "\\")
+        if not cmd:
+            continue
+        if any(n.replace("/", "\\") in cmd for n in needles_l):
+            out.append(pid)
+    return out
+
+
+def _list_processes() -> list[dict]:
+    ps = (
+        "Get-CimInstance Win32_Process | "
+        "Select-Object ProcessId,ParentProcessId,Name,CommandLine | "
+        "ConvertTo-Json -Compress -Depth 2"
+    )
+    r = subprocess.run(
+        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps],
+        capture_output=True, text=True, timeout=45, **hide_console_kwargs(),
+    )
+    try:
+        data = json.loads(r.stdout or "[]")
+    except json.JSONDecodeError:
+        return []
+    if isinstance(data, dict):
+        data = [data]
+    return [
+        {
+            "pid": row.get("ProcessId"),
+            "ppid": row.get("ParentProcessId"),
+            "name": row.get("Name"),
+            "cmd": row.get("CommandLine"),
+        }
+        for row in data
+        if isinstance(row, dict)
+    ]
+
+
+def kill_processes_holding_path(path: Path | str, *, extra_needles: list[str] | None = None) -> list[int]:
+    """Mata node/ffmpeg que seguram arquivos DENTRO de `path` (para o rmtree
+    de edit/remotion não falhar com EPERM).
+
+    Regras que existem por causa de um bug real: nunca mata processo da
+    própria árvore, nunca aceita apelido curto como alvo e só encosta em
+    processos que de fato abrem arquivo lá dentro."""
     if sys.platform != "win32":
         return []
     target = str(Path(path).resolve())
     needles = [target, target.replace("\\", "/")]
-    # pasta do projeto (job id curto) também serve
     for n in extra_needles or []:
-        if n and n not in needles:
+        if n and str(n) not in needles:
             needles.append(str(n))
-    needles_l = [n.lower() for n in needles if n]
-    if not needles_l:
+    if not any(_is_path_needle(n) for n in needles):
         return []
 
     killed: list[int] = []
     try:
-        # PowerShell — lista processos cuja cmdline cita o caminho e mata
-        ps = (
-            "$needles = @("
-            + ",".join("'" + n.replace("'", "''") + "'" for n in needles_l)
-            + "); "
-            "Get-CimInstance Win32_Process | ForEach-Object { "
-            "  $cl = $_.CommandLine; if (-not $cl) { return }; "
-            "  $low = $cl.ToLowerInvariant(); "
-            "  foreach ($n in $needles) { "
-            "    if ($low.Contains($n)) { "
-            "      try { Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop; "
-            "        Write-Output $_.ProcessId } catch {} "
-            "      break "
-            "    } "
-            "  } "
-            "}"
-        )
-        r = subprocess.run(
+        targets = select_kill_targets(_list_processes(), needles)
+        if not targets:
+            return []
+        subprocess.run(
             [
-                "powershell",
-                "-NoProfile",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-Command",
-                ps,
+                "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+                "Stop-Process -Id " + ",".join(str(p) for p in targets)
+                + " -Force -ErrorAction SilentlyContinue",
             ],
-            capture_output=True,
-            text=True,
-            timeout=45,
-            **hide_console_kwargs(),
+            capture_output=True, text=True, timeout=45, **hide_console_kwargs(),
         )
-        for line in (r.stdout or "").splitlines():
-            line = line.strip()
-            if line.isdigit():
-                killed.append(int(line))
+        killed = targets
     except Exception:
         return killed
     return killed
