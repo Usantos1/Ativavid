@@ -125,3 +125,36 @@ pytest pipeline/test_prepared_source.py -q        # cache e concorrência
 ```
 
 Scripts da auditoria em `scratchpad/` (build_finals.py, final_cmp.py, frames_dificeis.py, origem.py).
+
+---
+
+# Adendo — o compose foi ao limite e parou
+
+Depois da v2.17.1, medi as três saídas restantes para o compose (25,1 s fixos,
+metade de um Apply incremental de 55,7 s). **Nenhuma se sustentou.**
+
+| Tentativa | Ganho | Por que caiu |
+|---|---|---|
+| Compose incremental (recompor só a janela) | 1,36× | o custo é decodificar o overlay, quase independente do tamanho da janela |
+| Trocar ProRes 4444 por VP9-alpha | **1,08×** | arquivo 20× menor (156 MB → 8 MB), mas o gargalo não era o decode |
+| Compose na GPU (`overlay_cuda`) | 1,92× | **91% dos frames abaixo de 35 dB** (mediana 31,3) — imagem materialmente diferente |
+
+O gargalo do compose é a **mescla alpha na CPU**, e a versão em GPU não
+reproduz o resultado. Corrigir a faixa de cor no overlay antes do upload
+melhorou pouco (30,9 → 31,7 dB), então não é (só) questão de range.
+
+**Consequência:** o compose está no seu piso prático enquanto o overlay for um
+vídeo com alpha composto na CPU. Ele só melhora junto com a troca do
+rasterizador — as duas frentes que sobraram são a mesma frente.
+
+## Erros de medição meus neste adendo
+
+1. O protótipo do compose incremental deu 5,2 s numa rodada; repetindo três
+   vezes, o custo real ficou em 14–17 s. **Número único não vale nesta máquina.**
+2. Minha imagem de diferença CPU×GPU deu "tudo preto" por extração errada de
+   frame; o `psnr=stats_file` por frame mostrou o contrário. Uso o log.
+
+## Achado reaproveitável
+
+`ffprobe -count_frames` **decodifica o arquivo inteiro** (32 s num final de
+28 s). `-count_packets` faz a mesma contagem em 1,2 s.
