@@ -405,3 +405,43 @@ def _detect_machine_inner(
             "probed": bool(probe_encoders),
         },
     }
+
+
+def system_payload(projects_root: Path | None = None) -> dict[str, Any]:
+    """Resposta do /api/system — usada pelos dois servidores.
+
+    Estava copiada nos dois e já tinha divergido (um cortava a mensagem de erro
+    em 200 caracteres, o outro em 240). A detecção roda em thread separada com
+    prazo: numa máquina lenta ela travava a tela de Configurações.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+    from concurrent.futures import TimeoutError as FutTimeout
+
+    from app.performance import profile_settings
+    from app.settings_store import load_settings, public_settings
+
+    try:
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            fut = pool.submit(detect_machine, projects_root, quick=True)
+            try:
+                machine = fut.result(timeout=5.0)
+            except FutTimeout:
+                machine = _minimal_machine(
+                    projects_root, err="detecção demorou — veja Diagnóstico abaixo")
+    except Exception as e:  # noqa: BLE001
+        machine = _minimal_machine(projects_root, err=str(e)[:240])
+
+    try:
+        settings = load_settings()
+        publicas = public_settings()
+    except Exception:  # noqa: BLE001
+        settings, publicas = {}, {}
+
+    try:
+        perf = profile_settings(settings.get("performanceProfile") if settings else None,
+                                machine)
+    except Exception:  # noqa: BLE001
+        perf = {"profile": "auto", "label": "Automático", "parallelJobs": 1,
+                "proxyEnabled": True, "proxyHeight": 540}
+
+    return {"machine": machine, "settings": publicas, "performance": perf}

@@ -1,0 +1,81 @@
+"""Monta a lista de cards da Fila — uma implementação só.
+
+O /api/jobs existia duas vezes, quase igual, no local_server e no
+desktop_server. Foi exatamente por isso que o defeito dos campos de visão
+grudando no card precisou ser caçado em dois lugares. Aqui a vista é montada
+num lugar só; a diferença real entre os dois (a desktop também dá os links do
+editor) é um parâmetro.
+
+Tudo o que este módulo escreve são campos DERIVADOS: valem para esta resposta
+e não voltam para a fila — o store entrega cópias justamente para isso.
+"""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+from urllib.parse import quote
+
+
+def _status_do_pipeline(job: dict, edit: Path) -> None:
+    """Passo e progresso vêm do pipeline_status.json, que é escrito pelo run."""
+    st_path = edit / "pipeline_status.json"
+    if job.get("status") == "processing" and st_path.exists():
+        try:
+            st = json.loads(st_path.read_text(encoding="utf-8-sig"))
+            job["stage"] = st.get("stage") or "processing"
+            job["progress"] = st.get("progress")
+            if st.get("message"):
+                job["message"] = st["message"]
+        except (OSError, json.JSONDecodeError):
+            job["stage"] = "processing"
+    else:
+        job["stage"] = job.get("status")
+
+
+def build(store: Any, projects_root: Path, *, com_links: bool = False) -> list[dict]:
+    """Cards prontos para a tela, do mais recente para o mais antigo."""
+    from app.local_server import (  # import tardio: o local_server usa este módulo
+        STAGE_LABELS,
+        enrich_job_display,
+        resolve_delivery_mp4,
+    )
+
+    jobs = store.list()
+    for j in jobs:
+        edit = Path(j.get("editDir") or "")
+        j["hasCut"] = (edit / "cut.mp4").exists()
+        j["hasFinal"] = resolve_delivery_mp4(edit) is not None
+        j["hasThumb"] = (edit / "thumb.jpg").exists()
+        j["thumbUrl"] = f"/api/jobs/{j['id']}/thumb"
+        if com_links:
+            enc = quote(Path(j.get("projectDir") or "").name, safe="-_.")
+            j["editorUrl"] = f"/p/{enc}/fase1"
+            j["estiloUrl"] = f"/p/{enc}/estilo"
+            j["finalUrl"] = f"/p/{enc}/fase2"
+        _status_do_pipeline(j, edit)
+        j["stageLabel"] = STAGE_LABELS.get(str(j.get("stage") or ""), j.get("message") or "")
+        score_path = edit / "score.json"
+        if score_path.exists():
+            try:
+                j["score"] = json.loads(score_path.read_text(encoding="utf-8-sig"))
+            except (OSError, json.JSONDecodeError):
+                pass
+        enrich_job_display(j, edit)
+
+    try:
+        from app.eta_estimate import attach_eta, collect_history
+
+        hist = collect_history(projects_root)
+        for j in jobs:
+            attach_eta(j, hist, Path(j.get("editDir") or ""))
+    except Exception:  # noqa: BLE001 - a estimativa nunca pode derrubar a Fila
+        pass
+
+    try:
+        from app.apply_tasks import enrich_jobs_list
+
+        enrich_jobs_list(jobs, projects_root)
+    except Exception:  # noqa: BLE001
+        pass
+    return jobs

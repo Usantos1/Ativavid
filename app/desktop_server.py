@@ -244,46 +244,9 @@ class DesktopHandler(ps.Handler):
             self._json(ls.run_doutor())
             return
         if raw == "/api/system":
-            # Direto aqui (sem shim) — resposta sempre JSON, detecção quick.
-            from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutTimeout
+            from app.system_info import system_payload
 
-            from app.performance import profile_settings
-            from app.settings_store import load_settings, public_settings
-            from app.system_info import _minimal_machine, detect_machine
-
-            m: dict = {}
-            try:
-                with ThreadPoolExecutor(max_workers=1) as pool:
-                    fut = pool.submit(
-                        detect_machine,
-                        self.projects_root,
-                        quick=True,
-                    )
-                    try:
-                        m = fut.result(timeout=5.0)
-                    except FutTimeout:
-                        m = _minimal_machine(
-                            self.projects_root,
-                            err="detecção demorou — veja Diagnóstico abaixo",
-                        )
-            except Exception as e:  # noqa: BLE001
-                m = _minimal_machine(self.projects_root, err=str(e)[:200])
-            try:
-                s = load_settings()
-                pub = public_settings()
-            except Exception:
-                s, pub = {}, {}
-            try:
-                perf = profile_settings(s.get("performanceProfile") if s else None, m)
-            except Exception:
-                perf = {
-                    "profile": "auto",
-                    "label": "Automático",
-                    "parallelJobs": 1,
-                    "proxyEnabled": True,
-                    "proxyHeight": 540,
-                }
-            self._json({"machine": m, "settings": pub, "performance": perf})
+            self._json(system_payload(self.projects_root))
             return
         if raw == "/api/hardware":
             from app.render_engine import public_profile, load_profile
@@ -332,60 +295,17 @@ class DesktopHandler(ps.Handler):
             self._json({"providers": ls.sessions_public()})
             return
         if raw == "/api/jobs":
-            from urllib.parse import quote
+            from app.jobs_view import build as build_jobs
 
-            jobs = self.store.list()
+            jobs = build_jobs(self.store, self.projects_root, com_links=True)
             for j in jobs:
-                folder = Path(j["projectDir"]).name
-                enc = quote(folder, safe="-_.")
-                j["editorUrl"] = f"/p/{enc}/fase1"
-                j["estiloUrl"] = f"/p/{enc}/estilo"
-                j["finalUrl"] = f"/p/{enc}/fase2"
-                j["thumbUrl"] = f"/api/jobs/{j['id']}/thumb"
+                # O editor precisa abrir mesmo depois de uma parada em REVISAR.
                 edit = Path(j["editDir"])
-                j["hasCut"] = (edit / "cut.mp4").exists()
-                j["hasFinal"] = ls.resolve_delivery_mp4(edit) is not None
-                j["hasThumb"] = (edit / "thumb.jpg").exists()
-                st_path = edit / "pipeline_status.json"
-                if j.get("status") == "processing" and st_path.exists():
-                    try:
-                        st = json.loads(st_path.read_text(encoding="utf-8-sig"))
-                        j["stage"] = st.get("stage") or "processing"
-                        j["progress"] = st.get("progress")
-                        if st.get("message"):
-                            j["message"] = st["message"]
-                    except (OSError, json.JSONDecodeError):
-                        j["stage"] = "processing"
-                else:
-                    j["stage"] = j.get("status")
-                j["stageLabel"] = ls.STAGE_LABELS.get(str(j.get("stage") or ""), j.get("message") or "")
-                score_path = edit / "score.json"
-                if score_path.exists():
-                    try:
-                        j["score"] = json.loads(score_path.read_text(encoding="utf-8-sig"))
-                    except (OSError, json.JSONDecodeError):
-                        pass
-                ls.enrich_job_display(j, edit)
-            from app.eta_estimate import attach_eta, collect_history
-
-            hist = collect_history(self.projects_root)
-            for j in jobs:
-                attach_eta(j, hist, Path(j["editDir"]))
-            try:
-                from app.apply_tasks import enrich_jobs_list
-
-                enrich_jobs_list(jobs, self.projects_root)
-            except Exception:
-                pass
-            for j in jobs:
-                edit = Path(j["editDir"])
-                folder = Path(j["projectDir"]).name
-                # Ensure editor can open even after a needs_review stop
                 if not (edit / "state.json").exists():
                     edit.mkdir(parents=True, exist_ok=True)
                     (edit / "state.json").write_text(
                         json.dumps({
-                            "project": j.get("name") or folder,
+                            "project": j.get("name") or Path(j["projectDir"]).name,
                             "phase": 1,
                             "message": j.get("message") or "Sem corte ainda",
                             "fps": 30,
