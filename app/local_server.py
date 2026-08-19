@@ -2699,55 +2699,66 @@ class StudioHandler(BaseHTTPRequestHandler):
         return [self._create_job_from_file(src, copy=True, intent=intent, title=title) for src in files]
 
     def _ingest_multipart(self, merge: bool = False) -> list[dict]:
-        n = int(self.headers.get("Content-Length") or 0)
-        body = self.rfile.read(n) if n else b""
-        ctype = self.headers.get("Content-Type", "")
-        if "boundary=" not in ctype:
-            return []
-        raw = b"Content-Type: " + ctype.encode("ascii", "ignore") + b"\r\nMIME-Version: 1.0\r\n\r\n" + body
-        msg = BytesParser(policy=policy.default).parsebytes(raw)
-        parts: list[tuple[str, bytes]] = []
-        intent: dict | None = None
-        title: str | None = None
-        for part in msg.iter_parts():
-            filename = part.get_filename()
-            disp = str(part.get("Content-Disposition") or "")
-            field = (part.get_param("name", header="content-disposition") or "").strip()
-            if not field and "name=" in disp.lower():
-                m = re.search(r'name="?([^";]+)"?', disp, flags=re.I)
-                field = (m.group(1) if m else "").strip()
-            payload = part.get_payload(decode=True) or b""
-            if field == "intent" or (not filename and field in ("intent", "jobIntent")):
-                try:
-                    intent = json.loads(payload.decode("utf-8", errors="replace") or "{}")
-                except json.JSONDecodeError:
-                    intent = None
-                continue
-            if field == "title" and not filename:
-                title = payload.decode("utf-8", errors="replace").strip() or None
-                continue
-            if not filename:
-                continue
-            parts.append((filename, payload))
-        if not parts:
-            return []
-        if merge and len(parts) > 1:
-            return [self._create_job_from_many_bytes(parts, intent=intent, title=title)]
-        return [self._create_job_from_bytes(name, data, intent=intent, title=title) for name, data in parts]
+        """Recebe o upload gravando direto no disco.
 
-    def _create_job_from_many_files(self, files: list[Path], intent: dict | None = None, title: str | None = None) -> dict:
+        Antes o corpo inteiro entrava na memória e ainda era copiado pelo
+        parser da stdlib: medido, um vídeo de 250 MB custava 3,1 GB de RAM —
+        12,5x o arquivo — competindo com o ffmpeg e o Remotion que rodam junto.
+        """
+        from app import multipart_stream as mp
+
+        n = int(self.headers.get("Content-Length") or 0)
+        ctype = self.headers.get("Content-Type", "")
+        temp = self.projects_root / ".ativavid" / "upload" / uuid.uuid4().hex[:12]
+        try:
+            arquivos, campos = mp.parse(self.rfile, ctype, n, temp)
+        except mp.MultipartError as e:
+            print(f"[upload] recusado: {e}", flush=True)
+            shutil.rmtree(temp, ignore_errors=True)
+            return []
+        if not arquivos:
+            shutil.rmtree(temp, ignore_errors=True)
+            return []
+
+        intent = None
+        if campos.get("intent"):
+            try:
+                intent = json.loads(campos["intent"])
+            except json.JSONDecodeError:
+                intent = None
+        title = (campos.get("title") or "").strip() or None
+
+        try:
+            if merge and len(arquivos) > 1:
+                return [self._create_job_from_many_files(
+                    [p for _, p in arquivos], intent=intent, title=title,
+                    copy=False, nomes=[n for n, _ in arquivos])]
+            return [self._create_job_from_file(caminho, copy=False, intent=intent,
+                                               title=title, nome=nome)
+                    for nome, caminho in arquivos]
+        finally:
+            shutil.rmtree(temp, ignore_errors=True)
+
+    def _create_job_from_many_files(self, files: list[Path], intent: dict | None = None,
+                                    title: str | None = None, copy: bool = True,
+                                    nomes: list[str] | None = None) -> dict:
         job_id = uuid.uuid4().hex[:10]
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        label = _safe_name(title or files[0].stem)[:40] or "takes"
+        primeiro_nome = (nomes[0] if nomes else files[0].name)
+        label = _safe_name(title or Path(primeiro_nome).stem)[:40] or "takes"
         project = self.projects_root / f"{stamp}_{label}_x{len(files)}_{job_id}"
         project.mkdir(parents=True, exist_ok=True)
         copied: list[Path] = []
-        for src in files:
-            dest = project / src.name
+        for i, src in enumerate(files):
+            origem = (nomes[i] if nomes and i < len(nomes) else src.name)
+            dest = project / origem
             # Avoid clobber if same basename
             if dest.exists():
-                dest = project / f"{src.stem}_{len(copied)}{src.suffix}"
-            shutil.copy2(src, dest)
+                dest = project / f"{Path(origem).stem}_{len(copied)}{Path(origem).suffix}"
+            if copy:
+                shutil.copy2(src, dest)
+            else:
+                shutil.move(str(src), str(dest))
             copied.append(dest)
         primary = copied[0]
         display = (title or "").strip() or (f"{label} (+{len(copied) - 1})" if len(copied) > 1 else label)
@@ -2791,13 +2802,17 @@ class StudioHandler(BaseHTTPRequestHandler):
     def _create_job_from_upload(self, filename: str, data: bytes) -> dict:
         return self._create_job_from_bytes(filename, data)
 
-    def _create_job_from_file(self, src: Path, copy: bool = True, intent: dict | None = None, title: str | None = None) -> dict:
+    def _create_job_from_file(self, src: Path, copy: bool = True, intent: dict | None = None,
+                              title: str | None = None, nome: str | None = None) -> dict:
+        """`nome` preserva o nome que o usuário enviou: o arquivo vindo do
+        upload está num temporário com nome de trabalho."""
         job_id = uuid.uuid4().hex[:10]
-        name = _safe_name(src.name)
+        origem = nome or src.name
+        name = _safe_name(origem)
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         project = self.projects_root / f"{stamp}_{name}_{job_id}"
         project.mkdir(parents=True, exist_ok=True)
-        dest = project / src.name
+        dest = project / origem
         if copy:
             shutil.copy2(src, dest)
         else:

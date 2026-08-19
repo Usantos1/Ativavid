@@ -1,12 +1,21 @@
 # Changelog
 
+## 2.19
+
+Importar vídeo parou de comer a memória da máquina.
+
+- **Importar um vídeo de 250 MB usava 3,2 GB de memória.** O arquivo inteiro entrava na memória e ainda era copiado mais três vezes antes de chegar ao disco. Agora ele é gravado em pedaços, enquanto chega: o mesmo vídeo usa **22 MB**
+- Isso importava porque a memória do import disputava com o ffmpeg e o Remotion, que rodam ao mesmo tempo quando há fila. Com vários vídeos grandes seguidos, a máquina ficava sem folga
+- **Receber o arquivo também ficou ~14x mais rápido** (10,3 s para 0,75 s no vídeo de 250 MB, com a máquina livre)
+- O arquivo chega íntegro: conferido byte a byte, e o leitor novo foi testado contra o antigo em dezenas de casos, incluindo nome com acento, dois arquivos de mesmo nome e upload interrompido no meio
+
 ## 2.18
 
 A fila deixou de perder o estado dos cards.
 
 - **A fila agora vive num banco de dados, não num arquivo de texto.** Antes, cada atualização reescrevia a lista inteira; se dois programas mexessem na fila ao mesmo tempo, o último a gravar desfazia o trabalho do outro — um vídeo que estava "Editando..." voltava sozinho para "Na fila"
 - **Campos de tela não grudam mais no card.** A tela da Fila calcula coisas na hora (se já tem corte, se já tem capa, em que passo está) e isso estava sendo gravado junto com o card. Um passo antigo, uma capa já apagada ou uma mensagem passageira podiam ficar presos ali para sempre — foi a raiz dos cards travados que consertamos aos pedaços nas versões 2.13 e 2.14
-- **Atualizar um card ficou 69x mais rápido** com a fila cheia (8,3 ms para 0,12 ms com 200 vídeos)
+- **Atualizar um card ficou ~40x mais rápido** com a fila cheia (4,0 ms para 0,08 ms com 200 vídeos, mediana de 3 medições)
 - Sua fila é convertida sozinha na primeira abertura; o arquivo antigo fica guardado ao lado, por segurança
 
 ## 2.17.1
