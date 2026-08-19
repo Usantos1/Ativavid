@@ -37,6 +37,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+from ffprobe_util import first_record, parse_rate  # mesma pasta
+
 try:
     from grade import get_preset, auto_grade_for_clip  # same directory
 except Exception:
@@ -550,7 +552,10 @@ def is_portrait_source(video: Path) -> bool:
              "-of", "csv=p=0", str(video)],
             capture_output=True, text=True, check=True,
         )
-        parts = out.stdout.strip().split(",")
+        # first_record: com stream group o ffprobe repete o bloco e o
+        # split(",") cru pegava valor colado do segundo. Caia no except
+        # e respondia False em silencio.
+        parts = first_record(out.stdout).split(",")
         w, h = int(parts[0]), int(parts[1])
     except Exception:
         return False
@@ -587,8 +592,7 @@ def source_fps(video: Path) -> float:
              "-of", "default=noprint_wrappers=1:nokey=1", str(video)],
             capture_output=True, text=True, check=True,
         )
-        num, _, den = out.stdout.strip().partition("/")
-        return float(num) / float(den) if den else float(num)
+        return parse_rate(first_record(out.stdout), default=0.0)
     except Exception:
         return 0.0
 

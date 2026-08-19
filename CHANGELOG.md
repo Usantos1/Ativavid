@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.19.1
+
+Correção: vídeo de câmera falhava logo no começo.
+
+- **Arquivos de câmera (como os A001_… da Sony) davam erro e não passavam do corte.** O programa que lê as informações do vídeo repete o bloco de dados quando o arquivo tem uma estrutura que só câmeras usam, e a leitura entendia "24 quadros" como um texto quebrado. Vídeo de celular nunca mostrou o problema — por isso passou
+- Foi corrigido em todos os pontos que liam essas informações. Em dois deles o erro era pior: não quebrava, respondia errado calado — um chegava a dizer "zero quadros"
+- **Os vídeos que falharam funcionam com "Tentar novamente"**, sem precisar importar de novo
+
 ## 2.19
 
 Importar vídeo parou de comer a memória da máquina.

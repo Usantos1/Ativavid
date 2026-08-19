@@ -74,3 +74,15 @@ def ffmpeg_bin() -> str:
     if found:
         return found
     return "ffmpeg"
+
+
+# O ffprobe 9 repete o bloco do stream quando o arquivo tem stream group
+# (material de camera). Quem le a saida de texto como um valor so erra —
+# derrubou video em producao. A regra de leitura mora em helpers/ffprobe_util
+# e e reexportada aqui para o lado app: uma implementacao so.
+import sys  # noqa: E402
+
+if str(REPO / "helpers") not in sys.path:
+    sys.path.insert(0, str(REPO / "helpers"))
+
+from ffprobe_util import first_record, parse_rate  # noqa: E402,F401

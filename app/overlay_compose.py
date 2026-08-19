@@ -15,6 +15,8 @@ import json
 import re
 import subprocess
 from pathlib import Path
+
+from app.ffmpeg_tools import first_record
 from typing import Any
 
 LOUDNORM_I = -14.0
@@ -89,7 +91,7 @@ def count_frames(path: Path) -> int:
         "-of", "default=nw=1:nk=1", str(path),
     ])
     try:
-        return int((r.stdout or "").strip() or 0)
+        return int(first_record(r.stdout) or 0)
     except ValueError:
         return 0
 

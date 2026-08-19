@@ -31,6 +31,8 @@ HELPERS = REPO / "helpers"
 # Windows + stdout em pipe = cp1252; prints com "→" derrubam o job.
 if str(HELPERS) not in sys.path:
     sys.path.insert(0, str(HELPERS))
+
+from ffprobe_util import first_record, parse_rate  # noqa: E402
 import _utf8  # noqa: F401
 
 SHORTFORM = REPO / "assets" / "shortform"
@@ -481,11 +483,11 @@ def _ffprobe_fps(path: Path) -> float:
             "-of", "default=nokey=1:noprint_wrappers=1", str(path),
         ],
         capture_output=True, text=True, check=True,
-    ).stdout.strip()
-    if "/" in out:
-        a, b = out.split("/", 1)
-        return float(a) / float(b) if float(b) else 30.0
-    return float(out or 30.0)
+    ).stdout
+    # Com stream group (material de camera) o ffprobe repete o bloco e a
+    # saida vem com o valor duas vezes. Ler isso como um valor so derrubava
+    # o video em producao.
+    return parse_rate(first_record(out), default=30.0)
 
 
 def _ffprobe_wh(path: Path) -> tuple[int, int]:
@@ -523,7 +525,7 @@ def _ffprobe_wh(path: Path) -> tuple[int, int]:
             f"ffprobe falhou ao ler o vídeo ({path.name}): {err}\n"
             "Confira se o arquivo abre no player e se o FFmpeg está instalado."
         )
-    parts = [p for p in (r.stdout or "").strip().split(",") if p.strip()]
+    parts = [p for p in first_record(r.stdout).split(",") if p.strip()]
     if len(parts) < 2:
         raise RuntimeError(f"ffprobe não retornou width/height para {path.name}: {r.stdout!r}")
     return int(parts[0]), int(parts[1])
@@ -583,7 +585,8 @@ def _count_frames(path: Path) -> int:
             "-of", "default=nw=1:nk=1", str(path),
         ],
         capture_output=True, text=True, check=True,
-    ).stdout.strip()
+    ).stdout
+    out = first_record(out)
     if out not in ("", "N/A"):
         try:
             n = int(out)
@@ -598,8 +601,8 @@ def _count_frames(path: Path) -> int:
             "-of", "default=nw=1:nk=1", str(path),
         ],
         capture_output=True, text=True, check=True,
-    ).stdout.strip()
-    return int(out or 0)
+    ).stdout
+    return int(first_record(out) or 0)
 
 
 def load_preset(path: Path | None, raw: str | None) -> dict:
@@ -1766,7 +1769,8 @@ def encode_final(
                 "-of", "csv=p=0", str(render),
             ],
             capture_output=True, text=True, timeout=30,
-        ).stdout.strip().split(",")
+        ).stdout
+        tags = first_record(tags).split(",")
         if tags[:3] == ["yuv420p", "tv", "bt709"]:
             print("[final_encode] video ja em bt709/tv -> stream copy", flush=True)
             proc = _run_tool(

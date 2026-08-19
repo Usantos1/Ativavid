@@ -11,6 +11,8 @@ import shutil
 import subprocess
 import time
 from pathlib import Path
+
+from app.ffmpeg_tools import first_record
 from typing import Any
 
 REPO = Path(__file__).resolve().parent.parent
@@ -239,7 +241,7 @@ def _mov_frames(path: Path) -> int:
              str(path)],
             capture_output=True, text=True, timeout=30, **_hide(),
         )
-        return int((r.stdout or "").strip() or 0)
+        return int(first_record(r.stdout) or 0)
     except (ValueError, OSError, subprocess.SubprocessError):
         return 0
 
