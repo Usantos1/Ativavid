@@ -451,7 +451,13 @@ def _busy_if_applying(edit_dir: Path) -> dict[str, Any] | None:
     }
 
 
-def handle(edit_dir: Path, body: dict[str, Any], *, hooks: Any = None) -> dict[str, Any]:
+def handle(
+    edit_dir: Path,
+    body: dict[str, Any],
+    *,
+    hooks: Any = None,
+    fallback_full: Any = None,
+) -> dict[str, Any]:
     """API do editor. Apply dispara o executor; o planner continua puro."""
     op = str((body or {}).get("op") or (body or {}).get("action") or "").strip().lower()
     edit = Path(edit_dir)
@@ -469,7 +475,7 @@ def handle(edit_dir: Path, body: dict[str, Any], *, hooks: Any = None) -> dict[s
         if body.get("sync") or hooks is not None:
             plan = plan_for_edit(edit)
             return execute_apply_plan(edit, plan, hooks=hooks)
-        return start_apply(edit)
+        return start_apply(edit, fallback_full=fallback_full)
     busy = _busy_if_applying(edit)
     if busy and op not in ("load", "get", "plan", "apply-plan", ""):
         return busy

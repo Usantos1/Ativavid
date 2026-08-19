@@ -722,9 +722,24 @@ def load_manual_edl_ranges(edit_dir: Path, source_key: str, preset: dict) -> lis
     Sem isto, um requeue por mudança de headline/estilo replaneja com a IA e
     DESFAZ os cortes manuais (visto em produção: EDL truncado pelo usuário
     voltou ao plano cheio). Reusa o edl.json quando (a) houve edição manual
-    antes (preview_edits.applied.json existe) e (b) os knobs de corte não
-    mudaram — mudar ritmo/intensidade/tipo é pedido explícito de replanejar."""
-    if not (edit_dir / "preview_edits.applied.json").exists():
+    antes (preview_edits.applied.json OU corrections.json com edl mexido/
+    aplicado — o caminho de quick apply não passa por preview_edits) e
+    (b) os knobs de corte não mudaram — mudar ritmo/intensidade/tipo é
+    pedido explícito de replanejar."""
+    manual = (edit_dir / "preview_edits.applied.json").exists()
+    if not manual:
+        try:
+            corr = json.loads((edit_dir / "corrections.json").read_text(encoding="utf-8-sig"))
+            dirty = corr.get("dirty") or {}
+            pending = corr.get("pending") or {}
+            manual = bool(
+                dirty.get("edl")
+                or pending.get("edl")
+                or corr.get("appliedAt")
+            )
+        except (OSError, json.JSONDecodeError, AttributeError):
+            manual = False
+    if not manual:
         return None
     edl_p = edit_dir / "edl.json"
     if not edl_p.exists():
@@ -3308,6 +3323,17 @@ def run(
     except Exception as e:  # noqa: BLE001
         print(f"[warn] delivery pack: {e}", flush=True)
     set_stage(edit_dir, "done", "Pronto", 100)
+    # Rebatiza o fingerprint das corrections para o estado recém-gerado
+    # (captions/edl/cut agora são a mesma verdade). Sem isto um projeto com
+    # edições antigas guardava um "relógio" defasado e o quick apply passava
+    # a falhar para sempre com "OLD map Nf vs cut.mp4 Mf".
+    try:
+        from app.apply_execute import _clear_dirty
+
+        if (edit_dir / "corrections.json").exists():
+            _clear_dirty(edit_dir)
+    except Exception as e:  # noqa: BLE001
+        print(f"[warn] corrections clock: {e}", flush=True)
     _write_preview_state(
         edit_dir, source.name, phase=3, message="Pronto",
         fps=int(fps), style=style_blob,

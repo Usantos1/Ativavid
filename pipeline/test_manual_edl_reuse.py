@@ -65,6 +65,86 @@ def test_headline_only_change_still_reuses(tmp_path):
     assert load_manual_edl_ranges(edit, "IMG", preset) is not None
 
 
+def test_corrections_marker_allows_reuse(tmp_path):
+    # quick apply não passa por preview_edits: a evidência de edição manual
+    # fica em corrections.json (dirty.edl / appliedAt)
+    edit = _project(tmp_path, applied=False, preset_used=dict(PRESET))
+    (edit / "corrections.json").write_text(json.dumps({
+        "dirty": {"edl": True}, "pending": {"edl": 2},
+    }), encoding="utf-8")
+    assert load_manual_edl_ranges(edit, "IMG", dict(PRESET)) is not None
+
+
+def test_apply_fallback_requeues_and_clears_task(tmp_path, monkeypatch):
+    # PrepareError não pode deixar o projeto travado: com fallback_full o
+    # Apply delega ao rerun completo e a tarefa sai da frente do card.
+    import app.apply_execute as ax
+
+    edit = tmp_path / "proj" / "edit"
+    edit.mkdir(parents=True)
+    monkeypatch.setattr(ax, "plan_apply_changes", lambda corr: {"mode": "RENDER_VISUAL"})
+    monkeypatch.setattr(ax, "execute_apply_plan",
+                        lambda e, plan, hooks=None: {"ok": False, "prepareFailed": True})
+    calls = []
+    res = ax.start_apply(edit, fallback_full=lambda: calls.append(1) or True)
+    assert res.get("started")
+    import time as _t
+    for _ in range(100):
+        st = ax.read_apply_status(edit)
+        if st.get("stage") == "queued" and not st.get("running") and calls:
+            break
+        _t.sleep(0.05)
+    assert calls, "fallback_full não foi chamado"
+    st = ax.read_apply_status(edit)
+    assert st.get("stage") == "queued" and st.get("ok") is None
+    assert not (edit / "apply_task.json").exists()
+
+
+def test_requeue_fallback_finds_job_and_skips_running_one(tmp_path):
+    import helpers.preview_server as ps
+
+    proj = tmp_path / "20260818_projeto_abc"
+    (proj / "edit").mkdir(parents=True)
+
+    class FakeStore:
+        def __init__(self):
+            self.updates = []
+
+        def list(self):
+            return [{"id": "abc", "projectDir": str(proj), "status": "done"}]
+
+        def update(self, jid, **kw):
+            self.updates.append((jid, kw))
+
+    class FakeWorker:
+        busy_id = None
+
+        def __init__(self):
+            self.queued = []
+
+        def enqueue(self, jid):
+            self.queued.append(jid)
+
+    h = ps.Handler.__new__(ps.Handler)
+    h.root = proj / "edit"
+    h.store, h.worker = FakeStore(), FakeWorker()
+    assert h._requeue_full_fallback()() is True
+    assert h.worker.queued == ["abc"]
+    assert h.store.updates[0][1]["status"] == "queued"
+
+    # job em andamento: não reenfileira por cima
+    h.worker.busy_id = "abc"
+    assert h._requeue_full_fallback()() is False
+
+
+def test_requeue_fallback_absent_without_store(tmp_path):
+    import helpers.preview_server as ps
+
+    h = ps.Handler.__new__(ps.Handler)
+    h.root = tmp_path
+    assert h._requeue_full_fallback() is None
+
+
 def test_llm_plan_drops_sliver_takes():
     from llm_cut_plan import MIN_TAKE_S, _normalize_ranges
 

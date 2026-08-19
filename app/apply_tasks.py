@@ -474,6 +474,27 @@ def mark_interrupted(edit_dir: Path, task: dict[str, Any] | None = None) -> dict
     return _persist(Path(edit_dir), row)
 
 
+def clear_task(edit_dir: Path) -> None:
+    """Tira a tarefa de Apply deste projeto do índice — o card da Fila volta
+    a seguir o job do pipeline (usado quando o Apply delega ao rerun completo)."""
+    edit = Path(edit_dir)
+    try:
+        task_path(edit).unlink(missing_ok=True)
+    except OSError:
+        pass
+    root = projects_root_for(edit)
+    with _index_lock:
+        tasks = _load_index(root)
+        if tasks.pop(project_id_for(edit), None) is not None:
+            _save_index(root, tasks)
+    try:
+        from app.event_bus import bump
+
+        bump()
+    except Exception:
+        pass
+
+
 def sweep_stale_applies(projects_root: Path, *, boot: bool = False) -> list[str]:
     """Não deixa Apply eternamente 'running' depois de crash/restart."""
     root = Path(projects_root)

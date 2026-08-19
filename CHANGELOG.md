@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.13
+
+Projeto travado no "Aplicar" nunca mais.
+
+- Quando o atalho rápido do Aplicar não consegue garantir a legenda alinhada, o app **reprocessa o vídeo inteiro sozinho** em vez de falhar — e os seus cortes manuais são mantidos no reprocesso
+- Isso conserta o caso em que toda tentativa de aplicar dava "Não foi possível preparar este corte" para sempre, sem saída
+- Ao terminar um vídeo, o app reajusta o relógio interno das legendas — era o descompasso que travava o Aplicar dos projetos mais antigos
+
 ## 2.12
 
 Importar ficou mais simples — e o app agora respeita os seus cortes.

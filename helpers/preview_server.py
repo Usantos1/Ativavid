@@ -1478,9 +1478,40 @@ class Handler(BaseHTTPRequestHandler):
         try:
             from app.quick_corrections import handle
 
-            self._json(handle(self.root, body))
+            self._json(handle(self.root, body, fallback_full=self._requeue_full_fallback()))
         except Exception as e:
             self._json({"ok": False, "error": str(e)}, 500)
+
+    def _requeue_full_fallback(self):
+        """Fallback do Apply: reenfileirar o job deste projeto no pipeline
+        completo quando o atalho rápido não serve (PrepareError). Só existe
+        no app desktop, onde o handler tem store/worker; no preview
+        standalone devolve None e o Apply falha como antes."""
+        store = getattr(self, "store", None)
+        worker = getattr(self, "worker", None)
+        if store is None or worker is None:
+            return None
+        folder = self.root.parent.name if self.root.name.lower() == "edit" else self.root.name
+        busy_id = getattr(worker, "busy_id", None)
+
+        def _requeue() -> bool:
+            for j in store.list():
+                if Path(j.get("projectDir", "")).name != folder:
+                    continue
+                if j.get("status") == "processing" or j.get("id") == busy_id:
+                    return False  # não briga com um job em andamento
+                store.update(
+                    j["id"],
+                    status="queued",
+                    message="Na fila — aplicando ajustes",
+                    reason=None,
+                    detail=None,
+                )
+                worker.enqueue(j["id"])
+                return True
+            return False
+
+        return _requeue
 
     def _waveform(self) -> None:
         video = self._current_video()

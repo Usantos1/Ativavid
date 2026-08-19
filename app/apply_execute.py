@@ -876,14 +876,26 @@ def execute_apply_plan(
             "ok": False,
             "plan": plan,
             "execute": True,
+            "prepareFailed": isinstance(e, PrepareError),
             "error": str(e)[:400],
             "message": msg,
             "corrections": load(edit),
         }
 
 
-def start_apply(edit_dir: Path, *, hooks: ApplyHooks | None = None) -> dict[str, Any]:
-    """Dispara o Apply em thread. A UI consulta apply_status.json."""
+def start_apply(
+    edit_dir: Path,
+    *,
+    hooks: ApplyHooks | None = None,
+    fallback_full: Callable[[], bool] | None = None,
+) -> dict[str, Any]:
+    """Dispara o Apply em thread. A UI consulta apply_status.json.
+
+    fallback_full: reenfileira o projeto no pipeline completo quando o
+    atalho rápido não consegue garantir legendas alinhadas (PrepareError,
+    ex.: mapa da timeline divergiu do cut.mp4). Sem isto o projeto ficava
+    travado — toda tentativa de Apply falhava para sempre. O rerun completo
+    mantém o corte manual (load_manual_edl_ranges)."""
     edit = Path(edit_dir)
     if is_apply_running(edit):
         return {
@@ -940,7 +952,31 @@ def start_apply(edit_dir: Path, *, hooks: ApplyHooks | None = None) -> dict[str,
             pid=os.getpid(),
         )
         try:
-            execute_apply_plan(edit, plan, hooks=hooks)
+            res = execute_apply_plan(edit, plan, hooks=hooks)
+            if (not res.get("ok")) and res.get("prepareFailed") and fallback_full is not None:
+                delegated = False
+                try:
+                    delegated = bool(fallback_full())
+                except Exception:
+                    delegated = False
+                if delegated:
+                    write_apply_status(
+                        edit,
+                        running=False,
+                        ok=None,
+                        message="Reprocessando o vídeo inteiro (seus cortes são mantidos)...",
+                        stage="queued",
+                        error=None,
+                    )
+                    # Por último: o job do pipeline assume o card da Fila; a
+                    # tarefa de Apply sai de cena (write_apply_status acima
+                    # ressincroniza a task, então o clear vem depois dela).
+                    try:
+                        from app.apply_tasks import clear_task
+
+                        clear_task(edit)
+                    except Exception:
+                        pass
         except Exception as e:
             write_apply_status(
                 edit,
