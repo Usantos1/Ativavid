@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.17
+
+Reprocessar um vídeo ficou 9x mais rápido.
+
+- Vídeos gravados no iPhone são HDR, e converter essa cor era a etapa mais cara do corte — ela rodava **de novo a cada trecho e a cada reprocessamento**. Agora essa conversão é feita **uma vez por vídeo** e reaproveitada
+- **A primeira edição leva o mesmo tempo de antes.** As seguintes (trocar headline, corrigir legenda, ajustar corte) caem de ~5 minutos para ~30 segundos no passo do corte — medido: 294s para 32s
+- A imagem continua a mesma: os filtros são exatamente os mesmos, na mesma ordem, só aplicados mais cedo
+- O arquivo intermediário fica na pasta do projeto e é refeito sozinho se você trocar a cor da marca ou o vídeo de origem
+
+
 ## 2.16
 
 Ajustar legenda ou headline deixou de custar uma hora.

@@ -1,0 +1,11 @@
+teste,ok,runs,tempo_s,spread_s,fps,x_realtime,codec,size_mb,bitrate_mbps,gpu_sm_avg,gpu_sm_max,gpu_enc_avg,gpu_enc_max,gpu_dec_avg,gpu_dec_max,vram_max_mb,cpu_avg,cpu_max,samples,nota,erro
+A0 copia de fluxo,True,3,0.3,0.01,2837.6,94.59,h264,56.7,16.78,42,42,0,0,0,0,478,79.3,79.3,1,piso absoluto: so copia,
+A3a decode CPU -> null,True,3,4.7,0.2,181.3,6.04,,0,0,37.5,44,0,0,0,0,478,94.5,100.0,15,custo do decode isolado,
+A3b decode NVDEC -> null,True,3,2.83,0.42,300.3,10.01,,0,0,40.1,42,0,0,49.6,66,637,74.4,85.0,9,NVDEC isolado,
+A1 CPU decode -> h264_nvenc,True,3,8.24,5.43,103.3,3.44,h264,43.7,12.91,29.6,41,38.1,66,2.1,58,700,97.0,100.0,27,,
+A2 CPU decode -> hevc_nvenc,True,3,15.76,3.99,54.0,1.8,hevc,28.6,8.44,25.5,53,21.8,66,0,0,699,99.8,100.0,49,,
+A3c NVDEC->NVENC zero-copy,True,3,3.17,0.32,268.2,8.94,h264,43.7,12.91,24.6,39,60.5,100,31.9,57,813,85.6,95.7,10,frame nunca sai da GPU,
+A3c2 NVDEC->hevc_nvenc zero-copy,True,3,3.03,0.07,281.2,9.37,hevc,28.6,8.44,22.9,26,88,100,44.8,58,818,78.1,84.8,9,,
+A3d d3d11va -> h264_nvenc,False,,,,,,,,,,,,,,,,,,,,"0:0/h264_nvenc @ 0000025a4bba1240] Terminating thread with return code -22 (Invalid argument) [out#0/mp4 @ 0000025a4bb12a00] Nothing was written into output file, because at least one of its streams received no packets. "
+A4 CPU decode -> libx264 veryfast,True,3,39.01,8.02,21.8,0.73,h264,33.4,9.89,35.8,64,0,0,0,0,495,99.9,100.0,115,regua CPU,
+A5 av1_nvenc (esperado falhar),False,,,,,,,,,,,,,,,,,,,Ampere nao codifica AV1 — confirmar,"#0:0/av1_nvenc @ 0000027addd0cb40] Terminating thread with return code -22 (Invalid argument) [out#0/mp4 @ 0000027addc72780] Nothing was written into output file, because at least one of its streams received no packets. "

@@ -1,0 +1,6 @@
+caminho,tempo_s,x_realtime
+CPU + NVENC,23.7,1.2
+GPU com upload por frame,14.0,2.03
+CPU + x264,27.3,1.04
+(referencia) 22 PNGs + overlay_cuda,10.08,2.81
+(referencia) decode so do ProRes,4.7,6.01

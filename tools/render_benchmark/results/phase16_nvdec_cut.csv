@@ -1,0 +1,4 @@
+caminho,tempo_s,runs,gpu_sm_avg,gpu_sm_max,gpu_enc_avg,gpu_enc_max,gpu_dec_avg,gpu_dec_max,vram_max_mb,cpu_avg,cpu_max,samples,ganho_vs_hoje
+CPU decode + libx264 (como hoje),294.4,2,23.5,44,0,0,0,0,543,98.9,100.0,584,
+CPU decode + h264_nvenc,238.5,2,13.9,43,6.6,43,0,0,780,97.6,100.0,474,1.23
+NVDEC + h264_nvenc,181.0,2,28.4,52,10.0,60,15.9,46,1353,92.0,100.0,360,1.63

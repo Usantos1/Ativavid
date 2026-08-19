@@ -1,0 +1,2 @@
+caminho,tempo_s,gpu_sm_avg,gpu_sm_max,gpu_enc_avg,gpu_enc_max,gpu_dec_avg,gpu_dec_max,vram_max_mb,cpu_avg,cpu_max,samples
+NVDEC + grade + zoom (CPU) + NVENC,300.6,30.9,64,6.7,59,5.4,40,1338,98.0,100.0,296

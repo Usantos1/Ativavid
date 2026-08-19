@@ -1,0 +1,13 @@
+variante,ssim
+blur 2.0 ,0.8846
+blur 2.0 + gradiente,0.8859
+blur 3.0 ,0.8941
+blur 3.0 + gradiente,0.8797
+blur 3.5 ,0.8971
+blur 3.5 + gradiente,0.8668
+blur 4.0 ,0.8995
+blur 4.0 + gradiente,0.8561
+blur 5.0 ,0.8975
+blur 5.0 + gradiente,0.8279
+"partida (Segoe, sem calibrar)",0.5874
+teto (ref x ref),1.0

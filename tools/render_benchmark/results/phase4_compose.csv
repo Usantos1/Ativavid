@@ -1,0 +1,6 @@
+teste,ok,runs,tempo_s,spread_s,fps,x_realtime,codec,size_mb,bitrate_mbps,gpu_sm_avg,gpu_sm_max,gpu_enc_avg,gpu_enc_max,gpu_dec_avg,gpu_dec_max,vram_max_mb,cpu_avg,cpu_max,samples,nota
+B1 CPU decode + overlay CPU + nvenc,True,3,12.01,8.98,70.8,2.36,h264,43.7,12.94,28.6,52,27.2,70,0,0,700,97.0,100.0,40,"22 graficos, blend na CPU"
+B2 NVDEC + overlay_cuda + nvenc,True,3,10.45,0.17,81.5,2.72,h264,43.8,12.95,26.8,49,18.8,100,10,55,2376,65.6,86.7,32,zero-copy pretendido
+B3 NVDEC + overlay_cuda + hevc,True,3,10.08,0.69,84.4,2.81,hevc,28.8,8.52,26.9,51,23.6,100,14.7,74,2375,65.1,87.0,31,zero-copy pretendido
+B4 drawtext por frame + nvenc,True,3,14.44,5.06,59.0,1.97,h264,43.6,12.9,24.2,51,24.5,76,0,0,700,99.4,100.0,41,8 drawtext; forca frame na CPU
+prep rasterizacao PNG,True,,4.67,,,,,,,,,,,,,,,,,"22 PNGs, custo unico"

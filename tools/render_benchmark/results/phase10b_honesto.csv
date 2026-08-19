@@ -1,0 +1,27 @@
+estado,situacao,ssim_faixa,ssim_justo
+0,porte nao desenhou nada,,
+1,,0.9635,0.7824
+2,ambos vazios (excluido),,
+3,,0.9797,0.7846
+4,ambos vazios (excluido),,
+5,,0.9778,0.6719
+6,,0.9817,0.7416
+7,porte nao desenhou nada,,
+8,,0.9413,0.5785
+9,porte nao desenhou nada,,
+10,porte nao desenhou nada,,
+11,"ref vazia, porte desenhou",,
+12,porte nao desenhou nada,,
+13,,0.97,0.6574
+14,,0.9818,0.6769
+15,,0.9611,0.6671
+16,"ref vazia, porte desenhou",,
+17,ambos vazios (excluido),,
+18,ambos vazios (excluido),,
+19,ambos vazios (excluido),,
+20,ambos vazios (excluido),,
+21,,0.9092,0.9554
+MEDIA faixa,,0.9629,
+MEDIA justo,,,0.724
+excluidos vazios,6,,
+porte sem desenho,5,,

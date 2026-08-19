@@ -1,0 +1,7 @@
+variante,ssim,fontsize,nota
+l1_libass_simples,0.8498,153,"Poppins real, sem efeito"
+l2_desfoque_2,0.8881,153,+ desfoque 2 (o que o drawtext nao faz)
+l3_desfoque_3,0.902,153,+ desfoque 3
+l4_desfoque_e_tracking,0.8966,153,"+ tracking -1,5 (como no TSX)"
+melhor drawtext (p4),0.8622,,"gradiente + sombra, medido antes"
+"antes de tudo (Segoe, sem calibrar)",0.5874,,

@@ -1,0 +1,7 @@
+variante,ssim,caixa,fontsize,nota
+p1_poppins_calibrada,0.8418,"(433, 1218, 217, 65)",86,"Poppins real, corpo e posicao iguais"
+p2_com_sombra,0.842,"(433, 1218, 217, 69)",86,+ sombra
+p3_com_gradiente,0.8478,"(433, 1218, 217, 65)",86,+ gradiente nas letras
+p4_completa,0.8622,"(433, 1218, 217, 69)",86,+ gradiente e sombra
+antes_sem_calibrar,0.5874,,,"Segoe UI Black, geometria diferente"
+teto (ref x ref),1.0,,,controle

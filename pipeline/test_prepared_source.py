@@ -1,0 +1,98 @@
+"""Fonte preparada: tonemap + grade aplicados uma vez, não a cada segmento.
+
+O tonemap HDR domina o corte (medido: 294,4 s para 29,1 s de vídeo, CPU a
+99%). Aplicando-o uma vez sobre a fonte, a 1ª execução empata e as
+reexecuções caem para 32,4 s — 9,1x. Estes testes travam as regras que
+tornam isso seguro.
+"""
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parent.parent
+if str(REPO) not in sys.path:
+    sys.path.insert(0, str(REPO))
+sys.path.insert(0, str(REPO / "helpers"))
+
+import render  # noqa: E402
+
+
+def _fake_src(tmp_path: Path, name: str = "a.mov") -> Path:
+    p = tmp_path / name
+    p.write_bytes(b"x" * 2048)
+    return p
+
+
+def test_desligado_por_variavel(tmp_path, monkeypatch):
+    monkeypatch.setenv("ATIVAVID_PREP_SOURCE", "0")
+    assert render.prepared_source(_fake_src(tmp_path), "scale=-2:1920", "eq=x") is None
+
+
+def test_fonte_sdr_nao_prepara(tmp_path, monkeypatch):
+    """Sem tonemap não há o que economizar — evita gerar arquivo à toa."""
+    monkeypatch.delenv("ATIVAVID_PREP_SOURCE", raising=False)
+    monkeypatch.setattr(render, "is_hdr_source", lambda _p: False)
+    assert render.prepared_source(_fake_src(tmp_path), "scale=-2:1920", "eq=x") is None
+
+
+def test_chave_muda_com_grade_escala_e_fonte(tmp_path):
+    src = _fake_src(tmp_path)
+    base = render._prep_key(src, "scale=-2:1920", "eq=a")
+    assert base == render._prep_key(src, "scale=-2:1920", "eq=a")   # estável
+    assert base != render._prep_key(src, "scale=-2:1080", "eq=a")   # escala
+    assert base != render._prep_key(src, "scale=-2:1920", "eq=b")   # grade
+    src.write_bytes(b"y" * 4096)                                    # fonte mudou
+    assert base != render._prep_key(src, "scale=-2:1920", "eq=a")
+
+
+def test_cache_invalido_e_refeito(tmp_path, monkeypatch):
+    """Chave divergente não pode devolver o arquivo velho."""
+    monkeypatch.delenv("ATIVAVID_PREP_SOURCE", raising=False)
+    monkeypatch.setattr(render, "is_hdr_source", lambda _p: True)
+    src = _fake_src(tmp_path)
+    prep = src.with_suffix(src.suffix + ".prep.mp4")
+    keyf = src.with_suffix(src.suffix + ".prepkey")
+    prep.write_bytes(b"video")
+    keyf.write_text("chave-de-outra-coisa", encoding="utf-8")
+    chamou = []
+    monkeypatch.setattr(render, "_run_ffmpeg",
+                        lambda *a, **k: chamou.append(1))
+    render.prepared_source(src, "scale=-2:1920", "eq=a", quiet=True)
+    assert chamou, "cache inválido foi aceito sem regerar"
+
+
+def test_cache_valido_e_reaproveitado(tmp_path, monkeypatch):
+    monkeypatch.delenv("ATIVAVID_PREP_SOURCE", raising=False)
+    monkeypatch.setattr(render, "is_hdr_source", lambda _p: True)
+    src = _fake_src(tmp_path)
+    prep = src.with_suffix(src.suffix + ".prep.mp4")
+    keyf = src.with_suffix(src.suffix + ".prepkey")
+    prep.write_bytes(b"video")
+    keyf.write_text(render._prep_key(src, "scale=-2:1920", "eq=a"), encoding="utf-8")
+    monkeypatch.setattr(render, "_run_ffmpeg",
+                        lambda *a, **k: (_ for _ in ()).throw(AssertionError("regerou à toa")))
+    assert render.prepared_source(src, "scale=-2:1920", "eq=a", quiet=True) == prep
+
+
+def test_falha_do_ffmpeg_cai_no_caminho_normal(tmp_path, monkeypatch):
+    """Nunca pode derrubar o corte: erro ao preparar devolve None."""
+    monkeypatch.delenv("ATIVAVID_PREP_SOURCE", raising=False)
+    monkeypatch.setattr(render, "is_hdr_source", lambda _p: True)
+    monkeypatch.setattr(render, "_run_ffmpeg",
+                        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    assert render.prepared_source(_fake_src(tmp_path), "scale=-2:1920", "eq=a",
+                                  quiet=True) is None
+
+
+def test_duracao_divergente_descarta(tmp_path, monkeypatch):
+    """Arquivo truncado não pode virar cache — o corte sairia curto."""
+    monkeypatch.delenv("ATIVAVID_PREP_SOURCE", raising=False)
+    monkeypatch.setattr(render, "is_hdr_source", lambda _p: True)
+    src = _fake_src(tmp_path)
+    monkeypatch.setattr(render, "_run_ffmpeg",
+                        lambda *a, **k: src.with_suffix(src.suffix + ".prep.tmp.mp4")
+                        .write_bytes(b"curto"))
+    monkeypatch.setattr(render, "probe_duration",
+                        lambda p: 5.0 if "tmp" in p.name else 40.0)
+    assert render.prepared_source(src, "scale=-2:1920", "eq=a", quiet=True) is None

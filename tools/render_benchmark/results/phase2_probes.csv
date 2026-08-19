@@ -1,0 +1,2 @@
+teste,ok,tempo_s,segmentos,n_ffprobe,n_ffmpeg,ffprobe_por_segmento,n_subproc_total,nota
+corte: contagem de subprocessos,True,8.75,5,4,12,0.8,16,"{""ffprobe"": 0.34, ""ffmpeg"": 8.33}"

@@ -28,6 +28,7 @@ import atexit
 import functools
 import json
 import math
+import hashlib
 import os
 import re
 import subprocess
@@ -621,6 +622,96 @@ def _auto_extract_jobs() -> int:
 # -------- Per-segment extraction (Rule 2 + Rule 3) --------------------------
 
 
+_PREP_VER = "1"
+
+
+def _prep_key(source: Path, scale: str, grade_filter: str) -> str:
+    """Assinatura do que foi embutido no arquivo preparado."""
+    st = source.stat()
+    blob = "|".join([
+        _PREP_VER, str(st.st_size), str(int(st.st_mtime)),
+        scale, TONEMAP_CHAIN, grade_filter or "",
+    ])
+    return hashlib.sha1(blob.encode("utf-8")).hexdigest()[:16]
+
+
+def prepared_source(
+    source: Path, scale: str, grade_filter: str, *, quiet: bool = False,
+) -> Path | None:
+    """Fonte com escala + tonemap + grade já aplicados, gerada UMA vez.
+
+    O tonemap HDR é o passo mais caro do corte: um pipeline float32 que hoje
+    roda de novo em cada segmento e em cada reprocessamento. Aplicando-o uma
+    única vez sobre a fonte inteira, os segmentos passam a sair de um H.264
+    8-bit barato.
+
+    A cor é idêntica porque a ordem dos filtros (escala → tonemap → grade) é
+    exatamente a mesma — só muda QUANDO são aplicados. Medido no projeto do
+    usuário: 1ª execução empata com o caminho atual (297,6 s vs 294,4 s) e as
+    reexecuções caem de 294,4 s para 29,7 s (9,9x).
+
+    Devolve None quando não se aplica (fonte SDR, sem tonemap a economizar) ou
+    quando algo falha — nesses casos o corte segue pelo caminho de sempre.
+    """
+    if os.environ.get("ATIVAVID_PREP_SOURCE", "").strip() == "0":
+        return None
+    if not is_hdr_source(source):
+        return None  # sem tonemap, não há o que economizar
+    prep = source.with_suffix(source.suffix + ".prep.mp4")
+    keyf = source.with_suffix(source.suffix + ".prepkey")
+    want = _prep_key(source, scale, grade_filter)
+    if prep.exists() and keyf.exists():
+        try:
+            if keyf.read_text(encoding="utf-8").strip() == want:
+                return prep
+        except OSError:
+            pass
+    tmp = prep.with_suffix(".tmp.mp4")
+    vf = ",".join([x for x in (scale, TONEMAP_CHAIN, grade_filter) if x])
+    # Qualidade alta de propósito: este arquivo é um INTERMEDIÁRIO e o corte
+    # ainda será reencodado depois. A cq 19 a perda de geração medida foi
+    # PSNR 35,5 dB; a cq 14 fica visualmente transparente e o arquivo é
+    # temporário (some com o projeto).
+    venc, _ = pick_video_encoder()
+    if venc == "libx264":
+        vextra = ["-preset", "fast", "-crf", "14", "-pix_fmt", "yuv420p"]
+    elif "nvenc" in venc:
+        vextra = ["-preset", "p4", "-cq", "14", "-b:v", "0", "-pix_fmt", "yuv420p"]
+    else:
+        vextra = ["-crf", "14", "-pix_fmt", "yuv420p"]
+    cmd = [
+        "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+        "-i", str(source), "-vf", vf,
+        "-c:v", venc, *vextra, "-g", "30", "-keyint_min", "15",
+        "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709",
+        "-c:a", "copy", "-movflags", "+faststart", str(tmp),
+    ]
+    if not quiet:
+        print(f"  preparando fonte (tonemap uma vez): {source.name}", flush=True)
+    try:
+        _run_ffmpeg(cmd, label="prepared source")
+    except Exception as e:  # noqa: BLE001
+        print(f"  [warn] fonte preparada falhou ({e}) — seguindo pelo caminho normal", flush=True)
+        tmp.unlink(missing_ok=True)
+        return None
+    # só aceita se a duração bater com a fonte (guarda contra arquivo truncado)
+    try:
+        if abs(probe_duration(tmp) - probe_duration(source)) > 0.5:
+            print("  [warn] fonte preparada com duração diferente — descartada", flush=True)
+            tmp.unlink(missing_ok=True)
+            return None
+    except Exception:  # noqa: BLE001
+        tmp.unlink(missing_ok=True)
+        return None
+    try:
+        tmp.replace(prep)
+        keyf.write_text(want, encoding="utf-8")
+    except OSError:
+        tmp.unlink(missing_ok=True)
+        return None
+    return prep
+
+
 def extract_segment(
     source: Path,
     seg_start: float,
@@ -635,6 +726,7 @@ def extract_segment(
     bleep_windows: list | None = None,
     streams: str = "av",
     zoom: dict | None = None,
+    prepared: Path | None = None,
 ) -> None:
     """Extract a cut range as its own MP4 with grade + 30ms audio fades baked in.
 
@@ -656,6 +748,14 @@ def extract_segment(
     """
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # Fonte preparada: escala, tonemap e grade já estão embutidos nela, então
+    # este segmento só precisa cortar (e aplicar zoom). Sem isto o tonemap
+    # rodaria de novo por segmento.
+    prepped = prepared is not None and prepared.exists()
+    if prepped:
+        source = prepared
+        grade_filter = ""
+
     portrait = is_portrait_source(source)
     if draft:
         scale = "scale=-2:1280" if portrait else "scale=1280:-2"
@@ -663,6 +763,12 @@ def extract_segment(
         scale = ""  # keep native resolution (longform)
     else:
         scale = "scale=-2:1920" if portrait else "scale=1920:-2"
+
+    if prepped:
+        # A fonte preparada já está na altura de entrega. Zera SÓ a escala:
+        # mexer em keep_resolution também soltaria o fps da fonte (medido:
+        # saía 60fps/1696 frames em vez de 30fps/851).
+        scale = ""
 
     vf_parts: list[str] = []
     # Downscale FIRST, before any HDR tonemap / wide-gamut colour conversion.
@@ -907,6 +1013,24 @@ def extract_all_segments(
     if jobs <= 0:
         jobs = _auto_extract_jobs()
     print(f"extracting {len(ranges)} segment(s) → {clips_dir.name}/  ({jobs} parallel)")
+
+    # Uma fonte preparada por arquivo, montada ANTES do laço paralelo: se cada
+    # thread chamasse por conta própria, N threads tonemapariam a mesma fonte
+    # ao mesmo tempo.
+    prep_by_src: dict[str, Path | None] = {}
+    if not (draft or preview or keep_resolution) and not is_auto:
+        _portrait_scale = "scale=-2:1920"
+        for _name in {r["source"] for r in ranges}:
+            _sp = resolve_path(sources[_name], edit_dir)
+            _scale = _portrait_scale if is_portrait_source(_sp) else "scale=1920:-2"
+            try:
+                prep_by_src[_name] = prepared_source(_sp, _scale, resolved)
+            except Exception as _e:  # noqa: BLE001
+                print(f"  [warn] fonte preparada de {_name}: {_e}", flush=True)
+                prep_by_src[_name] = None
+        _hits = [k for k, v in prep_by_src.items() if v]
+        if _hits:
+            print(f"  fonte preparada em uso: {', '.join(_hits)}", flush=True)
     try:
         from app.ffmpeg_zoom import zoom_enabled, zoom_for_index
     except ImportError:
@@ -948,6 +1072,7 @@ def extract_all_segments(
             gain_db=gain_db, gain_windows=gain_windows,
             bleep_windows=bleep_windows,
             zoom=zoom_for_index(edl, i),
+            prepared=prep_by_src.get(src_name),
         )
         return out_path
 
@@ -1270,6 +1395,22 @@ def extract_and_assemble_jcut(
     if jobs <= 0:
         jobs = _auto_extract_jobs()
 
+    # Fonte preparada (tonemap + grade uma vez só) — mesma ideia do caminho
+    # sem J-cut. Montada aqui, antes do laço paralelo.
+    prep_by_src: dict[str, Path | None] = {}
+    if not (draft or preview or keep_resolution) and not is_auto:
+        for _name in {r["source"] for r in edl["ranges"]}:
+            _sp = resolve_path(edl["sources"][_name], edit_dir)
+            _scale = "scale=-2:1920" if is_portrait_source(_sp) else "scale=1920:-2"
+            try:
+                prep_by_src[_name] = prepared_source(_sp, _scale, resolved)
+            except Exception as _e:  # noqa: BLE001
+                print(f"  [warn] fonte preparada de {_name}: {_e}", flush=True)
+                prep_by_src[_name] = None
+        _hits = [k for k, v in prep_by_src.items() if v]
+        if _hits:
+            print(f"  fonte preparada em uso: {', '.join(_hits)}", flush=True)
+
     # Render incremental: um re-render que só mudou parte do corte reaproveita
     # os segmentos idênticos da extração anterior (casados por CHAVE de
     # conteúdo — fonte+mtime+range+grade+zoom+flags — nunca por nome).
@@ -1311,13 +1452,17 @@ def extract_and_assemble_jcut(
         i, r = p["i"], p["range"]
         vkey = _seg_key(
             "v", p["src"], p["v_in"], p["v_out"],
+            # `prep` entra na chave: o segmento sai de um arquivo diferente
+            # quando a fonte preparada existe, então não pode reusar o antigo.
             [str(edl.get("grade") or ""), _zoom_key_fn(edl, i),
-             preview, draft, keep_resolution, encoder_env],
+             preview, draft, keep_resolution, encoder_env,
+             bool(prep_by_src.get(r["source"]))],
         )
         akey = _seg_key(
             "a", p["src"], p["a_in"], p["a_out"],
             [float(r.get("gain_db", 0.0) or 0.0), r.get("gain_windows") or [],
-             r.get("bleep_windows") or [], preview, draft],
+             r.get("bleep_windows") or [], preview, draft,
+             bool(prep_by_src.get(r["source"]))],
         )
         p["_vkey"], p["_akey"] = vkey, akey
         vpath = clips_dir / f"seg_{i:02d}_{r['source']}_v.mp4"
@@ -1380,13 +1525,15 @@ def extract_and_assemble_jcut(
             extract_segment(p["src"], p["v_in"], p["v_out"] - p["v_in"], seg_filter,
                             vpath, preview=preview, draft=draft,
                             keep_resolution=keep_resolution, streams="v",
-                            zoom=zoom_for_index(edl, i))
+                            zoom=zoom_for_index(edl, i),
+                            prepared=prep_by_src.get(r["source"]))
         if not p.get("reuse_a"):
             extract_segment(p["src"], p["a_in"], p["a_out"] - p["a_in"], "",
                             apath, preview=preview, draft=draft,
                             keep_resolution=keep_resolution, gain_db=gain_db,
                             gain_windows=gain_windows, bleep_windows=bleep_windows,
-                            streams="a")
+                            streams="a",
+                            prepared=prep_by_src.get(r["source"]))
         p["video_path"], p["audio_path"] = vpath, apath
 
         tail_note = ""

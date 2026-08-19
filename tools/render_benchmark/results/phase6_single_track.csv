@@ -1,0 +1,6 @@
+teste,ok,runs,tempo_s,spread_s,fps,x_realtime,codec,size_mb,bitrate_mbps,gpu_sm_avg,gpu_sm_max,gpu_enc_avg,gpu_enc_max,gpu_dec_avg,gpu_dec_max,vram_max_mb,cpu_avg,cpu_max,samples,nota
+D1 1 overlay CPU (faixa direta),True,3,24.93,5.29,34.1,1.14,h264,43.8,12.95,20.7,54,26.6,91,0,0,763,99.5,100.0,71,1 filtro em vez de 22
+D2 1 overlay_cuda (faixa direta),True,3,6.94,0.4,122.7,4.09,h264,43.8,12.95,30.6,57,24.4,100,14.0,52,2682,97.4,100.0,21,"1 filtro, tudo na GPU"
+D3 gerar faixa ProRes 4444,True,3,80.86,7.0,10.5,0.35,prores,68.8,17.4,29.3,46,0,0,0,0,584,100.0,100.0,241,equivalente ao overlay que o Remotion escreve
+D4 compor faixa ProRes + nvenc,True,3,148.74,108.55,5.7,0.19,h264,43.8,12.94,29.9,79,6.2,51,3.7,36,1100,100.0,100.0,392,mesma etapa que o compose de producao faz hoje
+prep rasterizacao PNG,True,,4.16,,,,,,,,,,,,,,,,,"22 PNGs, custo unico"

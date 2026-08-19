@@ -1,0 +1,7 @@
+variante,ssim,nota
+v1_texto_simples,0.9346,"Arial Bold, branco chapado, sem sombra"
+v2_fonte_pesada,0.9293,Segoe UI Black (mais perto da Poppins 900)
+v3_com_sombra,0.9293,+ sombra suave
+v4_sombra_e_espacamento,0.9293,+ tracking negativo (drawtext nao suporta — igual a v3)
+v5_gradiente_nas_letras,0.9295,gradiente dentro das letras REPRODUZIDO com alphamerge
+teto (ref vs ref),1.0,controle
