@@ -655,6 +655,12 @@ def attach_apply_to_jobs(jobs: list[dict[str, Any]], projects_root: Path | None 
         view = public_view(task, edit if edit else None)
         if view:
             job["quickApply"] = view
+        else:
+            # quickApply é DERIVADO da tarefa. Já vazou para dentro do
+            # jobs.json em produção e, sem este pop, o aviso "REVISAR" de um
+            # Apply antigo grudava no card para sempre — mesmo com a tarefa
+            # apagada, porque o valor velho continuava sendo servido.
+            job.pop("quickApply", None)
     return jobs
 
 

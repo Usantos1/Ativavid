@@ -2557,3 +2557,7 @@ body.home-working .hero-import .hero-inner { padding: 10px 0; }
 .import-adv[open] > summary::before { content: "\25BE"; }
 .import-adv > summary h4 { margin: 0; display: inline; }
 .import-adv > summary .muted { font-size: 12px; opacity: .6; }
+
+/* Ações de card travado: os botões participam do mesmo flex da linha
+   (display:contents), senão o wrapper quebraria o flex-wrap dos cards. */
+.pc-actions .pc-stuck { display: contents; }

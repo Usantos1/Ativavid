@@ -67,6 +67,48 @@ REASON_LABELS = {
     ),
 }
 
+CORRUPT_SOURCE_MSG = (
+    "O arquivo deste vídeo está incompleto ou ilegível — a cópia do celular "
+    "foi interrompida. Apague este item, copie o vídeo de novo e importe "
+    "outra vez; tentar de novo com este mesmo arquivo não resolve."
+)
+MISSING_SOURCE_MSG = (
+    "O arquivo original deste vídeo não está mais no lugar (foi movido, "
+    "renomeado ou apagado). Importe o vídeo de novo."
+)
+
+
+def unreadable_source_message(job: dict) -> str | None:
+    """Motivo por que este job NÃO pode ser reprocessado, ou None se dá.
+
+    Só olha a fonte principal e só custa um ffprobe rápido. Sem isto, o
+    "Tentar novamente" reenfileira um arquivo quebrado e o card volta para
+    erro — foi o que travou a fila do usuário."""
+    raw = str(job.get("source") or "")
+    if not raw:
+        return None
+    src = Path(raw)
+    if not src.exists():
+        return MISSING_SOURCE_MSG
+    try:
+        from app.media_probe import probe_video
+
+        info = probe_video(src)
+    except Exception:  # noqa: BLE001
+        return CORRUPT_SOURCE_MSG
+    info = info or {}
+    if not info.get("ok"):
+        # ffprobe ausente não é culpa do arquivo — não bloqueia o retry
+        if "ffprobe" in str(info.get("error") or "").lower():
+            return None
+        return CORRUPT_SOURCE_MSG
+    try:
+        dur = float(info.get("durationSec") or 0)
+    except (TypeError, ValueError):
+        dur = 0.0
+    return None if dur > 0.05 else CORRUPT_SOURCE_MSG
+
+
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]|\x1b\].*?\x07|\x1b.")
 
 
@@ -686,8 +728,18 @@ class JobStore:
             except (json.JSONDecodeError, TypeError, KeyError):
                 self._jobs = {}
 
+    # Campos DERIVADOS de outra fonte (a tarefa de Apply). Nunca podem ser
+    # gravados: uma cópia velha aqui sobrevive à tarefa e o card fica preso
+    # em "REVISAR" para sempre — foi o que travou a fila do usuário.
+    _DERIVED_KEYS = ("quickApply",)
+
     def _save(self) -> None:
-        payload = {"jobs": sorted(self._jobs.values(), key=_job_recency_key, reverse=True)}
+        rows = []
+        for job in sorted(self._jobs.values(), key=_job_recency_key, reverse=True):
+            for key in self._DERIVED_KEYS:
+                job.pop(key, None)
+            rows.append(job)
+        payload = {"jobs": rows}
         tmp = self.jobs_path.with_suffix(".tmp")
         tmp.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
         tmp.replace(self.jobs_path)
@@ -2515,9 +2567,31 @@ class StudioHandler(BaseHTTPRequestHandler):
             if not job:
                 self._json({"error": "job not found"}, 404)
                 return
+            # Fonte ilegível não vira job: reenfileirar um arquivo quebrado só
+            # devolve o mesmo erro e o card fica preso no "Tentar novamente".
+            blocked = unreadable_source_message(job)
+            if blocked:
+                self.store.update(
+                    job["id"],
+                    status="needs_review",
+                    reason="arquivo_corrompido",
+                    message=blocked,
+                )
+                self._json({"ok": False, "permanent": True, "error": blocked}, 409)
+                return
             # Se estava editando/na fila, cancela o processo atual antes de reenfileirar
             if self.worker.busy_id == job["id"] or job.get("status") == "processing":
                 self.worker.cancel(job["id"])
+            # Um Apply que falhou não pode continuar marcando o card depois que
+            # o vídeo entra no reprocesso completo.
+            try:
+                from app.apply_tasks import clear_task
+
+                edit = Path(job.get("editDir") or "")
+                if edit:
+                    clear_task(edit)
+            except Exception:  # noqa: BLE001
+                pass
             self.store.update(job["id"], status="queued", message="Na fila", reason=None, detail=None)
             self.worker.enqueue(job["id"])
             self._json({"ok": True})

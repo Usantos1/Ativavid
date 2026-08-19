@@ -261,7 +261,7 @@ function cardSig(j, opts) {
   const qa = j.quickApply || {};
   return [
     j.id, j.status, j.title || j.name, Math.round(Number(j.progress) || 0), j.hasFinal, j.hasThumb, j.finishedAt, j.finishedAtLabel,
-    j.stage, j.message, j.localPoster || j.thumbUrl, links.editor, links.estilo, links.final,
+    j.stage, j.message, j.reason || "", j.localPoster || j.thumbUrl, links.editor, links.estilo, links.final,
     opts && opts.compact ? "1" : "0",
     qa.status || "", qa.stage || "", qa.elapsedLabel || "", qa.etaLabel || "", qa.stageLabel || "",
     opts && opts.view ? opts.view : "",
@@ -349,6 +349,30 @@ function displayTitle(j) {
   return j.title || j.name || "Vídeo";
 }
 
+// Motivos que NÃO adiantam reprocessar: o arquivo de origem está quebrado
+// ou sumiu. Card assim precisa de saída ("Apagar"), não de "Tentar de novo".
+const DEAD_END_REASONS = new Set(["arquivo_corrompido", "source_missing"]);
+
+function isDeadEnd(j) {
+  return DEAD_END_REASONS.has(String((j && j.reason) || ""));
+}
+
+/** Ações que tiram o card do limbo. Um card com aviso sempre tem o que fazer. */
+function stuckActionsHtml(j, safeId) {
+  if (isDeadEnd(j)) {
+    return `<button type="button" class="chip-btn ghostish" data-act="delete" data-id="${safeId}"
+      data-name="${escapeHtml(displayTitle(j))}" title="O arquivo não abre — apague e importe de novo">Apagar</button>`;
+  }
+  if (applyFailed(j)) {
+    // Reprocessar aqui é seguro: o rerun mantém os cortes manuais.
+    return `<button type="button" class="chip-btn" data-act="retry" data-id="${safeId}"
+        title="Refazer este vídeo mantendo os seus cortes">Aplicar de novo</button>
+      <button type="button" class="chip-btn ghostish" data-act="ackapply" data-id="${safeId}"
+        title="Manter o vídeo como está e tirar este aviso">Dispensar</button>`;
+  }
+  return "";
+}
+
 function cardHtml(j, opts) {
   const compact = !!(opts && opts.compact);
   const enter = !!(opts && opts.enter);
@@ -375,7 +399,11 @@ function cardHtml(j, opts) {
     ? `<a class="chip-btn primary${canFinal ? "" : " disabled"}" href="${escapeHtml(links.final)}"${updating ? ' title="Ainda estou atualizando este vídeo. Este é o final anterior."' : ""}>${updating ? "Ver anterior" : "Visualizar"}</a>`
     : busy
       ? `<button type="button" class="chip-btn" data-act="cancel" data-id="${safeId}">Cancelar</button>`
-      : `<button type="button" class="chip-btn" data-act="retry" data-id="${safeId}">Tentar novamente</button>`;
+      : isDeadEnd(j)
+        // "Tentar novamente" num arquivo quebrado é beco sem saída: o caminho
+        // real é importar o arquivo bom de novo.
+        ? `<button type="button" class="chip-btn primary" data-act="reimport" data-id="${safeId}">Importar de novo</button>`
+        : `<button type="button" class="chip-btn" data-act="retry" data-id="${safeId}">Tentar novamente</button>`;
   const menu = `<div class="pc-more" data-menu-host="${menuKey}">
       <button type="button" class="chip-btn ghostish pc-more-btn" data-act="menu" data-id="${safeId}" data-menu-key="${menuKey}" aria-label="Mais ações" aria-expanded="false" aria-haspopup="menu">⋯</button>
       <div class="pc-menu hidden" data-menu="${menuKey}" role="menu">
@@ -412,6 +440,7 @@ function cardHtml(j, opts) {
       ${progress}
       <div class="pc-actions">
         ${primary}
+        ${(() => { const s = stuckActionsHtml(j, safeId); return s ? `<span class="pc-stuck" data-stuck-sig="${escapeHtml(s)}">${s}</span>` : ""; })()}
         ${j.status === "done" ? `<button type="button" class="chip-btn ghostish" data-act="folder" data-id="${safeId}" title="Abrir a pasta publicar">Pasta</button>${j.legenda ? `<button type="button" class="chip-btn ghostish" data-act="copylegenda" data-id="${safeId}" title="Copiar a legenda do post">Legenda</button>` : ""}` : ""}
         ${menu}
       </div>
@@ -584,18 +613,48 @@ function patchCard(el, j, opts) {
         first.title = updating ? "Ainda estou atualizando este vídeo. Este é o final anterior." : "";
         first.classList.toggle("disabled", !canFinal);
       }
-    } else if (first && (first.tagName === "A" || first.dataset.act === "open-final")) {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "chip-btn";
-      b.dataset.act = busy ? "cancel" : "retry";
-      b.dataset.id = j.id;
-      b.textContent = busy ? "Cancelar" : "Tentar novamente";
-      first.replaceWith(b);
-    } else if (first) {
-      first.dataset.act = busy ? "cancel" : "retry";
-      first.dataset.id = j.id;
-      first.textContent = busy ? "Cancelar" : "Tentar novamente";
+    } else {
+      // Mesmo rótulo que o cardHtml usaria — senão o patch reescreve o botão
+      // de "Importar de novo" (arquivo quebrado) de volta para "Tentar novamente".
+      const act = busy ? "cancel" : (isDeadEnd(j) ? "reimport" : "retry");
+      const label = busy ? "Cancelar" : (isDeadEnd(j) ? "Importar de novo" : "Tentar novamente");
+      const cls = act === "reimport" ? "chip-btn primary" : "chip-btn";
+      if (first && (first.tagName === "A" || first.dataset.act === "open-final")) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = cls;
+        b.dataset.act = act;
+        b.dataset.id = j.id;
+        b.textContent = label;
+        first.replaceWith(b);
+      } else if (first) {
+        first.className = cls;
+        first.dataset.act = act;
+        first.dataset.id = j.id;
+        first.textContent = label;
+      }
+    }
+    // Botões de saída (Aplicar de novo / Dispensar / Apagar) aparecem e somem
+    // junto com o aviso — o patch precisa acompanhar, senão sobra botão morto.
+    const stuckWanted = stuckActionsHtml(j, escapeHtml(j.id));
+    const stuckHost = actions.querySelector(".pc-stuck");
+    if (stuckWanted) {
+      if (stuckHost) {
+        if (stuckHost.dataset.stuckSig !== stuckWanted) {
+          stuckHost.innerHTML = stuckWanted;
+          stuckHost.dataset.stuckSig = stuckWanted;
+        }
+      } else {
+        const span = document.createElement("span");
+        span.className = "pc-stuck";
+        span.innerHTML = stuckWanted;
+        span.dataset.stuckSig = stuckWanted;
+        const anchor = actions.querySelector(":scope > a.chip-btn, :scope > button.chip-btn");
+        if (anchor) anchor.after(span);
+        else actions.insertBefore(span, actions.firstChild);
+      }
+    } else if (stuckHost) {
+      stuckHost.remove();
     }
   }
   const img = el.querySelector(".pc-thumb img");
@@ -1680,13 +1739,25 @@ function wireList() {
         const job = state.jobs.find((x) => x.id === id);
         if (job) location.href = jobLinks(job).final;
       } else if (act === "retry") {
+        const job = state.jobs.find((x) => x.id === id);
+        const wasApplyFail = applyFailed(job);
         await api("/api/jobs/retry", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ id }),
         });
-        toast("De volta à fila");
+        toast(wasApplyFail ? "Refazendo o vídeo com os seus cortes" : "De volta à fila");
         setView("fila");
+        await refreshJobs();
+      } else if (act === "reimport") {
+        // O arquivo antigo não abre: abre o seletor para o usuário trazer a
+        // cópia boa. O card quebrado continua ali para ele apagar.
+        toast("Escolha o arquivo do vídeo de novo", 4000);
+        $("#fileInput")?.click();
+      } else if (act === "ackapply") {
+        const job = state.jobs.find((x) => x.id === id);
+        markApplyAck(job && job.quickApply);
+        toast("Aviso dispensado — o vídeo continua como está");
         await refreshJobs();
       } else if (act === "cancel") {
         if (String(id).startsWith("tmp-")) {

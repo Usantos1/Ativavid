@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.14
+
+Nenhum card fica preso na Fila.
+
+- **O aviso "Revisar" não gruda mais no card**: um aviso de atualização antiga ficava salvo junto do vídeo e voltava para sempre, mesmo depois de resolvido. Agora ele some quando deixa de valer
+- Card com aviso ganhou botões que resolvem: **Aplicar de novo** (refaz o vídeo mantendo os seus cortes) e **Dispensar** (mantém o vídeo como está e tira o aviso)
+- **"Tentar novamente" não é mais beco sem saída**: se o arquivo do vídeo está quebrado ou sumiu do lugar, o app avisa na hora em vez de mandar para a fila e falhar de novo. Nesses casos o card mostra **Importar de novo** e **Apagar**
+
 ## 2.13
 
 Projeto travado no "Aplicar" nunca mais.
