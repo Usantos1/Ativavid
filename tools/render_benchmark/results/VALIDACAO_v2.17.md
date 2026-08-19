@@ -158,3 +158,70 @@ rasterizador — as duas frentes que sobraram são a mesma frente.
 
 `ffprobe -count_frames` **decodifica o arquivo inteiro** (32 s num final de
 28 s). `-count_packets` faz a mesma contagem em 1,2 s.
+
+---
+
+# Adendo 2 — o rasterizador próprio foi ao limite e reprovou
+
+O Remotion é 77,2% do Apply; a saída seria desenhar as legendas direto, sem
+navegador. Retomei o protótipo Pillow (`phase14_raster.py`), que estava em
+0,835 de SSIM, e reconstruí a referência com o **template atual**.
+
+**Primeiro achado: 0,835 era contra um template velho.** O `src` que estava na
+pasta do projeto não tinha `ImpactCaptions.tsx` — o produto já tinha andado.
+Contra o template de hoje o mesmo protótipo caía para **0,52**.
+
+## Defeitos reais encontrados no protótipo
+
+| Defeito | Efeito |
+|---|---|
+| Cor aplicada pela imagem, não por linha | a linha Playfair saía branca em vez de laranja |
+| Playfair variável sem eixo de peso | saía Regular onde o template pede 900 |
+| Uma sombra só, no bloco inteiro | o template tem duas sombras e o estilo 1 usa a forte |
+| Sombra por linha | no CSS o filtro está no **span de cada palavra** |
+| Gradiente recortado na mancha de tinta | o `background-clip:text` usa a **caixa da linha** |
+| Avanço por glifo sem kerning, largura com | inconsistente (sem efeito no Poppins, mas latente) |
+
+Corrigidos todos: **0,52 → 0,823** no estilo que o protótipo implementa.
+
+## Onde parou
+
+| Medida | STACK_MIXED | Todos os estilos |
+|---|---|---|
+| Como está | **0,823** | 0,751 |
+| Com alinhamento ótimo (teto) | 0,878 | 0,800 |
+| Sem sombra dos dois lados, alinhado | 0,863 | 0,794 |
+
+**A barra era 0,97.** Os melhores estados chegam a 0,93–0,95; os de 3–4 linhas
+ficam em 0,74–0,78 e o deslocamento ótimo de cada um aponta para lados
+opostos (+4 num, −3 noutro) — não há correção global que sirva.
+
+## Dois sinais de que o caminho é errado, não só incompleto
+
+1. **O desfoque teve de ser dobrado para bater.** A especificação do CSS diz
+   σ = raio/2; o valor que maximiza o SSIM é σ ≈ raio (varredura de 0,5 a 2,5,
+   pico em 1,05). Ou seja: não estou implementando a regra, estou **ajustando
+   ao navegador**.
+2. **Só 1 dos 3 presets está implementado.** `SOLO_OUTLINE` (círculo do
+   PencilOutline) e `SOLO_BIG` ficam em 0,42–0,45. Cada estilo novo shipado
+   reabre o trabalho — o rasterizador vira uma segunda implementação do
+   template que precisa perseguir a primeira.
+
+## Velocidade não é o gargalo — fidelidade é
+
+O protótipo faz 113 ms por estado, mas compõe a tela inteira a cada palavra:
+71 ms são desfoque gaussiano em 1080×1920 e 34 ms são composição alpha, ambos
+desperdiçados fora da caixa do texto. Uma versão que trabalhasse só na caixa
+seria muito mais rápida que o Remotion. **Não é por velocidade que reprova.**
+
+**Conclusão: encerrado.** Não é falta de ajuste — é que a única forma de
+igualar o resultado é reimplementar o motor de layout do navegador e depois
+mantê-lo sincronizado com todo estilo novo. O Remotion continua sendo o
+rasterizador.
+
+### Como reproduzir
+
+```
+py tools/render_benchmark/cmp_rast.py     # fidelidade por estado
+py tools/render_benchmark/cmp_align.py    # teto com alinhamento ótimo
+```

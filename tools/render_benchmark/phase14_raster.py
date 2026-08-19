@@ -15,13 +15,14 @@ Roda no venv isolado do benchmark. Nao toca o produto.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
 BENCH = Path(r"E:\Temp\claude\E--Code-ativa-vid\82d36fa4-0bd4-4030-a656-a054a8ce0e05\scratchpad\bench")
-OV = BENCH / "ov_remotion"
+OV = BENCH / "ov_remotion3"
 OUT = BENCH / "raster"
 FONTS = BENCH / "fonts"
 W, H, FPS = 1080, 1920, 30
@@ -34,7 +35,10 @@ LETTER_SPACING = -1.5
 LINE_HEIGHT = 1.12
 MARGIN_TOP_EM = -0.34
 WORD_PAD_EM = 0.06          # padding: '0 0.06em' de cada palavra
-SHADOW = (0, 5, 9, 0.5)     # dx, dy, blur, alpha
+# drop-shadow por estilo (SHADOW / SHADOW_STRONG do template): dx, dy, blur, alpha
+BLUR_K = float(os.environ.get("RAST_BLUR_K", "1.05"))
+SHADOW = [(0, 5, 9, 0.5)]
+SHADOW_STRONG = [(0, 5, 10, 0.55), (0, 2, 3, 0.55)]
 
 FONT_FILE = {
     0: ("Poppins-BlackItalic.ttf", None),
@@ -45,11 +49,22 @@ FONT_FILE = {
 _cache: dict[tuple[str, int], ImageFont.FreeTypeFont] = {}
 
 
+# Peso do eixo variavel por estilo (LINE_STYLES do template).
+FONT_WGHT = {2: 900}
+
+
 def font(idx: int, size: int) -> ImageFont.FreeTypeFont:
     name = FONT_FILE[idx][0]
     key = (name, size)
     if key not in _cache:
-        _cache[key] = ImageFont.truetype(str(FONTS / name), size)
+        f = ImageFont.truetype(str(FONTS / name), size)
+        w = FONT_WGHT.get(idx)
+        if w:
+            try:
+                f.set_variation_by_axes([w])
+            except (OSError, AttributeError):
+                pass
+        _cache[key] = f
     return _cache[key]
 
 
@@ -87,10 +102,16 @@ def text_width(f: ImageFont.FreeTypeFont, s: str) -> float:
 
 
 def draw_tracked(d: ImageDraw.ImageDraw, xy, s: str, f, fill) -> None:
+    """Posiciona cada glifo pelo avanco COM kerning.
+
+    Somar getlength(ch) ignora os pares de kerning, enquanto a largura usada
+    para centralizar (getlength da string inteira) os inclui: o desenho saia
+    fora do centro que a propria medida pediu.
+    """
     x, y = xy
-    for ch in s:
+    for i, ch in enumerate(s):
         d.text((x, y), ch, font=f, fill=fill)
-        x += f.getlength(ch) + LETTER_SPACING
+        x = xy[0] + f.getlength(s[: i + 1]) + LETTER_SPACING * (i + 1)
 
 
 def gradient_mask(size: tuple[int, int]) -> Image.Image:
@@ -125,9 +146,14 @@ def render_state(cue: dict, fl: float, out: Path) -> Path:
         total += alturas[i] + MARGIN_TOP_EM * linhas[i]["size"]
     top = (H / 2 + BASE_Y) - total / 2
 
-    glyphs = Image.new("L", (W, H), 0)      # mascara do texto
-    gd = ImageDraw.Draw(glyphs)
-    colored: list[tuple[Image.Image, Image.Image]] = []
+    glyphs = Image.new("L", (W, H), 0)      # mascara do texto (para a sombra)
+    # No template cada LINHA tem o proprio fill (LINE_STYLES): gradiente branco
+    # ou a cor do estilo. Pintar a imagem toda com o estilo da 1a linha deixava
+    # a linha Playfair branca em vez de laranja.
+    # (mascara, estilo, topo da caixa de linha, altura da caixa) por PALAVRA:
+    # no template o filter e o background-clip:text estao no span de cada
+    # palavra, e o gradiente usa a CAIXA da linha, nao a mancha de tinta.
+    por_palavra: list[tuple[Image.Image, int, float, float]] = []
 
     y = top
     for li, ln in enumerate(linhas):
@@ -154,38 +180,41 @@ def render_state(cue: dict, fl: float, out: Path) -> Path:
                 if op < 0.995:
                     tmp = tmp.point(lambda v, o=op: int(v * o))
                 glyphs = ImageChops.lighter(glyphs, tmp)
-                gd = ImageDraw.Draw(glyphs)
+                por_palavra.append((tmp, ln["idx"], y, alturas[li]))
             x += wl
         y += alturas[li]
 
-    # cor: gradiente branco ou cor chapada do estilo
-    idx0 = linhas[0]["idx"] if linhas else 3
-    cor_fixa = FONT_FILE[idx0][1]
-    if cor_fixa:
-        fill = Image.new("RGB", (W, H), cor_fixa)
-    else:
-        bbox = glyphs.getbbox()
-        fill = Image.new("RGB", (W, H), "#ffffff")
-        if bbox:
-            gh = bbox[3] - bbox[1]
-            grad = gradient_mask((W, gh)).convert("RGB")
-            fill.paste(grad, (0, bbox[1]))
+    def camada_cor(idx: int, topo: float, alt: float) -> Image.Image:
+        cor_fixa = FONT_FILE[idx][1]
+        if cor_fixa:
+            return Image.new("RGB", (W, H), cor_fixa)
+        c = Image.new("RGB", (W, H), "#ffffff")
+        h = max(1, int(round(alt)))
+        c.paste(gradient_mask((W, h)).convert("RGB"), (0, int(round(topo))))
+        return c
 
-    # sombra: desfoque gaussiano deslocado
-    dx, dy, blur, sa = SHADOW
-    sh = glyphs.filter(ImageFilter.GaussianBlur(blur / 2))
-    shadow_a = Image.new("L", (W, H), 0)
-    shadow_a.paste(sh, (dx, dy))
-    shadow_a = shadow_a.point(lambda v: int(v * sa))
+    def sombra(mask_w: Image.Image, idx: int) -> Image.Image:
+        """Empilha os drop-shadows do estilo; o estilo 1 leva dois no template."""
+        out = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        if os.environ.get("RAST_NO_SHADOW") == "1":
+            return out
+        for dx, dy, blur, sa in (SHADOW_STRONG if idx == 1 else SHADOW):
+            a = Image.new("L", (W, H), 0)
+            a.paste(mask_w.filter(ImageFilter.GaussianBlur(blur * BLUR_K)), (dx, dy))
+            a = a.point(lambda v, k=sa: int(v * k))
+            preto = Image.new("L", (W, H), 0)
+            out = Image.alpha_composite(out, Image.merge("RGBA", (preto, preto, preto, a)))
+        return out
 
-    # Sombra: preto com o alpha desfocado. Texto: cor com alpha dos glifos.
-    # `paste` com mascara NAO escreve o canal alpha — precisa de merge, senao
-    # a camada de texto sai transparente e sobra so a sombra preta.
-    shadow_img = Image.merge("RGBA", (
-        Image.new("L", (W, H), 0), Image.new("L", (W, H), 0),
-        Image.new("L", (W, H), 0), shadow_a))
-    txt_layer = Image.merge("RGBA", (*fill.split(), glyphs))
-    img = Image.alpha_composite(shadow_img, txt_layer)
+    # Cada linha pinta sombra + texto na ordem do DOM: com o recuo negativo as
+    # linhas se sobrepoem, e a de baixo cobre a sombra da de cima.
+    img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    for mask_w, idx, topo, alt in por_palavra:
+        if not mask_w.getbbox():
+            continue
+        img = Image.alpha_composite(img, sombra(mask_w, idx))
+        img = Image.alpha_composite(
+            img, Image.merge("RGBA", (*camada_cor(idx, topo, alt).split(), mask_w)))
     img.save(out)
     return out
 
