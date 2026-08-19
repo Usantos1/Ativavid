@@ -547,6 +547,10 @@
     <p class="hint hidden" id="importFolderHint"></p>
     <p class="hint hidden" id="importRecommend"></p>
     <div class="intent-grid" id="intentGrid">
+      <button type="button" class="intent-card" data-intent="light">
+        <strong>Edição leve</strong>
+        <span>Só tira silêncios, erros e pausas. Sem IA mexendo no corte — simples, previsível e o mais rápido.</span>
+      </button>
       <button type="button" class="intent-card" data-intent="complete">
         <strong>Editar vídeo completo</strong>
         <span>Mantém a estrutura e a mensagem do vídeo. A IA remove apenas erros, repetições e pausas desnecessárias.</span>
@@ -559,13 +563,17 @@
         <strong>Criar Reels / Shorts</strong>
         <span>A IA procura os melhores trechos do vídeo e cria conteúdos curtos independentes.</span>
       </button>
+      <button type="button" class="intent-card" data-intent="viral">
+        <strong>Viral</strong>
+        <span>Retenção máxima: gancho nos 2 primeiros segundos, zero enrolação e final que faz reassistir.</span>
+      </button>
       <button type="button" class="intent-card" data-intent="clips">
         <strong>Clipes de podcast</strong>
         <span>De um vídeo longo, a IA separa vários clipes independentes — cada um vira um vídeo próprio na Fila, com headline própria.</span>
       </button>
     </div>
-    <div class="import-block">
-      <h4>Proteção de conteúdo</h4>
+    <details class="import-block import-adv">
+      <summary><h4>Proteção de conteúdo</h4><span class="muted">tudo preservado por padrão</span></summary>
       <label class="import-chk"><input type="checkbox" id="protHook" checked> Preservar abertura / gancho</label>
       <label class="import-chk"><input type="checkbox" id="protCta" checked> Preservar conclusão / CTA</label>
       <label class="import-chk"><input type="checkbox" id="protSentence" checked> Nunca cortar frase pela metade</label>
@@ -573,7 +581,7 @@
       <label class="import-field">Trechos protegidos <span class="muted">(opcional, ex. 0:00-0:08, 1:42-1:55)</span>
         <input type="text" id="protRanges" placeholder="00:00-00:08">
       </label>
-    </div>
+    </details>
     <div class="import-block">
       <h4>Tipo de conteúdo</h4>
       <label class="import-field">Tipo de conteúdo
@@ -589,15 +597,15 @@
         </select>
       </label>
     </div>
-    <div class="import-block">
-      <h4>Estilo</h4>
+    <details class="import-block import-adv">
+      <summary><h4>Estilo</h4><span class="muted">padrão da marca</span></summary>
       <p class="hint" id="importPresetHint">Usar: padrão da marca</p>
       <label class="import-field">Preset desta marca
         <select id="importPresetSelect"></select>
       </label>
       <label class="import-chk"><input type="checkbox" id="useBrandStyle" checked> Usar padrão da marca</label>
       <button type="button" class="ghost-btn" id="btnImportStyle">Alterar para este vídeo</button>
-    </div>
+    </details>
     <label class="import-chk" id="mergeTakesWrap">
       <input type="checkbox" id="mergeTakes">
       <span><strong>Juntar arquivos em um único vídeo</strong><br><span class="muted">Use quando gravou o mesmo conteúdo em vários takes. Desmarcado: cada arquivo vira um job.</span></span>

@@ -2542,3 +2542,18 @@ body.home-working .hero-import .hero-inner { padding: 10px 0; }
 
 /* thumbs um pouco maiores nos cards */
 .pc-thumb { width: 128px; }
+
+
+/* Diálogo de importação: ajustes avançados recolhidos + summary limpo */
+.import-adv > summary {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  cursor: pointer;
+  list-style: none;
+}
+.import-adv > summary::-webkit-details-marker { display: none; }
+.import-adv > summary::before { content: "\25B8"; opacity: .55; font-size: 11px; }
+.import-adv[open] > summary::before { content: "\25BE"; }
+.import-adv > summary h4 { margin: 0; display: inline; }
+.import-adv > summary .muted { font-size: 12px; opacity: .6; }

@@ -457,6 +457,20 @@ def mark_interrupted(edit_dir: Path, task: dict[str, Any] | None = None) -> dict
         "success": False,
         "interrupted": True,
     })
+    # Sem isto o apply_status.json fica "Aplicando edição..." para sempre
+    # depois de um crash/fechamento do app (visto em produção: update do
+    # instalador no meio do Apply) — e o editor mostra progresso fantasma.
+    try:
+        _write_json(Path(edit_dir) / "apply_status.json", {
+            "running": False,
+            "ok": False,
+            "message": INTERRUPTED_MSG + " Abra o editor e aplique de novo.",
+            "stage": "error",
+            "pid": None,
+            "error": "interrupted",
+        })
+    except Exception:
+        pass
     return _persist(Path(edit_dir), row)
 
 

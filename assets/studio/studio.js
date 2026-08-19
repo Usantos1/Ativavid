@@ -991,8 +991,10 @@ function parseProtectedRanges(text) {
 
 function collectImportIntent() {
   const mode = document.querySelector(".intent-card.on")?.dataset.intent || "dynamic";
+  // "viral" é um pacote da UI: intenção dinâmica + tipo de conteúdo viral
+  const realMode = mode === "viral" ? "dynamic" : mode;
   return {
-    editingIntent: mode,
+    editingIntent: realMode,
     preserveHook: !!$("#protHook")?.checked,
     preserveCTA: !!$("#protCta")?.checked,
     preserveCompleteSentences: !!$("#protSentence")?.checked,
@@ -1013,11 +1015,13 @@ function applyIntentDefaults(mode, recommended) {
     rec.textContent = recommended === mode ? "Recomendado para este vídeo" : "";
   }
   $$(".intent-card").forEach((c) => c.classList.toggle("on", c.dataset.intent === mode));
-  const shorts = mode === "shorts";
-  if ($("#protHook")) $("#protHook").checked = !shorts;
-  if ($("#protCta")) $("#protCta").checked = !shorts;
+  const loose = mode === "shorts" || mode === "viral";
+  if ($("#protHook")) $("#protHook").checked = !loose;
+  if ($("#protCta")) $("#protCta").checked = !loose;
   if ($("#protSentence")) $("#protSentence").checked = true;
   if ($("#protContext")) $("#protContext").checked = true;
+  // o card Viral também define o tipo de conteúdo — um clique, o pacote todo
+  if (mode === "viral" && $("#importContentType")) $("#importContentType").value = "viral";
 }
 
 function probeVideoDuration(file) {

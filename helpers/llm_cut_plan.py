@@ -18,6 +18,7 @@ if str(REPO) not in sys.path:
 
 LEAD_S = 0.05
 TRAIL_S = 0.12
+MIN_TAKE_S = 0.35  # take menor que isto vira flash no final — nunca intencional
 MAX_PACKED_CHARS = 14000
 
 
@@ -407,6 +408,13 @@ def _normalize_ranges(
         })
     if not out:
         raise ValueError("ranges IA vazios após snap")
+    # A IA às vezes devolve takes de 0,2s — no vídeo final viram um flash de
+    # meia dúzia de frames que parece corte errado (visto em produção). Um
+    # take menor que isto nunca é intencional neste produto: descarta.
+    solid = [r for r in out if r["end"] - r["start"] >= MIN_TAKE_S]
+    if solid and len(solid) < len(out):
+        print(f"[ia] {len(out) - len(solid)} take(s) <{MIN_TAKE_S}s descartados (flash)", flush=True)
+        out = solid
     return out
 
 

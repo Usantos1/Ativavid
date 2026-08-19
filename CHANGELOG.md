@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.12
+
+Importar ficou mais simples — e o app agora respeita os seus cortes.
+
+- Tela de importação nova: cards diretos, incluindo **Edição leve** (só tira silêncios e erros, sem IA mexendo no corte — o modo mais rápido) e **Viral** (retenção máxima em um clique). Proteção e Estilo ficam recolhidos para quem quiser ajustar
+- **Reprocessar não desfaz mais os seus cortes**: se você removeu um trecho no editor e depois trocou headline/estilo, o corte manual é mantido — a IA só replaneja se você mudar ritmo, intensidade ou tipo de conteúdo
+- Fim dos "flashes": takes de 0,2s que a IA às vezes deixava no corte (uma piscada de vídeo que parecia corte errado) são descartados — no plano da IA e nas sobras de remoção no editor
+- Arquivo que chegou incompleto do celular (cópia interrompida) agora dá mensagem clara: copie de novo do celular — tentar de novo com o mesmo arquivo não resolve
+- Se o app fechar no meio de um "Aplicar" (ex.: atualização do instalador), o projeto não fica mais preso em "Aplicando edição…" — mostra que foi interrompido e pede para aplicar de novo
+
 ## 2.11
 
 Correção: cards de Concluídos não estouram mais a borda.

@@ -10,7 +10,7 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 
-INTENTS = ("complete", "dynamic", "shorts", "clips")
+INTENTS = ("complete", "dynamic", "shorts", "clips", "light")
 INTENT_FILE = "job_intent.json"
 
 # Vídeo ≥ isto (segundos) recomenda "Editar vídeo completo"
@@ -43,6 +43,14 @@ DEFAULTS = {
     "shorts": {
         "preserveHook": False,
         "preserveCTA": False,
+        "preserveCompleteSentences": True,
+        "preserveContext": True,
+    },
+    # "light": edição leve — corte heurístico local (só silêncio/erro),
+    # SEM IA reescrevendo o corte. Tudo preservado por padrão.
+    "light": {
+        "preserveHook": True,
+        "preserveCTA": True,
         "preserveCompleteSentences": True,
         "preserveContext": True,
     },

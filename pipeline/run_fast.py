@@ -510,6 +510,15 @@ def _ffprobe_wh(path: Path) -> tuple[int, int]:
     )
     if r.returncode != 0:
         err = (r.stderr or r.stdout or "").strip() or f"exit {r.returncode}"
+        low = err.lower()
+        # Cópia interrompida do celular: o MP4/MOV grava o índice (moov) no
+        # fim — sem ele o arquivo é irrecuperável e "tentar de novo" nunca
+        # resolve. Mensagem tem que mandar recopiar a origem.
+        if "moov atom" in low or "invalid data found" in low or "end of file" in low:
+            raise NeedsReview(
+                "arquivo_corrompido",
+                f"{path.name}: {err[:200]}",
+            )
         raise RuntimeError(
             f"ffprobe falhou ao ler o vídeo ({path.name}): {err}\n"
             "Confira se o arquivo abre no player e se o FFmpeg está instalado."
@@ -700,6 +709,68 @@ def load_preview_edit_ranges(edit_dir: Path, source_key: str) -> list[dict] | No
         except OSError:
             pass
     return out
+
+
+# Knobs que definem O CORTE (não o visual): se algum mudou, o usuário está
+# pedindo um plano novo e o reuso do EDL manual não se aplica.
+_CUT_STYLE_KEYS = ("rhythm", "intensity", "editingIntent", "contentType", "speechClean")
+
+
+def load_manual_edl_ranges(edit_dir: Path, source_key: str, preset: dict) -> list[dict] | None:
+    """Reprocesso respeita o corte que o usuário já aplicou no editor.
+
+    Sem isto, um requeue por mudança de headline/estilo replaneja com a IA e
+    DESFAZ os cortes manuais (visto em produção: EDL truncado pelo usuário
+    voltou ao plano cheio). Reusa o edl.json quando (a) houve edição manual
+    antes (preview_edits.applied.json existe) e (b) os knobs de corte não
+    mudaram — mudar ritmo/intensidade/tipo é pedido explícito de replanejar."""
+    if not (edit_dir / "preview_edits.applied.json").exists():
+        return None
+    edl_p = edit_dir / "edl.json"
+    if not edl_p.exists():
+        return None
+    used_p = edit_dir / "preset-used.json"
+    try:
+        used = json.loads(used_p.read_text(encoding="utf-8-sig")) if used_p.exists() else {}
+    except (OSError, json.JSONDecodeError):
+        used = {}
+    if isinstance(used, dict) and used:
+        for key in _CUT_STYLE_KEYS:
+            if str(used.get(key) or "") != str(preset.get(key) or ""):
+                return None
+    try:
+        data = json.loads(edl_p.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    raw = data.get("ranges") if isinstance(data, dict) else None
+    if not isinstance(raw, list) or not raw:
+        return None
+    out: list[dict] = []
+    for r in raw:
+        if not isinstance(r, dict):
+            continue
+        src = str(r.get("source") or source_key)
+        if src != source_key:
+            return None  # multi-take fica fora do reuso
+        try:
+            start, end = float(r["start"]), float(r["end"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if end - start < 0.05:
+            continue
+        item = {
+            "source": src,
+            "start": round(start, 3),
+            "end": round(end, 3),
+            "beat": str(r.get("beat") or ""),
+        }
+        if r.get("gain_db") is not None:
+            try:
+                item["gain_db"] = float(r["gain_db"])
+            except (TypeError, ValueError):
+                pass
+        out.append(item)
+    return out or None
 
 
 def build_edl_ranges(
@@ -2435,6 +2506,22 @@ def run(
             pass
         print(f"[edits] corte do editor · {len(ranges)} takes", flush=True)
         set_stage(edit_dir, "planning", "Aplicando seus ajustes…", 38)
+    elif len(sources) == 1 and (manual := load_manual_edl_ranges(edit_dir, source_key, preset)):
+        ranges = manual
+        llm_meta = {"ok": True, "backend": "manual_edl"}
+        print(f"[edits] mantendo seu corte aplicado · {len(ranges)} takes", flush=True)
+        set_stage(edit_dir, "planning", "Mantendo seus cortes…", 38)
+    elif str(preset.get("editingIntent") or "").lower() == "light" and len(sources) == 1:
+        # Edição leve: corte heurístico local (silêncio/erro), sem chamada de
+        # IA — o modo mais rápido e previsível do app. Headline e legenda da
+        # Fase 2 seguem normais.
+        print("[leve] edição leve — corte heurístico, sem IA", flush=True)
+        set_stage(edit_dir, "planning", "Cortando silêncios e erros…", 38)
+        ranges = build_edl_ranges(
+            source_key, regions, voice, spoken, source_dur=dur,
+            preserve_hook=True,
+        )
+        llm_meta = {"ok": True, "backend": "heuristic_light"}
     elif len(sources) == 1:
         try:
             sys.path.insert(0, str(HELPERS))
@@ -2475,7 +2562,7 @@ def run(
     if not ranges:
         raise NeedsReview("no_speech", "nenhum trecho de fala para cortar")
 
-    if llm_meta.get("backend") != "preview_edits":
+    if llm_meta.get("backend") not in ("preview_edits", "manual_edl"):
         try:
             from app.editing_intent import guard_ranges
 

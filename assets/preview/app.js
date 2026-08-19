@@ -4457,7 +4457,10 @@ function removeDraftTimeRange(tStart, tEnd) {
     if (hit < 0) break;
     const r = S.draft[hit];
     const pieces = [];
-    if (srcA - r.start >= MIN_SEG) {
+    // Sobra menor que isto vira um flash de frames no final — melhor levar
+    // junto na remoção do que manter um take que parece corte errado.
+    const PIECE_MIN = 0.35;
+    if (srcA - r.start >= PIECE_MIN) {
       pieces.push({
         source: r.source, start: r.start, end: srcA, beat: r.beat,
         removed: false, srcIdx: null, orig: { start: r.start, end: r.end },
@@ -4467,7 +4470,7 @@ function removeDraftTimeRange(tStart, tEnd) {
       source: r.source, start: srcA, end: srcB, beat: r.beat,
       removed: true, srcIdx: null, orig: { start: r.start, end: r.end },
     });
-    if (r.end - srcB >= MIN_SEG) {
+    if (r.end - srcB >= PIECE_MIN) {
       pieces.push({
         source: r.source, start: srcB, end: r.end, beat: r.beat,
         removed: false, srcIdx: null, orig: { start: r.start, end: r.end },

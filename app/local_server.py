@@ -60,6 +60,11 @@ REASON_LABELS = {
     "black_frames": "Frames pretos no corte",
     "clips_plan_failed": "A IA não conseguiu dividir em clipes — tente de novo",
     "clips_spawn_failed": "Falha ao criar os clipes na Fila",
+    "arquivo_corrompido": (
+        "O arquivo chegou incompleto no computador (a cópia foi interrompida). "
+        "Apague este item, copie o vídeo de novo do celular e importe outra vez — "
+        "tentar de novo com este mesmo arquivo não resolve."
+    ),
 }
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]|\x1b\].*?\x07|\x1b.")
