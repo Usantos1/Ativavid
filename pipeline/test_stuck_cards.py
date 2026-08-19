@@ -43,8 +43,8 @@ def test_quick_apply_is_never_persisted(tmp_path):
     # simula o enrich mutando o job vivo (foi assim que vazou em produção)
     store.list()[0]["quickApply"] = {"status": "failed", "taskId": "t"}
     store.update("j1", message="Pronto")
-    disk = json.loads((store.jobs_path).read_text(encoding="utf-8"))
-    assert all("quickApply" not in row for row in disk["jobs"])
+    # store novo = leitura do disco, sem passar pelo estado do primeiro
+    assert all("quickApply" not in row for row in JobStore(tmp_path).list())
 
 
 def test_stale_quick_apply_is_dropped_when_task_is_gone(tmp_path):
@@ -56,3 +56,36 @@ def test_stale_quick_apply_is_dropped_when_task_is_gone(tmp_path):
     }]
     out = attach_apply_to_jobs(jobs, tmp_path)
     assert "quickApply" not in out[0], "aviso velho continuaria travando o card"
+
+def test_campos_de_visao_nao_entram_na_fila(tmp_path):
+    """Os /api/jobs carimbam campos de visão no que o store entrega.
+
+    Antes da fronteira eles caíam no jobs.json e sobreviviam ao run seguinte:
+    `stage` de um run velho, `hasCut` de arquivo apagado, `message` transitório
+    por cima do definitivo.
+    """
+    store = JobStore(tmp_path)
+    store.upsert({"id": "j1", "status": "done", "message": "Pronto",
+                  "projectDir": str(tmp_path / "p"), "sources": ["a.mp4"]})
+
+    vista = store.list()[0]
+    vista["hasCut"] = True
+    vista["stage"] = "processing"
+    vista["progress"] = 42
+    vista["message"] = "Renderizando..."
+    vista["thumbUrl"] = "/api/jobs/j1/thumb"
+    vista["sources"].append("nao_deveria_entrar.mp4")
+
+    store.update("j1", status="done")
+    row = JobStore(tmp_path).list()[0]
+    for campo in ("hasCut", "stage", "progress", "thumbUrl"):
+        assert campo not in row, f"{campo} vazou para a fila"
+    assert row["message"] == "Pronto", "mensagem transitória sobrescreveu a real"
+    assert row["sources"] == ["a.mp4"], "lista aninhada foi mutada por quem só listou"
+
+
+def test_lista_nao_e_alias_do_store(tmp_path):
+    store = JobStore(tmp_path)
+    store.upsert({"id": "j1", "status": "queued", "projectDir": str(tmp_path / "p")})
+    store.list()[0]["status"] = "done"
+    assert store.get("j1")["status"] == "queued"

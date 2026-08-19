@@ -27,6 +27,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+# Este arquivo também é chamado direto (`python app/local_server.py`), e aí só
+# `app/` entra no sys.path — sem a raiz, `import app.*` no topo quebra.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from app.job_store import SqliteJobStore  # noqa: E402
+
 # UTF-8 stdout on Windows consoles (same idea as helpers/_utf8.py)
 if hasattr(sys.stdout, "reconfigure"):
     try:
@@ -477,11 +483,6 @@ def _is_opaque_title(name: str) -> bool:
     return False
 
 
-def _job_recency_key(job: dict) -> str:
-    """Mais recente: término (reedição) > atualização > criação."""
-    return str(job.get("finishedAt") or job.get("updatedAt") or job.get("createdAt") or "")
-
-
 def _fmt_job_when(iso: str | None) -> str:
     """Data/hora local pt-BR a partir de ISO UTC."""
     if not iso:
@@ -709,78 +710,10 @@ def run_doutor() -> dict:
         return {"bloqueios": proc.returncode, "itens": [], "raw": proc.stdout[-2000:]}
 
 
-class JobStore:
-    def __init__(self, root: Path):
-        self.root = root
-        self.root.mkdir(parents=True, exist_ok=True)
-        self.meta_dir = self.root / ".ativavid"
-        self.meta_dir.mkdir(exist_ok=True)
-        self.jobs_path = self.meta_dir / "jobs.json"
-        self._lock = threading.Lock()
-        self._jobs: dict[str, dict] = {}
-        self._load()
-
-    def _load(self) -> None:
-        if self.jobs_path.exists():
-            try:
-                raw = json.loads(self.jobs_path.read_text(encoding="utf-8-sig"))
-                self._jobs = {j["id"]: j for j in raw.get("jobs", [])}
-            except (json.JSONDecodeError, TypeError, KeyError):
-                self._jobs = {}
-
-    # Campos DERIVADOS de outra fonte (a tarefa de Apply). Nunca podem ser
-    # gravados: uma cópia velha aqui sobrevive à tarefa e o card fica preso
-    # em "REVISAR" para sempre — foi o que travou a fila do usuário.
-    _DERIVED_KEYS = ("quickApply",)
-
-    def _save(self) -> None:
-        rows = []
-        for job in sorted(self._jobs.values(), key=_job_recency_key, reverse=True):
-            for key in self._DERIVED_KEYS:
-                job.pop(key, None)
-            rows.append(job)
-        payload = {"jobs": rows}
-        tmp = self.jobs_path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
-        tmp.replace(self.jobs_path)
-        try:
-            from app.event_bus import bump
-
-            bump()  # acorda o /api/events — a Fila atualiza sem poll cego
-        except Exception:
-            pass
-
-    def list(self) -> list[dict]:
-        with self._lock:
-            return sorted(self._jobs.values(), key=_job_recency_key, reverse=True)
-
-    def get(self, job_id: str) -> dict | None:
-        with self._lock:
-            return dict(self._jobs[job_id]) if job_id in self._jobs else None
-
-    def upsert(self, job: dict) -> None:
-        with self._lock:
-            self._jobs[job["id"]] = job
-            self._save()
-
-    def update(self, job_id: str, **fields: object) -> dict | None:
-        with self._lock:
-            if job_id not in self._jobs:
-                return None
-            self._jobs[job_id].update(fields)
-            self._jobs[job_id]["updatedAt"] = _utc()
-            self._save()
-            return dict(self._jobs[job_id])
-
-    def delete(self, job_id: str) -> dict | None:
-        """Remove job from the queue index. Caller deletes files if wanted."""
-        with self._lock:
-            job = self._jobs.pop(job_id, None)
-            if job is None:
-                return None
-            self._save()
-            return dict(job)
-
+# A fila mora em SQLite (app/job_store.py). O jobs.json é migrado sozinho na
+# primeira abertura e guardado como .bak. O nome JobStore fica: é o que o resto
+# do app e os testes importam.
+JobStore = SqliteJobStore
 
 class Worker:
     def __init__(self, store: JobStore):

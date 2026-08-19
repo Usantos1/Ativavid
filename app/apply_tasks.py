@@ -368,12 +368,37 @@ def acknowledge_task(
     return public_view(found, edit if edit else None)
 
 
+def _jobs_rows(projects_root: Path) -> list[dict[str, Any]]:
+    """Lê a fila de fora do servidor: jobs.db, com jobs.json como retaguarda.
+
+    Roda em OUTRO processo (o Apply), então abre o banco só para ler — daí o
+    modo somente-leitura, que não cria arquivo nem espera lock de escrita.
+    """
+    meta = Path(projects_root) / ".ativavid"
+    db = meta / "jobs.db"
+    if db.exists():
+        import sqlite3
+
+        try:
+            cx = sqlite3.connect(f"file:{db.as_posix()}?mode=ro", uri=True, timeout=5.0)
+            try:
+                rows = cx.execute("SELECT data FROM jobs").fetchall()
+            finally:
+                cx.close()
+            return [json.loads(r[0]) for r in rows]
+        except (sqlite3.Error, json.JSONDecodeError, ValueError):
+            pass
+    for nome in ("jobs.json", "jobs.json.bak"):
+        raw = _read_json(meta / nome, {})
+        jobs = raw.get("jobs") if isinstance(raw, dict) else None
+        if isinstance(jobs, list):
+            return [j for j in jobs if isinstance(j, dict)]
+    return []
+
+
 def _lookup_job(edit_dir: Path, projects_root: Path) -> tuple[str, str]:
-    """(jobId, title) a partir de jobs.json, sem criar job novo."""
-    jobs_raw = _read_json(Path(projects_root) / ".ativavid" / "jobs.json", {})
-    jobs = jobs_raw.get("jobs") if isinstance(jobs_raw, dict) else None
-    if not isinstance(jobs, list):
-        return "", ""
+    """(jobId, title) a partir da fila, sem criar job novo."""
+    jobs = _jobs_rows(Path(projects_root))
     want = _norm(edit_dir)
     parent = _norm(Path(edit_dir).parent)
     for job in jobs:

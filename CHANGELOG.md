@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.18
+
+A fila deixou de perder o estado dos cards.
+
+- **A fila agora vive num banco de dados, não num arquivo de texto.** Antes, cada atualização reescrevia a lista inteira; se dois programas mexessem na fila ao mesmo tempo, o último a gravar desfazia o trabalho do outro — um vídeo que estava "Editando..." voltava sozinho para "Na fila"
+- **Campos de tela não grudam mais no card.** A tela da Fila calcula coisas na hora (se já tem corte, se já tem capa, em que passo está) e isso estava sendo gravado junto com o card. Um passo antigo, uma capa já apagada ou uma mensagem passageira podiam ficar presos ali para sempre — foi a raiz dos cards travados que consertamos aos pedaços nas versões 2.13 e 2.14
+- **Atualizar um card ficou 69x mais rápido** com a fila cheia (8,3 ms para 0,12 ms com 200 vídeos)
+- Sua fila é convertida sozinha na primeira abertura; o arquivo antigo fica guardado ao lado, por segurança
+
 ## 2.17.1
 
 Correções da auditoria da v2.17 — sem mudança de comportamento visível.
