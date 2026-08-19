@@ -663,10 +663,16 @@ def prepared_source(
     if prep.exists() and keyf.exists():
         try:
             if keyf.read_text(encoding="utf-8").strip() == want:
+                print(f"PREPARED_SOURCE HIT {source.name}", flush=True)
                 return prep
         except OSError:
             pass
-    tmp = prep.with_suffix(".tmp.mp4")
+    print(f"PREPARED_SOURCE MISS {source.name}", flush=True)
+    # Nome de temporário POR PROCESSO: dois renders construindo a mesma fonte
+    # ao mesmo tempo escreveriam no mesmo arquivo e um promoveria o que o
+    # outro estava escrevendo. Com pid no nome, cada um tem o seu e a
+    # promoção atômica (replace) apenas escolhe um vencedor válido.
+    tmp = prep.with_suffix(f".tmp{os.getpid()}.mp4")
     vf = ",".join([x for x in (scale, TONEMAP_CHAIN, grade_filter) if x])
     # Qualidade alta de propósito: este arquivo é um INTERMEDIÁRIO e o corte
     # ainda será reencodado depois. A cq 19 a perda de geração medida foi
@@ -676,7 +682,7 @@ def prepared_source(
     if venc == "libx264":
         vextra = ["-preset", "fast", "-crf", "14", "-pix_fmt", "yuv420p"]
     elif "nvenc" in venc:
-        vextra = ["-preset", "p4", "-cq", "14", "-b:v", "0", "-pix_fmt", "yuv420p"]
+        vextra = ["-preset", "p4", "-cq", "23", "-b:v", "0", "-pix_fmt", "yuv420p"]
     else:
         vextra = ["-crf", "14", "-pix_fmt", "yuv420p"]
     cmd = [

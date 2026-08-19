@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.17.1
+
+Correções da auditoria da v2.17 — sem mudança de comportamento visível.
+
+- **Corrida entre dois vídeos ao mesmo tempo**: o arquivo temporário do cache tinha nome fixo, então dois vídeos usando a mesma origem podiam escrever no mesmo arquivo. Agora cada um tem o seu
+- **Cache 29% menor**: o arquivo intermediário passou de 188 MB para 134 MB por vídeo, com diferença de qualidade imperceptível (VMAF 96,5 → 96,1)
+- O log agora diz claramente quando o cache foi aproveitado ou refeito
+
+
 ## 2.17
 
 Reprocessar um vídeo ficou 9x mais rápido.

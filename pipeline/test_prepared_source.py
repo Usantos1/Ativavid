@@ -96,3 +96,72 @@ def test_duracao_divergente_descarta(tmp_path, monkeypatch):
     monkeypatch.setattr(render, "probe_duration",
                         lambda p: 5.0 if "tmp" in p.name else 40.0)
     assert render.prepared_source(src, "scale=-2:1920", "eq=a", quiet=True) is None
+
+
+# ---------- cenários de invalidação exigidos na auditoria da v2.17 ----------
+
+def _hit(src, scale="scale=-2:1920", grade="eq=a") -> bool:
+    """True = cache aceito (HIT); False = seria refeito (MISS)."""
+    keyf = src.with_suffix(src.suffix + ".prepkey")
+    return keyf.exists() and keyf.read_text(encoding="utf-8").strip() == \
+        render._prep_key(src, scale, grade)
+
+
+def _armar(tmp_path):
+    src = _fake_src(tmp_path)
+    src.with_suffix(src.suffix + ".prep.mp4").write_bytes(b"v")
+    src.with_suffix(src.suffix + ".prepkey").write_text(
+        render._prep_key(src, "scale=-2:1920", "eq=a"), encoding="utf-8")
+    return src
+
+
+def test_hit_quando_nada_mudou(tmp_path):
+    assert _hit(_armar(tmp_path)) is True
+
+
+def test_headline_ou_legenda_nao_invalidam(tmp_path):
+    """Headline e legenda são desenhadas depois do corte: não entram na chave."""
+    src = _armar(tmp_path)
+    assert _hit(src) is True  # a chave não tem nada de headline/legenda
+    assert "headline" not in render._prep_key(src, "scale=-2:1920", "eq=a")
+
+
+def test_fonte_trocada_invalida(tmp_path):
+    src = _armar(tmp_path)
+    src.write_bytes(b"outro conteudo bem diferente" * 99)
+    assert _hit(src) is False
+
+
+def test_grade_trocada_invalida(tmp_path):
+    assert _hit(_armar(tmp_path), grade="eq=OUTRA") is False
+
+
+def test_resolucao_trocada_invalida(tmp_path):
+    assert _hit(_armar(tmp_path), scale="scale=-2:1080") is False
+
+
+def test_tonemap_faz_parte_da_chave(tmp_path):
+    """Se a cadeia de tonemap mudar no código, o cache tem de cair."""
+    src = _armar(tmp_path)
+    antes = render._prep_key(src, "scale=-2:1920", "eq=a")
+    original = render.TONEMAP_CHAIN
+    try:
+        render.TONEMAP_CHAIN = original + ",eq=gamma=1.01"
+        assert render._prep_key(src, "scale=-2:1920", "eq=a") != antes
+    finally:
+        render.TONEMAP_CHAIN = original
+
+
+def test_temporario_e_por_processo(tmp_path, monkeypatch):
+    """Dois renders simultâneos não podem escrever no mesmo arquivo temporário."""
+    import os as _os
+    monkeypatch.delenv("ATIVAVID_PREP_SOURCE", raising=False)
+    monkeypatch.setattr(render, "is_hdr_source", lambda _p: True)
+    src = _fake_src(tmp_path)
+    vistos = []
+    monkeypatch.setattr(render, "_run_ffmpeg",
+                        lambda cmd, **k: vistos.append(cmd[-1]))
+    monkeypatch.setattr(render, "probe_duration", lambda p: 10.0)
+    render.prepared_source(src, "scale=-2:1920", "eq=a", quiet=True)
+    assert vistos, "não chamou o ffmpeg"
+    assert str(_os.getpid()) in vistos[0], f"temporário sem pid: {vistos[0]}"
