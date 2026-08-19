@@ -88,12 +88,14 @@ def test_apply_fallback_requeues_and_clears_task(tmp_path, monkeypatch):
     calls = []
     res = ax.start_apply(edit, fallback_full=lambda: calls.append(1) or True)
     assert res.get("started")
+    # A thread do Apply concorre com o resto da máquina: com a fila cheia,
+    # 5s não bastam. Espera generosa, mas sai assim que o estado chega.
     import time as _t
-    for _ in range(100):
+    for _ in range(300):
         st = ax.read_apply_status(edit)
         if st.get("stage") == "queued" and not st.get("running") and calls:
             break
-        _t.sleep(0.05)
+        _t.sleep(0.1)
     assert calls, "fallback_full não foi chamado"
     st = ax.read_apply_status(edit)
     assert st.get("stage") == "queued" and st.get("ok") is None

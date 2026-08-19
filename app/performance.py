@@ -36,6 +36,11 @@ def profile_settings(name: str | None = None, machine: dict[str, Any] | None = N
     enc = (m.get("accel") or {}).get("preferredEncoder") or "libx264"
     ram = float(m.get("ramGb") or 0)
     cores = int(m.get("cores") or 4)
+    # Quantos vídeos rodam juntos se mede em núcleo REAL: ffmpeg e Remotion
+    # não ganham com hyper-threading. Contar threads fazia um CPU de 4
+    # núcleos abrir 4 pipelines pesados, e cada vídeo levava o triplo do
+    # tempo (medido na máquina do usuário: fase de análise de 2min virou 8min).
+    real = int(m.get("physicalCores") or 0) or max(1, cores // 2)
 
     if profile == "eco":
         return {
@@ -54,14 +59,14 @@ def profile_settings(name: str | None = None, machine: dict[str, Any] | None = N
         }
     if profile == "performance":
         # Fase leve em paralelo; Remotion limitado (slot).
-        parallel = min(6, max(3, cores // 2))
-        render_slots = 2 if ram >= 24 and cores >= 8 else 1
+        parallel = min(6, max(2, real // 2))
+        render_slots = 2 if ram >= 24 and real >= 8 else 1
         return {
             "profile": profile,
             "label": "Desempenho",
             "parallelJobs": parallel,
             "renderSlots": render_slots,
-            "extractJobs": min(4, max(2, cores // 2)),
+            "extractJobs": min(4, max(2, real // 2)),
             "proxyHeight": 720,
             "proxyEnabled": ram < 32,
             "thumbEager": True,
@@ -73,13 +78,13 @@ def profile_settings(name: str | None = None, machine: dict[str, Any] | None = N
             ),
         }
     # balanced
-    parallel = min(4, max(2, cores // 3)) if ram >= 12 else 2
+    parallel = min(4, max(1, real // 2)) if ram >= 12 else 1
     return {
         "profile": profile,
         "label": "Balanceado",
         "parallelJobs": parallel,
         "renderSlots": 1,
-        "extractJobs": min(3, max(1, cores // 3)),
+        "extractJobs": min(3, max(1, real // 3)),
         "proxyHeight": 540,
         "proxyEnabled": True,
         "thumbEager": True,

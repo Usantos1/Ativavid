@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.16
+
+Ajustar legenda ou headline deixou de custar uma hora.
+
+- **Mudança pequena agora usa o caminho rápido**: corrigir legenda, trocar headline ou cortar um trecho reaproveita o vídeo já processado, em vez de refazer tudo do zero (re-transcrever, re-analisar, re-cortar). O reprocessamento completo ficou só para quando entra material novo (anexar outro vídeo) ou b-roll/inserts
+- **O app parou de brigar consigo mesmo por CPU**: ele contava os "threads" do processador como se fossem núcleos e abria o dobro de vídeos ao mesmo tempo do que a máquina aguenta. Cada vídeo ficava até 3x mais lento. Agora conta núcleo real — menos vídeos ao mesmo tempo, cada um terminando muito antes
+
+
 ## 2.15
 
 Correção grave: o app estava derrubando os próprios vídeos.

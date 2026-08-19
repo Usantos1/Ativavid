@@ -121,6 +121,38 @@ def _ram_gb_ctypes() -> tuple[float | None, float | None]:
         return None, None
 
 
+def physical_cores() -> int:
+    """Núcleos FÍSICOS (não threads).
+
+    ffmpeg e Remotion são limitados por núcleo real: hyper-threading não
+    dobra a capacidade. Contar os 8 threads de um CPU de 4 núcleos fazia o
+    app abrir 4 pipelines pesados que brigavam entre si e cada vídeo levava
+    o triplo do tempo. 0 = não deu para descobrir (o chamador usa o lógico).
+    """
+    if sys.platform == "win32":
+        try:
+            out = _run(
+                [
+                    "powershell", "-NoProfile", "-Command",
+                    "(Get-CimInstance Win32_Processor | "
+                    "Measure-Object -Property NumberOfCores -Sum).Sum",
+                ],
+                timeout=8,
+            ).strip()
+            if out.isdigit() and int(out) > 0:
+                return int(out)
+        except Exception:  # noqa: BLE001
+            pass
+        return 0
+    try:
+        import multiprocessing
+
+        # Linux/mac: sem contagem física barata; o lógico é o que temos
+        return multiprocessing.cpu_count()
+    except Exception:  # noqa: BLE001
+        return 0
+
+
 def _ram_gb() -> tuple[float | None, float | None]:
     total, free = _ram_gb_ctypes()
     if total is not None:
@@ -195,6 +227,7 @@ def _minimal_machine(projects_root: Path | None = None, err: str = "") -> dict[s
         "python": platform.python_version(),
         "cpu": platform.processor() or platform.machine(),
         "cores": os.cpu_count() or 1,
+        "physicalCores": physical_cores() or os.cpu_count() or 1,
         "ramGb": total,
         "ramFreeGb": free,
         "gpus": [],
@@ -288,6 +321,7 @@ def _detect_machine_inner(
     total_ram, free_ram = _ram_gb()
     cpu = platform.processor() or platform.machine()
     cores = os.cpu_count() or 1
+    physical = physical_cores() or cores
 
     ff_bin = _ffmpeg_cmd()
     fp_bin = _ffprobe_cmd()
@@ -346,6 +380,7 @@ def _detect_machine_inner(
         "python": platform.python_version(),
         "cpu": cpu,
         "cores": cores,
+        "physicalCores": physical,
         "ramGb": total_ram,
         "ramFreeGb": free_ram,
         "gpus": gpus,

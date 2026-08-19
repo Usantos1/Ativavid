@@ -4583,6 +4583,27 @@ async function saveEditsAndReturnToQueue() {
   refreshHeader();
 
   const captionOnly = !!(payload.captionFixes && !payload.edl && !payload.editData && !payload.extraSources);
+  // Refazer o vídeo do zero (re-analisar, re-transcrever, re-cortar) só é
+  // necessário quando entra material NOVO ou muda algo que a IA precisa
+  // reler. Ajuste de corte, legenda e headline vai pelo Aplicar rápido, que
+  // reaproveita o que já está pronto: minutos em vez de uma hora.
+  const needsFullRerun = !!(payload.extraSources || payload.editData);
+  if (BASE && BASE.startsWith('/p/') && !captionOnly && !needsFullRerun) {
+    if (payload.edl) {
+      const ok = await persistCorrection({ op: 'set_edl', ranges: payload.edl.ranges });
+      if (!ok || ok.ok === false) {
+        toast('Não consegui salvar o corte — nada foi alterado', 4000);
+        return false;
+      }
+    }
+    const applied = await persistCorrection({ op: 'apply' });
+    if (applied && applied.ok !== false) {
+      toast('✓ Atualizando o vídeo com suas mudanças', 2800);
+      setTimeout(() => { location.href = '/?view=fila'; }, 500);
+      return true;
+    }
+    // Se o atalho recusar, cai no reprocesso completo (nunca fica sem saída)
+  }
   if (BASE && BASE.startsWith('/p/') && !captionOnly) {
     const folder = projectFolder() || decodeURIComponent(BASE.slice('/p/'.length).split('/')[0]);
     try {
