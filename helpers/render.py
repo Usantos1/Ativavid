@@ -722,17 +722,27 @@ def prepared_source(
         vextra = ["-preset", "p4", "-cq", "23", "-b:v", "0", "-pix_fmt", "yuv420p"]
     else:
         vextra = ["-crf", "14", "-pix_fmt", "yuv420p"]
-    cmd = [
-        "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-        "-i", str(source), "-vf", vf,
-        "-c:v", venc, *vextra, "-g", "30", "-keyint_min", "15",
-        "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709",
-        "-c:a", "copy", "-movflags", "+faststart", str(tmp),
-    ]
+    def _cmd(hwaccel: bool) -> list[str]:
+        # NVDEC no decode do 4K HEVC 10-bit: medido bit-IDENTICO (PSNR inf)
+        # e ~15% mais rapido que decodificar na CPU. So o decode — o tonemap
+        # continua na CPU, que e quem garante a cor.
+        hw = ["-hwaccel", "cuda"] if hwaccel else []
+        return [
+            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+            *hw, "-i", str(source), "-vf", vf,
+            "-c:v", venc, *vextra, "-g", "30", "-keyint_min", "15",
+            "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709",
+            "-c:a", "copy", "-movflags", "+faststart", str(tmp),
+        ]
+
     if not quiet:
         print(f"  preparando fonte (tonemap uma vez): {source.name}", flush=True)
     try:
-        _run_ffmpeg(cmd, label="prepared source")
+        try:
+            _run_ffmpeg(_cmd(True), label="prepared source (nvdec)")
+        except Exception:  # noqa: BLE001 - maquina sem NVDEC cai no decode CPU
+            tmp.unlink(missing_ok=True)
+            _run_ffmpeg(_cmd(False), label="prepared source")
     except Exception as e:  # noqa: BLE001
         print(f"  [warn] fonte preparada falhou ({e}) — seguindo pelo caminho normal", flush=True)
         tmp.unlink(missing_ok=True)
