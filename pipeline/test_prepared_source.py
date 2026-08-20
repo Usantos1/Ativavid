@@ -230,3 +230,70 @@ def test_nvdec_desligado_quando_prep_e_concorrente(monkeypatch, tmp_path):
                                     lambda sp: "s", "")
     assert flags == {"x.mov": True}
 
+
+
+# ------------------------------------- descartar quadro antes do tonemap ----
+def test_prep_descarta_quadro_de_fonte_60fps(tmp_path, monkeypatch):
+    """O corte sai em 30fps (`-r 30` no segmento), então tonemapar os 60 da
+    fonte é metade do trabalho jogada fora."""
+    src = _fake_src(tmp_path)
+    monkeypatch.setattr(render, "source_fps", lambda _p: 60.0)
+    monkeypatch.setattr(render, "shortform_target_fps", lambda _p: "30")
+    assert render._prep_fps(src) == "30"
+
+
+def test_prep_nao_mexe_em_fonte_ja_no_alvo(tmp_path, monkeypatch):
+    """Numa fonte de 30fps o filtro seria um no-op com custo — o caso mais
+    comum (gravação de celular) não é tocado."""
+    src = _fake_src(tmp_path)
+    monkeypatch.setattr(render, "source_fps", lambda _p: 30.0)
+    monkeypatch.setattr(render, "shortform_target_fps", lambda _p: "30")
+    assert render._prep_fps(src) == ""
+
+
+def test_prep_nao_mexe_quando_a_sonda_falha(tmp_path, monkeypatch):
+    """Sem saber o fps da fonte, mexer é adivinhar — segue o caminho antigo."""
+    src = _fake_src(tmp_path)
+
+    def _explode(_p):
+        raise OSError("ffprobe sumiu")
+
+    monkeypatch.setattr(render, "source_fps", _explode)
+    monkeypatch.setattr(render, "shortform_target_fps", lambda _p: "30")
+    assert render._prep_fps(src) == ""
+
+
+def test_chave_do_prep_muda_com_o_fps(tmp_path, monkeypatch):
+    """Um .prep.mp4 de 60fps gravado antes desta mudança não pode ser
+    reusado calado depois dela."""
+    src = _fake_src(tmp_path)
+    monkeypatch.setattr(render, "shortform_target_fps", lambda _p: "30")
+    monkeypatch.setattr(render, "source_fps", lambda _p: 30.0)
+    sem = render._prep_key(src, "scale=-2:1920", "eq=x")
+    monkeypatch.setattr(render, "source_fps", lambda _p: 60.0)
+    com = render._prep_key(src, "scale=-2:1920", "eq=x")
+    assert sem != com
+
+
+def test_fps_vem_antes_do_tonemap_na_cadeia(tmp_path, monkeypatch):
+    """Descartado antes de escalar e tonemapar, o quadro não custa nada;
+    depois do tonemap o trabalho caro já foi feito."""
+    vistos = []
+
+    def _fake_run(cmd, *, label=""):
+        vistos.append(cmd)
+        raise RuntimeError("parar aqui: só queremos a linha de comando")
+
+    src = _fake_src(tmp_path)
+    monkeypatch.delenv("ATIVAVID_PREP_SOURCE", raising=False)
+    monkeypatch.setattr(render, "is_hdr_source", lambda _p: True)
+    monkeypatch.setattr(render, "source_fps", lambda _p: 60.0)
+    monkeypatch.setattr(render, "shortform_target_fps", lambda _p: "30")
+    monkeypatch.setattr(render, "pick_video_encoder", lambda: ("libx264", []))
+    monkeypatch.setattr(render, "_run_ffmpeg", _fake_run)
+    assert render.prepared_source(src, "scale=-2:1920", "eq=x") is None
+    assert vistos, "devia ter montado ao menos um comando"
+    vf = vistos[0][vistos[0].index("-vf") + 1]
+    assert vf.startswith("fps=30,"), vf
+    assert vf.index("fps=30") < vf.index("zscale"), "fps antes do tonemap"
+    assert vf.index("scale=-2:1920") < vf.index("zscale")
