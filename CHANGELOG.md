@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.29.1
+
+- **IA e Integrações agora usam a tela inteira.** Na 2.29 elas ficavam presas numa coluna estreita à esquerda, com o resto do monitor vazio. Em tela larga a IA mostra o passo a passo de um lado e o que você opera do outro; Integrações põe os três serviços lado a lado
+
 ## 2.29
 
 Menu lateral redesenhado, com quatro telas que estavam escondidas.
