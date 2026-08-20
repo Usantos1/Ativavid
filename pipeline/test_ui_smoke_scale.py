@@ -130,11 +130,6 @@ def test_score_labels_from_real_numbers():
     assert present_score({}) == {}
 
 
-if __name__ == "__main__":
-    test_editor_has_protect_and_versions()
-    test_studio_has_content_type_and_simple_system()
-    test_score_labels_from_real_numbers()
-    print("ok")
 
 def test_grades_das_telas_novas_nao_estouram_em_tela_estreita():
     """`minmax(320px, 1fr)` reserva 320px mesmo quando sobra menos que
@@ -195,3 +190,25 @@ def test_menu_vira_gaveta_em_tela_de_celular():
         assert "function wireGaveta" in txt, js
         assert "sb-open" in txt, js
 
+def test_ia_e_integracoes_usam_a_largura_do_monitor():
+    """Num monitor de 1920 sobravam ~680px de vazio: ao separar IA de
+    Integracoes eu travei a grade em 900px e a tela ficou colada na
+    esquerda. Em tela larga cada uma se divide em duas colunas."""
+    css = (REPO / "assets" / "studio" / "studio.css").read_text(encoding="utf-8")
+    i = css.index(".keys-grid--single {")
+    assert "max-width" not in css[i:css.index("}", i)], "sem teto arbitrario"
+    i = css.index("@media (min-width: 1180px) {")
+    bloco = css[i:]
+    # IA: passo a passo de um lado, o que se opera do outro
+    assert '"steps form"' in bloco
+    assert ".keys-block--session > .keys-form" in bloco
+    # Integracoes: os servicos lado a lado
+    assert ".keys-block--apis .keys-form" in bloco
+    assert "minmax(min(360px, 100%), 1fr)" in bloco
+
+
+if __name__ == "__main__":
+    test_editor_has_protect_and_versions()
+    test_studio_has_content_type_and_simple_system()
+    test_score_labels_from_real_numbers()
+    print("ok")

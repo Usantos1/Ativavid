@@ -2991,7 +2991,10 @@ body.home-working .hero-import .hero-inner { padding: 10px 0; }
 
 /* A barra de marca em Estilos ficou só com o nome da marca ativa. */
 .estilo-brand-bar--slim { padding: 10px 16px; gap: 10px 20px; }
-.keys-grid--single { grid-template-columns: minmax(0, 1fr); max-width: 900px; }
+/* Coluna unica NO ESTREITO. O `max-width: 900px` que estava aqui deixava
+   a tela colada na esquerda num monitor de 1920 — com 1580px disponiveis
+   sobravam 680px de vazio. Em tela larga cada uma se divide em duas. */
+.keys-grid--single { grid-template-columns: minmax(0, 1fr); }
 /* Caminhos como %USERPROFILE%\ATIVAVID\extension\llm-session não têm onde
    quebrar e furavam o painel em tela estreita (medido: 33px). */
 .keys-block code,
@@ -3119,4 +3122,33 @@ body.home-working .hero-import .hero-inner { padding: 10px 0; }
 @media (prefers-reduced-motion: reduce) {
   .sidebar { transition: none; }
   .sb-scrim { transition: none; }
+}
+
+
+/* ---- IA e Integracoes em monitor largo ------------------------------- */
+@media (min-width: 1180px) {
+  /* IA: o passo a passo de um lado, o que voce OPERA (contas, modelo,
+     testar) do outro — em vez de uma coluna longa e meia tela vazia. */
+  .keys-block--session {
+    display: grid;
+    grid-template-columns: minmax(0, 1.02fr) minmax(0, 1fr);
+    grid-template-areas:
+      "head head"
+      "steps form";
+    column-gap: 28px;
+    row-gap: 18px;
+    align-items: start;
+  }
+  .keys-block--session > .keys-block-head { grid-area: head; }
+  .keys-block--session > .keys-steps { grid-area: steps; margin: 0; }
+  .keys-block--session > .keys-form { grid-area: form; }
+
+  /* Integracoes: os servicos lado a lado; sao cartoes independentes. */
+  .keys-block--apis .keys-form {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr));
+    gap: 14px;
+    align-items: start;
+  }
+  .keys-block--apis .keys-actions { grid-column: 1 / -1; }
 }
