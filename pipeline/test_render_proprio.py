@@ -49,7 +49,7 @@ def test_gate_derruba_o_que_nao_desenha(tmp_path):
     pub = _public(tmp_path)
     casos = [
         (_ed(captions={"style": "estilo_do_futuro"}), "estilo de legenda"),
-        (_ed(hook={"enabled": True, "style": "card", "lines": ["a"]}), "headline"),
+        (_ed(hook={"enabled": True, "style": "estilo_novo", "lines": ["a"]}), "headline"),
         (_ed(elements={"listCounter": True}), "contador"),
         (_ed(elements={"emojiCaptions": True}), "emoji"),
         (_ed(inserts=[{"file": "x.png"}]), "inserts"),
@@ -211,4 +211,36 @@ def test_catalogo_de_legendas_todo_suportado(tmp_path):
 def test_estilo_desconhecido_ainda_derruba(tmp_path):
     assert "estilo de legenda" in (motivo_nao_suportado(
         _ed(captions={"style": "estilo_do_futuro"}), _public(tmp_path)) or "")
+
+# --------------------------------------------------------- headlines ----
+def test_catalogo_de_headlines_todo_suportado(tmp_path):
+    """Os 9 estilos validados contra o Remotion — tinta mediana 0,862-1,166."""
+    for estilo in ("outline", "card", "realce", "misto", "sombra",
+                   "sublinhado", "pilula", "manchete", "carimbo"):
+        ed = _ed(hook={"enabled": True, "style": estilo,
+                       "text": "Quase perdi essa venda", "endSec": 3.0})
+        assert motivo_nao_suportado(ed, _public(tmp_path)) is None, estilo
+
+
+def test_headline_desconhecida_ainda_derruba(tmp_path):
+    ed = _ed(hook={"enabled": True, "style": "estilo_do_futuro", "lines": ["a"]})
+    assert "headline" in (motivo_nao_suportado(ed, _public(tmp_path)) or "")
+
+
+def test_headline_quebra_em_duas_linhas_por_largura(tmp_path):
+    """A quebra e por largura MEDIDA, nao por contagem de palavras."""
+    r = Renderizador(_public(tmp_path), _ed(hook={"enabled": False},
+                                            endCard={"enabled": False}),
+                     frames=30, fps=30.0)
+    linhas, tam = r._hl_linhas("Quase perdi essa venda", (900, 900), 86, 830)
+    assert len(linhas) == 2
+    assert 40 <= tam <= 86
+    # as duas metades devem ficar proximas em largura
+    a = r._larg_hl(linhas[0], tam, 900)
+    b = r._larg_hl(linhas[1], tam, 900)
+    assert abs(a - b) / max(a, b) < 0.4
+
+
+def test_headline_maiuscula_so_em_tres_estilos():
+    assert set(Renderizador.HL_MAIUSCULA) == {"card", "manchete", "carimbo"}
 

@@ -46,12 +46,19 @@ def _quadros(mov: Path, n: int) -> np.ndarray:
     return np.array(out)
 
 
-def valida(estilo: str, ed_base: dict) -> dict:
+def valida(estilo: str, ed_base: dict, alvo: str = "captions") -> dict:
     ed = json.loads(json.dumps(ed_base))
-    ed["captions"] = dict(ed.get("captions") or {}, style=estilo)
-    ed["hook"] = dict(ed.get("hook") or {}, enabled=False)
+    if alvo == "hook":
+        ed["hook"] = dict(ed.get("hook") or {}, enabled=True, style=estilo)
+        ed["captions"] = dict(ed.get("captions") or {}, style="stacked")
+        (PUB / "caption-cues.json").write_text("[]", encoding="utf-8")
+    else:
+        ed["captions"] = dict(ed.get("captions") or {}, style=estilo)
+        ed["hook"] = dict(ed.get("hook") or {}, enabled=False)
     ed["endCard"] = dict(ed.get("endCard") or {}, enabled=False)
     ed["transitions"] = []
+    if alvo == "hook":
+        ed["hook"]["endSec"] = 12.0
     (PUB / "edit-data.json").write_text(json.dumps(ed, ensure_ascii=False),
                                         encoding="utf-8")
 
@@ -116,8 +123,11 @@ if __name__ == "__main__":
     backup = (PUB / "edit-data.json").read_text(encoding="utf-8-sig")
     base = json.loads(backup)
     try:
-        for estilo in sys.argv[1:] or ["impacto", "scatter", "simples"]:
-            r = valida(estilo, base)
+        alvo = "hook" if sys.argv[1:2] == ["--hook"] else "captions"
+        lista = sys.argv[2:] if alvo == "hook" else sys.argv[1:]
+        cues_bak = (PUB / "caption-cues.json").read_text(encoding="utf-8-sig")
+        for estilo in lista or ["impacto", "scatter", "simples"]:
+            r = valida(estilo, base, alvo)
             if "erro" in r:
                 print(f"  {estilo:10s} FALHOU: {r['erro'][:120]}")
             else:
@@ -127,4 +137,8 @@ if __name__ == "__main__":
                       f"Remotion {r['t_remotion']}s vs nosso {r['t_nosso']}s")
     finally:
         (PUB / "edit-data.json").write_text(backup, encoding="utf-8")
+        try:
+            (PUB / "caption-cues.json").write_text(cues_bak, encoding="utf-8")
+        except NameError:
+            pass
         print("  edit-data restaurado")

@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.25
+
+Todas as headlines agora usam o motor rápido.
+
+- **Os 9 estilos de headline passaram a ser desenhados sem navegador**: contorno, cartão, realce, misto, sombra, sublinhado, pílula, manchete e carimbo. Antes só o realce; escolher outro jogava o vídeo inteiro no caminho lento
+- **Cada um conferido quadro a quadro contra o desenho antigo** — 140 quadros por estilo, diferença de imagem entre 1% e 17%. Dois defeitos foram corrigidos na conferência: o carimbo desenhava a moldura só na primeira linha e a manchete deixava a faixa escura 20% mais curta
+- Desenhar ficou entre 9x e 22x mais rápido conforme o estilo
+- Com isso, legendas e headlines — os dois elementos que aparecem em todo vídeo — estão 100% no motor novo
+
 ## 2.24
 
 Todos os estilos de legenda agora usam o motor rápido.

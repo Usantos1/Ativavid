@@ -73,8 +73,6 @@ TRACO_COR = "#39E508"
 TRACO_SOMBRA = (0, 3, 8, 0.45)
 TRACO_CAIXA = (-0.10, -0.22, 1.20, 1.50)   # esq, topo, larg, alt (fração)
 
-# HL_STYLES.realce (Main.tsx)
-REALCE = {"cap": 86, "safe_w": 830, "lh": 1.04, "top": 300}
 HL_MIN = 40
 
 # CutFlashes (CustomGraphics.tsx)
@@ -107,7 +105,7 @@ def motivo_nao_suportado(edit_data: dict[str, Any], public: Path) -> str | None:
         return "fonte de marca nas legendas"
     hook = edit_data.get("hook") or {}
     if hook.get("enabled"):
-        if (hook.get("style") or "outline") != "realce":
+        if (hook.get("style") or "outline") not in Renderizador.HL_STYLES:
             return f"estilo de headline '{hook.get('style')}'"
         if hook.get("answerLines"):
             return "headline pergunta-resposta"
@@ -529,15 +527,32 @@ class Renderizador:
         _estagio(1.0, (o_fim, float(leg.fim_f - leg.inicio_f + 10)))
         return leg
 
-    # ----- headline `realce` -------------------------------------------------
-    def _larg_hl(self, texto: str, tam: int) -> float:
-        f = self.fonte(4, tam)
+    # HL_STYLES do template (Main.tsx): pesos, teto, largura segura, entrelinha
+    # e distancia do topo. `manchete` ancora embaixo (top ignorado).
+    HL_STYLES = {
+        "outline":    ((800, 800), 92, 900, 1.02, 330),
+        "card":       ((900, 900), 82, 820, 1.06, 120),
+        "realce":     ((900, 900), 86, 830, 1.04, 300),
+        "misto":      ((400, 900), 98, 900, 0.98, 300),
+        "sombra":     ((900, 900), 92, 860, 1.02, 310),
+        "sublinhado": ((900, 900), 84, 850, 1.00, 305),
+        "pilula":     ((700, 700), 44, 780, 1.10, 130),
+        "manchete":   ((800, 800), 54, 780, 1.14, 0),
+        "carimbo":    ((900, 900), 80, 720, 1.05, 300),
+    }
+    HL_MAIUSCULA = ("card", "manchete", "carimbo")
+    # peso -> arquivo Poppins
+    HL_FONTE = {400: 1, 500: 1, 600: 3, 700: 3, 800: 3, 900: 4}
+
+    def _hl_fonte(self, peso: int, tam: int) -> ImageFont.FreeTypeFont:
+        return self.fonte(self.HL_FONTE.get(peso, 4), tam)
+
+    def _larg_hl(self, texto: str, tam: int, peso: int = 900) -> float:
+        f = self._hl_fonte(peso, tam)
         return f.getlength(texto) - 1.0 * max(0, len(texto) - 1)
 
-    def _montar_headline(self, hook: dict) -> Camada:
-        fim = int(float(hook.get("endSec") or 4.0) * self.fps)
-        accent = hook.get("accent") or "#ff5200"
-        texto = (hook.get("text") or " ".join(hook.get("lines") or [])).strip()
+    def _hl_linhas(self, texto: str, pesos, cap: int, safe_w: float):
+        """Duas linhas balanceadas por LARGURA MEDIDA + tamanho ajustado."""
         palavras = texto.split()
         if len(palavras) < 2:
             linhas = [texto] if texto else []
@@ -545,53 +560,357 @@ class Renderizador:
             melhor, dif = (palavras[0], " ".join(palavras[1:])), float("inf")
             for i in range(1, len(palavras)):
                 a, b = " ".join(palavras[:i]), " ".join(palavras[i:])
-                d = abs(self._larg_hl(a, 100) - self._larg_hl(b, 100))
+                d = abs(self._larg_hl(a, 100, pesos[0])
+                        - self._larg_hl(b, 100, pesos[1]))
                 if d < dif:
                     melhor, dif = (a, b), d
             linhas = [l for l in melhor if l]
-        mais = lambda t: max(*(self._larg_hl(l, t) for l in linhas), 1.0)
-        tam = int(REALCE["safe_w"] / mais(100) * 100)
-        tam = max(HL_MIN, min(REALCE["cap"], int(REALCE["safe_w"] / mais(tam) * tam)))
-        f = self.fonte(4, tam)
+
+        def mais_larga(t):
+            return max([self._larg_hl(l, t, pesos[min(i, 1)])
+                        for i, l in enumerate(linhas)] + [1.0])
+
+        tam = int(safe_w / mais_larga(100) * 100)
+        tam = max(HL_MIN, min(cap, int(safe_w / mais_larga(tam) * tam)))
+        return linhas, tam
+
+    def _hl_bloco_texto(self, leg, texto, tam, peso, x0, y_topo, alt_cx,
+                        cor, especs, k_sombra=0.5, contorno=None,
+                        fundo=None, raio=0, pad_xy=(0, 0, 0), enter=8,
+                        sobe=24.0, rot=0.0, borda=None):
+        """Uma linha de headline: fundo opcional, contorno opcional, texto.
+
+        Concentra o que os 9 estilos tem em comum — o que muda entre eles e
+        so QUAL dessas pinturas entra."""
+        f = self._hl_fonte(peso, tam)
+        asc, desc = f.getmetrics()
+        m = self._mascara(f, texto, -1.0)
+        h_m, w_m = m.shape
+        pad_x, pad_t, pad_b = pad_xy
+        folga = 56
+        larg_b = int(w_m + 2 * pad_x)
+        alt_b = int(alt_cx + pad_t + pad_b)
+        L = larg_b + 2 * folga
+        A = alt_b + 2 * folga
+
+        alpha = np.zeros((A, L), dtype=np.float32)
+        rgb = np.zeros((A, L, 3), dtype=np.float32)
+        base_sombra = None
+
+        if fundo is not None:
+            img = Image.new("L", (L, A), 0)
+            ImageDraw.Draw(img).rounded_rectangle(
+                [folga, folga, folga + larg_b, folga + alt_b],
+                radius=raio, fill=255)
+            a_f = np.asarray(img, dtype=np.float32) / 255.0
+            if isinstance(fundo, tuple):          # (cor, opacidade)
+                cor_f, op_f = fundo
+                a_f = a_f * op_f
+            else:
+                cor_f = fundo
+            alpha = a_f
+            rgb[:] = self._cor(cor_f)
+            base_sombra = np.asarray(img, dtype=np.float32) / 255.0
+
+        if borda is not None:
+            cor_bd, esp = borda
+            img = Image.new("L", (L, A), 0)
+            d = ImageDraw.Draw(img)
+            d.rounded_rectangle([folga, folga, folga + larg_b, folga + alt_b],
+                                radius=raio, outline=255, width=esp)
+            a_bd = np.asarray(img, dtype=np.float32) / 255.0
+            rgb = rgb * (1 - a_bd[..., None]) + self._cor(cor_bd) * a_bd[..., None]
+            alpha = np.maximum(alpha, a_bd)
+            if base_sombra is None:
+                base_sombra = a_bd
+
+        t_a = np.zeros((A, L), dtype=np.float32)
+        tx = folga + int(pad_x)
+        ty = folga + int(pad_t + (alt_cx - (asc + desc)) / 2)
+        hh, ww = min(h_m, A - ty), min(w_m, L - tx)
+        t_a[ty:ty + hh, tx:tx + ww] = m[:hh, :ww]
+
+        if contorno is not None:
+            cor_ct, esp = contorno
+            ct = np.zeros_like(t_a)
+            passos = [(esp, 0), (-esp, 0), (0, esp), (0, -esp)]
+            d = int(round(0.7071 * esp))
+            passos += [(d, d), (-d, d), (d, -d), (-d, -d)]
+            for dx, dy in passos:
+                desl = np.zeros_like(t_a)
+                ys = slice(max(0, dy), A + min(0, dy))
+                xs = slice(max(0, dx), L + min(0, dx))
+                ys2 = slice(max(0, -dy), A + min(0, -dy))
+                xs2 = slice(max(0, -dx), L + min(0, -dx))
+                desl[ys, xs] = t_a[ys2, xs2]
+                ct = np.maximum(ct, desl)
+            rgb = rgb * (1 - ct[..., None]) + self._cor(cor_ct) * ct[..., None]
+            alpha = np.maximum(alpha, ct)
+            if base_sombra is None:
+                base_sombra = ct
+
+        rgb = rgb * (1 - t_a[..., None]) + self._cor(cor) * t_a[..., None]
+        alpha = np.maximum(alpha, t_a)
+        if base_sombra is None:
+            base_sombra = t_a
+        sombra = self._sombra_de(base_sombra, especs, k=k_sombra) if especs \
+            else np.zeros_like(alpha)
+
+        if rot:
+            def _gira(a, modo="L"):
+                im = Image.fromarray((a * 255).astype(np.uint8), modo)
+                return np.asarray(im.rotate(rot, expand=False,
+                                            resample=Image.BICUBIC),
+                                  dtype=np.float32) / 255.0
+            alpha = _gira(alpha)
+            sombra = _gira(sombra)
+            rgb = np.asarray(
+                Image.fromarray(rgb.astype(np.uint8), "RGB")
+                .rotate(rot, expand=False, resample=Image.BICUBIC),
+                dtype=np.float32)
+
+        leg.palavras.append(Palavra(
+            int(x0) - folga, int(y_topo) - folga, rgb, alpha, sombra,
+            inicio_f=0, enter=enter, sobe=sobe))
+        return alt_b
+
+    def _hl_bloco_multi(self, leg, linhas, tam, peso, alt_cx, x0, y_topo,
+                        cor, especs, raio=0, pad_xy=(0, 0, 0), borda=None,
+                        rot=0.0, sobe=24.0, fundo=None):
+        """Bloco de VARIAS linhas numa peca so — para molduras/fundos que
+        envolvem o conjunto (carimbo), nao cada linha."""
+        f = self._hl_fonte(peso, tam)
+        asc, desc = f.getmetrics()
+        mascaras = [self._mascara(f, l, -1.0) for l in linhas]
+        pad_x, pad_t, pad_b = pad_xy
+        larg_txt = max((m.shape[1] for m in mascaras), default=1)
+        larg_b = int(larg_txt + 2 * pad_x)
+        alt_b = int(alt_cx * len(mascaras) + pad_t + pad_b)
+        folga = 56
+        L, A = larg_b + 2 * folga, alt_b + 2 * folga
+
+        alpha = np.zeros((A, L), dtype=np.float32)
+        rgb = np.zeros((A, L, 3), dtype=np.float32)
+        base = None
+        if fundo is not None:
+            img = Image.new("L", (L, A), 0)
+            ImageDraw.Draw(img).rounded_rectangle(
+                [folga, folga, folga + larg_b, folga + alt_b], radius=raio,
+                fill=255)
+            a_f = np.asarray(img, dtype=np.float32) / 255.0
+            base = a_f.copy()
+            if isinstance(fundo, tuple):        # (cor, opacidade)
+                cor_f, op_f = fundo
+                a_f = a_f * op_f
+            else:
+                cor_f = fundo
+            alpha = a_f
+            rgb[:] = self._cor(cor_f)
+        if borda is not None:
+            cor_bd, esp = borda
+            img = Image.new("L", (L, A), 0)
+            ImageDraw.Draw(img).rounded_rectangle(
+                [folga, folga, folga + larg_b, folga + alt_b], radius=raio,
+                outline=255, width=esp)
+            a_bd = np.asarray(img, dtype=np.float32) / 255.0
+            rgb = rgb * (1 - a_bd[..., None]) + self._cor(cor_bd) * a_bd[..., None]
+            alpha = np.maximum(alpha, a_bd)
+            base = a_bd if base is None else np.maximum(base, a_bd)
+
+        t_a = np.zeros((A, L), dtype=np.float32)
+        y = folga + pad_t
+        for m in mascaras:
+            h_m, w_m = m.shape
+            tx = folga + pad_x + int((larg_txt - w_m) / 2)
+            ty = int(y + (alt_cx - (asc + desc)) / 2)
+            hh, ww = min(h_m, A - ty), min(w_m, L - tx)
+            t_a[ty:ty + hh, tx:tx + ww] = np.maximum(
+                t_a[ty:ty + hh, tx:tx + ww], m[:hh, :ww])
+            y += alt_cx
+        rgb = rgb * (1 - t_a[..., None]) + self._cor(cor) * t_a[..., None]
+        alpha = np.maximum(alpha, t_a)
+        base = t_a if base is None else np.maximum(base, t_a)
+        sombra = (self._sombra_de(base, especs, k=0.5) if especs
+                  else np.zeros_like(alpha))
+
+        if rot:
+            def _g(a):
+                im = Image.fromarray((a * 255).astype(np.uint8), "L")
+                return np.asarray(im.rotate(rot, expand=False,
+                                            resample=Image.BICUBIC),
+                                  dtype=np.float32) / 255.0
+            alpha, sombra = _g(alpha), _g(sombra)
+            rgb = np.asarray(Image.fromarray(rgb.astype(np.uint8), "RGB")
+                             .rotate(rot, expand=False, resample=Image.BICUBIC),
+                             dtype=np.float32)
+        leg.palavras.append(Palavra(
+            int(x0) - folga, int(y_topo) - folga, rgb, alpha, sombra,
+            inicio_f=0, enter=8, sobe=sobe))
+
+    def _montar_headline(self, hook: dict) -> Camada:
+        """Os 9 estilos de headline. O layout (duas linhas, ajuste de tamanho,
+        entrada e saida) e comum; cada estilo escolhe a PINTURA."""
+        estilo = hook.get("style") or "outline"
+        pesos, cap0, safe_w0, lh, top0 = self.HL_STYLES.get(
+            estilo, self.HL_STYLES["outline"])
+        fim = int(float(hook.get("endSec") or 4.0) * self.fps)
+        accent = hook.get("accent") or "#ff5200"
+        texto = (hook.get("text") or " ".join(hook.get("lines") or [])).strip()
+        if estilo in self.HL_MAIUSCULA:
+            texto = texto.upper()
+        cap = int(hook.get("fontSizePx") or hook.get("maxFontPx") or cap0)
+        safe_w = float(hook.get("safeWidth") or safe_w0)
+        linhas, tam = self._hl_linhas(texto, pesos, cap, safe_w)
+        lh = float(hook.get("lineHeight") or lh)
+        top = float(hook.get("paddingTop") or top0)
 
         leg = Camada(0, fim)
         leg.dur_f = fim
         leg.saida_f = fim - 9
         leg.exit_fade = True
-        cor_b = self._cor(accent)
-        y = float(REALCE["top"])
-        for texto_l in linhas:
-            larg_t = self._larg_hl(texto_l, tam)
-            pad_x, pad_t, pad_b = 0.3 * tam, 0.08 * tam, 0.16 * tam
-            asc, desc = f.getmetrics()
-            larg_b = int(larg_t + 2 * pad_x)
-            # caixa CSS = line-height + paddings, NAO ascent+descent (medido:
-            # ascent+descent dava bloco 13% mais alto que producao)
-            alt_b = int(REALCE["lh"] * tam + pad_t + pad_b)
-            folga = 40
-            L, A = larg_b + 2 * folga, alt_b + 2 * folga
-            bloco = Image.new("L", (L, A), 0)
-            ImageDraw.Draw(bloco).rounded_rectangle(
-                [folga, folga, folga + larg_b, folga + alt_b], radius=12, fill=255)
-            a_bloco = np.asarray(bloco, dtype=np.float32) / 255.0
-            m = self._mascara(f, texto_l, -1.0)
-            h_m, w_m = m.shape
-            tx = folga + int(pad_x)
-            ty = folga + int(pad_t + (REALCE["lh"] * tam - (asc + desc)) / 2)
-            t_a = np.zeros_like(a_bloco)
-            t_a[ty:ty + h_m, tx:tx + w_m] = m[:A - ty, :L - tx]
-            rgb = np.broadcast_to(cor_b, (A, L, 3)).copy()
-            rgb = rgb * (1 - t_a[..., None]) + 255.0 * t_a[..., None]
-            alpha = np.maximum(a_bloco, t_a)
-            b = np.asarray(Image.fromarray((a_bloco * 255).astype(np.uint8))
-                           .filter(ImageFilter.GaussianBlur(28 * 0.5)),
-                           dtype=np.float32) / 255.0
-            sombra = np.zeros_like(b)
-            sombra[10:, :] = b[:-10, :] * 0.45
+        alt_cx = lh * tam
+
+        # entrada: padrao (sobe 24), pop (escala) ou deslizar — pop/deslizar
+        # caem no fade simples aqui; a escala por quadro fica para depois
+        sobe = 24.0 if str(hook.get("animation") or "padrao") == "padrao" else 0.0
+
+        if estilo == "realce":
+            y = top
+            for l in linhas:
+                pad = (0.3 * tam, 0.08 * tam, 0.16 * tam)
+                larg_b = self._larg_hl(l, tam, pesos[0]) + 2 * pad[0]
+                alt = self._hl_bloco_texto(
+                    leg, l, tam, pesos[0], (self.w - larg_b) / 2, y, alt_cx,
+                    "#ffffff", [(0, 10, 28, 0.45)], fundo=accent, raio=12,
+                    pad_xy=pad, sobe=sobe)
+                y += alt + 10
+            return leg
+
+        if estilo == "card":
+            y = top
+            larg_max = max(self._larg_hl(l, tam, 900) for l in linhas) if linhas else 0
+            for i, l in enumerate(linhas):
+                pad = (46, 28 if i == 0 else 0, 28 if i == len(linhas) - 1 else 0)
+                alt = self._hl_bloco_texto(
+                    leg, l, tam, 900, (self.w - (larg_max + 92)) / 2, y, alt_cx,
+                    "#ffffff", [(0, 18, 50, 0.45)], fundo="#232326", raio=24,
+                    pad_xy=(46, pad[1], pad[2]), sobe=sobe)
+                y += alt
+            return leg
+
+        if estilo == "misto":
+            y = top
+            for i, l in enumerate(linhas):
+                peso = pesos[min(i, 1)]
+                cor = "#ffffff" if i == 0 else accent
+                larg = self._larg_hl(l, tam, peso)
+                alt = self._hl_bloco_texto(
+                    leg, l, tam, peso, (self.w - larg) / 2, y, alt_cx, cor,
+                    [(0, 6, 16, 0.55)], k_sombra=BLUR_K, sobe=sobe)
+                y += alt
+            return leg
+
+        if estilo == "sombra":
+            off = max(3, round(tam * 0.06))
+            y = top
+            for l in linhas:
+                larg = self._larg_hl(l, tam, 900)
+                alt = self._hl_bloco_texto(
+                    leg, l, tam, 900, (self.w - larg) / 2, y, alt_cx, "#ffffff",
+                    [(off, off, 0, 1.0), (0, 6, 18, 0.5)], sobe=sobe)
+                # textShadow `off off 0 accent`: copia DURA do glifo por
+                # baixo, deslocada — so aparece onde o texto nao cobre.
+                p = leg.palavras[-1]
+                dura = np.zeros_like(p.alpha)
+                dura[off:, off:] = p.alpha[:-off, :-off]
+                fica = np.clip(dura - p.alpha, 0.0, 1.0)
+                p.rgb[:] = p.rgb * (1 - fica[..., None])                     + self._cor(accent) * fica[..., None]
+                p.alpha[:] = np.maximum(p.alpha, dura)
+                y += alt
+            return leg
+
+        if estilo == "sublinhado":
+            barra_h = max(6, round(tam * 0.14))
+            y = top
+            for l in linhas:
+                larg = self._larg_hl(l, tam, 900)
+                alt = self._hl_bloco_texto(
+                    leg, l, tam, 900, (self.w - larg) / 2, y, alt_cx, "#ffffff",
+                    [(0, 6, 18, 0.5)], sobe=sobe)
+                # barra sob a linha, na cor da marca
+                img = Image.new("L", (int(larg) + 8, barra_h), 0)
+                ImageDraw.Draw(img).rounded_rectangle(
+                    [0, 0, int(larg), barra_h - 1], radius=barra_h // 2, fill=255)
+                a_b = np.asarray(img, dtype=np.float32) / 255.0
+                leg.palavras.append(Palavra(
+                    int((self.w - larg) / 2), int(y + alt_cx + barra_h * 0.2),
+                    np.broadcast_to(self._cor(accent), (*a_b.shape, 3)).copy(),
+                    a_b, np.zeros_like(a_b), inicio_f=0, enter=8, sobe=sobe))
+                y += alt + round(tam * 0.16)
+            return leg
+
+        if estilo == "pilula":
+            uma = " ".join(linhas)
+            larg = self._larg_hl(uma, tam, 700)
+            pad = (round(tam * 0.6), round(tam * 0.3), round(tam * 0.3))
+            self._hl_bloco_texto(
+                leg, uma, tam, 700, (self.w - (larg + 2 * pad[0])) / 2, top,
+                alt_cx, "#ffffff", [(0, 10, 30, 0.35)],
+                fundo=("#111214", 0.78), raio=999, pad_xy=pad, sobe=sobe)
+            return leg
+
+        if estilo == "manchete":
+            # a faixa escura envolve as DUAS linhas (uma peca so), com a
+            # barra de acento colada a esquerda dela. Aplicar o fundo por
+            # linha deixava a faixa 20% mais baixa que a do Remotion
+            # (182px contra 230px, medido).
+            bottom = float(hook.get("paddingBottom") or 140)
+            pad = (44, 26, 26)
+            larg_max = max((self._larg_hl(l, tam, 800) for l in linhas),
+                           default=0)
+            larg_b = larg_max + 2 * pad[0]
+            alt_b = alt_cx * len(linhas) + pad[1] + pad[2]
+            x_faixa = (self.w - larg_b) / 2 + 15
+            y0 = self.h - bottom - alt_b
+            # barra de acento (12px) colada na borda esquerda da faixa
+            img = Image.new("L", (12, int(alt_b)), 0)
+            ImageDraw.Draw(img).rounded_rectangle(
+                [0, 0, 11, int(alt_b) - 1], radius=6, fill=255)
+            a_b = np.asarray(img, dtype=np.float32) / 255.0
             leg.palavras.append(Palavra(
-                int((self.w - larg_b) / 2) - folga, int(y) - folga,
-                rgb, alpha, sombra, inicio_f=0, enter=8, sobe=24.0))
-            y += alt_b + 10
+                int(x_faixa - 30), int(y0),
+                np.broadcast_to(self._cor(accent), (*a_b.shape, 3)).copy(),
+                a_b, np.zeros_like(a_b), inicio_f=0, enter=8, sobe=sobe))
+            self._hl_bloco_multi(
+                leg, linhas, tam, 800, alt_cx, x_faixa, y0, "#ffffff",
+                [(0, 10, 26, 0.4)], raio=18, pad_xy=pad,
+                fundo=("#0c0d0f", 0.86), sobe=sobe)
+            return leg
+
+        if estilo == "carimbo":
+            # a moldura envolve o BLOCO INTEIRO (as duas linhas): o carimbo e
+            # uma peca so, girada -6 graus de uma vez.
+            bw = max(6, round(tam * 0.09))
+            pad = (round(tam * 0.35), round(tam * 0.2), round(tam * 0.2))
+            larg_max = max((self._larg_hl(l, tam, 900) for l in linhas),
+                           default=0)
+            self._hl_bloco_multi(
+                leg, linhas, tam, 900, alt_cx,
+                (self.w - (larg_max + 2 * pad[0])) / 2, top,
+                accent, [(0, 12, 30, 0.4)], raio=18, pad_xy=pad,
+                borda=(accent, bw), rot=-6.0, sobe=0.0)
+            return leg
+
+        # outline (padrao): branco com contorno preto grosso
+        stroke = int(hook.get("strokePx") or 12)
+        y = top
+        for l in linhas:
+            larg = self._larg_hl(l, tam, 800)
+            alt = self._hl_bloco_texto(
+                leg, l, tam, 800, (self.w - larg) / 2, y, alt_cx, "#ffffff",
+                [(0, 6, 14, 0.45)], k_sombra=BLUR_K,
+                contorno=("#000000", stroke), sobe=sobe)
+            y += alt
         return leg
 
     # ----- cartão final ------------------------------------------------------
