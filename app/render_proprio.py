@@ -101,6 +101,8 @@ def motivo_nao_suportado(edit_data: dict[str, Any], public: Path) -> str | None:
         permitidos.add("impacto")
     if os.environ.get("ATIVAVID_PROPRIO_SCATTER") == "1":
         permitidos.add("scatter")
+    if os.environ.get("ATIVAVID_PROPRIO_SIMPLE") == "1":
+        permitidos.update(("simples", "serifada", "classica", "bloco", "recorte"))
     if estilo not in permitidos:
         return f"estilo de legenda '{caps.get('style')}'"
     if caps.get("fontFamily"):
@@ -300,6 +302,10 @@ class Renderizador:
             self.cues = []
         elif estilo == "scatter":
             self.camadas.extend(self._montar_scatter())
+            self.cues = []
+        elif estilo in self.SIMPLE_VARIANTES or estilo == "recorte":
+            self.camadas.extend(self._montar_simple(
+                "recorte_simple" if estilo == "recorte" else estilo))
             self.cues = []
         for cue in self.cues:
             preset = cue.get("preset") or "STACK_MIXED"
@@ -962,6 +968,198 @@ class Renderizador:
                                     (leg.saida_f + q, leg.saida_f + q + 1))
                     x += largs[k] + GAP
                 y += alturas[li]
+            camadas.append(leg)
+        return camadas
+
+    # ----- legendas `simple` (5 variantes estaticas) ------------------------
+    SIMPLE_VARIANTES = {
+        #        fonte        peso  tam  maxP lin  sqX   sqY   track bottom maxW  modo
+        "simples":  ("Poppins-SemiBold.ttf", None, 82, 3, 1, 0.9, 0.9, -3, 430, 860, ""),
+        "serifada": ("LibreBaskerville[wght].ttf", 700, 84, 3, 1, 1.0, 1.0, -1, 430, 860, ""),
+        "classica": ("Inter[opsz,wght].ttf", "Medium", 52, 14, 2, 1.0, 1.0, 0, 430, 840, ""),
+        "bloco":    ("Poppins-ExtraBold.ttf", None, 76, 3, 1, 1.0, 1.0, -2, 430, 760, "bloco"),
+        "recorte_simple": ("Poppins-ExtraBold.ttf", None, 78, 3, 1, 1.0, 1.0, -1, 430, 800, "sticker"),
+    }
+    _ORFAO = ("o", "a", "os", "as", "e", "\u00e9", "de", "do", "da", "em", "no",
+              "na", "um", "uma", "que", "se", "ao", "\u00e0", "por", "com")
+
+    def _fonte_arquivo(self, nome: str, tam: int, eixo) -> ImageFont.FreeTypeFont:
+        chave = (nome, tam, str(eixo))
+        if chave not in self._fontes:
+            f = ImageFont.truetype(str(FONTES / nome), tam)
+            if isinstance(eixo, int):
+                try:
+                    f.set_variation_by_axes([eixo])
+                except (OSError, AttributeError):
+                    pass
+            elif isinstance(eixo, str):
+                try:
+                    f.set_variation_by_name(eixo)
+                except (OSError, AttributeError):
+                    pass
+            self._fontes[chave] = f
+        return self._fontes[chave]
+
+    def _montar_simple(self, variante: str):
+        """Cinco variantes ESTATICAS: o texto do cue aparece pronto e some no
+        cue seguinte — sem animacao por palavra. Agrupamento por largura
+        medida > contagem > respiro, e a quebra em 2 linhas evita terminar
+        linha em palavra funcional (penalidade de ~200px, como o template)."""
+        import re
+
+        (arq, eixo, tam0, max_p, n_lin, sq_x, sq_y,
+         track, bottom0, max_w, modo) = self.SIMPLE_VARIANTES[variante]
+        caps_cfg = self.ed.get("captions") or {}
+        tam = round(tam0 * float(caps_cfg.get("sizeScale") or 1.0))
+        pos = {"centro": 900, "alto": 1330}.get(caps_cfg.get("position") or "")
+        bottom = pos if pos else bottom0
+        accent = caps_cfg.get("accent")
+        f = self._fonte_arquivo(arq, tam, eixo)
+
+        def limpar(t):
+            t = re.sub(r"[.,!?\u2026]+$", "", t)
+            return t.upper() if modo == "sticker" else t
+
+        def largura(ws):
+            txt = " ".join(limpar(w["text"]) for w in ws)
+            return (f.getlength(txt) + track * max(0, len(txt) - 1)) * sq_x
+
+        raw = json.loads((self.public / "captions.json")
+                         .read_text(encoding="utf-8-sig"))
+        words = raw if isinstance(raw, list) else (raw.get("words") or [])
+
+        cues, cur = [], []
+        orc = max_w * n_lin
+        for i, w in enumerate(words):
+            trial = cur + [w]
+            if cur and (len(trial) > max_p or largura(trial) > orc):
+                cues.append(cur)
+                cur = [w]
+            else:
+                cur = trial
+            nxt = words[i + 1] if i + 1 < len(words) else None
+            gap = (nxt["startMs"] - w["endMs"]) if nxt else 0
+            if cur and (re.search(r"[.,!?\u2026]$", w["text"]) or gap > 450):
+                cues.append(cur)
+                cur = []
+        if cur:
+            cues.append(cur)
+
+        def duas(ws):
+            if n_lin == 1 or len(ws) < 2:
+                return [ws]
+            melhor, m_score = 0, float("inf")
+            for i in range(1, len(ws)):
+                dif = abs(largura(ws[:i]) - largura(ws[i:]))
+                cauda = limpar(ws[i - 1]["text"]).lower()
+                score = dif + (200 if cauda in self._ORFAO else 0)
+                if score < m_score:
+                    m_score, melhor = score, i
+            return [ws[:melhor], ws[melhor:]]
+
+        camadas = []
+        lh = {"bloco": 1.06, "sticker": 1.16}.get(modo, 1.18)
+        for ci, cue in enumerate(cues):
+            ini_f = int(round(cue[0]["startMs"] / 1000 * self.fps))
+            nxt = cues[ci + 1] if ci + 1 < len(cues) else None
+            fim_f = (int(round(nxt[0]["startMs"] / 1000 * self.fps)) - 1 if nxt
+                     else min(self.frames,
+                              int(round(cue[-1]["endMs"] / 1000 * self.fps))
+                              + int(self.fps)))
+            if fim_f < ini_f:
+                continue
+            leg = Camada(ini_f, fim_f)
+            leg.dur_f = fim_f - ini_f + 1
+            leg.saida_f = 1e9
+            linhas = duas(cue)
+            asc, desc = f.getmetrics()
+            alt_l = tam * lh
+            gap_l = round(tam * 0.14) if modo == "bloco" else 0
+            alt_total = alt_l * len(linhas) * sq_y + gap_l * (len(linhas) - 1)
+            y = self.h - bottom - alt_total
+
+            for ln in linhas:
+                texto = " ".join(limpar(w["text"]) for w in ln)
+                m = self._mascara(f, texto, float(track))
+                if sq_x != 1.0 or sq_y != 1.0:
+                    novo_t = (max(1, int(m.shape[1] * sq_x)),
+                              max(1, int(m.shape[0] * sq_y)))
+                    m = np.asarray(
+                        Image.fromarray((m * 255).astype(np.uint8))
+                        .resize(novo_t, Image.BILINEAR),
+                        dtype=np.float32) / 255.0
+                h_m, w_m = m.shape
+                folga = 48
+                x0 = int((self.w - w_m) / 2)
+
+                if modo == "bloco":
+                    pad = round(tam * 0.16)
+                    slab = accent or "#111214"
+                    tinta = self._tinta_na_caixa(slab)
+                    cw = w_m + 2 * pad
+                    ch = int(alt_l + pad * 0.55 + pad * 0.75)
+                    L, A = cw + 2 * folga, ch + 2 * folga
+                    img = Image.new("L", (L, A), 0)
+                    ImageDraw.Draw(img).rounded_rectangle(
+                        [folga, folga, folga + cw, folga + ch],
+                        radius=round(tam * 0.16), fill=255)
+                    a_c = np.asarray(img, dtype=np.float32) / 255.0
+                    t_a = np.zeros_like(a_c)
+                    tx = folga + pad
+                    ty = folga + int(pad * 0.55 + (alt_l - (asc + desc)) / 2)
+                    hh = min(h_m, A - ty)
+                    ww = min(w_m, L - tx)
+                    t_a[ty:ty + hh, tx:tx + ww] = m[:hh, :ww]
+                    rgb = np.broadcast_to(self._cor(slab), (*a_c.shape, 3)).copy()
+                    rgb = rgb * (1 - t_a[..., None]) \
+                        + self._cor(tinta) * t_a[..., None]
+                    alpha = np.maximum(a_c, t_a)
+                    b = np.asarray(Image.fromarray((a_c * 255).astype(np.uint8))
+                                   .filter(ImageFilter.GaussianBlur(30 * 0.5)),
+                                   dtype=np.float32) / 255.0
+                    sombra = np.zeros_like(b)
+                    sombra[12:, :] = b[:-12, :] * 0.45
+                    leg.palavras.append(Palavra(
+                        int((self.w - cw) / 2) - folga, int(y) - folga,
+                        rgb, alpha, sombra, inicio_f=-1, enter=1, sobe=0.0))
+                    y += ch + gap_l
+                    continue
+
+                pad_m = np.zeros((h_m + 2 * folga, w_m + 2 * folga),
+                                 dtype=np.float32)
+                pad_m[folga:folga + h_m, folga:folga + w_m] = m
+                if modo == "sticker":
+                    R = max(5, round(tam * 0.09))
+                    D = int(round(0.7071 * R))
+                    contorno = np.zeros_like(pad_m)
+                    for dx, dy in ((R, 0), (-R, 0), (0, R), (0, -R),
+                                   (D, D), (-D, D), (D, -D), (-D, -D)):
+                        desl = np.zeros_like(pad_m)
+                        ys = slice(max(0, dy), pad_m.shape[0] + min(0, dy))
+                        xs = slice(max(0, dx), pad_m.shape[1] + min(0, dx))
+                        ys2 = slice(max(0, -dy), pad_m.shape[0] + min(0, -dy))
+                        xs2 = slice(max(0, -dx), pad_m.shape[1] + min(0, -dx))
+                        desl[ys, xs] = pad_m[ys2, xs2]
+                        contorno = np.maximum(contorno, desl)
+                    cor_t = self._cor(accent or "#ffffff")
+                    cor_e = self._cor("#141518")
+                    alpha = np.maximum(contorno, pad_m)
+                    rgb = np.broadcast_to(cor_e, (*pad_m.shape, 3)).copy()
+                    rgb = rgb * (1 - pad_m[..., None]) + cor_t * pad_m[..., None]
+                    sombra = self._sombra_de(alpha, [(0, 14, 30, 0.5)])
+                    leg.palavras.append(Palavra(
+                        x0 - folga,
+                        int(y + (alt_l - (asc + desc)) / 2) - folga,
+                        rgb, alpha, sombra, inicio_f=-1, enter=1, sobe=0.0))
+                else:
+                    sombra = self._sombra_de(pad_m, [(0, 4, 18, 0.55)])
+                    cor = self._cor(accent or "#f4f1e9")
+                    rgb = np.broadcast_to(cor, (*pad_m.shape, 3)).copy()
+                    leg.palavras.append(Palavra(
+                        x0 - folga,
+                        int(y + (alt_l * sq_y - (asc + desc) * sq_y) / 2) - folga,
+                        rgb, pad_m, sombra, inicio_f=-1, enter=1, sobe=0.0))
+                y += alt_l * sq_y + gap_l
             camadas.append(leg)
         return camadas
 
