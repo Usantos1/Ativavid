@@ -142,6 +142,7 @@ class Legenda:
     caixa: tuple[int, int, int, int] | None = None
     cache_chave: tuple | None = None
     cache_tela: np.ndarray | None = None
+    cache_pronto: np.ndarray | None = None   # a mesma tela ja convertida (uint8)
 
     def saida(self, fl: float) -> tuple[float, float, float]:
         """(opacidade, deslocamento vertical, desfoque) no quadro `fl`."""
@@ -321,6 +322,67 @@ def _blend_palavra(tela: np.ndarray, p: "Palavra", op: float,
     sub[..., 3] = sub[..., 3] * inv + a_t
 
 
+def _converter(tela: np.ndarray) -> np.ndarray:
+    """Premultiplicado float -> RGBA alpha direto uint8."""
+    a = np.clip(tela[..., 3:4], 0.0, 1.0)
+    rgb = np.clip(tela[..., :3] / np.maximum(a, 1e-6), 0.0, 255.0)
+    out = np.empty(tela.shape, dtype=np.float32)
+    out[..., :3] = rgb
+    out[..., 3] = a[..., 0] * 255.0
+    return out.astype(np.uint8)
+
+
+def _blend_palavra_em(sub: np.ndarray, p: "Palavra", op: float,
+                      abs_x0: int, abs_y0: int) -> None:
+    """Como _blend_palavra, mas com origem absoluta arbitraria."""
+    h, w = p.alpha.shape
+    desloc = int(round(p.sobe * (1.0 - op))) if p.janela is None else 0
+    py, px = p.y0 - abs_y0 + desloc, p.x0 - abs_x0
+    ys0, xs0 = max(0, py), max(0, px)
+    ys1, xs1 = min(sub.shape[0], py + h), min(sub.shape[1], px + w)
+    if ys1 <= ys0 or xs1 <= xs0:
+        return
+    sy, sx = ys0 - py, xs0 - px
+    alt, larg = ys1 - ys0, xs1 - xs0
+    dst = sub[ys0:ys1, xs0:xs1]
+    a_s = p.sombra[sy:sy + alt, sx:sx + larg] * op
+    a_t = p.alpha[sy:sy + alt, sx:sx + larg] * op
+    rgb = p.rgb[sy:sy + alt, sx:sx + larg]
+    inv = 1.0 - a_s
+    dst[..., :3] *= inv[..., None]
+    dst[..., 3] = dst[..., 3] * inv + a_s
+    inv = 1.0 - a_t
+    dst[..., :3] = dst[..., :3] * inv[..., None] + rgb * a_t[..., None]
+    dst[..., 3] = dst[..., 3] * inv + a_t
+
+
+def _blit(pronto8: np.ndarray, leg: "Legenda", buf: np.ndarray,
+          sujo: list[int], bx0: int, by0: int, bx1: int, by1: int,
+          dy: int, mesclar: bool) -> None:
+    """Escreve/mescla o retangulo pronto (uint8 alpha direto) no buffer."""
+    dy0, dy1 = by0 + dy, by1 + dy
+    corte0 = max(0, -dy0)
+    dy0, dy1 = max(0, dy0), min(buf.shape[0], dy1)
+    if dy1 <= dy0:
+        return
+    pedaco = pronto8[corte0:corte0 + (dy1 - dy0)]
+    if mesclar:
+        fundo = buf[dy0:dy1, bx0:bx1].astype(np.float32)
+        pf = pedaco.astype(np.float32)
+        a_f = pf[..., 3:4] / 255.0
+        a_b = fundo[..., 3:4] / 255.0
+        a_o = a_f + a_b * (1.0 - a_f)
+        rgb = (pf[..., :3] * a_f + fundo[..., :3] * a_b * (1.0 - a_f))             / np.maximum(a_o, 1e-6)
+        buf[dy0:dy1, bx0:bx1] = np.clip(
+            np.concatenate([rgb, a_o * 255.0], axis=2), 0, 255).astype(np.uint8)
+    else:
+        buf[dy0:dy1, bx0:bx1] = pedaco
+    sujo[0] = min(sujo[0], bx0) if sujo[2] > sujo[0] else bx0
+    sujo[1] = min(sujo[1], dy0) if sujo[3] > sujo[1] else dy0
+    sujo[2] = max(sujo[2], bx1)
+    sujo[3] = max(sujo[3], dy1)
+
+
 def desenhar(leg: "Legenda | None", fl: float, buf: np.ndarray,
              sujo: list[int], origem: tuple[int, int] = (0, 0),
              mesclar: bool = False) -> None:
@@ -371,7 +433,31 @@ def desenhar(leg: "Legenda | None", fl: float, buf: np.ndarray,
         for p in assentadas:
             _blend_palavra(base, p, 1.0, x0, y0)
         leg.cache_chave, leg.cache_tela = chave, base
+        leg.cache_pronto = _converter(base)
     tela = leg.cache_tela
+
+    # Caminho rapido: sem saida em curso, converter SO o retangulo das
+    # palavras que estao animando — o perfil mostrou a conversao da caixa
+    # inteira comendo 24 ms/quadro para animar uma palavra.
+    if (not animando) and op_cue >= 0.996 and blur_cue <= 0.25 and abs(dy_cue) < 0.5:
+        # tudo assentado: o retangulo convertido ja esta pronto no cache
+        _blit(leg.cache_pronto, leg, buf, sujo, bx0, by0, bx1, by1, 0, mesclar)
+        return
+    if animando and op_cue >= 0.996 and blur_cue <= 0.25 and abs(dy_cue) < 0.5:
+        pronto8 = leg.cache_pronto.copy()
+        ax0 = min(max(0, p.x0 - x0) for p, _ in animando)
+        ay0 = min(max(0, p.y0 - y0 - int(p.sobe)) for p, _ in animando)
+        ax1 = max(min(x1 - x0, p.x0 - x0 + p.alpha.shape[1]) for p, _ in animando)
+        ay1 = max(min(y1 - y0, p.y0 - y0 + p.alpha.shape[0] + int(p.sobe) + 1)
+                  for p, _ in animando)
+        if ax1 > ax0 and ay1 > ay0:
+            sub = tela[ay0:ay1, ax0:ax1].copy()
+            for p, op in animando:
+                _blend_palavra_em(sub, p, op, x0 + ax0, y0 + ay0)
+            pronto8[ay0:ay1, ax0:ax1] = np.clip(_converter(sub), 0, 255)
+        _blit(pronto8, leg, buf, sujo, bx0, by0, bx1, by1, 0, mesclar)
+        return
+
     if animando:
         tela = tela.copy()
         for p, op in animando:

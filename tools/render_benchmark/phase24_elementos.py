@@ -143,12 +143,13 @@ def montar_endcard(ec: dict, hook_accent: str, total_f: int, fps: float) -> "R.L
     leg.dur_f = dur + 20
     leg.saida_f = 1e9                              # sem fade de saida
 
-    # camada 1: escurecimento de tela inteira
-    a_dim = np.full((R.H, R.W), dim, dtype=np.float32)
-    leg.palavras.append(R.Palavra(
-        0, 0, np.zeros((R.H, R.W, 3), dtype=np.float32), a_dim,
-        np.zeros((R.H, R.W), dtype=np.float32),
-        inicio_f=0, enter=fade, sobe=0.0))
+    # O escurecimento NAO e uma camada: e preto constante sobre a tela
+    # inteira, o que se reduz a multiplicar o quadro por (1-a). Como camada
+    # de verdade custava 426 ms/quadro (mescla float de tela cheia); como
+    # multiplicacao uint8 custa ~5 ms. Fica em leg.dim para o driver aplicar
+    # ENTRE as legendas e o texto do cartao.
+    leg.dim = dim
+    leg.dim_fade = fade
 
     base = round(R.W * 0.058)
     safe_w = R.W * 0.70
@@ -198,16 +199,26 @@ def montar_endcard(ec: dict, hook_accent: str, total_f: int, fps: float) -> "R.L
     return leg
 
 
+_FLASH_CACHE: dict[int, np.ndarray] = {}
+
+
 def flash_quadro(at_s: float, fps: float, f: int) -> np.ndarray | None:
-    """Camada do flash no quadro f, ou None. Rasterizada na hora — sao so
-    7 quadros por corte, nao vale cache."""
+    """Camada do flash no quadro f, ou None.
+
+    A mascara depende so do INDICE do estagio (0..6) — a posicao do facho e
+    funcao de p, igual para todos os cortes. Recalcular a rotacao PIL e
+    mesclar em float custava 525 ms por quadro de flash; com o estagio em
+    cache e a aplicacao em uint8 cai para poucos ms."""
     c = round(at_s * fps) + VIDEO_LAG
     if not (c - FLASH_LEAD <= f < c - FLASH_LEAD + FLASH_LEN):
         return None
-    p = (f - (c - FLASH_LEAD)) / (FLASH_LEN - 1)
+    est = f - (c - FLASH_LEAD)
+    p = est / (FLASH_LEN - 1)
+    bloom = np.interp(f, [c - 1, c, c + 2], [0, 0.5, 0])
+    if est in _FLASH_CACHE:
+        return np.maximum(_FLASH_CACHE[est], np.float32(bloom))
     x = (-1.35 + 2.7 * p) * R.W
     beam = np.interp(p, [0, 0.35, 1], [0, 1, 0])
-    bloom = np.interp(f, [c - 1, c, c + 2], [0, 0.5, 0])
 
     img = Image.new("L", (R.W, R.H), 0)
     d = ImageDraw.Draw(img)
@@ -219,9 +230,39 @@ def flash_quadro(at_s: float, fps: float, f: int) -> np.ndarray | None:
     barra = Image.fromarray(barra_np, mode="L").rotate(
         -18, expand=True, resample=Image.BILINEAR)
     img.paste(barra, (int(x), int(-0.3 * R.H)), barra)
-    a = np.asarray(img, dtype=np.float32) / 255.0 * beam
-    a = np.maximum(a, float(bloom))
-    return np.clip(a, 0.0, 1.0)
+    a = np.clip(np.asarray(img, dtype=np.float32) / 255.0 * beam, 0.0, 1.0)
+    _FLASH_CACHE[est] = a
+    return np.maximum(a, np.float32(bloom))
+
+
+def aplicar_dim(buf: np.ndarray, sujo: list[int], dim: float, fl: float,
+                fade: int) -> None:
+    """Preto constante por cima de tudo que ja foi composto no quadro."""
+    t = min(1.0, max(0.0, fl / max(1, fade)))
+    a = dim * (1 - (1 - t) ** 3)
+    if a <= 0.004:
+        return
+    # sobre RGBA alpha direto: rgb' = rgb*(1-a); alpha' = alpha + a*(1-alpha)
+    alpha = buf[..., 3].astype(np.float32) / 255.0
+    buf[..., :3] = (buf[..., :3] * (1.0 - a)).astype(np.uint8)
+    buf[..., 3] = ((alpha + a * (1.0 - alpha)) * 255.0).astype(np.uint8)
+    sujo[:] = [0, 0, buf.shape[1], buf.shape[0]]
+
+
+def aplicar_flash(buf: np.ndarray, sujo: list[int], a: np.ndarray) -> None:
+    """Branco "over" no RGBA de alpha direto.
+
+    A versao simplificada rgb+(255-rgb)*a erra onde o fundo e TRANSPARENTE:
+    ali o resultado deve ser branco puro (o alpha de saida e o do flash), nao
+    uma mistura com o rgb residual. Sao so 28 quadros: o over completo cabe.
+    """
+    a_b = buf[..., 3].astype(np.float32) / 255.0
+    a_o = a + a_b * (1.0 - a)
+    peso = (a_b * (1.0 - a))[..., None]
+    rgb = (255.0 * a[..., None] + buf[..., :3].astype(np.float32) * peso)         / np.maximum(a_o[..., None], 1e-6)
+    buf[..., :3] = np.clip(rgb, 0, 255).astype(np.uint8)
+    buf[..., 3] = (np.clip(a_o, 0, 1) * 255.0).astype(np.uint8)
+    sujo[:] = [0, 0, buf.shape[1], buf.shape[0]]
 
 
 def render_completo(pub: Path, cut_frames: int, saida: Path) -> float:
@@ -260,18 +301,15 @@ def render_completo(pub: Path, cut_frames: int, saida: Path) -> float:
         sujo[:] = [0, 0, 0, 0]
         for leg in camadas:
             if leg.inicio_f <= f <= leg.fim_f:
+                d_val = getattr(leg, "dim", 0.0)
+                if d_val:
+                    aplicar_dim(buf, sujo, d_val, f - leg.inicio_f,
+                                getattr(leg, "dim_fade", 10))
                 R.desenhar(leg, f - leg.inicio_f, buf, sujo, mesclar=True)
         for at in flashes:
             a = flash_quadro(at, R.FPS, f)
             if a is not None:
-                fundo = buf.astype(np.float32)
-                a_f = a[..., None]
-                a_b = fundo[..., 3:4] / 255.0
-                a_o = a_f + a_b * (1 - a_f)
-                rgb = (255.0 * a_f + fundo[..., :3] * a_b * (1 - a_f)) / np.maximum(a_o, 1e-6)
-                buf[:] = np.clip(
-                    np.concatenate([rgb, a_o * 255.0], axis=2), 0, 255).astype(np.uint8)
-                sujo[:] = [0, 0, R.W, R.H]
+                aplicar_flash(buf, sujo, a)
         ff.stdin.write(buf.tobytes())
     ff.stdin.close()
     ff.wait()

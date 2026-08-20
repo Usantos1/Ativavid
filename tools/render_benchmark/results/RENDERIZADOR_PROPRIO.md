@@ -171,10 +171,24 @@ intermediário — não de encodar ProRes mais rápido.
 **Observação do usuário durante os testes:** nosso caminho ocupa ~50% de
 CPU/memória; o do Remotion passa de 90%. A máquina continua utilizável.
 
-**Contra o CapCut (5,3× tempo real): estamos a 0,37×.** O perfil diz onde
-está o resto: 24 ms/quadro de composição Python nos quadros dinâmicos
-(conversão sobre a caixa inteira quando só uma palavra anima) e 8,3 MB/quadro
-de cano de tela cheia. Ambos têm solução conhecida; nenhum foi feito.
+### A escada de otimização (todas verificadas com fidelidade idêntica, 1,003)
+
+| Passo | Mediana de 3 |
+|---|---|
+| Uma passada ingênua | 106,7 s |
+| + quadro parado reenvia os próprios bytes (419/851) | 92,8 s |
+| + palavra assentada composta uma vez (cache na camada) | 77,6 s |
+| + retângulo convertido em cache; só o que anima reconverte | 72,3 s |
+| + escurecimento do cartão vira multiplicação (era camada: 426 ms/quadro) | 57,7 s |
+| + estágios do flash em cache, over em uint8 | **53,8 s** |
+
+**Resultado da noite: produção 126,5 s → nosso 53,8 s = 2,35×**, a 0,53× do
+tempo real. O chão medido do cano+ffmpeg sozinhos é 17,2 s — ainda há 36 s de
+Python para atacar (headline compõe a caixa toda por quadro; o cano leva a
+tela cheia mesmo quando só a faixa da legenda muda).
+
+**Contra o CapCut (5,3× tempo real): estamos a 0,53×.** A distância era 38×
+no caminho de produção; agora é 10×.
 
 ## O que estes testes NÃO respondem
 
