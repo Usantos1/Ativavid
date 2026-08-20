@@ -165,3 +165,46 @@ def test_temporario_e_por_processo(tmp_path, monkeypatch):
     render.prepared_source(src, "scale=-2:1920", "eq=a", quiet=True)
     assert vistos, "não chamou o ffmpeg"
     assert str(_os.getpid()) in vistos[0], f"temporário sem pid: {vistos[0]}"
+
+def test_prepara_fontes_em_paralelo(monkeypatch, tmp_path):
+    """x2 com duas fontes 4K60: o prep sequencial dominava o CUT. As duas
+    devem preparar AO MESMO TEMPO (2 por vez), com falha isolada por fonte."""
+    import threading
+    import time as _t
+
+    import render
+
+    ativos, pico = [0], [0]
+    trava = threading.Lock()
+
+    def _falso(sp, scale, grade, **kw):
+        with trava:
+            ativos[0] += 1
+            pico[0] = max(pico[0], ativos[0])
+        _t.sleep(0.15)
+        with trava:
+            ativos[0] -= 1
+        if "ruim" in str(sp):
+            raise RuntimeError("fonte quebrada")
+        return sp.with_suffix(".prep.mp4")
+
+    monkeypatch.setattr(render, "prepared_source", _falso)
+    out = render.prepare_sources_parallel(
+        {"a.mov", "b.mov", "ruim.mov"},
+        lambda n: tmp_path / n,
+        lambda sp: "scale=1920:-2",
+        "")
+    assert pico[0] == 2, f"duas por vez, medido {pico[0]}"
+    assert out["a.mov"] is not None and out["b.mov"] is not None
+    assert out["ruim.mov"] is None, "falha de uma fonte nao derruba as outras"
+
+
+def test_uma_fonte_nao_abre_pool(monkeypatch, tmp_path):
+    import render
+
+    chamadas = []
+    monkeypatch.setattr(render, "prepared_source",
+                        lambda sp, sc, gr, **kw: chamadas.append(sp) or None)
+    render.prepare_sources_parallel({"x.mov"}, lambda n: tmp_path / n,
+                                    lambda sp: "s", "")
+    assert len(chamadas) == 1

@@ -639,6 +639,39 @@ def _prep_key(source: Path, scale: str, grade_filter: str) -> str:
     return hashlib.sha1(blob.encode("utf-8")).hexdigest()[:16]
 
 
+def prepare_sources_parallel(
+    nomes: set[str], resolve, scale_for, grade_filter: str,
+) -> dict[str, "Path | None"]:
+    """Prepara VARIAS fontes ao mesmo tempo (2 por vez).
+
+    Um x2 real do usuario tinha duas fontes 4K60 HDR e o prep sequencial
+    dominava o CUT (~370s de 565s). O tonemap de UMA instancia nao satura os
+    4 nucleos, entao duas instancias se sobrepoem de verdade. Mais de 2 por
+    vez briga com o proprio ffmpeg e com o NVENC — nao vale.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    out: dict[str, Path | None] = {}
+    if not nomes:
+        return out
+
+    def _um(nome: str) -> tuple[str, Path | None]:
+        sp = resolve(nome)
+        try:
+            return nome, prepared_source(sp, scale_for(sp), grade_filter)
+        except Exception as e:  # noqa: BLE001
+            print(f"  [warn] fonte preparada de {nome}: {e}", flush=True)
+            return nome, None
+
+    if len(nomes) == 1:
+        n, v = _um(next(iter(nomes)))
+        return {n: v}
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        for n, v in pool.map(_um, sorted(nomes)):
+            out[n] = v
+    return out
+
+
 def prepared_source(
     source: Path, scale: str, grade_filter: str, *, quiet: bool = False,
 ) -> Path | None:
@@ -1029,15 +1062,11 @@ def extract_all_segments(
     # ao mesmo tempo.
     prep_by_src: dict[str, Path | None] = {}
     if not (draft or preview or keep_resolution) and not is_auto:
-        _portrait_scale = "scale=-2:1920"
-        for _name in {r["source"] for r in ranges}:
-            _sp = resolve_path(sources[_name], edit_dir)
-            _scale = _portrait_scale if is_portrait_source(_sp) else "scale=1920:-2"
-            try:
-                prep_by_src[_name] = prepared_source(_sp, _scale, resolved)
-            except Exception as _e:  # noqa: BLE001
-                print(f"  [warn] fonte preparada de {_name}: {_e}", flush=True)
-                prep_by_src[_name] = None
+        prep_by_src = prepare_sources_parallel(
+            {r["source"] for r in ranges},
+            lambda n: resolve_path(sources[n], edit_dir),
+            lambda sp: "scale=-2:1920" if is_portrait_source(sp) else "scale=1920:-2",
+            resolved)
         _hits = [k for k, v in prep_by_src.items() if v]
         if _hits:
             print(f"  fonte preparada em uso: {', '.join(_hits)}", flush=True)
@@ -1409,14 +1438,11 @@ def extract_and_assemble_jcut(
     # sem J-cut. Montada aqui, antes do laço paralelo.
     prep_by_src: dict[str, Path | None] = {}
     if not (draft or preview or keep_resolution) and not is_auto:
-        for _name in {r["source"] for r in edl["ranges"]}:
-            _sp = resolve_path(edl["sources"][_name], edit_dir)
-            _scale = "scale=-2:1920" if is_portrait_source(_sp) else "scale=1920:-2"
-            try:
-                prep_by_src[_name] = prepared_source(_sp, _scale, resolved)
-            except Exception as _e:  # noqa: BLE001
-                print(f"  [warn] fonte preparada de {_name}: {_e}", flush=True)
-                prep_by_src[_name] = None
+        prep_by_src = prepare_sources_parallel(
+            {r["source"] for r in edl["ranges"]},
+            lambda n: resolve_path(edl["sources"][n], edit_dir),
+            lambda sp: "scale=-2:1920" if is_portrait_source(sp) else "scale=1920:-2",
+            resolved)
         _hits = [k for k, v in prep_by_src.items() if v]
         if _hits:
             print(f"  fonte preparada em uso: {', '.join(_hits)}", flush=True)
