@@ -88,3 +88,29 @@ def test_arquivo_do_filtro_e_relativo():
     assert "metadata=print:file=meta.txt" in fonte
     assert "cwd=tmpdir" in fonte
     assert "file={meta}" not in fonte
+
+
+# ------------------------------------------- o mesmo bug estava no grade ----
+@sem_ffmpeg
+def test_grade_automatico_mede_de_verdade(tmp_path):
+    """`helpers/grade.py` tinha o MESMO `metadata=print:file=<caminho
+    absoluto>`. A falha era ainda mais discreta que no detect_color: o
+    arquivo saía vazio, nenhum YAVG era lido, e a função devolvia "valores
+    neutros (sem correção)" — ou seja, com `colorGrade: auto` a graduação
+    por segmento nunca corrigiu nada no Windows."""
+    sys.path.insert(0, str(REPO / "helpers"))
+    import grade
+
+    st = grade._sample_frame_stats(_clipe(tmp_path), 0.0, 1.0, n_samples=4)
+    neutro = {"y_mean": 0.5, "y_std": 0.18, "sat_mean": 0.25}
+    assert st != neutro, "caiu no neutro: a análise não rodou"
+    assert 0.0 < st["y_mean"] < 1.0
+
+
+def test_grade_usa_caminho_relativo_no_filtro():
+    """Trava a forma: caminho absoluto volta a quebrar no `:` da unidade, e
+    quebra sem levantar erro nenhum."""
+    fonte = (REPO / "helpers" / "grade.py").read_text(encoding="utf-8")
+    assert "metadata=print:file=meta.txt" in fonte
+    assert "cwd=tmpdir" in fonte
+    assert "file={metadata_path}" not in fonte

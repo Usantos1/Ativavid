@@ -31,6 +31,7 @@ import _utf8  # noqa: F401  — UTF-8 no stdout antes de qualquer print
 
 import argparse
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -136,8 +137,12 @@ def _sample_frame_stats(
     # Sample fps = n_samples / duration, clamped so we don't over-sample short clips
     fps = max(0.5, min(n_samples / max(duration, 0.1), 10.0))
 
-    with tempfile.NamedTemporaryFile(mode="w+", suffix=".txt", delete=False) as f:
-        metadata_path = f.name
+    # `file=` RELATIVO com o cwd na pasta temporaria: um caminho absoluto do
+    # Windows leva `C:` e o `:` e separador de opcao no parser de filtro do
+    # ffmpeg — o grafo nem abria, e a falha aparecia so como "sem amostras"
+    # (ver docstring do modulo).
+    tmpdir = tempfile.mkdtemp(prefix="ativavid-grade-")
+    metadata_path = str(Path(tmpdir) / "meta.txt")
 
     try:
         cmd = [
@@ -145,10 +150,11 @@ def _sample_frame_stats(
             "-ss", f"{start:.3f}",
             "-i", str(video),
             "-t", f"{duration:.3f}",
-            "-vf", f"fps={fps:.2f},signalstats,metadata=print:file={metadata_path}",
+            "-vf", f"fps={fps:.2f},signalstats,metadata=print:file=meta.txt",
             "-f", "null", "-",
         ]
-        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(cmd, check=True, cwd=tmpdir,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
         # Parse signalstats metadata. Signalstats reports values in the NATIVE
         # bit depth of the decoded frame (8-bit → 0-255, 10-bit → 0-1023). We
@@ -211,7 +217,7 @@ def _sample_frame_stats(
             "sat_mean": sat_mean,
         }
     finally:
-        Path(metadata_path).unlink(missing_ok=True)
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 def auto_grade_for_clip(
