@@ -26,7 +26,8 @@
 </head>
 <body class="editor-shell">
 
-<div class="app-shell" id="appShell">
+<div class="sb-scrim" id="sbScrim" aria-hidden="true"></div>
+  <div class="app-shell" id="appShell">
   <aside class="sidebar" id="hubSidebar" aria-label="ATIVAVID">
     <div class="sb-brand">
       <button type="button" class="logo-home" id="btnHome" title="Início" aria-label="Início">
@@ -110,6 +111,10 @@
   <div class="editor-pane">
 
   <header class="titlebar" id="titlebar" aria-label="Barra do aplicativo">
+    <button type="button" class="tb-burger" id="btnBurger" aria-label="Abrir menu"
+            aria-expanded="false" aria-controls="hubSidebar">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
     <div class="titlebar-drag pywebview-drag-region" aria-hidden="true"></div>
     <div class="titlebar-actions" id="titlebarActions">
       <button type="button" class="tb-btn theme-toggle" id="btnTheme" aria-label="Tema claro ou escuro">

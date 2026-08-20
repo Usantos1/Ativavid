@@ -2306,6 +2306,41 @@ function renderWorkspaceCard() {
   }
 }
 
+/**
+ * Gaveta do menu (<=620px). Fora dessa faixa o CSS ignora `sb-open`, entao
+ * a classe pode ficar pendurada sem efeito — mas fechamos no resize para o
+ * estado nao voltar sozinho quando a janela encolhe de novo.
+ */
+function wireGaveta() {
+  const burger = $("#btnBurger");
+  const scrim = $("#sbScrim");
+  const sidebar = $(".sidebar");
+  if (!burger || burger.dataset.wired) return;
+  burger.dataset.wired = "1";
+  const abrir = (on) => {
+    document.body.classList.toggle("sb-open", on);
+    burger.setAttribute("aria-expanded", on ? "true" : "false");
+    burger.setAttribute("aria-label", on ? "Fechar menu" : "Abrir menu");
+  };
+  burger.addEventListener("click", (e) => {
+    e.stopPropagation();
+    abrir(!document.body.classList.contains("sb-open"));
+  });
+  if (scrim) scrim.addEventListener("click", () => abrir(false));
+  if (sidebar) {
+    // navegar fecha a gaveta: em tela pequena ela cobre o conteudo
+    sidebar.addEventListener("click", (e) => {
+      if (e.target.closest(".sb-item")) abrir(false);
+    });
+  }
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") abrir(false);
+  });
+  window.addEventListener("resize", () => {
+    if (window.innerWidth > 620) abrir(false);
+  });
+}
+
 function closeWorkspaceMenu() {
   const menu = $("#wsMenu");
   const btn = $("#btnWorkspace");
@@ -3962,6 +3997,7 @@ async function boot() {
   wireList();
   wireForms();
   wireProjetos();
+  wireGaveta();
   wirePresets();
   wireBiblioteca();
   wireTheme();

@@ -265,93 +265,97 @@ body.maximized .tb-win .ico-rest { display: block; }
   background: var(--chrome-bg);
   transition: grid-template-columns .22s var(--ease);
 }
-body.sb-collapsed .app-shell { grid-template-columns: var(--side-collapsed) minmax(0, 1fr); }
-body.sb-collapsed .sb-txt,
-body.sb-collapsed .sb-label,
-body.sb-collapsed .sb-hint,
-body.sb-collapsed .ws-card-text,
-body.sb-collapsed .ws-card-chev,
-body.sb-collapsed .sb-collapse { display: none; }
-body.sb-collapsed .sb-item { justify-content: center; padding-inline: 0; }
-/* Cada seção vira um traço fino: some o rótulo, fica o agrupamento. */
-body.sb-collapsed .sb-label {
-  display: block;
-  height: 1px;
-  margin: 8px 14px;
-  padding: 0;
-  overflow: hidden;
-  text-indent: -999px;
-  background: color-mix(in srgb, var(--text) 9%, transparent);
-}
-body.sb-collapsed .sb-nav > .sb-label:first-child { display: none; }
-body.sb-collapsed .sb-item.active::before { left: -6px; }
-/* O contador vira um ponto sobre o ícone — a informação continua visível
-   (o pedido era manter os badges), sem texto para caber. */
-body.sb-collapsed .sb-count,
-body.sb-collapsed .sb-badge {
-  position: absolute;
-  top: 3px;
-  right: 8px;
-  min-width: 0;
-  width: 7px;
-  height: 7px;
-  padding: 0;
-  border-radius: 50%;
-  font-size: 0;
-  color: transparent;
-  background: var(--accent);
-  box-shadow: 0 0 0 2px var(--sb-bg);
-}
-body.sb-collapsed .sb-count[data-zero="1"] { display: none; }
-body.sb-collapsed .sb-badge { background: var(--teal); }
-body.sb-collapsed .sb-brand { justify-content: center; padding-inline: 0; }
-body.sb-collapsed .sb-foot { justify-content: center; border-top-color: transparent; padding-top: 6px; }
-body.sb-collapsed .ws-card {
-  grid-template-columns: 1fr;
-  justify-items: center;
-  padding: 5px;
-}
-/* Recolhido, o menu não cabe no trilho de 72px e o `.sidebar` tem
-   overflow:hidden — então ele sai do fluxo e ancora ao lado do trilho. */
-body.sb-collapsed .ws-menu {
-  position: fixed;
-  left: calc(var(--side-collapsed) + 20px);
-  right: auto;
-  bottom: 22px;
-  width: 216px;
-}
+/* O modo recolhido e do desktop. Em tela de celular o menu vira gaveta
+   (mais abaixo) e mostra os nomes — trilho de icone nao serve no toque. */
+@media (min-width: 621px) {
+  body.sb-collapsed .app-shell { grid-template-columns: var(--side-collapsed) minmax(0, 1fr); }
+  body.sb-collapsed .sb-txt,
+  body.sb-collapsed .sb-label,
+  body.sb-collapsed .sb-hint,
+  body.sb-collapsed .ws-card-text,
+  body.sb-collapsed .ws-card-chev,
+  body.sb-collapsed .sb-collapse { display: none; }
+  body.sb-collapsed .sb-item { justify-content: center; padding-inline: 0; }
+  /* Cada seção vira um traço fino: some o rótulo, fica o agrupamento. */
+  body.sb-collapsed .sb-label {
+    display: block;
+    height: 1px;
+    margin: 8px 14px;
+    padding: 0;
+    overflow: hidden;
+    text-indent: -999px;
+    background: color-mix(in srgb, var(--text) 9%, transparent);
+  }
+  body.sb-collapsed .sb-nav > .sb-label:first-child { display: none; }
+  body.sb-collapsed .sb-item.active::before { left: -6px; }
+  /* O contador vira um ponto sobre o ícone — a informação continua visível
+     (o pedido era manter os badges), sem texto para caber. */
+  body.sb-collapsed .sb-count,
+  body.sb-collapsed .sb-badge {
+    position: absolute;
+    top: 3px;
+    right: 8px;
+    min-width: 0;
+    width: 7px;
+    height: 7px;
+    padding: 0;
+    border-radius: 50%;
+    font-size: 0;
+    color: transparent;
+    background: var(--accent);
+    box-shadow: 0 0 0 2px var(--sb-bg);
+  }
+  body.sb-collapsed .sb-count[data-zero="1"] { display: none; }
+  body.sb-collapsed .sb-badge { background: var(--teal); }
+  body.sb-collapsed .sb-brand { justify-content: center; padding-inline: 0; }
+  body.sb-collapsed .sb-foot { justify-content: center; border-top-color: transparent; padding-top: 6px; }
+  body.sb-collapsed .ws-card {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    padding: 5px;
+  }
+  /* Recolhido, o menu não cabe no trilho de 72px e o `.sidebar` tem
+     overflow:hidden — então ele sai do fluxo e ancora ao lado do trilho. */
+  body.sb-collapsed .ws-menu {
+    position: fixed;
+    left: calc(var(--side-collapsed) + 20px);
+    right: auto;
+    bottom: 22px;
+    width: 216px;
+  }
 
-/* Tooltip do modo recolhido — o rótulo continua acessível no hover. */
-body.sb-collapsed .sb-item[data-tip]::after,
-body.sb-collapsed .ws-card[data-tip]::after {
-  content: attr(data-tip);
-  position: absolute;
-  left: calc(100% + 8px);
-  top: 50%;
-  transform: translateY(-50%) translateX(-4px);
-  z-index: 60;
-  padding: 5px 9px;
-  border-radius: 8px;
-  border: 1px solid var(--hairline);
-  background: var(--panel2);
-  color: var(--text);
-  font-size: 11.5px;
-  font-weight: 650;
-  white-space: nowrap;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity .12s, transform .12s var(--ease);
-  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.34);
+  /* Tooltip do modo recolhido — o rótulo continua acessível no hover. */
+  body.sb-collapsed .sb-item[data-tip]::after,
+  body.sb-collapsed .ws-card[data-tip]::after {
+    content: attr(data-tip);
+    position: absolute;
+    left: calc(100% + 8px);
+    top: 50%;
+    transform: translateY(-50%) translateX(-4px);
+    z-index: 60;
+    padding: 5px 9px;
+    border-radius: 8px;
+    border: 1px solid var(--hairline);
+    background: var(--panel2);
+    color: var(--text);
+    font-size: 11.5px;
+    font-weight: 650;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity .12s, transform .12s var(--ease);
+    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.34);
+  }
+  body.sb-collapsed .ws-card { position: relative; }
+  body.sb-collapsed .sb-item[data-tip]:hover::after,
+  body.sb-collapsed .sb-item[data-tip]:focus-visible::after,
+  body.sb-collapsed .ws-card[data-tip]:hover::after,
+  body.sb-collapsed .ws-card[data-tip]:focus-visible::after {
+    opacity: 1;
+    transform: translateY(-50%) translateX(0);
+  }
+  html[data-theme="light"] body.sb-collapsed .sb-item[data-tip]::after { background: #fff; }
 }
-body.sb-collapsed .ws-card { position: relative; }
-body.sb-collapsed .sb-item[data-tip]:hover::after,
-body.sb-collapsed .sb-item[data-tip]:focus-visible::after,
-body.sb-collapsed .ws-card[data-tip]:hover::after,
-body.sb-collapsed .ws-card[data-tip]:focus-visible::after {
-  opacity: 1;
-  transform: translateY(-50%) translateX(0);
-}
-html[data-theme="light"] body.sb-collapsed .sb-item[data-tip]::after { background: #fff; }
 
 .main-col {
   display: flex;
@@ -2569,7 +2573,7 @@ body.view-estilo-on .ws-head {
 @media (max-width: 720px) {
   .sys-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-@media (max-width: 900px) {
+@media (min-width: 621px) and (max-width: 900px) {
   .app-shell { grid-template-columns: var(--side-collapsed) minmax(0, 1fr); }
   .sb-txt, .sb-label, .sb-count, .sb-badge, .sb-hint,
   .ws-card-text, .ws-card-chev, .sb-collapse { display: none; }
@@ -3048,3 +3052,71 @@ body.home-working .hero-import .hero-inner { padding: 10px 0; }
   font-size: 13.5px;
 }
 .estilo-falha.hidden { display: none; }
+
+
+/* ===================== MENU EM GAVETA (celular) ========================
+   Ate 620px o sidebar sai do fluxo: o conteudo ocupa a tela inteira e o
+   menu abre por cima, com os nomes. O botao fica na barra de titulo. */
+.tb-burger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--dim);
+  flex: 0 0 auto;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+.tb-burger:hover { color: var(--text); background: color-mix(in srgb, var(--text) 7%, transparent); }
+.tb-burger svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+}
+.sb-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  background: rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s;
+}
+
+@media (max-width: 620px) {
+  .tb-burger { display: flex; }
+  /* A gaveta e `position: fixed`, ou seja, SAI do grid. Com duas colunas
+     declaradas o .main-col caia na primeira (0px) e a tela ficava preta. */
+  .app-shell { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(260px, 82vw);
+    max-height: none;
+    margin: 0;
+    border-radius: 0 16px 16px 0;
+    border-left: 0;
+    transform: translateX(-104%);
+    transition: transform .24s var(--ease);
+    z-index: 200;
+  }
+  body.sb-open .sidebar { transform: none; }
+  body.sb-open .sb-scrim { opacity: 1; pointer-events: auto; }
+  /* o botao de recolher nao faz sentido numa gaveta */
+  .sb-collapse { display: none; }
+  .workspace { margin: 0 8px 8px 8px; }
+  /* o menu do workspace fica dentro da gaveta, entao volta ao normal */
+  .ws-menu { position: absolute; left: 2px; right: 2px; bottom: calc(100% - 2px); width: auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sidebar { transition: none; }
+  .sb-scrim { transition: none; }
+}

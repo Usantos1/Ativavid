@@ -21,6 +21,7 @@
   <div id="dropAnywhere" class="drop-anywhere hidden" aria-hidden="true">
     <div class="drop-anywhere-msg">Solte para importar</div>
   </div>
+  <div class="sb-scrim" id="sbScrim" aria-hidden="true"></div>
   <div class="app-shell">
     <aside class="sidebar" id="sidebar">
       <div class="sb-brand">
@@ -133,6 +134,10 @@
 
     <div class="main-col">
       <header class="titlebar" id="titlebar" aria-label="Barra do aplicativo">
+        <button type="button" class="tb-burger" id="btnBurger" aria-label="Abrir menu"
+                aria-expanded="false" aria-controls="sidebar">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
         <div class="titlebar-drag pywebview-drag-region" aria-hidden="true"></div>
         <div class="titlebar-actions" id="titlebarActions">
           <button type="button" class="tb-btn theme-toggle" id="btnTheme" aria-label="Tema claro ou escuro">

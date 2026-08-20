@@ -172,3 +172,26 @@ def test_telas_avisam_quando_a_leitura_falha():
     i = js.index("btn.onclick")
     assert "createElement(\"iframe\")" in js[i:i + 1200]
 
+def test_menu_vira_gaveta_em_tela_de_celular():
+    """Ate 620px o trilho de 72px comia 15% da largura e os rotulos so
+    existiam como tooltip — inutil no toque."""
+    css = (REPO / "assets" / "studio" / "studio.css").read_text(encoding="utf-8")
+    i = css.index("@media (max-width: 620px) {\n  .tb-burger")
+    bloco = css[i:i + 1400]
+    assert "position: fixed" in bloco and "translateX(-104%)" in bloco
+    # a gaveta sai do grid: declarar duas colunas jogava o conteudo na de
+    # 0px e a tela ficava PRETA (medido)
+    assert "grid-template-columns: minmax(0, 1fr)" in bloco
+    # o trilho e do desktop — dentro da gaveta o menu e o completo
+    assert "@media (min-width: 621px) {" in css
+    assert "@media (min-width: 621px) and (max-width: 900px) {" in css
+    for arq, sb in (("studio", "sidebar"), ("preview", "hubSidebar")):
+        pasta = "studio" if arq == "studio" else "preview"
+        html = (REPO / "assets" / pasta / "index.html").read_text(encoding="utf-8")
+        assert 'id="btnBurger"' in html and f'aria-controls="{sb}"' in html, arq
+        assert 'id="sbScrim"' in html, arq
+    for js in ("studio.js", "shell.js"):
+        txt = (REPO / "assets" / "studio" / js).read_text(encoding="utf-8")
+        assert "function wireGaveta" in txt, js
+        assert "sb-open" in txt, js
+
