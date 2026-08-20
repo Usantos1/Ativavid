@@ -58,6 +58,20 @@ FONT_FILE = {
 }
 FONT_WGHT = {2: 900}
 
+# Catalogo de fontes da marca (fonts.ts): id -> (arquivo, teto de peso).
+# O teto existe porque uma fonte de peso unico (Anton/Bebas/Archivo) nao tem
+# negrito — pedir 900 nela daria negrito FALSO. O template clampa igual.
+MARCA_FONTES = {
+    "poppins":    ("Poppins-Black.ttf", None),
+    "inter":      ("Inter[opsz,wght].ttf", None),
+    "montserrat": ("Montserrat[wght].ttf", None),
+    "playfair":   ("PlayfairDisplay-Italic[wght].ttf", None),
+    "lora":       ("Lora[wght].ttf", 700),
+    "anton":      ("Anton-Regular.ttf", 400),
+    "bebas":      ("BebasNeue-Regular.ttf", 400),
+    "archivo":    ("ArchivoBlack-Regular.ttf", 400),
+}
+
 # PencilOutline.tsx — o caminho do traço, já parseado (viewBox 312x150)
 TRACO_INICIO = (30.0, 78.0)
 TRACO_CURVAS = [
@@ -101,16 +115,10 @@ def motivo_nao_suportado(edit_data: dict[str, Any], public: Path) -> str | None:
                   "simples", "serifada", "classica", "bloco", "recorte"}
     if estilo not in permitidos:
         return f"estilo de legenda '{caps.get('style')}'"
-    if caps.get("fontFamily"):
-        return "fonte de marca nas legendas"
     hook = edit_data.get("hook") or {}
     if hook.get("enabled"):
         if (hook.get("style") or "outline") not in Renderizador.HL_STYLES:
             return f"estilo de headline '{hook.get('style')}'"
-        if hook.get("answerLines"):
-            return "headline pergunta-resposta"
-        if hook.get("fontFamily"):
-            return "fonte de marca na headline"
         if hook.get("logo") or hook.get("sign"):
             return "logo/assinatura na headline"
     els = edit_data.get("elements") or {}
@@ -218,7 +226,12 @@ class Renderizador:
         self.scratch_vol = float(sfx.get("scratchVolume") or SCRATCH_VOL)
         self.stack_vol = float(sfx.get("stackClickVolume")
                                or min(0.28, self.click_vol * 0.5))
-        self._fontes: dict[tuple[str, int], ImageFont.FreeTypeFont] = {}
+        self._fontes: dict = {}
+        self.marca_cap = self._resolver_marca(
+            caps.get("fontFamily"), edit_data.get("brandFontFile"))
+        self.marca_hook = self._resolver_marca(
+            (edit_data.get("hook") or {}).get("fontFamily"),
+            edit_data.get("brandFontFile"))
         d = json.loads((public / "caption-cues.json").read_text(encoding="utf-8-sig")) \
             if (public / "caption-cues.json").exists() else []
         self.cues = d if isinstance(d, list) else (d.get("cues") or [])
@@ -227,12 +240,45 @@ class Renderizador:
         self._montar_tudo()
 
     # ------------------------------------------------------------ fontes ----
+    def _resolver_marca(self, ident: str, arquivo_marca: str | None):
+        """(arquivo, teto de peso) da fonte de marca, ou None.
+
+        `arquivo` (id "arquivo") e a fonte PROPRIA do usuario, que o pipeline
+        copia para public/fonts — nunca redistribuida pelo app.
+        """
+        ident = (ident or "").strip().lower()
+        if not ident:
+            return None
+        if ident == "arquivo":
+            if not arquivo_marca:
+                return None
+            cam = self.public / str(arquivo_marca)
+            if not cam.exists():
+                return None
+            try:
+                ImageFont.truetype(str(cam), 40)
+            except OSError:
+                print(f"  [warn] fonte da marca ilegivel: {cam.name}", flush=True)
+                return None
+            return (str(cam), None)
+        item = MARCA_FONTES.get(ident)
+        if not item:
+            return None
+        cam = FONTES / item[0]
+        return (str(cam), item[1]) if cam.exists() else None
+
+
     def fonte(self, idx: int, tam: int,
               peso: int | None = None) -> ImageFont.FreeTypeFont:
-        chave = (self.font_file[idx][0], tam, peso)
+        arq, teto = str(FONTES / self.font_file[idx][0]), None
+        if self.marca_cap:
+            arq, teto = self.marca_cap
+        chave = (arq, tam, peso, teto)
         if chave not in self._fontes:
-            f = ImageFont.truetype(str(FONTES / self.font_file[idx][0]), tam)
+            f = ImageFont.truetype(arq, tam)
             eixo = peso if peso is not None else FONT_WGHT.get(idx)
+            if eixo and teto is not None:
+                eixo = min(eixo, teto)      # sem negrito falso
             if eixo:
                 try:
                     f.set_variation_by_axes([eixo])
@@ -539,12 +585,17 @@ class Renderizador:
         "pilula":     ((700, 700), 44, 780, 1.10, 130),
         "manchete":   ((800, 800), 54, 780, 1.14, 0),
         "carimbo":    ((900, 900), 80, 720, 1.05, 300),
+        "pergunta":   ((800, 900), 84, 840, 1.05, 300),
     }
     HL_MAIUSCULA = ("card", "manchete", "carimbo")
     # peso -> arquivo Poppins
     HL_FONTE = {400: 1, 500: 1, 600: 3, 700: 3, 800: 3, 900: 4}
 
     def _hl_fonte(self, peso: int, tam: int) -> ImageFont.FreeTypeFont:
+        if self.marca_hook:
+            arq, teto = self.marca_hook
+            eixo = min(peso, teto) if teto is not None else peso
+            return self._fonte_arquivo(arq, tam, eixo)
         return self.fonte(self.HL_FONTE.get(peso, 4), tam)
 
     def _larg_hl(self, texto: str, tam: int, peso: int = 900) -> float:
@@ -773,6 +824,59 @@ class Renderizador:
         # entrada: padrao (sobe 24), pop (escala) ou deslizar — pop/deslizar
         # caem no fade simples aqui; a escala por quadro fica para depois
         sobe = 24.0 if str(hook.get("animation") or "padrao") == "padrao" else 0.0
+
+        if estilo == "pergunta":
+            # Duas fases na MESMA headline: a pergunta abre em branco (como o
+            # `outline`, sem contorno) e some em 6 quadros; no answerAtSec a
+            # resposta entra numa pilula do accent com pop (Easing.back 1.8),
+            # e fica ate o fim. Cada fase e um conjunto de Palavras com
+            # janela — o mesmo mecanismo do traco do Recorte.
+            at = max(1, int(round(float(hook.get("answerAtSec") or 2.5) * self.fps)))
+            resposta = " ".join(hook.get("answerLines") or []).strip() or texto
+            a_linhas, a_tam = self._hl_linhas(resposta, (900, 900), cap, safe_w)
+            a_alt_cx = lh * a_tam
+
+            # fase 1: a pergunta, ate `at` (com 6 quadros de fade)
+            y = top
+            for l in linhas:
+                larg = self._larg_hl(l, tam, 800)
+                for q in range(6):
+                    op = 1.0 - (q + 1) / 6
+                    self._hl_bloco_texto(
+                        leg, l, tam, 800, (self.w - larg) / 2, y, alt_cx,
+                        "#ffffff", [(0, 6, 14, 0.45)], k_sombra=BLUR_K,
+                        sobe=0.0)
+                    p = leg.palavras[-1]
+                    p.alpha[:] *= op
+                    p.sombra[:] *= op
+                    p.janela = (at - 6 + q, at - 6 + q + 1)
+                # o corpo estavel da pergunta: do inicio ate o comeco do fade
+                self._hl_bloco_texto(
+                    leg, l, tam, 800, (self.w - larg) / 2, y, alt_cx,
+                    "#ffffff", [(0, 6, 14, 0.45)], k_sombra=BLUR_K, sobe=sobe)
+                leg.palavras[-1].janela = (0, at - 6)
+                y += alt_cx
+
+            # fase 2: a resposta em pilula, com pop
+            y2 = top
+            for l in a_linhas:
+                pad = (0.3 * a_tam, 0.08 * a_tam, 0.16 * a_tam)
+                larg_b = self._larg_hl(l, a_tam, 900) + 2 * pad[0]
+                for q in range(8):
+                    t = min(1.0, q / 7)
+                    esc = 0.8 + 0.2 * self._ease_back(t, 1.8)
+                    tam_e = max(8, int(a_tam * esc))
+                    pad_e = (pad[0] * esc, pad[1] * esc, pad[2] * esc)
+                    larg_e = self._larg_hl(l, tam_e, 900) + 2 * pad_e[0]
+                    self._hl_bloco_texto(
+                        leg, l, tam_e, 900, (self.w - larg_e) / 2,
+                        y2 + (a_alt_cx - lh * tam_e) / 2, lh * tam_e,
+                        "#ffffff", [(0, 10, 28, 0.45)], fundo=accent,
+                        raio=max(2, int(12 * esc)), pad_xy=pad_e, sobe=0.0)
+                    leg.palavras[-1].janela = (at + q, at + q + 1) if q < 7 \
+                        else (at + 7, 1e9)
+                y2 += a_alt_cx + 10
+            return leg
 
         if estilo == "realce":
             y = top
@@ -1341,7 +1445,8 @@ class Renderizador:
     def _fonte_arquivo(self, nome: str, tam: int, eixo) -> ImageFont.FreeTypeFont:
         chave = (nome, tam, str(eixo))
         if chave not in self._fontes:
-            f = ImageFont.truetype(str(FONTES / nome), tam)
+            cam = nome if "\\" in nome or "/" in nome else str(FONTES / nome)
+            f = ImageFont.truetype(cam, tam)
             if isinstance(eixo, int):
                 try:
                     f.set_variation_by_axes([eixo])

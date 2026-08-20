@@ -271,3 +271,61 @@ def test_contador_um_selo_por_marcador(tmp_path):
     assert len(selos) == 2, "um selo por marcador, cada um ate o proximo"
     assert selos[0].fim_f == 59 and selos[1].fim_f == 120
 
+# ------------------------------------------------- pergunta e fonte de marca ----
+def test_pergunta_resposta_suportada(tmp_path):
+    ed = _ed(hook={"enabled": True, "style": "pergunta",
+                   "text": "Sabe por que?", "answerLines": ["Falta de estoque"],
+                   "answerAtSec": 2.0, "endSec": 5.0})
+    assert motivo_nao_suportado(ed, _public(tmp_path)) is None
+
+
+def test_pergunta_tem_as_duas_fases(tmp_path):
+    ed = _ed(hook={"enabled": True, "style": "pergunta", "text": "Por que?",
+                   "answerLines": ["Estoque"], "answerAtSec": 2.0,
+                   "endSec": 5.0}, endCard={"enabled": False})
+    r = Renderizador(_public(tmp_path), ed, frames=150, fps=30.0)
+    hl = r.camadas[0]
+    at = 60
+    # antes do answerAt so a pergunta; depois do pop so a resposta
+    antes = [p for p in hl.palavras
+             if p.janela and p.janela[0] <= 10 < p.janela[1]]
+    depois = [p for p in hl.palavras
+              if p.janela and p.janela[0] <= at + 20 < p.janela[1]]
+    assert antes and depois, "as duas fases tem de existir"
+    assert antes != depois
+
+
+def test_fonte_de_marca_do_catalogo(tmp_path):
+    for fam in ("poppins", "inter", "montserrat", "playfair",
+                "lora", "anton", "bebas", "archivo"):
+        ed = _ed(captions={"style": "stacked", "fontFamily": fam})
+        assert motivo_nao_suportado(ed, _public(tmp_path)) is None, fam
+
+
+def test_fonte_de_peso_unico_nao_ganha_negrito_falso(tmp_path):
+    """Anton/Bebas/Archivo tem um peso so: pedir 900 nelas tem de ser
+    clampado, como o hookWeight do template faz."""
+    r = Renderizador(_public(tmp_path),
+                     _ed(hook={"enabled": True, "style": "outline",
+                               "text": "oi", "fontFamily": "anton"}),
+                     frames=30, fps=30.0)
+    assert r.marca_hook is not None
+    assert r.marca_hook[1] == 400, "teto de peso da Anton"
+
+
+def test_fonte_de_marca_inexistente_e_ignorada(tmp_path):
+    """Id desconhecido nao pode derrubar o render — cai na fonte padrao."""
+    r = Renderizador(_public(tmp_path),
+                     _ed(captions={"style": "stacked", "fontFamily": "nao_existe"}),
+                     frames=30, fps=30.0)
+    assert r.marca_cap is None
+
+
+def test_fonte_propria_ausente_nao_quebra(tmp_path):
+    """id `arquivo` com o .ttf faltando cai na padrao em vez de estourar."""
+    r = Renderizador(_public(tmp_path),
+                     _ed(captions={"style": "stacked", "fontFamily": "arquivo"},
+                         brandFontFile="fonts/sumiu.ttf"),
+                     frames=30, fps=30.0)
+    assert r.marca_cap is None
+

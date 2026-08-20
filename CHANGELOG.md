@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.27
+
+Fonte da marca e headline pergunta→resposta no motor rápido.
+
+- **Escolher uma fonte para a marca não joga mais o vídeo no caminho lento.** As 8 famílias do catálogo (Poppins, Inter, Montserrat, Playfair, Lora, Anton, Bebas, Archivo) e a sua própria fonte (a que você coloca na pasta Fontes) já são desenhadas pelo motor novo
+- Fontes de peso único (Anton, Bebas, Archivo) não ganham negrito falso — o peso é limitado ao que a fonte tem, igual ao comportamento antigo
+- **A headline pergunta→resposta** (pergunta abre, some, e a resposta entra numa pílula) também foi portada
+- Se a fonte escolhida não existir ou estiver ilegível, o vídeo usa a padrão em vez de falhar
+- Falta agora só o emoji nas legendas (precisa de uma fonte de emoji) e o b-roll
+
 ## 2.26
 
 Contador de lista e logo no cartão final também no motor rápido.
