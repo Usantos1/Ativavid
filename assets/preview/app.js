@@ -4682,16 +4682,37 @@ function closeHeadMore() {
   $('headMoreMenu')?.classList.add('hidden');
   $('btnHeadMore')?.setAttribute('aria-expanded', 'false');
 }
+function posicionarHeadMore() {
+  const menu = $('headMoreMenu');
+  const btn = $('btnHeadMore');
+  if (!menu || !btn || menu.classList.contains('hidden')) return;
+  const r = btn.getBoundingClientRect();
+  const larg = menu.offsetWidth || 196;
+  // Alinhado a direita do botao, sem sair da janela.
+  const left = Math.max(8, Math.min(r.right - larg, window.innerWidth - larg - 8));
+  menu.style.left = `${Math.round(left)}px`;
+  menu.style.top = `${Math.round(r.bottom + 6)}px`;
+}
+
 $('btnHeadMore')?.addEventListener('click', (e) => {
   e.stopPropagation();
   const menu = $('headMoreMenu');
   if (!menu) return;
+  // Sai do cabecalho na PRIMEIRA abertura: la dentro ele e recortado pelo
+  // `overflow: hidden`, e o `backdrop-filter` do .glass faria o recorte valer
+  // ate para `position: fixed`.
+  if (menu.parentElement !== document.body) document.body.appendChild(menu);
   const open = menu.classList.contains('hidden');
   menu.classList.toggle('hidden', !open);
   $('btnHeadMore').setAttribute('aria-expanded', open ? 'true' : 'false');
+  if (open) posicionarHeadMore();
 });
+window.addEventListener('resize', posicionarHeadMore);
 document.addEventListener('click', (e) => {
-  if (e.target.closest?.('#headMore')) return;
+  // `#headMore` nao envolve mais o menu (ele foi para o <body>), entao o
+  // proprio menu tem de ser reconhecido aqui — senao clicar num item o
+  // fecharia antes do handler do item rodar.
+  if (e.target.closest?.('#headMore, #headMoreMenu')) return;
   closeHeadMore();
 });
 // header — light/dark theme (padrão global: localStorage ativavid-theme)

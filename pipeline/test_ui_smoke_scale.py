@@ -280,3 +280,24 @@ def test_duplo_clique_volta_a_altura_ao_padrao():
     assert "op, reset: true" in js
     # o gesto é anunciado: sem isso ninguém descobre
     assert "toque duplo volta ao padrão" in js
+
+
+def test_menu_mais_acoes_escapa_do_cabecalho():
+    """Ele não abria atrás do vídeo: abria e era CORTADO. O `header.glass`
+    tem `overflow: hidden` (precisa, por causa do brilho de 200px do
+    ::before) e o menu era `position: absolute` lá dentro.
+
+    `position: fixed` sozinho não resolveria: `.glass` tem `backdrop-filter`,
+    o que faz o cabeçalho virar bloco de contenção até dos filhos fixos."""
+    css = (REPO / "assets" / "preview" / "app.css").read_text(encoding="utf-8")
+    js = (REPO / "assets" / "preview" / "app.js").read_text(encoding="utf-8")
+    i = css.index(".head-more-menu {")
+    bloco = css[i:css.index("}", i)]
+    assert "position: fixed" in bloco
+    assert "position: absolute" not in bloco
+    # sai do cabeçalho no DOM — só o fixed não bastaria
+    assert "document.body.appendChild(menu)" in js
+    assert "function posicionarHeadMore" in js
+    # o clique-fora precisa reconhecer o menu no <body>, senão ele fecharia
+    # antes do handler do item rodar
+    assert "'#headMore, #headMoreMenu'" in js

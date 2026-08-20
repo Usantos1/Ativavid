@@ -695,10 +695,11 @@ body.applying-corrections .player-frame {
 .head-more { position: relative; }
 .head-more-btn { min-width: 36px; letter-spacing: 0.08em; }
 .head-more-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 40;
+  /* `fixed` + movido para o <body> ao abrir: dentro do cabecalho ele era
+     recortado pelo `overflow: hidden` (que existe por causa do brilho do
+     ::before). O topo/esquerda vem do JS, a partir do botao. */
+  position: fixed;
+  z-index: 200;
   min-width: 196px;
   padding: 6px;
   border-radius: 12px;

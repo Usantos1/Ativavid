@@ -496,3 +496,39 @@ def test_o_cartao_cresce_e_fica_no_lugar(tmp_path):
     assert max(largs) <= round(780 * 1.08) + 4, largs
     assert max(centros) - min(centros) <= 2, centros
 
+
+
+def test_dim_por_tabela_e_identico_ao_calculo_antigo():
+    """O escurecimento do cartão final custava 44% do desenho (17,1s de
+    38,8s em 70 quadros). A causa era `buf[..., :3] * (1.0 - a)`: uint8 vezes
+    float do Python promove 6 milhões de valores a float64 — 48 MB por
+    quadro — só para voltar a uint8 na linha seguinte.
+
+    Como `a` é escalar, o resultado só assume 256 valores por canal. A tabela
+    tem de dar EXATAMENTE o mesmo byte, inclusive o truncamento do astype."""
+    import numpy as np
+
+    def antigo(buf, a):
+        b = buf.copy()
+        alpha = b[..., 3].astype(np.float32) / 255.0
+        b[..., :3] = (b[..., :3] * (1.0 - a)).astype(np.uint8)
+        b[..., 3] = ((alpha + a * (1.0 - alpha)) * 255.0).astype(np.uint8)
+        return b
+
+    r = Renderizador.__new__(Renderizador)      # só as tabelas
+    rng = np.random.default_rng(11)
+    for a in (0.02, 0.2, 0.5, 0.82, 0.999):
+        buf = rng.integers(0, 256, size=(120, 90, 4), dtype=np.uint8)
+        novo = buf.copy()
+        t_rgb, t_a = r._tabelas_dim(a)
+        novo[..., :3] = t_rgb[novo[..., :3]]
+        novo[..., 3] = t_a[novo[..., 3]]
+        assert np.array_equal(antigo(buf, a), novo), f"divergiu em a={a}"
+
+
+def test_tabela_do_dim_e_reusada(tmp_path):
+    """Mesmo fator não pode remontar a tabela a cada quadro."""
+    r = Renderizador.__new__(Renderizador)
+    p1 = r._tabelas_dim(0.82)
+    p2 = r._tabelas_dim(0.82)
+    assert p1[0] is p2[0] and p1[1] is p2[1]
