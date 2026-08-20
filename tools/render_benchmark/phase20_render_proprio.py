@@ -56,6 +56,7 @@ FONT_FILE = {
     3: ("Poppins-ExtraBold.ttf", None),
 }
 FONT_WGHT = {2: 900}
+FONT_FILE[4] = ("Poppins-Black.ttf", None)   # Recorte: Poppins 900 reto
 # A cor de enfase e da MARCA, nao do codigo: vem de captions.emphasisAccent.
 # Deixar o laranja padrao chumbado fazia a linha Playfair sair laranja onde o
 # projeto pede vermelho.
@@ -118,6 +119,9 @@ class Palavra:
     sombra: np.ndarray     # (h, w) float32 0..1 — sombra ja desfocada
     inicio_f: float        # quadro (relativo a cue) em que a palavra entra
     enter: int
+    # Elemento que nao "entra" com fade e sim vale num intervalo de quadros —
+    # e o caso do traco do Recorte, que e um estagio por quadro.
+    janela: tuple[float, float] | None = None
 
 
 @dataclass
@@ -125,18 +129,33 @@ class Legenda:
     inicio_f: int
     fim_f: int
     palavras: list[Palavra] = field(default_factory=list)
+    # Saida da legenda inteira (exit "blur_up"): a partir de `saida_f` ela
+    # sobe, desbota e desfoca. Sem isto a legenda ficava na tela depois da
+    # hora — foi a primeira diferenca visivel contra o Remotion.
+    saida_f: float = 1e9
+    dur_f: float = 0.0
+    exit_abrupto: bool = False
+
+    def saida(self, fl: float) -> tuple[float, float, float]:
+        """(opacidade, deslocamento vertical, desfoque) no quadro `fl`."""
+        if self.exit_abrupto:
+            return (0.0 if fl >= self.dur_f - 2 else 1.0), 0.0, 0.0
+        if fl <= self.saida_f:
+            return 1.0, 0.0, 0.0
+        p = min(1.0, (fl - self.saida_f) / max(1e-6, self.dur_f - self.saida_f))
+        return 1.0 - p, -55.0 * p, 14.0 * p
 
 
-def _mascara_palavra(f, texto: str) -> np.ndarray:
+def _mascara_palavra(f, texto: str, ls: float = LETTER_SPACING) -> np.ndarray:
     """Rasteriza o texto com letter-spacing, recortado no bbox da tinta."""
-    larg = int(f.getlength(texto) + LETTER_SPACING * len(texto)) + 8
+    larg = int(f.getlength(texto) + ls * len(texto)) + 8
     asc, desc = f.getmetrics()
     img = Image.new("L", (max(1, larg), asc + desc + 8), 0)
     d = ImageDraw.Draw(img)
     x = 0.0
     for i, ch in enumerate(texto):
         d.text((x, 0), ch, font=f, fill=255)
-        x = f.getlength(texto[: i + 1]) + LETTER_SPACING * (i + 1)
+        x = f.getlength(texto[: i + 1]) + ls * (i + 1)
     return np.asarray(img, dtype=np.float32) / 255.0
 
 
@@ -164,6 +183,13 @@ def montar(cue: dict) -> Legenda:
     topo = (H / 2 + BASE_Y) - total / 2
 
     leg = Legenda(ini_f, fim_f)
+    # exitStart do template: max(dur-EXIT, min(ultimaEntrada+ENTER, dur-2))
+    EXIT = max(2, min(7, int(dur * 0.35)))
+    ultima = max((w["fromMs"] - cue["startMs"]) / 1000 * FPS
+                 for ln in cue["lines"] for w in ln)
+    leg.dur_f = dur
+    leg.exit_abrupto = cue.get("exit") == "abrupt"
+    leg.saida_f = max(dur - EXIT, min(ultima + enter, dur - 2))
     y = topo
     for li, ln in enumerate(linhas):
         if li > 0:
@@ -217,6 +243,9 @@ def montar(cue: dict) -> Legenda:
 
 
 def opacidade(p: Palavra, fl: float) -> float:
+    if p.janela is not None:
+        ini, fim = p.janela
+        return 1.0 if ini <= fl < fim else 0.0
     if fl <= p.inicio_f:
         return 0.0
     t = min(1.0, (fl - p.inicio_f) / max(1, p.enter))
@@ -261,9 +290,12 @@ def desenhar(leg: "Legenda | None", fl: float, buf: np.ndarray,
     if leg is None:
         return
 
+    op_cue, dy_cue, blur_cue = leg.saida(fl)
+    if op_cue <= 0.004:
+        return
     visiveis = []
     for p in leg.palavras:
-        op = opacidade(p, fl)
+        op = opacidade(p, fl) * op_cue
         if op > 0.004:
             visiveis.append((p, op))
     if not visiveis:
@@ -304,12 +336,24 @@ def desenhar(leg: "Legenda | None", fl: float, buf: np.ndarray,
     # zero e vai somando cor*alpha). Quem le RGBA — o overlay do ffmpeg, o
     # ProRes 4444 — espera alpha DIRETO. Entregar premultiplicado deixava o
     # texto lavado: o laranja e o branco saiam sem contraste na borda.
+    if blur_cue > 0.25:
+        tela = np.asarray(
+            Image.fromarray(np.clip(tela * [1, 1, 1, 255], 0, 255).astype(np.uint8),
+                            mode="RGBA").filter(ImageFilter.GaussianBlur(blur_cue / 2)),
+            dtype=np.float32)
+        tela[..., 3] /= 255.0
     a = tela[..., 3:4]
     np.divide(tela[..., :3], np.maximum(a, 1e-6), out=tela[..., :3])
     tela[..., 3] = a[..., 0] * 255.0
     np.clip(tela, 0.0, 255.0, out=tela)
-    buf[y0:y1, x0:x1] = tela.astype(np.uint8)
-    sujo[:] = [x0, y0, x1, y1]
+    dy = int(round(dy_cue))
+    dy0, dy1 = y0 + dy, y1 + dy
+    corte0 = max(0, -dy0)
+    dy0, dy1 = max(0, dy0), min(alt_buf, dy1)
+    if dy1 <= dy0:
+        return
+    buf[dy0:dy1, x0:x1] = tela[corte0:corte0 + (dy1 - dy0)].astype(np.uint8)
+    sujo[:] = [x0, dy0, x1, dy1]
 
 
 def renderizar(cues: list[dict], n_frames: int, saida: Path) -> float:

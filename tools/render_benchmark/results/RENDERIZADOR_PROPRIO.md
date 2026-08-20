@@ -59,9 +59,38 @@ Dois defeitos reais apareceram e foram corrigidos no caminho:
 2. **Cor de ênfase chumbada.** O laranja padrão estava no código; a cor é da
    marca e vem de `captions.emphasisAccent` (aqui, vermelho).
 
-## O que este teste NÃO responde
+## Segundo teste: o estilo difícil (`Recorte`)
 
-- Só um estilo (`stacked`). `SOLO_OUTLINE` e `SOLO_BIG` não foram feitos.
+O `Recorte` não é texto, é TRAÇO: um caminho de béziers que se desenha sozinho
+em volta da palavra, esticado sobre a caixa dela, com ponta redonda, avanço
+por comprimento de arco e sombra própria. Era o teste de que a arquitetura
+estica além de texto.
+
+**Esticou.** Implementação: curvas achatadas em polilinha, um estágio de traço
+rasterizado por quadro da animação (~10), e o estágio final reaproveitado até
+o fim — a mesma ideia de cache do texto.
+
+| | Remotion | Nosso |
+|---|---|---|
+| 15 quadros do Recorte | 14,7 s | **1,0 s** |
+
+Fidelidade conferida por tinta na faixa da legenda, quadro a quadro: a curva
+de entrada acompanha (q1–8), o estado parado fica em 95% da mesma tinta
+(46,8k vs 44,7k pixels — espessura de traço/serrilhado), e a saída abrupta
+cai a zero no MESMO quadro (13). `comparacao_recorte.png` mostra o quadro 9
+lado a lado sobre o vídeo real.
+
+No caminho, a saída de legenda inteira (fade/blur "blur_up" + o corte abrupto)
+foi implementada no renderizador — não existia e era visível.
+
+**Divergência conhecida:** o quadro 0 tem ~6k pixels de tinta no Remotion e
+nada no nosso — um quadro de defasagem na entrada da palavra. Pequeno, mas
+real; fica anotado.
+
+## O que estes testes NÃO respondem
+
+- `SOLO_BIG` não foi feito (mas é o texto grande sem traço — subconjunto do
+  que já existe).
 - Headline, cartão final, contador de lista e gráficos próprios ficaram fora.
 - Não há timeline nem ferramenta de refino manual — é render, não editor.
 - O número do Remotion aqui (158 ms) é medido **isolado**. A telemetria de
