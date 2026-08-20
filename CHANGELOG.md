@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.31.1
+
+- **O menu "•••" abre inteiro.** Ele não estava atrás do vídeo — estava sendo cortado pela barra do topo. Agora sai da barra e aparece por cima de tudo
+- **Cartão final mais rápido de desenhar.** O escurecimento do fim do vídeo estava custando quase metade do tempo de desenho do overlay; a imagem sai idêntica, byte por byte
+
 ## 2.31
 
 - **A legenda também se arrasta.** Segure e mova para escolher a altura, igual à headline. Onde você solta é onde o vídeo desenha
