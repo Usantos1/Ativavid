@@ -626,23 +626,7 @@ def _auto_extract_jobs() -> int:
 # -------- Per-segment extraction (Rule 2 + Rule 3) --------------------------
 
 
-_PREP_VER = "2"   # v2: o prep passou a descartar quadro antes do tonemap
-
-
-def _prep_fps(source: Path) -> str:
-    """fps a embutir no prep, ou "" quando nao ha quadro a descartar.
-
-    O prep so existe para o caminho short-form (os dois chamadores pulam
-    quando `keep_resolution`), e ali o alvo e sempre 30 ou 24 — nunca os 60
-    da fonte. Descartar antes do tonemap evita processar quadro que o
-    `-r` do segmento joga fora no fim.
-    """
-    alvo = shortform_target_fps(source)
-    try:
-        fonte = source_fps(source)
-    except Exception:  # noqa: BLE001 - sonda falhou: melhor nao mexer
-        return ""
-    return alvo if fonte > float(alvo) + 0.5 else ""
+_PREP_VER = "1"
 
 
 def _prep_key(source: Path, scale: str, grade_filter: str) -> str:
@@ -650,7 +634,7 @@ def _prep_key(source: Path, scale: str, grade_filter: str) -> str:
     st = source.stat()
     blob = "|".join([
         _PREP_VER, str(st.st_size), str(int(st.st_mtime)),
-        scale, TONEMAP_CHAIN, grade_filter or "", _prep_fps(source),
+        scale, TONEMAP_CHAIN, grade_filter or "",
     ])
     return hashlib.sha1(blob.encode("utf-8")).hexdigest()[:16]
 
@@ -730,11 +714,7 @@ def prepared_source(
     # outro estava escrevendo. Com pid no nome, cada um tem o seu e a
     # promoção atômica (replace) apenas escolhe um vencedor válido.
     tmp = prep.with_suffix(f".tmp{os.getpid()}.mp4")
-    # `fps` na FRENTE: descartado antes de escalar e tonemapar, o quadro nao
-    # custa nada. Depois do tonemap o trabalho caro ja foi feito.
-    vf = ",".join([x for x in (
-        (f"fps={_prep_fps(source)}" if _prep_fps(source) else ""),
-        scale, TONEMAP_CHAIN, grade_filter) if x])
+    vf = ",".join([x for x in (scale, TONEMAP_CHAIN, grade_filter) if x])
     # Qualidade alta de propósito: este arquivo é um INTERMEDIÁRIO e o corte
     # ainda será reencodado depois. A cq 19 a perda de geração medida foi
     # PSNR 35,5 dB; a cq 14 fica visualmente transparente e o arquivo é
