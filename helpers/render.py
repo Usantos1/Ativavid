@@ -655,10 +655,13 @@ def prepare_sources_parallel(
     if not nomes:
         return out
 
+    sozinho = len(nomes) == 1
+
     def _um(nome: str) -> tuple[str, Path | None]:
         sp = resolve(nome)
         try:
-            return nome, prepared_source(sp, scale_for(sp), grade_filter)
+            return nome, prepared_source(sp, scale_for(sp), grade_filter,
+                                         permitir_nvdec=sozinho)
         except Exception as e:  # noqa: BLE001
             print(f"  [warn] fonte preparada de {nome}: {e}", flush=True)
             return nome, None
@@ -674,6 +677,7 @@ def prepare_sources_parallel(
 
 def prepared_source(
     source: Path, scale: str, grade_filter: str, *, quiet: bool = False,
+    permitir_nvdec: bool = True,
 ) -> Path | None:
     """Fonte com escala + tonemap + grade já aplicados, gerada UMA vez.
 
@@ -739,8 +743,12 @@ def prepared_source(
         print(f"  preparando fonte (tonemap uma vez): {source.name}", flush=True)
     try:
         try:
+            if not permitir_nvdec:
+                # Medido: DUAS instancias NVDEC+NVENC saturam o motor de video
+                # (284s contra 151s do sequencial puro). NVDEC so vale sozinho.
+                raise RuntimeError("nvdec desligado (prep concorrente)")
             _run_ffmpeg(_cmd(True), label="prepared source (nvdec)")
-        except Exception:  # noqa: BLE001 - maquina sem NVDEC cai no decode CPU
+        except Exception:  # noqa: BLE001 - sem NVDEC (ou concorrente): CPU
             tmp.unlink(missing_ok=True)
             _run_ffmpeg(_cmd(False), label="prepared source")
     except Exception as e:  # noqa: BLE001

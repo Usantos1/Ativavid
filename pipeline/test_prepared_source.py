@@ -208,3 +208,25 @@ def test_uma_fonte_nao_abre_pool(monkeypatch, tmp_path):
     render.prepare_sources_parallel({"x.mov"}, lambda n: tmp_path / n,
                                     lambda sp: "s", "")
     assert len(chamadas) == 1
+
+def test_nvdec_desligado_quando_prep_e_concorrente(monkeypatch, tmp_path):
+    """Medido: duas instancias NVDEC+NVENC saturam o motor de video (284s
+    contra 151s do sequencial CPU). Em prep concorrente o NVDEC tem de vir
+    desligado; sozinho, ligado."""
+    import render
+
+    flags = {}
+
+    def _falso(sp, scale, grade, *, quiet=False, permitir_nvdec=True):
+        flags[sp.name] = permitir_nvdec
+        return None
+
+    monkeypatch.setattr(render, "prepared_source", _falso)
+    render.prepare_sources_parallel({"a.mov", "b.mov"}, lambda n: tmp_path / n,
+                                    lambda sp: "s", "")
+    assert flags == {"a.mov": False, "b.mov": False}
+    flags.clear()
+    render.prepare_sources_parallel({"x.mov"}, lambda n: tmp_path / n,
+                                    lambda sp: "s", "")
+    assert flags == {"x.mov": True}
+
