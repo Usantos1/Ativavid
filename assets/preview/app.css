@@ -524,17 +524,18 @@ body.applying-corrections .player-frame {
 .hl-overlay {
   position: absolute;
   inset: 8px;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding-top: 22px;
+  /* A linha e posicionada por JS na altura REAL do quadro (a ancora do
+     estilo, ou o paddingTop salvo) — o `padding-top: 22px` fixo que estava
+     aqui mostrava a headline num lugar que o render nao usava. */
   pointer-events: none;
   text-align: center;
   z-index: 4;
 }
 .hl-overlay-line {
   pointer-events: auto;
-  cursor: text;
+  cursor: grab;
+  touch-action: none;          /* o arrasto e nosso, nao rolagem */
+  user-select: none;
   max-width: 90%;
   font-family: 'Poppins', sans-serif;
   font-weight: 900;
@@ -545,7 +546,19 @@ body.applying-corrections .player-frame {
   text-shadow: 0 4px 18px rgba(0, 0, 0, 0.65);
   white-space: pre-wrap;
 }
+.hl-overlay-line:hover {
+  outline: 1px dashed color-mix(in srgb, var(--interact) 55%, transparent);
+  outline-offset: 6px;
+}
+.hl-overlay-line.dragging {
+  cursor: grabbing;
+  outline: 2px solid var(--interact);
+  outline-offset: 6px;
+  opacity: 0.92;
+}
 .hl-overlay-line[contenteditable="true"] {
+  cursor: text;
+  user-select: text;
   outline: 2px solid var(--interact);
   background: rgba(0, 0, 0, 0.4);
   padding: 4px 10px;

@@ -3622,6 +3622,132 @@ function updateCapOverlay() {
   highlightCurrentCaption(i);
 }
 
+
+// ---------- headline arrastavel -------------------------------------------
+// A altura padrao de cada estilo vem do MOTOR (/api/headline-anchors), nao de
+// uma copia aqui: a tabela ja vive no template e no render_proprio, e uma
+// terceira copia sairia de sincronia no primeiro estilo novo.
+let HL_ANCORAS = null;
+fetch('/api/headline-anchors', { cache: 'no-store' })
+  .then((r) => (r.ok ? r.json() : null))
+  .then((d) => { if (d && d.anchors) HL_ANCORAS = d.anchors; })
+  .catch(() => {});
+
+const HL_QUADRO_H = 1920;   // altura do quadro que o motor desenha
+
+/** {base, px} da headline deste projeto: o valor salvo vence o padrao. */
+function hlAncora() {
+  const hook = (S.editData && S.editData.hook) || {};
+  const estilo = String(hook.style || 'outline');
+  const padrao = (HL_ANCORAS && HL_ANCORAS[estilo]) || { base: 'top', px: 300 };
+  if (hook.paddingBottom != null && padrao.base === 'bottom') {
+    return { base: 'bottom', px: Number(hook.paddingBottom) };
+  }
+  if (hook.paddingTop != null) return { base: 'top', px: Number(hook.paddingTop) };
+  return { base: padrao.base, px: Number(padrao.px) };
+}
+
+/** Escala e deslocamento do VIDEO dentro da caixa da camada. */
+function hlMetrica() {
+  const box = $('hlOverlay');
+  if (!box || !video) return null;
+  const v = video.getBoundingClientRect();
+  const b = box.getBoundingClientRect();
+  if (!v.height || !b.height) return null;
+  // O video pode estar em caixa-postal dentro da moldura: ancorar na caixa
+  // e nao no video colocaria a headline num lugar que o render nao usa.
+  return { escala: v.height / HL_QUADRO_H, topo: v.top - b.top, alturaVideo: v.height };
+}
+
+/** Coloca a linha na altura real do quadro. */
+function hlPosicionar(line) {
+  const m = hlMetrica();
+  if (!m || !line) return;
+  const a = hlAncora();
+  line.style.position = 'absolute';
+  line.style.left = '50%';
+  line.style.transform = 'translateX(-50%)';
+  if (a.base === 'bottom') {
+    const baseY = m.topo + m.alturaVideo - a.px * m.escala;
+    line.style.top = Math.round(baseY - line.offsetHeight) + 'px';
+  } else {
+    line.style.top = Math.round(m.topo + a.px * m.escala) + 'px';
+  }
+}
+
+/** Arrastar: converte a posicao na tela de volta para pixels do quadro. */
+function hlArrastavel(line) {
+  if (!line || line.dataset.arrasta) return;
+  line.dataset.arrasta = '1';
+  let arrasto = null;
+
+  line.addEventListener('pointerdown', (e) => {
+    if (S.applying || line.contentEditable === 'true') return;
+    if (e.button !== 0) return;
+    const m = hlMetrica();
+    if (!m) return;
+    arrasto = {
+      y0: e.clientY,
+      topo0: parseFloat(line.style.top) || 0,
+      moveu: false,
+      m,
+    };
+    line.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+
+  line.addEventListener('pointermove', (e) => {
+    if (!arrasto) return;
+    const dy = e.clientY - arrasto.y0;
+    // Limiar: sem ele, um clique com 1px de tremor viraria arrasto e o
+    // clique-para-editar (que e o uso mais comum) nunca dispararia.
+    if (!arrasto.moveu && Math.abs(dy) < 4) return;
+    arrasto.moveu = true;
+    line.classList.add('dragging');
+    const m = arrasto.m;
+    const min = m.topo;
+    const max = m.topo + m.alturaVideo - line.offsetHeight;
+    line.style.top = Math.round(Math.max(min, Math.min(max, arrasto.topo0 + dy))) + 'px';
+  });
+
+  const soltar = async (e) => {
+    if (!arrasto) return;
+    const moveu = arrasto.moveu;
+    const m = arrasto.m;
+    arrasto = null;
+    line.classList.remove('dragging');
+    try { line.releasePointerCapture(e.pointerId); } catch { /* ja solto */ }
+    if (!moveu) return;          // foi um clique: deixa o handler de edicao
+    line.dataset.acabouDeArrastar = '1';
+    const a = hlAncora();
+    const topoPx = parseFloat(line.style.top) || 0;
+    let corpo;
+    if (a.base === 'bottom') {
+      const baseY = topoPx + line.offsetHeight;
+      corpo = { op: 'set_headline_pos',
+                paddingBottom: Math.round((m.topo + m.alturaVideo - baseY) / m.escala) };
+    } else {
+      corpo = { op: 'set_headline_pos',
+                paddingTop: Math.round((topoPx - m.topo) / m.escala) };
+    }
+    try {
+      const data = await persistCorrection(corpo);
+      if (data && data.ok !== false) {
+        const hook = (S.editData && S.editData.hook) || {};
+        if (corpo.paddingTop != null) hook.paddingTop = corpo.paddingTop;
+        else hook.paddingBottom = corpo.paddingBottom;
+        if (S.editData) S.editData.hook = hook;
+        toast('Headline reposicionada — Aplicar alterações para valer no vídeo', 2600);
+      }
+    } catch (err) {
+      toast((err && err.message) || 'Não deu para salvar a posição');
+      hlPosicionar(line);
+    }
+  };
+  line.addEventListener('pointerup', soltar);
+  line.addEventListener('pointercancel', soltar);
+}
+
 function updateHlOverlay() {
   const box = $('hlOverlay');
   if (!box) return;
@@ -3646,6 +3772,8 @@ function updateHlOverlay() {
     line = el('div', 'hl-overlay-line', box);
   }
   if (line.textContent !== want) line.textContent = want;
+  hlArrastavel(line);
+  hlPosicionar(line);
 }
 
 let rafTick = 0;
@@ -4764,6 +4892,13 @@ if ($('btnApply')) {
 if ($('hlOverlay')) {
   $('hlOverlay').addEventListener('click', (e) => {
     e.stopPropagation();
+    // Um arrasto termina com click; sem esta guarda, soltar a headline
+    // abriria o editor de texto por cima do que acabou de ser movido.
+    const line = e.target.closest('.hl-overlay-line');
+    if (line && line.dataset.acabouDeArrastar === '1') {
+      line.dataset.acabouDeArrastar = '0';
+      return;
+    }
     beginHeadlineEdit();
   });
 }

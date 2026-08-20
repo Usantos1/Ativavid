@@ -238,6 +238,36 @@ def set_headline_answer(edit_dir: Path, text_or_lines: Any) -> dict[str, Any]:
     return {"ok": True, "answer": lines, "corrections": corr}
 
 
+def set_headline_pos(edit_dir: Path, valor: Any, *, base: str = "top") -> dict[str, Any]:
+    """Altura da headline, em pixels do quadro de 1920.
+
+    `base="top"` grava paddingTop (a maioria dos estilos); `base="bottom"`
+    grava paddingBottom, que e como a manchete se ancora. Os dois campos ja
+    sao lidos pelo template e pelo render_proprio.
+    """
+    try:
+        px = float(valor)
+    except (TypeError, ValueError):
+        return {"ok": False, "error": "posicao invalida"}
+    if px != px or px in (float("inf"), float("-inf")):
+        return {"ok": False, "error": "posicao invalida"}
+    # Fora da tela a headline some sem aviso; o limite deixa sempre uma
+    # faixa visivel, com folga para o texto que cresce para baixo.
+    px = max(0.0, min(1560.0, px))
+    campo = "paddingBottom" if str(base).lower() == "bottom" else "paddingTop"
+    prepare_correction(edit_dir)
+    path = edit_data_path(edit_dir)
+    data = _read_json(path, {})
+    if not isinstance(data, dict):
+        data = {}
+    hook = dict(data.get("hook") or {}) if isinstance(data.get("hook"), dict) else {}
+    hook[campo] = round(px)
+    data["hook"] = hook
+    _write_json(path, data)
+    corr = mark_dirty(edit_dir, "headline")
+    return {"ok": True, campo: hook[campo], "corrections": corr}
+
+
 def fix_caption(edit_dir: Path, *, src: str, dst: str, **target: Any) -> dict[str, Any]:
     """Aplica o texto corrigido na fonte real da legenda. Preserva timings."""
     from app.caption_fixes import apply_caption_fixes
@@ -483,6 +513,13 @@ def handle(
         return set_headline(edit, body.get("lines") or body.get("text") or body.get("headline"))
     if op in ("set_headline_answer", "headline_answer"):
         return set_headline_answer(edit, body.get("lines") or body.get("text") or body.get("answer"))
+    if op in ("set_headline_pos", "headline_pos"):
+        return set_headline_pos(
+            edit,
+            body.get("paddingTop") if body.get("paddingTop") is not None
+            else body.get("paddingBottom"),
+            base="bottom" if body.get("paddingBottom") is not None else "top",
+        )
     if op in ("fix_caption", "caption", "captions"):
         return fix_caption(
             edit,

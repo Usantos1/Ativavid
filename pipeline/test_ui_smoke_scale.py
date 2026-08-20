@@ -1,4 +1,5 @@
 """Smoke de UI: IDs e textos existem. Sem servidor, sem mídia."""
+import re
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -212,3 +213,27 @@ if __name__ == "__main__":
     test_studio_has_content_type_and_simple_system()
     test_score_labels_from_real_numbers()
     print("ok")
+
+
+def test_headline_arrastavel_no_editor():
+    """A camada era um `padding-top: 22px` fixo: mostrava a headline num
+    lugar que o render não usava, e não dava para mover."""
+    js = (REPO / "assets" / "preview" / "app.js").read_text(encoding="utf-8")
+    css = (REPO / "assets" / "preview" / "app.css").read_text(encoding="utf-8")
+    for fn in ("function hlAncora", "function hlMetrica",
+               "function hlPosicionar", "function hlArrastavel"):
+        assert fn in js, fn
+    assert "set_headline_pos" in js
+    # a altura padrão vem do MOTOR, não de uma terceira cópia da tabela
+    assert "/api/headline-anchors" in js
+    # o preview ancora no VÍDEO, não na moldura: com caixa-postal os dois
+    # divergem e a headline apareceria onde o render não desenha
+    assert "video.getBoundingClientRect()" in js
+    # clique (editar texto) e arrasto (mover) convivem
+    assert "acabouDeArrastar" in js
+    assert "Math.abs(dy) < 4" in js
+    # sem comentarios: o proprio comentario da mudanca cita o valor antigo
+    limpo = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    i = limpo.index(".hl-overlay {")
+    assert "padding-top" not in limpo[i:limpo.index("}", i)]
+    assert ".hl-overlay-line.dragging" in css

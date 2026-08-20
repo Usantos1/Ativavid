@@ -262,6 +262,7 @@ class DesktopHandler(ps.Handler):
             "/api/brands",
             "/api/brand-presets",
             "/api/content-types",
+            "/api/headline-anchors",
             "/api/library",
             "/api/library/file",
             "/api/license",

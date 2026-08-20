@@ -429,3 +429,84 @@ def test_set_headline_answer_writes_hook_answer_lines(tmp_path):
     data = json.loads(ed_path.read_text(encoding="utf-8"))
     assert data["hook"]["answerLines"]
     assert data["hook"]["lines"] == ["P?"]  # pergunta intacta
+
+
+# ------------------------------------------- posição da headline (arrastar) ----
+def _projeto_com_hook(tmp_path, hook=None):
+    import json
+
+    edit = tmp_path / "edit"
+    (edit / "remotion" / "public").mkdir(parents=True)
+    p = edit / "remotion" / "public" / "edit-data.json"
+    p.write_text(json.dumps({"hook": hook or {"enabled": True, "lines": ["Oi"]}}),
+                 encoding="utf-8")
+    return edit, p
+
+
+def test_set_headline_pos_grava_padding_top(tmp_path):
+    import json
+    from app.quick_corrections import set_headline_pos
+
+    edit, p = _projeto_com_hook(tmp_path)
+    r = set_headline_pos(edit, 814)
+    assert r["ok"] is True and r["paddingTop"] == 814
+    data = json.loads(p.read_text(encoding="utf-8"))
+    assert data["hook"]["paddingTop"] == 814
+    assert data["hook"]["lines"] == ["Oi"]      # texto intacto
+
+
+def test_set_headline_pos_pela_base(tmp_path):
+    """A manchete se ancora pelo rodapé — arrastar tem de mexer no
+    paddingBottom, não no paddingTop, senão ela ignora o valor."""
+    import json
+    from app.quick_corrections import set_headline_pos
+
+    edit, p = _projeto_com_hook(tmp_path, {"enabled": True, "style": "manchete"})
+    r = set_headline_pos(edit, 439, base="bottom")
+    assert r["ok"] is True and r["paddingBottom"] == 439
+    data = json.loads(p.read_text(encoding="utf-8"))
+    assert data["hook"]["paddingBottom"] == 439
+    assert "paddingTop" not in data["hook"]
+
+
+def test_set_headline_pos_nao_deixa_sair_da_tela(tmp_path):
+    """Fora do quadro a headline sumiria sem aviso nenhum."""
+    from app.quick_corrections import set_headline_pos
+
+    edit, _ = _projeto_com_hook(tmp_path)
+    assert set_headline_pos(edit, -500)["paddingTop"] == 0
+    assert set_headline_pos(edit, 99999)["paddingTop"] == 1560
+
+
+def test_set_headline_pos_recusa_lixo(tmp_path):
+    from app.quick_corrections import set_headline_pos
+
+    edit, _ = _projeto_com_hook(tmp_path)
+    for ruim in ("", None, "abc", float("nan"), float("inf")):
+        assert set_headline_pos(edit, ruim)["ok"] is False, ruim
+
+
+def test_op_set_headline_pos_no_dispatcher(tmp_path):
+    import json
+    from app.quick_corrections import handle
+
+    edit, p = _projeto_com_hook(tmp_path)
+    handle(edit, {"op": "set_headline_pos", "paddingTop": 700})
+    assert json.loads(p.read_text(encoding="utf-8"))["hook"]["paddingTop"] == 700
+    handle(edit, {"op": "set_headline_pos", "paddingBottom": 210})
+    assert json.loads(p.read_text(encoding="utf-8"))["hook"]["paddingBottom"] == 210
+
+
+def test_ancoras_cobrem_todos_os_estilos_de_headline():
+    """O editor desenha a headline arrastável a partir desta tabela. Se um
+    estilo novo ficar de fora, ele aparece no lugar errado no preview."""
+    from app.render_proprio import Renderizador, ancoras_de_headline
+
+    anc = ancoras_de_headline()
+    assert set(anc) == set(Renderizador.HL_STYLES)
+    for nome, a in anc.items():
+        assert a["base"] in ("top", "bottom"), nome
+        assert isinstance(a["px"], int) and 0 <= a["px"] <= 1920, nome
+    # a manchete é a única que se ancora pela base
+    assert anc["manchete"]["base"] == "bottom"
+    assert [n for n, a in anc.items() if a["base"] == "bottom"] == ["manchete"]

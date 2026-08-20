@@ -149,6 +149,23 @@ WHOOSH_VOL = 0.1
 
 
 # ---------------------------------------------------------------- suporte ----
+def ancoras_de_headline() -> dict[str, dict[str, object]]:
+    """{estilo: {"base": "top"|"bottom", "px": N}} — a altura padrao.
+
+    O editor desenha a headline arrastavel a partir daqui, entao ele mostra
+    exatamente onde o motor vai desenhar. Sem isto, a tabela teria uma
+    terceira copia no JavaScript e as tres sairiam de sincronia.
+    """
+    out: dict[str, dict[str, object]] = {}
+    for nome, spec in Renderizador.HL_STYLES.items():
+        if nome == "manchete":
+            # a manchete se ancora pela BASE (paddingBottom, padrao 140)
+            out[nome] = {"base": "bottom", "px": 140}
+        else:
+            out[nome] = {"base": "top", "px": int(spec[4])}
+    return out
+
+
 def motivo_nao_suportado(edit_data: dict[str, Any], public: Path) -> str | None:
     """None = o renderizador próprio cobre este projeto; senão o motivo."""
     if (os.environ.get("ATIVAVID_RENDER_PROPRIO") or "").strip() == "0":
