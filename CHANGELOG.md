@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.32
+
+Corte mais rápido em vídeo de celular 4K a 60 quadros.
+
+- **O preparo da fonte ficou ~1,7x mais rápido.** Ele convertia a cor de todos os 60 quadros por segundo, mas o vídeo final usa 30 — metade do trabalho ia para o lixo
+- **De quebra, o movimento ficou mais regular.** No jeito antigo os primeiros quadros de cada trecho saíam em câmera lenta por um instante antes de estabilizar
+- **Dois vídeos processando juntos não brigam mais pela placa de vídeo.** Um usa a GPU e o outro a CPU, em vez de os dois disputarem — antes isso era mais lento do que fazer um de cada vez
+- Vídeo gravado a 30 quadros não muda em nada
+
 ## 2.31.2
 
 - **A conferência de áudio do vídeo final parou de abrir o vídeo à toa** — ela só precisa do som
