@@ -53,6 +53,8 @@ FONT_FILE = {
     2: ("PlayfairDisplay-Italic[wght].ttf", "#ff5200"),
     3: ("Poppins-ExtraBold.ttf", None),
     4: ("Poppins-Black.ttf", None),
+    5: ("Lora[wght].ttf", None),           # scatter: serifada
+    6: ("Lora-Italic[wght].ttf", None),
 }
 FONT_WGHT = {2: 900}
 
@@ -97,6 +99,8 @@ def motivo_nao_suportado(edit_data: dict[str, Any], public: Path) -> str | None:
     if os.environ.get("ATIVAVID_PROPRIO_IMPACTO") == "1":
         # portado, aguardando validacao visual — liga por env para testar
         permitidos.add("impacto")
+    if os.environ.get("ATIVAVID_PROPRIO_SCATTER") == "1":
+        permitidos.add("scatter")
     if estilo not in permitidos:
         return f"estilo de legenda '{caps.get('style')}'"
     if caps.get("fontFamily"):
@@ -227,13 +231,15 @@ class Renderizador:
         self._montar_tudo()
 
     # ------------------------------------------------------------ fontes ----
-    def fonte(self, idx: int, tam: int) -> ImageFont.FreeTypeFont:
-        chave = (self.font_file[idx][0], tam)
+    def fonte(self, idx: int, tam: int,
+              peso: int | None = None) -> ImageFont.FreeTypeFont:
+        chave = (self.font_file[idx][0], tam, peso)
         if chave not in self._fontes:
             f = ImageFont.truetype(str(FONTES / self.font_file[idx][0]), tam)
-            if FONT_WGHT.get(idx):
+            eixo = peso if peso is not None else FONT_WGHT.get(idx)
+            if eixo:
                 try:
-                    f.set_variation_by_axes([FONT_WGHT[idx]])
+                    f.set_variation_by_axes([eixo])
                 except (OSError, AttributeError):
                     pass
             self._fontes[chave] = f
@@ -291,6 +297,9 @@ class Renderizador:
         estilo = (self.ed.get("captions") or {}).get("style") or "stacked"
         if estilo == "impacto":
             self.camadas.extend(self._montar_impacto())
+            self.cues = []
+        elif estilo == "scatter":
+            self.camadas.extend(self._montar_scatter())
             self.cues = []
         for cue in self.cues:
             preset = cue.get("preset") or "STACK_MIXED"
@@ -773,6 +782,187 @@ class Renderizador:
                                 inicio_f=0, enter=1, janela=jan, sobe=0.0))
                     x += largs[i] + gap
                 camadas.append(leg)
+        return camadas
+
+    # ----- legendas `scatter` (disperso) ------------------------------------
+    @staticmethod
+    def _hash_det(n: float) -> float:
+        """O hash deterministico do template: mesmo layout em todo quadro."""
+        x = math.sin(n * 127.1 + 311.7) * 43758.5453
+        return x - math.floor(x)
+
+    def _montar_scatter(self):
+        """Serifada, minusculas, uma palavra por vez em linhas irregulares.
+        O deslocamento parece aleatorio mas e HASH do indice — igual ao
+        template, que nunca usa Math.random (cada quadro renderiza sozinho).
+
+        Palavra comum: so fade (7 quadros). Destaque (a mais longa >6 letras):
+        resolve de um desfoque pesado a 1,62x do tamanho, e volta ao desfoque
+        na saida — estagios por quadro, como o traco do Recorte."""
+        import re
+
+        caps_cfg = self.ed.get("captions") or {}
+        SAFE_W = float(caps_cfg.get("scatterSafeWidth") or 820)
+        BASE = int(caps_cfg.get("scatterFontSize") or 72)
+        OFFSET_Y = float(caps_cfg.get("scatterOffsetY") or 0.72)
+        HI_COLOR = caps_cfg.get("emphasisAccent")
+        HI_SCALE, SPREAD, GAP = 1.62, 0.45, 12
+        ENTER, HI_ENTER, EXIT = 7, 10, 8
+
+        raw = json.loads((self.public / "captions.json")
+                         .read_text(encoding="utf-8-sig"))
+        words = raw if isinstance(raw, list) else (raw.get("words") or [])
+
+        def limpar(t):
+            return re.sub(r"[.,!?\u2026]+$", "", t).lower()
+
+        # agrupar: pontuacao, 6 palavras ou pausa >400ms
+        grupos, cur = [], []
+        for i, w in enumerate(words):
+            cur.append(w)
+            nxt = words[i + 1] if i + 1 < len(words) else None
+            gap = (nxt["startMs"] - w["endMs"]) if nxt else 1e9
+            if len(cur) >= 6 or re.search(r"[.,!?\u2026]$", w["text"]) or gap > 400:
+                grupos.append(cur)
+                cur = []
+        if cur:
+            grupos.append(cur)
+
+        camadas = []
+        gradiente_scatter = ("#f8f5ef", "#f4f1e9", "#d5cec1")
+
+        def cor_grad(alt):
+            t = np.linspace(0.0, 1.0, max(1, alt), dtype=np.float32)
+            c0 = self._cor(gradiente_scatter[0])
+            c1 = self._cor(gradiente_scatter[1])
+            c2 = self._cor(gradiente_scatter[2])
+            saida = np.empty((len(t), 3), dtype=np.float32)
+            for k in range(len(t)):
+                if t[k] <= 0.54:
+                    a = t[k] / 0.54
+                    saida[k] = c0 * (1 - a) + c1 * a
+                else:
+                    a = (t[k] - 0.54) / 0.46
+                    saida[k] = c1 * (1 - a) + c2 * a
+            return saida
+
+        for gi, g in enumerate(grupos):
+            ini_f = int(round(g[0]["startMs"] / 1000 * self.fps))
+            nxt = grupos[gi + 1] if gi + 1 < len(grupos) else None
+            end_f = (int(round(nxt[0]["startMs"] / 1000 * self.fps)) if nxt
+                     else min(self.frames,
+                              int(round(g[-1]["endMs"] / 1000 * self.fps))
+                              + int(self.fps)))
+            if end_f <= ini_f:
+                continue
+            dur = end_f - ini_f
+
+            hi_idx, hi_len = -1, 6
+            for i, w in enumerate(g):
+                if len(limpar(w["text"])) > hi_len:
+                    hi_len, hi_idx = len(limpar(w["text"])), i
+
+            # linhas de 3-4 palavras; destaque em linha propria
+            linhas, linha = [], []
+            for i, w in enumerate(g):
+                if i == hi_idx:
+                    if linha:
+                        linhas.append(linha)
+                    linhas.append([i])
+                    linha = []
+                    continue
+                linha.append(i)
+                want = 4 if self._hash_det(gi * 31 + i) > 0.5 else 3
+                if len(linha) >= want:
+                    linhas.append(linha)
+                    linha = []
+            if linha:
+                linhas.append(linha)
+
+            leg = Camada(ini_f, end_f - 1)
+            leg.dur_f = dur
+            leg.saida_f = dur - EXIT
+            leg.exit_fade = True
+
+            drop = (self._hash_det(gi * 53 + 11) * 2 - 1) * 40
+            alt_total = 0.0
+            alturas = []
+            for idxs in linhas:
+                t_max = round(BASE * HI_SCALE) if hi_idx in idxs else BASE
+                alturas.append(t_max * 1.03)
+                alt_total += t_max * 1.03
+            y = self.h * OFFSET_Y - alt_total / 2 + drop
+
+            for li, idxs in enumerate(linhas):
+                # largura da linha (peso 400, tamanho de cada palavra)
+                largs = []
+                for i in idxs:
+                    tam_i = round(BASE * HI_SCALE) if i == hi_idx else BASE
+                    fw = self.fonte(5, tam_i, 400)
+                    largs.append(fw.getlength(limpar(g[i]["text"])))
+                larg_linha = sum(largs) + GAP * (len(idxs) - 1)
+                room = max(0.0, (SAFE_W - larg_linha) / 2) * SPREAD
+                shift = (self._hash_det(gi * 17 + li * 5 + 3) * 2 - 1) * room
+                x = (self.w - larg_linha) / 2 + shift
+
+                for k, i in enumerate(idxs):
+                    w = g[i]
+                    eh_hi = i == hi_idx
+                    tam_i = round(BASE * HI_SCALE) if eh_hi else BASE
+                    peso = 600 if eh_hi else 400
+                    italico = eh_hi and self._hash_det(li * 7 + i) > 0.65
+                    f = self.fonte(6 if italico else 5, tam_i, peso)
+                    m = self._mascara(f, limpar(w["text"]), 0.0)
+                    h_m, w_m = m.shape
+                    folga = 40
+                    pad_m = np.zeros((h_m + 2 * folga, w_m + 2 * folga),
+                                     dtype=np.float32)
+                    pad_m[folga:folga + h_m, folga:folga + w_m] = m
+                    sombra = self._sombra_de(pad_m, [(0, 4, 14, 0.5)])
+                    if eh_hi and HI_COLOR:
+                        rgb = np.broadcast_to(self._cor(HI_COLOR),
+                                              (*pad_m.shape, 3)).copy()
+                    else:
+                        col = cor_grad(h_m)
+                        idx_l = np.clip(np.arange(pad_m.shape[0]) - folga,
+                                        0, h_m - 1)
+                        rgb = np.repeat(col[idx_l][:, None, :],
+                                        pad_m.shape[1], axis=1)
+                    asc, desc = f.getmetrics()
+                    x0 = int(round(x)) - folga
+                    y0 = int(round(y + (alturas[li] - (asc + desc)) / 2)) - folga
+                    local = w["startMs"] / 1000 * self.fps - ini_f
+
+                    if not eh_hi:
+                        leg.palavras.append(Palavra(
+                            x0, y0, rgb, pad_m, sombra,
+                            inicio_f=local, enter=ENTER, sobe=0.0))
+                    else:
+                        # destaque: estagios com desfoque na ENTRADA e na SAIDA
+                        def estagio(blur_px, opac, jan):
+                            if blur_px > 0.4:
+                                a2 = np.asarray(
+                                    Image.fromarray((pad_m * 255).astype(np.uint8))
+                                    .filter(ImageFilter.GaussianBlur(blur_px / 2)),
+                                    dtype=np.float32) / 255.0
+                            else:
+                                a2 = pad_m
+                            leg.palavras.append(Palavra(
+                                x0, y0, rgb, a2 * opac,
+                                sombra * opac, inicio_f=0, enter=1,
+                                janela=jan, sobe=0.0))
+                        for q in range(HI_ENTER):
+                            t = 1 - (1 - min(1.0, q / HI_ENTER)) ** 3
+                            estagio((1 - t) * 26, t,
+                                    (local + q, local + q + 1))
+                        estagio(0.0, 1.0, (local + HI_ENTER, leg.saida_f))
+                        for q in range(EXIT):
+                            out = (q + 1) / EXIT
+                            estagio(out * 30, 1.0,
+                                    (leg.saida_f + q, leg.saida_f + q + 1))
+                    x += largs[k] + GAP
+                y += alturas[li]
+            camadas.append(leg)
         return camadas
 
     # ------------------------------------------------------------ desenho ----
