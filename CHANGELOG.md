@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.31
+
+- **A legenda também se arrasta.** Segure e mova para escolher a altura, igual à headline. Onde você solta é onde o vídeo desenha
+- **Toque duplo volta ao padrão** — na legenda e na headline. Serve para desfazer um arraste sem ficar procurando a posição original
+- A legenda no preview passa a aparecer **na altura real** do estilo. Antes ela usava uma tabela própria e ignorava o que estava salvo no projeto
+- **Correção de cor voltou a funcionar.** Ela estava desligada em silêncio desde sempre no Windows, por causa do `:` do caminho do arquivo. Material achatado (sem contraste) volta a receber o ajuste automático; vídeo normal e HDR de celular não mudam em nada
+- A análise da fala parou de abrir o vídeo à toa — ela só precisa do áudio
+
 ## 2.30
 
 - **Agora dá para arrastar a headline no preview.** Segure e mova para escolher a altura — sai do rosto, do letreiro, do que estiver atrapalhando. Onde você solta é onde o vídeo desenha
