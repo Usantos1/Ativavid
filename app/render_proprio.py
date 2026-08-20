@@ -92,7 +92,12 @@ def motivo_nao_suportado(edit_data: dict[str, Any], public: Path) -> str | None:
     if (os.environ.get("ATIVAVID_RENDER_PROPRIO") or "").strip() == "0":
         return "desligado por ATIVAVID_RENDER_PROPRIO=0"
     caps = edit_data.get("captions") or {}
-    if (caps.get("style") or "stacked") != "stacked":
+    estilo = caps.get("style") or "stacked"
+    permitidos = {"stacked"}
+    if os.environ.get("ATIVAVID_PROPRIO_IMPACTO") == "1":
+        # portado, aguardando validacao visual — liga por env para testar
+        permitidos.add("impacto")
+    if estilo not in permitidos:
         return f"estilo de legenda '{caps.get('style')}'"
     if caps.get("fontFamily"):
         return "fonte de marca nas legendas"
@@ -283,6 +288,10 @@ class Renderizador:
             self.camadas.append(self._montar_headline(hook))
             if self.sfx_on:
                 self.eventos_sfx.append(("whoosh.mp3", 0.0, WHOOSH_VOL))
+        estilo = (self.ed.get("captions") or {}).get("style") or "stacked"
+        if estilo == "impacto":
+            self.camadas.extend(self._montar_impacto())
+            self.cues = []
         for cue in self.cues:
             preset = cue.get("preset") or "STACK_MIXED"
             if preset == "SOLO_OUTLINE":
@@ -614,6 +623,157 @@ class Renderizador:
                 sombra, inicio_f=0, enter=fade, sobe=26.0))
             y += h_m + gap
         return leg
+
+    # ----- legendas `impacto` ------------------------------------------------
+    @staticmethod
+    def _agrupar_impacto(words, larg_de, max_w: float = 820.0,
+                         max_words: int = 3):
+        """O agrupamento do ImpactCaptions: largura medida > contagem >
+        respiro (pontuacao ou pausa >450 ms). O contrato de quebra e o mesmo
+        dos estilos estaticos — trocar de estilo nao reagrupa a fala."""
+        import re
+
+        cues, cur = [], []
+        for i, w in enumerate(words):
+            trial = cur + [w]
+            if cur and (len(trial) > max_words or larg_de(trial) > max_w):
+                cues.append(cur)
+                cur = [w]
+            else:
+                cur = trial
+            nxt = words[i + 1] if i + 1 < len(words) else None
+            gap = (nxt["startMs"] - w["endMs"]) if nxt else 0
+            if cur and (re.search(r"[.,!?\u2026]$", w["text"]) or gap > 450):
+                cues.append(cur)
+                cur = []
+        if cur:
+            cues.append(cur)
+        return cues
+
+    @staticmethod
+    def _ease_back(t: float, b: float = 2.2) -> float:
+        """Easing.out(Easing.back(2.2)) do Remotion: overshoot que assenta."""
+        t -= 1.0
+        return 1.0 + (b + 1.0) * t ** 3 + b * t * t
+
+    @staticmethod
+    def _tinta_na_caixa(bg: str) -> str:
+        n = int(bg.lstrip("#"), 16)
+        r, g, b = ((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255
+        return "#111214" if 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.6 else "#ffffff"
+
+    def _montar_impacto(self):
+        """Uma Camada por PERIODO de palavra quente: quando a caixa muda de
+        palavra, a linha inteira se reposiciona (a caixa tem padding proprio),
+        entao cada periodo e um layout completo."""
+        import re
+
+        caps_cfg = self.ed.get("captions") or {}
+        tam = round(72 * float(caps_cfg.get("sizeScale") or 1.0))
+        bottom = float(caps_cfg.get("paddingBottom") or 430)
+        cor_caixa = caps_cfg.get("emphasisAccent") or "#ffd400"
+        cor_tinta = self._tinta_na_caixa(cor_caixa)
+        f = self.fonte(4, tam)
+
+        raw = json.loads((self.public / "captions.json")
+                         .read_text(encoding="utf-8-sig"))
+        words = raw if isinstance(raw, list) else (raw.get("words") or [])
+
+        def limpar(t):
+            return re.sub(r"[.,!?\u2026]+$", "", t).upper()
+
+        larg_pal = lambda w: f.getlength(limpar(w["text"]))
+        larg_grupo = lambda ws: f.getlength(" ".join(limpar(w["text"]) for w in ws))
+        cues = self._agrupar_impacto(words, larg_grupo)
+
+        POP = 5
+        pad = round(tam * 0.18)
+        gap = round(tam * 0.22)
+        raio = round(tam * 0.18)
+        camadas = []
+
+        for ci, cue in enumerate(cues):
+            ini_f = int(round(cue[0]["startMs"] / 1000 * self.fps))
+            nxt = cues[ci + 1] if ci + 1 < len(cues) else None
+            fim_f = (int(round(nxt[0]["startMs"] / 1000 * self.fps)) - 1 if nxt
+                     else min(self.frames,
+                              int(round(cue[-1]["endMs"] / 1000 * self.fps))
+                              + int(self.fps)))
+            for hi, hot_w in enumerate(cue):
+                h_ini = max(ini_f, int(round(hot_w["startMs"] / 1000 * self.fps)))
+                h_fim = (int(round(cue[hi + 1]["startMs"] / 1000 * self.fps)) - 1
+                         if hi + 1 < len(cue) else fim_f)
+                if h_fim < h_ini:
+                    continue
+                leg = Camada(h_ini, h_fim)
+                leg.dur_f = h_fim - h_ini + 1
+                leg.saida_f = 1e9
+
+                largs = []
+                for i, w in enumerate(cue):
+                    lw = larg_pal(w)
+                    if i == hi:
+                        lw += 2 * pad
+                    largs.append(lw)
+                total = sum(largs) + gap * (len(cue) - 1)
+                x = (self.w - total) / 2
+                asc, desc = f.getmetrics()
+                alt_linha = tam * 1.08
+                y_base = self.h - bottom - alt_linha
+                y_texto = int(round(y_base + (alt_linha - (asc + desc)) / 2))
+
+                for i, w in enumerate(cue):
+                    texto = limpar(w["text"])
+                    if i != hi:
+                        self._palavra_texto(
+                            leg, f, texto, 0.0, int(round(x)), y_base,
+                            alt_linha, y_texto, "#ffffff", -1, 1,
+                            especs=[(0, 4, 18, 0.6)])
+                        leg.palavras[-1].sobe = 0.0
+                    else:
+                        lw = larg_pal(w)
+                        cw = int(lw + 2 * pad)
+                        ch = int(asc + desc + pad * 0.35 + pad * 0.5)
+                        for est in range(POP + 1):
+                            t = min(1.0, est / POP)
+                            esc = 0.7 + 0.3 * self._ease_back(t)
+                            ew, eh = max(2, int(cw * esc)), max(2, int(ch * esc))
+                            img = Image.new("L", (ew + 64, eh + 64), 0)
+                            ImageDraw.Draw(img).rounded_rectangle(
+                                [32, 32, 32 + ew, 32 + eh],
+                                radius=max(2, int(raio * esc)), fill=255)
+                            a_caixa = np.asarray(img, dtype=np.float32) / 255.0
+                            fe = self.fonte(4, max(8, int(tam * esc)))
+                            m = self._mascara(fe, texto, 0.0)
+                            t_a = np.zeros_like(a_caixa)
+                            tx = 32 + int(pad * esc)
+                            ty = 32 + int(pad * 0.35 * esc)
+                            hm = min(m.shape[0], t_a.shape[0] - ty)
+                            wm = min(m.shape[1], t_a.shape[1] - tx)
+                            t_a[ty:ty + hm, tx:tx + wm] = m[:hm, :wm]
+                            cor_c = self._cor(cor_caixa)
+                            cor_t = self._cor(cor_tinta)
+                            rgb = np.broadcast_to(cor_c, (*a_caixa.shape, 3)).copy()
+                            rgb = rgb * (1 - t_a[..., None]) + cor_t * t_a[..., None]
+                            alpha = np.maximum(a_caixa, t_a)
+                            b = np.asarray(
+                                Image.fromarray((a_caixa * 255).astype(np.uint8))
+                                .filter(ImageFilter.GaussianBlur(26 * 0.5)),
+                                dtype=np.float32) / 255.0
+                            sombra = np.zeros_like(b)
+                            sombra[10:, :] = b[:-10, :] * 0.45
+                            cx = x + (cw - ew) / 2
+                            cy = y_base + (alt_linha - ch) / 2 + (ch - eh) / 2
+                            jan = ((h_ini - leg.inicio_f + est,
+                                    h_ini - leg.inicio_f + est + 1)
+                                   if est < POP else
+                                   (h_ini - leg.inicio_f + POP, 1e9))
+                            leg.palavras.append(Palavra(
+                                int(cx) - 32, int(cy) - 32, rgb, alpha, sombra,
+                                inicio_f=0, enter=1, janela=jan, sobe=0.0))
+                    x += largs[i] + gap
+                camadas.append(leg)
+        return camadas
 
     # ------------------------------------------------------------ desenho ----
     def _caixa_leg(self, leg: Camada) -> tuple[int, int, int, int]:

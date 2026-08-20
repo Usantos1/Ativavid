@@ -161,3 +161,49 @@ def test_grafo_audio_espelha_o_compose():
     sem_sfx = _grafo_audio(0, None, 1, 0.2, 10.0, 8.5)
     assert "[1:a]volume=0.2000" in sem_sfx[1]
     assert "amix=inputs=2" in sem_sfx[-1]
+
+
+# ----------------------------------------------------------- estilo impacto ----
+def test_impacto_agrupa_como_o_template():
+    """Largura medida > contagem > respiro (pontuação/pausa >450 ms)."""
+    ws = [
+        {"text": "um", "startMs": 0, "endMs": 100},
+        {"text": "dois", "startMs": 100, "endMs": 200},
+        {"text": "tres.", "startMs": 200, "endMs": 300},     # pontuação quebra
+        {"text": "quatro", "startMs": 300, "endMs": 400},
+        {"text": "cinco", "startMs": 900, "endMs": 1000},    # pausa 500ms quebra
+        {"text": "seis", "startMs": 1000, "endMs": 1100},
+        {"text": "sete", "startMs": 1100, "endMs": 1200},
+        {"text": "oito", "startMs": 1200, "endMs": 1300},    # 4a palavra quebra
+    ]
+    cues = Renderizador._agrupar_impacto(ws, lambda g: 100.0 * len(g))
+    textos = [[w["text"] for w in c] for c in cues]
+    assert textos == [["um", "dois", "tres."], ["quatro"],
+                      ["cinco", "seis", "sete"], ["oito"]]
+
+
+def test_impacto_quebra_por_largura():
+    ws = [{"text": "a", "startMs": i * 100, "endMs": i * 100 + 90}
+          for i in range(3)]
+    cues = Renderizador._agrupar_impacto(ws, lambda g: 500.0 * len(g))
+    assert [len(c) for c in cues] == [1, 1, 1], "820px / 500 por palavra"
+
+
+def test_impacto_tinta_por_luminancia():
+    assert Renderizador._tinta_na_caixa("#ffd400") == "#111214"  # amarelo -> preto
+    assert Renderizador._tinta_na_caixa("#e30004") == "#ffffff"  # vermelho -> branco
+
+
+def test_ease_back_assenta_em_1():
+    assert abs(Renderizador._ease_back(1.0) - 1.0) < 1e-9
+    assert Renderizador._ease_back(0.6) > 1.0, "overshoot no meio"
+
+
+def test_impacto_fora_do_gate_por_padrao(tmp_path, monkeypatch):
+    monkeypatch.delenv("ATIVAVID_PROPRIO_IMPACTO", raising=False)
+    assert "impacto" in (motivo_nao_suportado(
+        _ed(captions={"style": "impacto"}), _public(tmp_path)) or "")
+    monkeypatch.setenv("ATIVAVID_PROPRIO_IMPACTO", "1")
+    assert motivo_nao_suportado(
+        _ed(captions={"style": "impacto"}), _public(tmp_path)) is None
+
