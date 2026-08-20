@@ -180,15 +180,20 @@ CPU/memória; o do Remotion passa de 90%. A máquina continua utilizável.
 | + palavra assentada composta uma vez (cache na camada) | 77,6 s |
 | + retângulo convertido em cache; só o que anima reconverte | 72,3 s |
 | + escurecimento do cartão vira multiplicação (era camada: 426 ms/quadro) | 57,7 s |
-| + estágios do flash em cache, over em uint8 | **53,8 s** |
+| + estágios do flash em cache, over em uint8 | 53,8 s |
+| + primeira camada escreve em vez de mesclar com o vazio | **33,3 s** |
 
-**Resultado da noite: produção 126,5 s → nosso 53,8 s = 2,35×**, a 0,53× do
-tempo real. O chão medido do cano+ffmpeg sozinhos é 17,2 s — ainda há 36 s de
-Python para atacar (headline compõe a caixa toda por quadro; o cano leva a
-tela cheia mesmo quando só a faixa da legenda muda).
+O último degrau foi o maior: mesclar em float contra um buffer que o driver
+acabou de limpar é uma cópia cara — a primeira camada de cada quadro agora
+escreve direto, e só as seguintes mesclam.
 
-**Contra o CapCut (5,3× tempo real): estamos a 0,53×.** A distância era 38×
-no caminho de produção; agora é 10×.
+**Resultado: produção 126,5 s → nosso 33,3 s = 3,8×**, a 0,85× do tempo real.
+Conferência visual dos 4 momentos (headline, flash, legendas, cartão) ok.
+O chão medido do cano+ffmpeg sozinhos é 17,2 s — sobram ~16 s de Python, e o
+próximo salto conhecido é transmitir só a faixa que muda em vez da tela cheia.
+
+**Contra o CapCut (5,3× tempo real): estamos a 0,85×.** A distância era 38×
+no caminho de produção; agora é 6,2×.
 
 ## O que estes testes NÃO respondem
 

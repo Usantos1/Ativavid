@@ -299,13 +299,16 @@ def render_completo(pub: Path, cut_frames: int, saida: Path) -> float:
         if sujo[2] > sujo[0] and sujo[3] > sujo[1]:
             buf[sujo[1]:sujo[3], sujo[0]:sujo[2]] = 0
         sujo[:] = [0, 0, 0, 0]
+        primeira = True
         for leg in camadas:
             if leg.inicio_f <= f <= leg.fim_f:
                 d_val = getattr(leg, "dim", 0.0)
                 if d_val:
                     aplicar_dim(buf, sujo, d_val, f - leg.inicio_f,
                                 getattr(leg, "dim_fade", 10))
-                R.desenhar(leg, f - leg.inicio_f, buf, sujo, mesclar=True)
+                    primeira = False
+                R.desenhar(leg, f - leg.inicio_f, buf, sujo, mesclar=not primeira)
+                primeira = False
         for at in flashes:
             a = flash_quadro(at, R.FPS, f)
             if a is not None:
