@@ -25,6 +25,7 @@ import _utf8  # noqa: F401  — UTF-8 no stdout antes de qualquer print
 
 import argparse
 import atexit
+import contextlib
 import functools
 import json
 import math
@@ -33,6 +34,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -683,6 +685,66 @@ def prepare_sources_parallel(
     return out
 
 
+_NVDEC_LOCK = Path(tempfile.gettempdir()) / "ativavid-nvdec.lock"
+_NVDEC_STALE_S = 60 * 20        # prep travado nao pode bloquear para sempre
+
+
+@contextlib.contextmanager
+def _reservar_nvdec():
+    """Cede o NVDEC a UM prep por vez na maquina inteira.
+
+    Rende True para quem pegou e False para quem nao pegou — quem nao pegou
+    decodifica na CPU em vez de esperar (medido: dois NVDEC juntos custam
+    98,7s contra 89,8s de um GPU + um CPU).
+
+    A criacao e atomica (O_CREAT|O_EXCL); lock de PID morto ou velho demais e
+    tomado, senao um prep que morreu no meio deixaria a GPU inutilizada.
+    """
+    fd = None
+    try:
+        flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
+        if hasattr(os, "O_BINARY"):
+            flags |= os.O_BINARY
+        try:
+            fd = os.open(str(_NVDEC_LOCK), flags, 0o644)
+        except FileExistsError:
+            velho = None
+            try:
+                dono = int(_NVDEC_LOCK.read_text(encoding="utf-8").split()[0])
+                idade = time.time() - _NVDEC_LOCK.stat().st_mtime
+                velho = (not _pid_alive(dono)) or idade > _NVDEC_STALE_S
+            except (OSError, ValueError, IndexError):
+                velho = True
+            if not velho:
+                yield False
+                return
+            try:
+                _NVDEC_LOCK.unlink()
+                fd = os.open(str(_NVDEC_LOCK), flags, 0o644)
+            except OSError:
+                yield False
+                return
+        os.write(fd, str(os.getpid()).encode("ascii"))
+        os.close(fd)
+        fd = None
+        yield True
+    except OSError:
+        # Sem poder criar o arquivo, seguir sem NVDEC e o seguro.
+        yield False
+    finally:
+        if fd is not None:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        try:
+            if (_NVDEC_LOCK.exists()
+                    and _NVDEC_LOCK.read_text(encoding="utf-8").strip() == str(os.getpid())):
+                _NVDEC_LOCK.unlink()
+        except OSError:
+            pass
+
+
 def prepared_source(
     source: Path, scale: str, grade_filter: str, *, quiet: bool = False,
     permitir_nvdec: bool = True,
@@ -750,15 +812,19 @@ def prepared_source(
     if not quiet:
         print(f"  preparando fonte (tonemap uma vez): {source.name}", flush=True)
     try:
-        try:
-            if not permitir_nvdec:
-                # Medido: DUAS instancias NVDEC+NVENC saturam o motor de video
-                # (284s contra 151s do sequencial puro). NVDEC so vale sozinho.
-                raise RuntimeError("nvdec desligado (prep concorrente)")
-            _run_ffmpeg(_cmd(True), label="prepared source (nvdec)")
-        except Exception:  # noqa: BLE001 - sem NVDEC (ou concorrente): CPU
-            tmp.unlink(missing_ok=True)
-            _run_ffmpeg(_cmd(False), label="prepared source")
+        # A reserva vale para a MAQUINA: `permitir_nvdec` so conhece as fontes
+        # deste job, e com parallelJobs=2 dois processos se veem sozinhos.
+        with _reservar_nvdec() as tenho_gpu:
+            try:
+                if not (permitir_nvdec and tenho_gpu):
+                    # Medido: DUAS instancias NVDEC+NVENC saturam o motor de
+                    # video (98,7s contra 89,8s de um GPU + um CPU, e 89,1s do
+                    # sequencial). Quem nao pegou vai de CPU, sem esperar.
+                    raise RuntimeError("nvdec ocupado ou desligado")
+                _run_ffmpeg(_cmd(True), label="prepared source (nvdec)")
+            except Exception:  # noqa: BLE001 - sem NVDEC (ou concorrente): CPU
+                tmp.unlink(missing_ok=True)
+                _run_ffmpeg(_cmd(False), label="prepared source")
     except Exception as e:  # noqa: BLE001
         print(f"  [warn] fonte preparada falhou ({e}) — seguindo pelo caminho normal", flush=True)
         tmp.unlink(missing_ok=True)

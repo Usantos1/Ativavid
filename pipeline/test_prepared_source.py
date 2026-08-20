@@ -230,3 +230,49 @@ def test_nvdec_desligado_quando_prep_e_concorrente(monkeypatch, tmp_path):
                                     lambda sp: "s", "")
     assert flags == {"x.mov": True}
 
+
+
+# ------------------------------------------ reserva de NVDEC entre processos ----
+def test_um_prep_por_vez_pega_o_nvdec():
+    """Medido na 4K60 HDR do usuário, máquina livre: dois preps com NVDEC ao
+    mesmo tempo custam 98,7s — PIOR que os 89,1s de rodar um depois do outro.
+    Um na GPU e outro na CPU dá 89,8s e mantém os dois jobs andando."""
+    render._NVDEC_LOCK.unlink(missing_ok=True)
+    with render._reservar_nvdec() as primeiro:
+        assert primeiro is True
+        with render._reservar_nvdec() as segundo:
+            assert segundo is False, "o segundo não pode pegar a GPU também"
+    # solto depois do bloco
+    with render._reservar_nvdec() as depois:
+        assert depois is True
+
+
+def test_lock_de_processo_morto_e_tomado(tmp_path, monkeypatch):
+    """Um prep que morreu no meio não pode deixar a GPU inutilizada."""
+    render._NVDEC_LOCK.unlink(missing_ok=True)
+    render._NVDEC_LOCK.write_text("999999999", encoding="utf-8")   # PID inexistente
+    monkeypatch.setattr(render, "_pid_alive", lambda _p: False)
+    with render._reservar_nvdec() as peguei:
+        assert peguei is True, "lock de PID morto tem de ser tomado"
+    render._NVDEC_LOCK.unlink(missing_ok=True)
+
+
+def test_lock_de_processo_vivo_e_respeitado(monkeypatch):
+    render._NVDEC_LOCK.unlink(missing_ok=True)
+    render._NVDEC_LOCK.write_text("4242", encoding="utf-8")
+    monkeypatch.setattr(render, "_pid_alive", lambda _p: True)
+    with render._reservar_nvdec() as peguei:
+        assert peguei is False, "dono vivo tem de ser respeitado"
+    render._NVDEC_LOCK.unlink(missing_ok=True)
+
+
+def test_reserva_solta_o_lock_mesmo_com_erro():
+    """Sem isto, um prep que estoura deixaria a GPU reservada para sempre."""
+    render._NVDEC_LOCK.unlink(missing_ok=True)
+    try:
+        with render._reservar_nvdec() as peguei:
+            assert peguei is True
+            raise RuntimeError("prep estourou")
+    except RuntimeError:
+        pass
+    assert not render._NVDEC_LOCK.exists()
