@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.30
+
+- **Agora dá para arrastar a headline no preview.** Segure e mova para escolher a altura — sai do rosto, do letreiro, do que estiver atrapalhando. Onde você solta é onde o vídeo desenha
+- A headline no preview passa a aparecer **na altura real** de cada estilo. Antes ela ficava sempre no mesmo ponto, que raramente era o do vídeo final
+- Clicar continua abrindo a edição do texto — só arrastar move
+
 ## 2.29.1
 
 - **IA e Integrações agora usam a tela inteira.** Na 2.29 elas ficavam presas numa coluna estreita à esquerda, com o resto do monitor vazio. Em tela larga a IA mostra o passo a passo de um lado e o que você opera do outro; Integrações põe os três serviços lado a lado
