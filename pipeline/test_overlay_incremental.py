@@ -56,14 +56,17 @@ def test_length_change_is_not_texts_only():
 
 def test_identical_snapshots_yield_empty_plan():
     s = _snap(hook={"lines": ["a", "b"], "endSec": 4})
-    assert _incremental_ranges(s, s, FPS, FRAMES) == []
+    plano = _incremental_ranges(s, s, FPS, FRAMES)
+    assert plano.ranges == []
+    assert plano.audio_do_cache is True
 
 
 def test_hook_only_change_yields_hook_window():
     old = _snap(hook={"lines": ["a", "b"], "endSec": 4})
     new = _snap(hook={"lines": ["c", "d"], "endSec": 4})
     plan = _incremental_ranges(old, new, FPS, FRAMES)
-    assert plan == [(0, int(4 * FPS) + 12)]
+    assert plan.ranges == [(0, int(4 * FPS) + 12)]
+    assert plan.audio_do_cache is True, "só o texto mudou: SFX segue no lugar"
 
 
 def test_caption_text_fix_renders_from_change_to_end():
@@ -72,7 +75,8 @@ def test_caption_text_fix_renders_from_change_to_end():
     old = _snap(hook={"endSec": 4}, caps=caps_a)
     new = _snap(hook={"endSec": 4}, caps=caps_b)
     plan = _incremental_ranges(old, new, FPS, FRAMES)
-    assert plan == [(int(12.0 * FPS) - 30, FRAMES)]
+    assert plan.ranges == [(int(12.0 * FPS) - 30, FRAMES)]
+    assert plan.audio_do_cache is True
 
 
 def test_hook_and_caption_changes_merge():
@@ -82,7 +86,8 @@ def test_hook_and_caption_changes_merge():
                 caps=[{"text": "y", "startMs": 1000, "endMs": 1300}])
     plan = _incremental_ranges(old, new, FPS, FRAMES)
     # gancho (0-132) e legenda (0-900) se sobrepõem → um range só até o fim
-    assert plan == [(0, FRAMES)]
+    assert plan.ranges == [(0, FRAMES)]
+    assert plan.audio_do_cache is True
 
 
 def test_style_change_forces_full_render():
@@ -105,3 +110,123 @@ def test_cache_slots_are_per_project(tmp_path):
     b = _cache_dir_for(tmp_path / "Projetos" / "proj_B" / "edit")
     assert a != b
     assert a == _cache_dir_for(tmp_path / "Projetos" / "proj_A" / "edit")
+
+
+# ---------------------------------------------------------------- corte (EDL)
+# Tirar 2 cortes do FIM refazia o overlay inteiro — e o overlay e 70-83% do
+# tempo, ~22 min por video nesta maquina. Tudo antes do ponto de corte fica
+# identico, cue por cue, e ja esta renderizado.
+from app.overlay_path import _prefix_first_change_ms  # noqa: E402
+
+
+def _cue(t: float, texto: str = "oi", dur: float = 400) -> dict:
+    return {"startMs": t, "endMs": t + dur, "lines": [[{"text": texto, "fromMs": t}]]}
+
+
+def test_prefixo_igual_devolve_o_ponto_de_divergencia():
+    """Devolve o FIM da última cue igual, não o início da divergência.
+
+    É de propósito: entre uma cue e a seguinte ainda corre a animação de
+    saída, e redesenhar meio segundo a mais custa quase nada perto do risco
+    de emendar no meio de um fade.
+    """
+    velho = [_cue(0), _cue(1000), _cue(2000)]
+    novo = [_cue(0), _cue(1000), _cue(2500)]
+    assert _prefix_first_change_ms(velho, novo) == 1400
+
+
+def test_corte_no_fim_devolve_o_fim_da_ultima_cue_igual():
+    """Nada de novo depois: o ponto de mudança é onde o antigo ainda tinha
+    conteúdo e o novo não tem mais."""
+    velho = [_cue(0), _cue(1000), _cue(2000)]
+    novo = [_cue(0), _cue(1000)]
+    assert _prefix_first_change_ms(velho, novo) == 1400  # fim da cue 1000+400
+
+
+def test_mudanca_na_primeira_cue_nao_tem_o_que_reaproveitar():
+    velho = [_cue(0), _cue(1000)]
+    novo = [_cue(500), _cue(1000)]
+    assert _prefix_first_change_ms(velho, novo) is None
+
+
+def test_listas_iguais_nao_sao_mudanca():
+    velho = [_cue(0), _cue(1000)]
+    assert _prefix_first_change_ms(velho, list(velho)) is None
+
+
+def test_corte_no_fim_rerenderiza_so_a_cauda_e_emenda_o_audio():
+    velho = _snap(hook={"endSec": 4}, cues=[_cue(0), _cue(10000), _cue(20000)])
+    novo = _snap(hook={"endSec": 4}, cues=[_cue(0), _cue(10000)])
+    plan = _incremental_ranges(velho, novo, FPS, FRAMES)
+    assert plan is not None, "corte no fim tem de virar parcial"
+    (a, b), = plan.ranges
+    assert b == FRAMES
+    assert a == int(10.4 * FPS) - 30, "começa 30 quadros antes da divergência"
+    assert plan.audio_do_cache is False, "os tempos mudaram: SFX tem de vir da emenda"
+
+
+def test_corte_no_meio_reaproveita_o_comeco():
+    velho = _snap(hook={"endSec": 4}, cues=[_cue(0), _cue(5000), _cue(9000)])
+    novo = _snap(hook={"endSec": 4}, cues=[_cue(0), _cue(5000), _cue(8000)])
+    plan = _incremental_ranges(velho, novo, FPS, FRAMES)
+    (a, b), = plan.ranges
+    # 5400 = fim da última cue igual; menos os 30 quadros de folga
+    assert a == int(5.4 * FPS) - 30 and b == FRAMES
+    assert plan.audio_do_cache is False
+
+
+def test_corte_no_comeco_cai_no_render_completo():
+    velho = _snap(hook={"endSec": 4}, cues=[_cue(0), _cue(5000)])
+    novo = _snap(hook={"endSec": 4}, cues=[_cue(300), _cue(5000)])
+    assert _incremental_ranges(velho, novo, FPS, FRAMES) is None
+
+
+def test_mudanca_de_estilo_junto_com_corte_ainda_e_completo():
+    velho = _snap(hook={"endSec": 4}, cues=[_cue(0), _cue(5000)])
+    novo = _snap(hook={"endSec": 4}, cues=[_cue(0)],
+                 extra={"captions": {"style": "impacto"}})
+    assert _incremental_ranges(velho, novo, FPS, FRAMES) is None
+
+
+def test_cobertura_grande_demais_nao_compensa():
+    """Se quase tudo muda, o parcial nao vale o risco da emenda — o gate de
+    cobertura de render_overlay_incremental derruba para o completo."""
+    velho = _snap(hook={"endSec": 4}, cues=[_cue(0), _cue(500)])
+    novo = _snap(hook={"endSec": 4}, cues=[_cue(0)])
+    plan = _incremental_ranges(velho, novo, FPS, FRAMES)
+    (a, b), = plan.ranges
+    assert (b - a) / FRAMES > 0.85, "cobertura alta: o gate vai recusar"
+
+
+# ------------------------------------------------------- duracao (o bloqueio)
+# edit-data.json guarda durationSec, e cortar SEMPRE muda isso. Comparar esse
+# campo derrubava tudo para render completo antes de olhar as legendas — o
+# parcial de corte nunca dispararia.
+def _snap_dur(dur, cues):
+    s = _snap(hook={"endSec": 4}, cues=cues)
+    s["edit-data.json"]["durationSec"] = dur
+    return s
+
+
+def test_corte_muda_a_duracao_e_ainda_vira_parcial():
+    velho = _snap_dur(30.0, [_cue(0), _cue(10000), _cue(20000)])
+    novo = _snap_dur(24.0, [_cue(0), _cue(10000)])
+    plan = _incremental_ranges(velho, novo, FPS, FRAMES)
+    assert plan is not None, "durationSec não pode bloquear o parcial"
+    assert plan.ranges and plan.ranges[-1][1] == FRAMES
+    assert plan.audio_do_cache is False
+
+
+def test_duracao_diferente_sem_mudanca_grafica_nao_reusa_o_cache():
+    """O cache tem o tamanho errado — copiá-lo inteiro entregaria um overlay
+    com duração diferente da composição."""
+    cues = [_cue(0), _cue(10000)]
+    velho = _snap_dur(30.0, cues)
+    novo = _snap_dur(24.0, list(cues))
+    assert _incremental_ranges(velho, novo, FPS, FRAMES) is None
+
+
+def test_mesma_duracao_e_mesmos_graficos_reusa_inteiro():
+    s = _snap_dur(30.0, [_cue(0), _cue(10000)])
+    plano = _incremental_ranges(s, s, FPS, FRAMES)
+    assert plano.ranges == [] and plano.audio_do_cache is True

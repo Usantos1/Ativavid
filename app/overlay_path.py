@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 
 from app.ffmpeg_tools import first_record
-from typing import Any
+from typing import Any, NamedTuple
 
 REPO = Path(__file__).resolve().parent.parent
 PROTO_SRC = REPO / "assets" / "overlay-proto"
@@ -117,9 +117,56 @@ def _texts_only_first_change_ms(old: Any, new: Any) -> float | None:
     return first
 
 
+class _Plano(NamedTuple):
+    """O que renderizar de novo, e de onde vem o audio.
+
+    `audio_do_cache=True` e o caso antigo: so texto/headline mudou, os tempos
+    sao os mesmos, entao os efeitos sonoros do overlay anterior continuam
+    caindo nos mesmos lugares e o audio vem inteiro do cache.
+
+    `False` e o caso de CORTE: os tempos mudam depois do ponto de corte, entao
+    o audio tem de ser emendado junto com o video, no mesmo ponto.
+    """
+
+    ranges: list[tuple[int, int]]
+    audio_do_cache: bool
+
+
+def _prefix_first_change_ms(old: Any, new: Any) -> float | None:
+    """Instante da primeira divergencia, quando as cues tem prefixo identico.
+
+    O `_texts_only_first_change_ms` desiste assim que um TEMPO muda — e mudar
+    tempo e exatamente o que um corte faz. Mas cortar no fim (ou no meio) deixa
+    tudo ANTES do ponto de corte igual byte a byte: mesma cue, mesmo startMs,
+    mesmo texto. O overlay dessa parte ja esta renderizado.
+
+    Devolve None quando nao ha o que reaproveitar: se a primeira cue ja difere,
+    ou se as listas sao iguais (nada mudou).
+    """
+    if not isinstance(old, list) or not isinstance(new, list):
+        return None
+    k = 0
+    while k < len(old) and k < len(new) and old[k] == new[k]:
+        k += 1
+    if k == 0 or (k == len(old) and k == len(new)):
+        return None
+
+    def _ms(cue: Any, campo: str) -> float | None:
+        if isinstance(cue, dict) and isinstance(cue.get(campo), (int, float)):
+            return float(cue[campo])
+        return None
+
+    candidatos = [t for t in (
+        _ms(new[k] if k < len(new) else None, "startMs"),
+        _ms(old[k] if k < len(old) else None, "startMs"),
+        _ms(old[k - 1], "endMs"),
+    ) if t is not None]
+    return min(candidatos) if candidatos else None
+
+
 def _incremental_ranges(
     old: dict[str, Any], new: dict[str, Any], fps: float, frames: int,
-) -> list[tuple[int, int]] | None:
+) -> "_Plano | None":
     """None = render completo. [] = insumos idênticos (ainda assim rendere-
     mos completo — compose precisa do arquivo — mas via cache). Senão, lista
     de (start, end) exclusivo de frames a re-renderizar."""
@@ -131,11 +178,17 @@ def _incremental_ranges(
     def _strip_hook(ed: dict) -> dict:
         d = json.loads(json.dumps(ed))
         d.pop("hook", None)
+        # durationSec muda SEMPRE que se corta — comparar isso derrubava tudo
+        # para render completo antes mesmo de olhar as legendas, e o parcial
+        # de corte nunca disparava. A duracao e tratada a parte, abaixo.
+        d.pop("durationSec", None)
         return d
 
     if _strip_hook(old_ed) != _strip_hook(new_ed):
         return None
+    duracao_mudou = old_ed.get("durationSec") != new_ed.get("durationSec")
     ranges: list[tuple[int, int]] = []
+    audio_do_cache = True
     if (old_ed.get("hook") or {}) != (new_ed.get("hook") or {}):
         end_sec = float((new_ed.get("hook") or {}).get("endSec") or 4.0)
         old_end = float((old_ed.get("hook") or {}).get("endSec") or 4.0)
@@ -146,20 +199,41 @@ def _incremental_ranges(
         old.get("captions.json"), new.get("captions.json"))
     cues_changed = old.get("caption-cues.json") != new.get("caption-cues.json")
     if caps_first is None and (old.get("captions.json") != new.get("captions.json")):
-        return None  # mudança de timing/estrutura nas legendas
+        # Timing/estrutura mudou nas legendas — so vale se as CUES (que sao o
+        # que o overlay desenha) tiverem prefixo identico; quem decide isso e
+        # o bloco de cues logo abaixo.
+        if not cues_changed:
+            return None
+        caps_first = None
     if cues_changed:
         cues_first = _texts_only_first_change_ms(
             old.get("caption-cues.json"), new.get("caption-cues.json"))
         if cues_first is None:
-            return None
+            # Timing mudou: e o caso do CORTE. Ainda da para reaproveitar tudo
+            # que vem ANTES do ponto de corte, que continua identico — mas
+            # dai o audio tem de ser emendado junto, no mesmo ponto.
+            cues_first = _prefix_first_change_ms(
+                old.get("caption-cues.json"), new.get("caption-cues.json"))
+            if cues_first is None:
+                return None
+            audio_do_cache = False
         caps_first = cues_first if caps_first is None else min(caps_first, cues_first)
     if caps_first is not None:
         # 30 frames antes: a palavra mudada pode regrupar a linha/cue em curso
         start_f = max(0, int(caps_first / 1000.0 * fps) - 30)
         ranges.append((start_f, frames))
+    if duracao_mudou:
+        # O cartao final e posicionado a partir do FIM: se a duracao mudou,
+        # ele se move. O trecho novo sempre vai ate o fim, o que ja cobre —
+        # mas sem nenhum range nao ha o que emendar.
+        if not ranges:
+            return None
+        audio_do_cache = False
 
     if not ranges:
-        return []
+        # Duracao diferente sem nenhuma mudanca de grafico: o cache tem o
+        # tamanho errado, nao da para reusar inteiro.
+        return None if duracao_mudou else _Plano([], True)
     # merge de sobreposições
     ranges.sort()
     merged = [ranges[0]]
@@ -169,7 +243,7 @@ def _incremental_ranges(
             merged[-1] = (la, max(lb, b))
         else:
             merged.append((a, b))
-    return merged
+    return _Plano(merged, audio_do_cache)
 
 
 def _cache_dir_for(edit_dir: Path) -> Path:
@@ -254,6 +328,7 @@ def render_overlay_incremental(
     frames: int,
     fps: float,
     work: Path,
+    audio_do_cache: bool = True,
 ) -> Path:
     """Renderiza só `ranges` e emenda com o overlay anterior (-c copy).
 
@@ -264,8 +339,16 @@ def render_overlay_incremental(
     covered = sum(b - a for a, b in ranges)
     if not ranges or covered / max(1, frames) > _OV_MAX_COVERAGE:
         raise RuntimeError(f"OVERLAY_INCR_COVERAGE {covered}/{frames}")
-    if _mov_frames(cached_mov) != frames:
-        raise RuntimeError("OVERLAY_INCR_CACHE_FRAMES mismatch")
+    cache_frames = _mov_frames(cached_mov)
+    if audio_do_cache:
+        # Caso antigo (texto/headline): a duracao nao muda, e a igualdade e a
+        # guarda de que o cache e do MESMO video.
+        if cache_frames != frames:
+            raise RuntimeError("OVERLAY_INCR_CACHE_FRAMES mismatch")
+    elif cache_frames <= 0:
+        # Corte: o video encolhe ou cresce de proposito. O que precisa existir
+        # no cache e so o trecho reaproveitado — conferido em _cut_old.
+        raise RuntimeError("OVERLAY_INCR_CACHE_VAZIO")
 
     from app.win_process import resolve_remotion_argv
 
@@ -276,11 +359,23 @@ def render_overlay_incremental(
 
     def _cut_old(a: int, b: int) -> Path:
         nonlocal idx
+        if b > cache_frames:
+            raise RuntimeError(f"OVERLAY_INCR_CACHE_CURTO {b}>{cache_frames}")
         piece = work / f"_incr_old_{idx:02d}.mov"
         idx += 1
+        # No corte o audio vem junto: os efeitos depois do ponto de corte
+        # mudam de lugar, entao pegar a faixa inteira do cache erraria.
+        # Seek NO MEIO do quadro. Medido: com -ss exatamente na fronteira o
+        # trecho sai deslocado UM quadro (a contagem continua certa por causa
+        # do -frames:v, entao a guarda de frames nao pegava). Com meio quadro
+        # de folga a emenda sai bit a bit igual ao original — conferido com
+        # framemd5 nos 851 quadros de um overlay real.
+        # a == 0 nao leva seek nenhum: com o offset de meio quadro o ffmpeg
+        # pula o quadro 0 e a emenda perde um quadro no comeco.
+        seek = [] if a == 0 else ["-ss", f"{(a + 0.5) / fps:.6f}"]
         r = subprocess.run(
             [_ffmpeg(), "-y", "-hide_banner", "-loglevel", "error",
-             "-ss", f"{a / fps:.6f}", "-i", str(cached_mov),
+             *seek, "-i", str(cached_mov),
              "-map", "0:v", "-c:v", "copy", "-frames:v", str(b - a), "-an",
              str(piece)],
             capture_output=True, **_hide(),
@@ -309,14 +404,48 @@ def render_overlay_incremental(
             raise RuntimeError(f"OVERLAY_INCR_RENDER {a}-{b}: {tail}")
         return piece
 
+    def _audio_span(src: Path, a: int, b: int) -> Path:
+        """Audio de [a, b) em quadros, com corte EXATO em amostras.
+
+        Nao da para tirar o audio junto com o video: o `-frames:v` para o
+        muxer quando o video acaba e trunca o audio no pacote — medido, some
+        ~15 ms por peca. Aqui o corte e por tempo em PCM, que e sem perda.
+        """
+        nonlocal idx
+        wav = work / f"_incr_aud_{idx:02d}.wav"
+        idx += 1
+        r = subprocess.run(
+            [_ffmpeg(), "-y", "-hide_banner", "-loglevel", "error",
+             "-i", str(src), "-map", "0:a:0",
+             # apad ANTES do segundo atrim: cortar audio por copia cai no
+             # limite do pacote e a peca pode vir alguns ms curta. Forcar o
+             # comprimento exato mantem a sincronia; o que falta vira silencio.
+             "-af", (f"atrim=start={a / fps:.9f}:end={b / fps:.9f},"
+                     f"apad,atrim=end={(b - a) / fps:.9f},asetpts=N/SR/TB"),
+             "-c:a", "pcm_s16le", str(wav)],
+            capture_output=True, **_hide(),
+        )
+        if r.returncode != 0 or not wav.is_file():
+            raise RuntimeError(f"OVERLAY_INCR_AUDIO {a}-{b}")
+        return wav
+
+    audios: list[Path] = []
     for a, b in ranges:
         a, b = max(0, a), min(frames, b)
         if a > cursor:
             pieces.append(_cut_old(cursor, a))
-        pieces.append(_render_new(a, b))
+            if not audio_do_cache:
+                audios.append(_audio_span(cached_mov, cursor, a))
+        novo_piece = _render_new(a, b)
+        pieces.append(novo_piece)
+        if not audio_do_cache:
+            # O trecho novo comeca no quadro 0 do proprio arquivo.
+            audios.append(_audio_span(novo_piece, 0, b - a))
         cursor = b
     if cursor < frames:
         pieces.append(_cut_old(cursor, frames))
+        if not audio_do_cache:
+            audios.append(_audio_span(cached_mov, cursor, frames))
 
     lst = work / "_incr_concat.txt"
     lst.write_text("".join(f"file '{p.resolve()}'\n" for p in pieces), encoding="utf-8")
@@ -329,14 +458,43 @@ def render_overlay_incremental(
     if r.returncode != 0 or not spliced.is_file():
         raise RuntimeError("OVERLAY_INCR_CONCAT")
     out = work / "overlay.mov"
-    r = subprocess.run(
-        [_ffmpeg(), "-y", "-hide_banner", "-loglevel", "error",
-         "-i", str(spliced), "-i", str(cached_mov),
-         "-map", "0:v", "-map", "1:a?", "-c", "copy", str(out)],
-        capture_output=True, **_hide(),
-    )
-    if r.returncode != 0 or not out.is_file():
-        raise RuntimeError("OVERLAY_INCR_MUX")
+    if audio_do_cache:
+        r = subprocess.run(
+            [_ffmpeg(), "-y", "-hide_banner", "-loglevel", "error",
+             "-i", str(spliced), "-i", str(cached_mov),
+             "-map", "0:v", "-map", "1:a?", "-c", "copy", str(out)],
+            capture_output=True, **_hide(),
+        )
+        if r.returncode != 0 or not out.is_file():
+            raise RuntimeError("OVERLAY_INCR_MUX")
+    else:
+        # Audio montado a parte, em PCM, e so entao casado com o video.
+        alista = work / "_incr_aud_concat.txt"
+        linhas = ["file '%s'" % w.resolve() for w in audios]
+        alista.write_text(chr(10).join(linhas) + chr(10), encoding="utf-8")
+        trilha = work / "_incr_aud.wav"
+        r = subprocess.run(
+            [_ffmpeg(), "-y", "-hide_banner", "-loglevel", "error",
+             "-f", "concat", "-safe", "0", "-i", str(alista),
+             "-c:a", "pcm_s16le", str(trilha)],
+            capture_output=True, **_hide(),
+        )
+        if r.returncode != 0 or not trilha.is_file():
+            raise RuntimeError("OVERLAY_INCR_AUDIO_CONCAT")
+        r = subprocess.run(
+            [_ffmpeg(), "-y", "-hide_banner", "-loglevel", "error",
+             "-i", str(spliced), "-i", str(trilha),
+             "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "pcm_s16le",
+             str(out)],
+            capture_output=True, **_hide(),
+        )
+        if r.returncode != 0 or not out.is_file():
+            raise RuntimeError("OVERLAY_INCR_MUX_AUDIO")
+        for w in audios + [alista, trilha]:
+            try:
+                w.unlink(missing_ok=True)
+            except OSError:
+                pass
     got = _mov_frames(out)
     if got != frames:
         raise RuntimeError(f"OVERLAY_INCR_FRAMES {got}!={frames}")
@@ -594,7 +752,7 @@ def try_overlay_final(
             plan = _incremental_ranges(c_snap, snapshot, fps, frames)
             if plan is None:
                 pass  # mudou demais — render completo abaixo
-            elif plan == []:
+            elif not plan.ranges:
                 # gráficos idênticos ao último render — reusa o cache inteiro
                 try:
                     reuse = work / "overlay.mov"
@@ -608,8 +766,9 @@ def try_overlay_final(
             else:
                 try:
                     overlay = render_overlay_incremental(
-                        ov_remotion, c_mov, plan,
+                        ov_remotion, c_mov, plan.ranges,
                         frames=frames, fps=fps, work=work,
+                        audio_do_cache=plan.audio_do_cache,
                     )
                 except Exception as e:  # noqa: BLE001
                     print(f"[warn] overlay incremental: {e} — render completo", flush=True)

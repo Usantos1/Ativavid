@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.20
+
+Corrigir corte parou de refazer o vídeo inteiro.
+
+- **Antes, mexer no corte redesenhava tudo.** Tirar dois pedaços do fim custava o mesmo que reeditar o vídeo do começo — e redesenhar as legendas é 70 a 83% do tempo, mais de 20 minutos por vídeo nesta máquina
+- **Agora o que vem antes do ponto que você mexeu é reaproveitado.** Só o trecho do corte em diante é redesenhado. No teste, cortando perto do fim, foram 251 de 851 quadros — 70% menos trabalho
+- Se você mexer logo no começo, ou mudar estilo junto, ele volta a refazer tudo: aí não há o que reaproveitar mesmo
+- **Correção junto:** a emenda estava entregando o trecho reaproveitado deslocado em um quadro. A contagem ficava certa, então ninguém percebia. Conferido agora quadro a quadro, o resultado sai idêntico
+
 ## 2.19.1
 
 Correção: vídeo de câmera falhava logo no começo.
