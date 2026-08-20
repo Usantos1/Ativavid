@@ -189,8 +189,16 @@ escreve direto, e só as seguintes mesclam.
 
 **Resultado: produção 126,5 s → nosso 33,3 s = 3,8×**, a 0,85× do tempo real.
 Conferência visual dos 4 momentos (headline, flash, legendas, cartão) ok.
-O chão medido do cano+ffmpeg sozinhos é 17,2 s — sobram ~16 s de Python, e o
-próximo salto conhecido é transmitir só a faixa que muda em vez da tela cheia.
+
+**A faixa foi tentada e é NEUTRA.** Transmitir só o retângulo com gráfico
+(854×1272, metade dos bytes) + dim/flash num fluxo 272×480 escalado pelo
+ffmpeg deu 34,3 s com a ordem de camadas correta — os estágios extras de
+filtro comem a economia do cano. Registrada em `phase26_faixa_neutra.py`;
+a arquitetura que fica é a tela cheia simples (`phase25_uma_passada_completa`).
+De quebra, a primeira versão da faixa saiu ERRADA (dim por cima do texto do
+cartão) e parecia 26,6 s — mais rápida porque fazia menos: armadilha clássica.
+
+O chão medido do cano+ffmpeg sozinhos é 17,2 s: sobram ~16 s de Python.
 
 **Contra o CapCut (5,3× tempo real): estamos a 0,85×.** A distância era 38×
 no caminho de produção; agora é 6,2×.
