@@ -138,6 +138,7 @@ class Legenda:
     saida_f: float = 1e9
     dur_f: float = 0.0
     exit_abrupto: bool = False
+    exit_fade: bool = False        # headline: sai so com fade, sem subir/desfocar
 
     def saida(self, fl: float) -> tuple[float, float, float]:
         """(opacidade, deslocamento vertical, desfoque) no quadro `fl`."""
@@ -146,6 +147,8 @@ class Legenda:
         if fl <= self.saida_f:
             return 1.0, 0.0, 0.0
         p = min(1.0, (fl - self.saida_f) / max(1e-6, self.dur_f - self.saida_f))
+        if self.exit_fade:
+            return 1.0 - p, 0.0, 0.0
         return 1.0 - p, -55.0 * p, 14.0 * p
 
 
@@ -279,7 +282,8 @@ def caixa_de(legendas: list["Legenda"], folga: int = 8) -> tuple[int, int, int, 
 
 
 def desenhar(leg: "Legenda | None", fl: float, buf: np.ndarray,
-             sujo: list[int], origem: tuple[int, int] = (0, 0)) -> None:
+             sujo: list[int], origem: tuple[int, int] = (0, 0),
+             mesclar: bool = False) -> None:
     """Compoe SO na uniao das caixas visiveis. `buf` e uint8 (H, W, 4).
 
     Nada de operacao em tela inteira: a versao anterior multiplicava e
@@ -287,9 +291,11 @@ def desenhar(leg: "Legenda | None", fl: float, buf: np.ndarray,
     um oitavo da tela — 66% do tempo ia nisso. `sujo` guarda a caixa escrita
     no quadro anterior, que e a unica coisa que precisa ser apagada.
     """
-    if sujo[2] > sujo[0] and sujo[3] > sujo[1]:
-        buf[sujo[1]:sujo[3], sujo[0]:sujo[2]] = 0
-    sujo[:] = [0, 0, 0, 0]
+    if not mesclar:
+        # camada unica: limpa a caixa do quadro anterior e escreve por cima
+        if sujo[2] > sujo[0] and sujo[3] > sujo[1]:
+            buf[sujo[1]:sujo[3], sujo[0]:sujo[2]] = 0
+        sujo[:] = [0, 0, 0, 0]
     if leg is None:
         return
 
@@ -356,8 +362,24 @@ def desenhar(leg: "Legenda | None", fl: float, buf: np.ndarray,
     dy0, dy1 = max(0, dy0), min(alt_buf, dy1)
     if dy1 <= dy0:
         return
-    buf[dy0:dy1, x0:x1] = tela[corte0:corte0 + (dy1 - dy0)].astype(np.uint8)
-    sujo[:] = [x0, dy0, x1, dy1]
+    pronto = tela[corte0:corte0 + (dy1 - dy0)]
+    if mesclar:
+        # "over" desta camada sobre o que ja esta no buf (RGBA alpha direto):
+        # e o caso de headline + legenda + cartao no mesmo quadro.
+        fundo = buf[dy0:dy1, x0:x1].astype(np.float32)
+        a_f = pronto[..., 3:4] / 255.0
+        a_b = fundo[..., 3:4] / 255.0
+        a_o = a_f + a_b * (1.0 - a_f)
+        rgb = (pronto[..., :3] * a_f + fundo[..., :3] * a_b * (1.0 - a_f)) / np.maximum(a_o, 1e-6)
+        saida_px = np.concatenate([rgb, a_o * 255.0], axis=2)
+        buf[dy0:dy1, x0:x1] = np.clip(saida_px, 0, 255).astype(np.uint8)
+        sujo[0] = min(sujo[0], x0) if sujo[2] > sujo[0] else x0
+        sujo[1] = min(sujo[1], dy0) if sujo[3] > sujo[1] else dy0
+        sujo[2] = max(sujo[2], x1)
+        sujo[3] = max(sujo[3], dy1)
+    else:
+        buf[dy0:dy1, x0:x1] = pronto.astype(np.uint8)
+        sujo[:] = [x0, dy0, x1, dy1]
 
 
 def renderizar(cues: list[dict], n_frames: int, saida: Path) -> float:

@@ -124,6 +124,27 @@ No caminho entraram: `SOLO_BIG`, a entrada com subida (translate 46→0 acoplado
 à opacidade — valia para todos os estilos e estava faltando) e a saída
 blur_up/abrupt.
 
+## Quarto teste: o overlay COMPLETO (headline + cartão + flashes)
+
+`phase24_elementos.py` fecha os elementos que faltavam, com composição em
+camadas (headline + legenda + cartão no mesmo quadro, modo `mesclar`):
+
+- **headline `realce`**: duas linhas balanceadas por largura medida, blocos na
+  cor da marca. Primeira versão saiu 13% mais alta que a de produção — a caixa
+  CSS é line-height + paddings, não ascent+descent da fonte. Corrigido por
+  medida: bloco nosso 584×230 contra 581×229 da produção.
+- **cartão final**: dim 0.82 + duas linhas com subida — visualmente idêntico.
+- **flashes de corte**: facho rotacionado varrendo + clarão no corte.
+  **Aproximados, não idênticos**: forma e tempo do facho diferem do CSS
+  (mix-blend screen não existe no nosso compositor). São 28 de 851 quadros.
+
+**Tela INTEIRA, todos os elementos, 785 quadros com tinta:** mediana da razão
+nosso/Remotion **1,003** (p5 0,923 · p95 1,048). Fora de ±25%: só os quadros
+de flash e o quadro 0 já conhecido.
+
+Os tempos desta rodada saíram COM a fila do usuário rodando — ficam de fora
+do relatório; a remedição limpa está pendente.
+
 ## O que estes testes NÃO respondem
 
 - `SOLO_BIG` não foi feito (mas é o texto grande sem traço — subconjunto do
