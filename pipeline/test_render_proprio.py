@@ -142,3 +142,22 @@ def test_motores_diferentes_nunca_se_emendam():
              "edit-data.json": {}, "captions.json": [], "caption-cues.json": []}
     novo = dict(velho, _engine="proprio")
     assert _incremental_ranges(velho, novo, 30.0, 100) is None
+
+
+# --------------------------------------------------------- passada única ----
+def test_grafo_audio_espelha_o_compose():
+    """Mesmas cadeias do overlay_compose._mix_audio_graph, com índices móveis."""
+    from app.render_proprio import _grafo_audio
+
+    g = _grafo_audio(0, 1, 2, 0.12, 28.4, 26.9)
+    assert g[0].startswith("[0:a]aformat=")
+    assert g[1].startswith("[1:a]aformat=")
+    assert "volume=0.1200" in g[2] and "afade=t=out:st=26.900" in g[2]
+    assert g[-1].endswith("dropout_transition=0:normalize=0[pre]")
+
+    so_voz = _grafo_audio(0, None, None, 0.12, 10.0, 8.5)
+    assert so_voz[-1] == "[voice]anull[pre]"
+
+    sem_sfx = _grafo_audio(0, None, 1, 0.2, 10.0, 8.5)
+    assert "[1:a]volume=0.2000" in sem_sfx[1]
+    assert "amix=inputs=2" in sem_sfx[-1]

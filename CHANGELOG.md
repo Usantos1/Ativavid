@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.22
+
+Renderização em passada única: desenhar e montar viraram uma etapa só.
+
+- **A renderização caiu de ~53 s para ~33 s** no vídeo de teste. Antes, mesmo com o desenho novo (2.21), as legendas viravam um arquivo intermediário de 150 MB que era lido de volta logo em seguida para juntar com o vídeo; agora o desenho vai direto para a montagem, quadro a quadro, sem arquivo no meio
+- **Nada muda no resultado**: mesma mistura de voz + efeitos + trilha, mesma normalização de volume em 2 passadas, mesmas cores. Conferido contra o caminho anterior (diferença no nível de ruído de compressão) e aprovado pela validação oficial do app
+- Se a passada única falhar por qualquer motivo, ele volta sozinho para o caminho em duas etapas — e, se este falhar, para o desenho antigo. Três camadas de segurança
+- No seu último vídeo pesado (2 fontes), a fase de renderização já tinha caído de ~22 min para 1,5 min com a 2.21; com a 2.22 ela fica ainda ~40% menor
+
 ## 2.21.1
 
 O "tempo restante" parou de mentir.

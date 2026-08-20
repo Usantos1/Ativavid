@@ -947,3 +947,201 @@ def render_overlay_proprio(public: Path, edit_data: dict[str, Any], *,
     r = Renderizador(public, edit_data, frames=frames, fps=fps,
                      width=width, height=height)
     return r.render(out)
+
+
+# ------------------------------------------------------- passada única ------
+def _grafo_audio(idx_voz: int, idx_sfx: int | None, idx_trilha: int | None,
+                 trilha_volume: float, duration_sec: float,
+                 fade_out_at: float) -> list[str]:
+    """O grafo de áudio do compose (overlay_compose._mix_audio_graph), com os
+    índices de entrada parametrizados — aqui o vídeo vem por cano e os índices
+    dos arquivos de áudio mudam de posição."""
+    a_fmt = "aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo"
+    a_len = f"{a_fmt},atrim=0:{duration_sec:.6f},asetpts=PTS-STARTPTS"
+    parts = [f"[{idx_voz}:a]{a_len}[voice]"]
+    mix_in = ["[voice]"]
+    if idx_sfx is not None:
+        parts.append(f"[{idx_sfx}:a]{a_len}[sfx]")
+        mix_in.append("[sfx]")
+    if idx_trilha is not None:
+        parts.append(
+            f"[{idx_trilha}:a]volume={trilha_volume:.4f},"
+            f"afade=t=in:st=0:d=0.4,afade=t=out:st={fade_out_at:.3f}:d=1.5,"
+            f"{a_len}[music]")
+        mix_in.append("[music]")
+    if len(mix_in) == 1:
+        parts.append("[voice]anull[pre]")
+    else:
+        parts.append(
+            f"{''.join(mix_in)}amix=inputs={len(mix_in)}:duration=first:"
+            f"dropout_transition=0:normalize=0[pre]")
+    return parts
+
+
+def render_final_uma_passada(
+    public: Path, edit_data: dict[str, Any], *,
+    cut: Path, dest: Path, frames: int, fps: float,
+    width: int = 1080, height: int = 1920,
+    trilha: Path | None = None, trilha_volume: float = 0.12,
+) -> dict[str, Any]:
+    """Desenha, compõe e encoda numa passada — sem overlay.mov intermediário.
+
+    Voz + SFX + trilha e o loudnorm em 2 passadas são os MESMOS do compose
+    (funções importadas de overlay_compose); a diferença é que o vídeo do
+    overlay chega por cano, quadro a quadro, em vez de virar um arquivo de
+    150 MB que seria lido de volta logo em seguida.
+
+    Levanta em qualquer problema; o caller cai no caminho de duas etapas.
+    """
+    from app.overlay_compose import (
+        LOUDNORM_I,
+        LOUDNORM_LRA,
+        LOUDNORM_TP,
+        _loudnorm_filter,
+        count_frames,
+        measure_loudnorm,
+    )
+    from app.render_engine import encoder_args
+
+    t0 = time.perf_counter()
+    r = Renderizador(public, edit_data, frames=frames, fps=fps,
+                     width=width, height=height)
+    sfx_wav = dest.with_name(dest.stem + "._sfx.wav")
+    tem_sfx = r._gravar_sfx(sfx_wav)
+    music = bool(trilha and trilha.exists())
+    duration_sec = frames / fps
+    fade_out_at = max(0.0, duration_sec - 1.5)
+
+    cut_frames = count_frames(cut)
+    if cut_frames and cut_frames < frames:
+        cut_v = (f"[0:v]tpad=stop_mode=clone:stop={frames - cut_frames},"
+                 "setpts=PTS-STARTPTS[cutv]")
+    else:
+        cut_v = f"[0:v]trim=end_frame={frames},setpts=PTS-STARTPTS[cutv]"
+
+    inputs = ["-i", str(cut)]
+    idx_sfx = idx_trilha = None
+    prox = 1
+    if tem_sfx:
+        idx_sfx = prox
+        inputs += ["-i", str(sfx_wav)]
+        prox += 1
+    if music:
+        idx_trilha = prox
+        inputs += ["-i", str(trilha)]
+        prox += 1
+    idx_pipe = prox
+    inputs += ["-f", "rawvideo", "-pix_fmt", "rgba",
+               "-s", f"{width}x{height}", "-r", f"{fps:g}", "-i", "-"]
+
+    vid = (
+        f"{cut_v};[{idx_pipe}:v]setpts=PTS-STARTPTS[ov];"
+        "[cutv][ov]overlay=eof_action=pass:format=auto,"
+        "format=yuv420p,"
+        "scale=in_range=full:out_range=limited,"
+        "setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv[vid]"
+    )
+    fc = vid + ";" + ";".join(_grafo_audio(
+        0, idx_sfx, idx_trilha, trilha_volume, duration_sec, fade_out_at))
+
+    prenorm = dest.with_name(dest.stem + "._prenorm.mp4")
+    primary, flags = encoder_args()
+
+    def _passada(enc: str, extra: list[str]) -> bool:
+        ff = subprocess.Popen(
+            ["ffmpeg", "-y", "-hide_banner", "-nostats", "-loglevel", "error",
+             *inputs, "-filter_complex", fc,
+             "-map", "[vid]", "-map", "[pre]",
+             "-c:v", enc, *extra,
+             "-colorspace", "bt709", "-color_primaries", "bt709",
+             "-color_trc", "bt709", "-color_range", "tv",
+             "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
+             "-frames:v", str(frames), "-t", f"{duration_sec:.6f}",
+             "-movflags", "+faststart", str(prenorm)],
+            stdin=subprocess.PIPE, **NOWIN)
+        buf = np.zeros((r.h, r.w, 4), dtype=np.uint8)
+        sujo = [0, 0, 0, 0]
+        ass_ant, bytes_ant = None, None
+        try:
+            for f in range(frames):
+                ass = r._assinatura(f)
+                if ass == ass_ant and bytes_ant is not None:
+                    ff.stdin.write(bytes_ant)
+                    continue
+                ass_ant = ass
+                if sujo[2] > sujo[0] and sujo[3] > sujo[1]:
+                    buf[sujo[1]:sujo[3], sujo[0]:sujo[2]] = 0
+                sujo[:] = [0, 0, 0, 0]
+                primeira = True
+                for leg in r.camadas:
+                    if leg.inicio_f <= f <= leg.fim_f:
+                        if leg.dim:
+                            r._aplicar_dim(buf, sujo, leg.dim,
+                                           f - leg.inicio_f, leg.dim_fade)
+                            primeira = False
+                        r.desenhar(leg, f - leg.inicio_f, buf, sujo,
+                                   mesclar=not primeira)
+                        primeira = False
+                for at in r.flashes:
+                    a = r._flash_quadro(at, f)
+                    if a is not None:
+                        r._aplicar_flash(buf, sujo, a)
+                bytes_ant = buf.tobytes()
+                ff.stdin.write(bytes_ant)
+        except OSError:
+            pass          # cano fechou: o returncode conta o que houve
+        finally:
+            try:
+                ff.stdin.close()
+            except OSError:
+                pass
+            ff.wait()
+        return ff.returncode == 0 and prenorm.exists()
+
+    ok = _passada(primary, list(flags))
+    if not ok and primary != "libx264":
+        print(f"UMA_PASSADA_ENCODER_FALLBACK {primary}->libx264", flush=True)
+        ok = _passada("libx264", ["-preset", "veryfast", "-crf", "19"])
+    if not ok:
+        sfx_wav.unlink(missing_ok=True)
+        raise RuntimeError("UMA_PASSADA_PRENORM")
+    render_sec = time.perf_counter() - t0
+
+    t1 = time.perf_counter()
+    measured = measure_loudnorm(prenorm)
+    tp_target = LOUDNORM_TP if measured else -1.5
+    if measured:
+        print(f"LOUDNORM_PASS1 I={measured['input_i']} TP={measured['input_tp']} "
+              f"LRA={measured['input_lra']} offset={measured['target_offset']}",
+              flush=True)
+    else:
+        print("LOUDNORM_PASS1_FAILED fallback=1pass TP=-1.5", flush=True)
+    ln = _loudnorm_filter(measured, TP=tp_target)
+    print(f"LOUDNORM_PASS2 target I={LOUDNORM_I} TP={tp_target} LRA={LOUDNORM_LRA}",
+          flush=True)
+    p2 = subprocess.run(
+        ["ffmpeg", "-y", "-hide_banner", "-nostats", "-i", str(prenorm),
+         "-c:v", "copy", "-af", ln,
+         "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
+         "-frames:v", str(frames), "-t", f"{duration_sec:.6f}",
+         "-movflags", "+faststart", str(dest)],
+        capture_output=True, text=True, **NOWIN)
+    prenorm.unlink(missing_ok=True)
+    sfx_wav.unlink(missing_ok=True)
+    if p2.returncode != 0 or not dest.exists():
+        raise RuntimeError(f"UMA_PASSADA_LOUDNORM {(p2.stderr or '')[-300:]}")
+    compose_sec = time.perf_counter() - t1
+    print(f"UMA_PASSADA ok {frames}f render={render_sec:.1f}s "
+          f"norm={compose_sec:.1f}s sfx={tem_sfx} trilha={music}", flush=True)
+    return {
+        "sfxFromOverlay": tem_sfx,
+        "soundtrack": music,
+        "out": str(dest),
+        "expectedFrames": frames,
+        "cutFrames": cut_frames,
+        "canonicalSec": duration_sec,
+        "renderSec": round(render_sec, 3),
+        "normSec": round(compose_sec, 3),
+        "loudnorm": {"pass1": measured, "targetI": LOUDNORM_I,
+                     "targetTP": tp_target, "targetLRA": LOUDNORM_LRA},
+    }

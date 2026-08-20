@@ -761,6 +761,36 @@ def try_overlay_final(
             motivo_proprio = f"modulo indisponivel: {e}"
         snapshot["_engine"] = "proprio" if motivo_proprio is None else "remotion"
         if motivo_proprio is None:
+            # Passada única: desenha + compõe + encoda sem o overlay.mov
+            # intermediário — mesma cadeia de vídeo, mesmo áudio e mesmo
+            # loudnorm do compose. Se falhar, cai nas duas etapas.
+            if (os.environ.get("ATIVAVID_PROPRIO_UMA_PASSADA") or "").strip() != "0":
+                try:
+                    from app.render_proprio import render_final_uma_passada
+
+                    st = edit_data.get("soundtrack") or {}
+                    trilha_up = public / str(st.get("file") or "trilha.mp3")
+                    if not (st.get("enabled") and trilha_up.exists()):
+                        trilha_up = None
+                    mix = render_final_uma_passada(
+                        public, edit_data, cut=cut, dest=dest,
+                        frames=frames, fps=fps, width=width, height=height,
+                        trilha=trilha_up,
+                        trilha_volume=float(st.get("volume") or 0.12))
+                    result = {
+                        "overlay": None,
+                        "alpha": {},   # o canário valida o FINAL; alpha é do intermediário
+                        "mix": mix,
+                        "remotionSec": float(mix.get("renderSec") or 0),
+                        "composeSec": float(mix.get("normSec") or 0),
+                        "timeline": tl,
+                        "tempPeakBytes": 0,
+                        "overlayFrames": frames,
+                        "cutFrames": int(mix.get("cutFrames") or 0),
+                    }
+                    return result
+                except Exception as e:  # noqa: BLE001
+                    print(f"UMA_PASSADA_FALLBACK erro: {e}", flush=True)
             try:
                 overlay = render_overlay_proprio(
                     public, edit_data, frames=frames, fps=fps,
