@@ -12,6 +12,11 @@ const state = {
   pendingDuration: null,
   pendingRecommended: null,
   uploads: {},
+  brandActive: null,
+  projFilter: "todos",
+  projBusca: "",
+  libraryRoot: "",
+  presetBrandId: "padrao",
 };
 
 const STATUS_LABEL = {
@@ -29,13 +34,18 @@ const VIEW_COPY = {
   import: ["Início", "Escolha vídeos ou uma pasta. Cada subpasta vira um vídeo."],
   fila: ["Fila", "Acompanhe o processamento dos seus vídeos."],
   done: ["Concluídos", "Vídeos prontos para abrir, ajustar ou exportar."],
+  projetos: ["Projetos", "Todo trabalho que ainda pode ser reaberto, revisado ou refeito."],
   estilo: ["Estilos", "Como os vídeos da sua marca normalmente devem parecer."],
-  keys: ["Chaves & IA", "Passo a passo da sessão + links para Groq, ElevenLabs e Pexels."],
+  marca: ["Marca", "Qual marca está ativa e o que define a identidade dela."],
+  biblioteca: ["Biblioteca", "Arquivos reutilizáveis que a IA pode usar nos vídeos."],
+  presets: ["Presets", "Combinações salvas de estilo e formato, prontas para reusar."],
+  ia: ["IA", "A inteligência que corta, escreve e legenda — sessão do navegador e modelo."],
+  integracoes: ["Integrações", "Serviços externos que o pipeline chama: transcrição, voz e b-roll."],
   licenca: ["Licença", "Status da assinatura e contas."],
-  sistema: ["Sistema", "Máquina, pastas, atualizações e diagnóstico."],
-  // aliases antigos → redirecionados em setView
-  ia: ["Chaves & IA", "Sessão do navegador e chaves de API."],
-  doutor: ["Sistema", "Desempenho e pastas."],
+  sistema: ["Configurações", "Máquina, pastas, atualizações e diagnóstico."],
+  // aliases antigos → redirecionados em setView (links salvos continuam abrindo)
+  keys: ["IA", "Sessão do navegador e chaves de API."],
+  doutor: ["Configurações", "Desempenho e pastas."],
 };
 
 function toast(msg, ms) {
@@ -176,7 +186,9 @@ function goHome() {
 }
 
 function setView(name) {
-  if (name === "ia") name = "keys";
+  // `keys` era o nome antigo da tela de IA — links e atalhos salvos ainda
+  // chegam por ele, então continua valendo como apelido.
+  if (name === "keys") name = "ia";
   if (name === "doutor") name = "sistema";
   state.view = name;
   $$(".sb-item[data-view]").forEach((b) => b.classList.toggle("active", b.dataset.view === name));
@@ -185,11 +197,15 @@ function setView(name) {
   $("#wsTitle").textContent = title;
   $("#wsSub").textContent = sub;
   document.body.classList.toggle("view-estilo-on", name === "estilo");
-  if (name === "keys") loadLlm().catch(() => {});
+  if (name === "ia") loadLlm().catch(() => {});
+  if (name === "integracoes") refreshHealth().catch(() => {});
   if (name === "licenca") loadLicenca().catch((e) => toast(e.message));
   if (name === "sistema") {
     loadSistema().catch((e) => toast(e.message));
   }
+  if (name === "marca") loadBrandsUi().catch(() => {});
+  if (name === "biblioteca") loadLibraryUi().catch(() => {});
+  if (name === "presets") loadPresetsUi().catch(() => {});
   if (name === "estilo") {
     loadBrandsUi().catch(() => {});
     const fr = $("#estiloFrame");
@@ -227,18 +243,43 @@ function jobRecency(j) {
   return Number.isFinite(t) ? t : 0;
 }
 
+/** Contador do menu. `data-zero` some com o ponto no sidebar recolhido. */
+function setCount(sel, n) {
+  const el = $(sel);
+  if (!el) return;
+  el.textContent = String(n);
+  el.dataset.zero = n ? "0" : "1";
+}
+
+function byRecency(a, b) {
+  return jobRecency(b) - jobRecency(a) || String(b.id).localeCompare(String(a.id));
+}
+
 function filterJobs(kind) {
   if (kind === "fila") {
     return state.jobs.filter(jobInFila);
   }
   if (kind === "done") {
-    return state.jobs
-      .filter((j) => j.status === "done")
-      .sort((a, b) => jobRecency(b) - jobRecency(a) || String(b.id).localeCompare(String(a.id)));
+    return state.jobs.filter((j) => j.status === "done").sort(byRecency);
   }
-  return [...state.jobs]
-    .sort((a, b) => jobRecency(b) - jobRecency(a) || String(b.id).localeCompare(String(a.id)))
-    .slice(0, 8);
+  if (kind === "projetos") {
+    // Projetos é o acervo: TODO trabalho que ainda existe em disco, em
+    // qualquer estado. A Fila e os Concluídos são recortes disto.
+    const f = state.projFilter || "todos";
+    const busca = (state.projBusca || "").trim().toLowerCase();
+    return state.jobs
+      .filter((j) => {
+        if (f === "ativos") return jobInFila(j) && j.status !== "error";
+        if (f === "prontos") return j.status === "done";
+        if (f === "parados") return j.status === "error" || j.status === "needs_review";
+        return true;
+      })
+      .filter((j) => !busca
+        || String(j.name || "").toLowerCase().includes(busca)
+        || jobFolderName(j).toLowerCase().includes(busca))
+      .sort(byRecency);
+  }
+  return [...state.jobs].sort(byRecency).slice(0, 8);
 }
 
 function jobFolderName(j) {
@@ -682,8 +723,8 @@ function patchCard(el, j, opts) {
 function renderJobs() {
   const fila = filterJobs("fila");
   const done = filterJobs("done");
-  $("#countFila").textContent = String(fila.length);
-  $("#countDone").textContent = String(done.length);
+  setCount("#countFila", fila.length);
+  setCount("#countDone", done.length);
   const verFila = $("#btnVerFila");
   if (verFila) {
     const busy = state.jobs.filter((j) =>
@@ -696,9 +737,10 @@ function renderJobs() {
     a[j.status] = (a[j.status] || 0) + 1;
     return a;
   }, {});
+  setCount("#countProjetos", state.jobs.length);
   const meta = $("#queueMeta");
   if (meta) {
-    const workView = ["import", "fila", "done"].includes(state.view);
+    const workView = ["import", "fila", "done", "projetos"].includes(state.view);
     meta.hidden = !workView;
     if (state.jobs.length) {
       meta.innerHTML = Object.entries(counts).map(([k, v]) =>
@@ -720,6 +762,35 @@ function renderJobs() {
   renderInto("jobListRecent", null, filterJobs("recent"), { compact: true, view: "recent" });
   renderInto("jobListFila", "emptyFila", fila, { view: "fila" });
   renderInto("jobListDone", "emptyDone", done, { view: "done" });
+  if (state.view === "projetos") {
+    renderInto("jobListProjetos", "emptyProjetos", filterJobs("projetos"), { view: "projetos" });
+  }
+}
+
+function wireProjetos() {
+  const seg = $("#projFilter");
+  if (seg && !seg.dataset.wired) {
+    seg.dataset.wired = "1";
+    seg.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-proj]");
+      if (!b) return;
+      state.projFilter = b.dataset.proj;
+      seg.querySelectorAll("[data-proj]").forEach((x) => {
+        const on = x === b;
+        x.classList.toggle("on", on);
+        x.setAttribute("aria-selected", on ? "true" : "false");
+      });
+      renderJobs();
+    });
+  }
+  const busca = $("#projSearch");
+  if (busca && !busca.dataset.wired) {
+    busca.dataset.wired = "1";
+    busca.addEventListener("input", () => {
+      state.projBusca = busca.value;
+      renderJobs();
+    });
+  }
 }
 
 // Faixa "Agora": o que está rodando, com a FASE real (o message do job já é
@@ -936,7 +1007,10 @@ function renderLicense(lic) {
   }
   state.license = lic;
   if (state.auth) applyAccountChrome(state.auth);
-  else syncLicenseChrome();
+  else {
+    renderWorkspaceCard();
+    syncLicenseChrome();
+  }
   const soft = $("#updateSoftHint");
   if (soft) {
     if (upd.updateAvailable && !upd.force) {
@@ -2101,27 +2175,144 @@ function adminOut(x) {
   el.textContent = typeof x === "string" ? x : JSON.stringify(x, null, 2);
 }
 
+/** Plano em uma linha curta — o rodapé é estreito e não pode cortar texto. */
+function workspacePlanMeta(lic) {
+  const L = lic || state.license || {};
+  const mode = L.mode || "open";
+  if (mode === "update_required" || L.update?.force) {
+    return { text: "Atualização pendente", tone: "bad" };
+  }
+  if (mode === "account" || mode === "licensed") {
+    return { text: `${L.planLabel || "Plano Pro"} · Ativo`, tone: "ok" };
+  }
+  if (mode === "trial") {
+    const d = L.trialDaysLeft;
+    return { text: `Trial · ${d ?? "?"} ${d === 1 ? "dia" : "dias"}`, tone: "warn" };
+  }
+  if (mode === "blocked") return { text: "Licença bloqueada", tone: "bad" };
+  if (mode === "error") return { text: "Licença indisponível", tone: "bad" };
+  if (mode === "open" || !L.configured) return { text: "Modo aberto", tone: "neutral" };
+  return { text: "Sem plano ativo", tone: "bad" };
+}
+
+/** Iniciais do workspace: 2 letras, das primeiras palavras do nome. */
+function initialsFromName(nome) {
+  const partes = String(nome || "").trim().split(/[\s._-]+/).filter(Boolean);
+  if (partes.length >= 2) return (partes[0][0] + partes[1][0]).toUpperCase();
+  return (String(nome || "AV").slice(0, 2) || "AV").toUpperCase();
+}
+
+/**
+ * Rodapé do sidebar. Mostra o WORKSPACE (a marca ativa), não a pessoa
+ * logada — o ATIVAVID é um app de produção, e quem assina o vídeo é a
+ * marca. A conta continua a um clique, dentro do menu.
+ */
+function renderWorkspaceCard() {
+  const btn = $("#btnWorkspace");
+  if (!btn) return;
+  const marca = state.brandActive || {};
+  const nome = marca.name || "Meu workspace";
+  const plano = workspacePlanMeta(state.license);
+  const nameEl = $("#wsName");
+  const planEl = $("#wsPlan");
+  const txt = $("#wsAvatarTxt");
+  const img = $("#wsAvatarImg");
+  if (nameEl) nameEl.textContent = nome;
+  if (planEl) planEl.textContent = plano.text;
+  if (txt) txt.textContent = initialsFromName(nome);
+  // Logo da marca quando existir; senão, iniciais na cor de destaque dela.
+  if (img) {
+    const logo = marca.logoUrl || "";
+    img.classList.toggle("hidden", !logo);
+    if (logo && img.getAttribute("src") !== logo) img.src = logo;
+  }
+  const avatar = $("#wsAvatar");
+  if (avatar) avatar.style.setProperty("--ws-tint", marca.accent || "");
+  btn.dataset.tone = plano.tone;
+  btn.title = `${nome} · ${plano.text}`;
+  const head = $("#wsMenuHead");
+  if (head) head.textContent = nome;
+  const logged = !!(state.auth && state.auth.loggedIn);
+  const sair = $("#wsMenuSair");
+  if (sair) sair.hidden = !logged;
+  const contaLab = $("#wsMenuContaLabel");
+  if (contaLab) {
+    contaLab.textContent = logged
+      ? (state.auth.email || "Minha conta")
+      : "Entrar na conta";
+  }
+}
+
+function closeWorkspaceMenu() {
+  const menu = $("#wsMenu");
+  const btn = $("#btnWorkspace");
+  if (menu) menu.classList.add("hidden");
+  if (btn) btn.setAttribute("aria-expanded", "false");
+}
+
+function wireWorkspaceMenu() {
+  const btn = $("#btnWorkspace");
+  const menu = $("#wsMenu");
+  if (!btn || !menu || btn.dataset.wired) return;
+  btn.dataset.wired = "1";
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    // Recolhido, o card vira só o avatar — abrir o menu ali é a única
+    // forma de chegar em conta/licença sem expandir o sidebar.
+    const abrir = menu.classList.contains("hidden");
+    menu.classList.toggle("hidden", !abrir);
+    btn.setAttribute("aria-expanded", abrir ? "true" : "false");
+  });
+  menu.addEventListener("click", async (e) => {
+    const item = e.target.closest("[data-ws]");
+    if (!item) return;
+    e.stopPropagation();
+    closeWorkspaceMenu();
+    const acao = item.dataset.ws;
+    const logado = !!(state.auth && state.auth.loggedIn);
+    if (acao === "conta") {
+      if (logado) openLicAccountDialog(state.auth.email || "");
+      else openLoginDialog();
+      return;
+    }
+    if (acao === "empresa") return setView("marca");
+    if (acao === "licenca") return setView("licenca");
+    if (acao === "updates") {
+      try {
+        const res = await api("/api/update/check");
+        if (res.force || res.updateAvailable) {
+          openUpdateDialog({ update: res, mode: res.force ? "update_required" : "open", message: res.message });
+        } else {
+          toast(res.message || "Você está no build atual");
+        }
+      } catch (err) {
+        toast(err.message || "Não foi possível verificar");
+      }
+      return;
+    }
+    if (acao === "sair") {
+      try {
+        await api("/api/auth/logout", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+        state.auth = { loggedIn: false, isAdmin: false, email: null };
+        applyAccountChrome(state.auth);
+        toast("Saiu");
+      } catch (err) {
+        toast(err.message || "Falha ao sair");
+      }
+    }
+  });
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest("#wsMenu") && !e.target.closest("#btnWorkspace")) closeWorkspaceMenu();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeWorkspaceMenu();
+  });
+}
+
 function applyAccountChrome(st) {
   const logged = !!st?.loggedIn;
   const email = st?.email || "";
-  const name = logged ? displayNameFromEmail(email) : "Entrar";
-  const licMeta = licenseSidebarMeta(state.license);
-  const btn = $("#btnSbAccount");
-  const avatar = $("#sbAccAvatar");
-  const nameEl = $("#sbAccName");
-  const metaEl = $("#sbAccMeta");
-  if (nameEl) nameEl.textContent = logged ? name : "Entrar";
-  if (metaEl) {
-    metaEl.textContent = logged
-      ? (st.isAdmin ? `Admin · ${licMeta.text}` : licMeta.text)
-      : "Toque para entrar";
-  }
-  if (avatar) avatar.textContent = logged ? initialsFromEmail(email) : "?";
-  if (btn) {
-    btn.dataset.logged = logged ? "1" : "0";
-    btn.dataset.tone = logged ? licMeta.tone : "neutral";
-    btn.title = logged ? `${email} · ${licMeta.text}` : "Entrar na conta";
-  }
+  renderWorkspaceCard();
   const openBtn = $("#btnOpenLogin");
   const logoutBtn = $("#btnAuthLogout");
   if (openBtn) openBtn.hidden = logged;
@@ -2615,14 +2806,7 @@ function wireForms() {
       else openLoginDialog();
     };
   });
-  const btnSbAccount = $("#btnSbAccount");
-  if (btnSbAccount) {
-    btnSbAccount.onclick = () => {
-      const st = state.auth || {};
-      if (st.loggedIn) setView("licenca");
-      else openLoginDialog();
-    };
-  }
+  wireWorkspaceMenu();
   ["btnLoginClose"].forEach((id) => {
     const el = $(`#${id}`);
     if (el) el.onclick = () => closeLoginDialog();
@@ -3294,14 +3478,33 @@ async function loadBrandsUi() {
     `<option value="${escapeHtml(b.id)}" ${b.active ? "selected" : ""}>${escapeHtml(b.name || b.id)}</option>`
   ).join("") || `<option value="padrao">Padrão</option>`;
   const active = brands.find((b) => b.active) || brands[0];
+  state.brandActive = active || null;
+  renderWorkspaceCard();
   if ($("#exportPresetSelect") && active) {
     $("#exportPresetSelect").value = active.exportPreset || "reels";
   }
+  const fmtNames = { reels: "Reels/Shorts", youtube: "YouTube 16:9", square: "Quadrado 1:1", feed: "Feed 4:5" };
+  const formato = fmtNames[active && active.exportPreset] || "Reels/Shorts";
   if ($("#brandHint")) {
-    const fmtNames = { reels: "Reels/Shorts", youtube: "YouTube 16:9", square: "Quadrado 1:1", feed: "Feed 4:5" };
-    $("#brandHint").textContent = active
-      ? `Os vídeos desta marca saem em ${fmtNames[active.exportPreset] || "Reels/Shorts"}. O estilo edita-se abaixo.`
+    $("#brandHint").textContent = active ? `Sai em ${formato}.` : "";
+  }
+  if ($("#brandHintMarca")) {
+    $("#brandHintMarca").textContent = active
+      ? `Os vídeos desta marca saem em ${formato}. O estilo edita-se em Estilos.`
       : "";
+  }
+  if ($("#estiloBrandName")) $("#estiloBrandName").textContent = (active && active.name) || "Padrão";
+  const sw = $("#identAccent");
+  if (sw) sw.style.background = (active && active.accent) || "var(--accent)";
+  if ($("#identAccentVal")) $("#identAccentVal").textContent = (active && active.accent) || "padrão";
+  if ($("#identEndCard")) {
+    // endCardCopy vem como {line1, line2} — mostra a primeira linha.
+    const copy = (active && active.endCardCopy) || null;
+    let txt = "—";
+    if (typeof copy === "string") txt = copy;
+    else if (Array.isArray(copy)) txt = copy[0] || "—";
+    else if (copy && typeof copy === "object") txt = copy.line1 || copy.line2 || "—";
+    $("#identEndCard").textContent = txt;
   }
   const fr = $("#estiloFrame");
   if (fr && fr.dataset.loaded === "1" && document.body.classList.contains("view-estilo-on")) {
@@ -3321,6 +3524,164 @@ async function loadBrandsUi() {
   } catch {
     if ($("#libraryHint")) $("#libraryHint").textContent = "";
   }
+}
+
+/**
+ * Biblioteca. O acervo já existia (/api/library alimenta o b-roll da IA),
+ * mas só aparecia como um botão "abrir pasta" perdido dentro de Estilos —
+ * aqui ele ganha tela própria. Nada de backend novo.
+ */
+async function loadLibraryUi() {
+  const grid = $("#libraryGrid");
+  if (!grid) return;
+  let lib = { items: [], root: "" };
+  try {
+    lib = await api("/api/library");
+  } catch {
+    $("#libraryHint").textContent = "Não foi possível ler a biblioteca.";
+    return;
+  }
+  state.libraryRoot = lib.root || "";
+  const itens = lib.items || [];
+  const empty = $("#libraryEmpty");
+  if (empty) empty.classList.toggle("hidden", itens.length > 0);
+  const hint = $("#libraryHint");
+  if (hint) {
+    const imgs = itens.filter((i) => i.kind === "image").length;
+    const clips = itens.length - imgs;
+    hint.textContent = itens.length
+      ? `${imgs} imagem(ns)${clips ? ` e ${clips} clipe(s)` : ""} · a IA usa como b-roll`
+      : "Coloque fotos dos seus produtos aqui para a IA usar como b-roll.";
+  }
+  grid.innerHTML = itens.map((it) => {
+    const src = `/api/library/file?rel=${encodeURIComponent(it.rel)}`;
+    const kb = it.bytes > 1048576
+      ? `${(it.bytes / 1048576).toFixed(1)} MB`
+      : `${Math.max(1, Math.round(it.bytes / 1024))} KB`;
+    const midia = it.kind === "clip"
+      ? `<video class="lib-thumb" src="${src}" muted preload="metadata"></video>`
+      : `<img class="lib-thumb" src="${src}" alt="" loading="lazy">`;
+    return `<figure class="lib-item" title="${escapeHtml(it.name)}">
+      ${midia}
+      <figcaption><span class="lib-name">${escapeHtml(it.name)}</span><span class="lib-size">${kb}</span></figcaption>
+    </figure>`;
+  }).join("");
+}
+
+/**
+ * Presets. O backend (/api/brand-presets) já fazia criar/renomear/duplicar/
+ * apagar/definir padrão — só era alcançável pelo seletor da tela de importar.
+ */
+async function loadPresetsUi() {
+  const lista = $("#presetList");
+  if (!lista) return;
+  let pack = { presets: [] };
+  try {
+    pack = await api("/api/brand-presets");
+  } catch {
+    $("#presetsHint").textContent = "Não foi possível ler os presets.";
+    return;
+  }
+  const presets = pack.presets || [];
+  const activeId = pack.activeId || (pack.active && pack.active.id) || "";
+  state.presetBrandId = (state.brandActive && state.brandActive.id) || "padrao";
+  const empty = $("#presetsEmpty");
+  if (empty) empty.classList.toggle("hidden", presets.length > 0);
+  const hint = $("#presetsHint");
+  if (hint) {
+    const marca = (state.brandActive && state.brandActive.name) || "Padrão";
+    hint.textContent = presets.length
+      ? `${presets.length} preset(s) da marca ${marca}. O marcado como padrão é o que a importação usa.`
+      : `Nenhum preset salvo para a marca ${marca}. Crie um a partir de um estilo aberto.`;
+  }
+  lista.innerHTML = presets.map((p) => {
+    const on = p.id === activeId;
+    const tipo = p.contentType ? escapeHtml(p.contentType) : "—";
+    return `<article class="preset-row${on ? " on" : ""}" data-preset="${escapeHtml(p.id)}">
+      <div class="preset-main">
+        <strong class="preset-name">${escapeHtml(p.name || p.id)}</strong>
+        <span class="preset-meta">${tipo}${on ? " · padrão da marca" : ""}</span>
+      </div>
+      <div class="preset-acts">
+        ${on ? "" : `<button type="button" class="ghost-btn ghost-btn--sm" data-preset-act="default">Usar como padrão</button>`}
+        <button type="button" class="ghost-btn ghost-btn--sm" data-preset-act="duplicate">Duplicar</button>
+        <button type="button" class="ghost-btn ghost-btn--sm" data-preset-act="rename">Renomear</button>
+        <button type="button" class="ghost-btn ghost-btn--sm preset-del" data-preset-act="delete">Apagar</button>
+      </div>
+    </article>`;
+  }).join("");
+}
+
+async function presetAction(action, body) {
+  const res = await api("/api/brand-presets", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ brandId: state.presetBrandId || "padrao", action, ...body }),
+  });
+  await loadPresetsUi();
+  await loadImportPresets().catch(() => {});
+  return res;
+}
+
+function wirePresets() {
+  const lista = $("#presetList");
+  if (lista && !lista.dataset.wired) {
+    lista.dataset.wired = "1";
+    lista.addEventListener("click", async (e) => {
+      const btn = e.target.closest("[data-preset-act]");
+      if (!btn) return;
+      const row = btn.closest("[data-preset]");
+      const id = row && row.dataset.preset;
+      if (!id) return;
+      const act = btn.dataset.presetAct;
+      try {
+        if (act === "delete") {
+          if (!confirm("Apagar este preset?")) return;
+          await presetAction("delete", { id });
+          toast("Preset apagado");
+        } else if (act === "rename") {
+          const atual = row.querySelector(".preset-name")?.textContent || "";
+          const nome = prompt("Novo nome do preset:", atual);
+          if (!nome || !nome.trim()) return;
+          await presetAction("rename", { id, name: nome.trim() });
+          toast("Preset renomeado");
+        } else if (act === "duplicate") {
+          const atual = row.querySelector(".preset-name")?.textContent || "Preset";
+          await presetAction("duplicate", { id, name: `${atual} (cópia)` });
+          toast("Preset duplicado");
+        } else if (act === "default") {
+          await presetAction("default", { id });
+          toast("Preset virou o padrão da marca");
+        }
+      } catch (err) {
+        toast(err.message || "Não deu para aplicar");
+      }
+    });
+  }
+}
+
+function wireBiblioteca() {
+  const btn = $("#btnLibraryUpload");
+  const input = $("#libraryFileInput");
+  if (!btn || !input || btn.dataset.wired) return;
+  btn.dataset.wired = "1";
+  btn.onclick = () => input.click();
+  input.onchange = async () => {
+    const files = [...(input.files || [])];
+    if (!files.length) return;
+    let ok = 0;
+    for (const f of files) {
+      const fd = new FormData();
+      fd.append("file", f, f.name);
+      try {
+        const res = await fetch("/api/library/upload", { method: "POST", body: fd });
+        if (res.ok) ok += 1;
+      } catch { /* segue para o próximo */ }
+    }
+    input.value = "";
+    toast(ok ? `${ok} arquivo(s) na biblioteca` : "Nada foi enviado");
+    await loadLibraryUi().catch(() => {});
+  };
 }
 
 async function checkCrashRecovery() {
@@ -3506,6 +3867,9 @@ async function boot() {
   wireDrop();
   wireList();
   wireForms();
+  wireProjetos();
+  wirePresets();
+  wireBiblioteca();
   wireTheme();
   await wireTitlebar();
   window.addEventListener("message", (e) => {
@@ -3534,6 +3898,7 @@ async function boot() {
   setView(initial);
   await refreshHealth();
   await refreshAuthUi().catch(() => {});
+  await loadBrandsUi().catch(() => {});
   try {
     const lic = await api("/api/license");
     renderLicense(lic);

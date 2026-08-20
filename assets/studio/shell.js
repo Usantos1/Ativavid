@@ -31,6 +31,15 @@
         (window.top || window).location.href = target;
       });
     });
+    const ws = $("#btnWorkspace");
+    if (ws) {
+      // Na página de edição o card do workspace é um atalho: leva para a
+      // tela de Marca no hub, onde ele é interativo de verdade.
+      ws.addEventListener("click", (e) => {
+        e.preventDefault();
+        (window.top || window).location.href = "/?view=marca";
+      });
+    }
     const home = $("#btnHome");
     if (home) {
       home.addEventListener("click", (e) => {
@@ -56,6 +65,30 @@
     } catch {
       if (hint) hint.textContent = "Versão sistema: —";
     }
+  }
+
+  /** Nome do workspace = marca ativa. Mesma leitura do hub, sem estado. */
+  async function refreshWorkspace() {
+    const nameEl = $("#wsName");
+    if (!nameEl) return;
+    try {
+      const res = await fetch("/api/brands", { cache: "no-store" });
+      if (!res.ok) return;
+      const data = await res.json();
+      const brands = Array.isArray(data.brands) ? data.brands : [];
+      const active = brands.find((b) => b.active) || brands[0];
+      if (!active) return;
+      nameEl.textContent = active.name || "Meu workspace";
+      const txt = $("#wsAvatarTxt");
+      if (txt) {
+        const partes = String(active.name || "AV").trim().split(/[\s._-]+/).filter(Boolean);
+        txt.textContent = (partes.length >= 2
+          ? partes[0][0] + partes[1][0]
+          : String(active.name || "AV").slice(0, 2)).toUpperCase();
+      }
+      const av = $("#wsAvatar");
+      if (av && active.accent) av.style.setProperty("--ws-tint", active.accent);
+    } catch { /* sem marca: fica o rótulo padrão */ }
   }
 
   async function refreshJobCounts() {
@@ -158,6 +191,7 @@
     wireCollapse();
     wireNav();
     refreshHint();
+    refreshWorkspace();
     refreshJobCounts();
     wireWindowChrome();
     // SSE: os contadores acordam por evento; o intervalo vira watchdog e só

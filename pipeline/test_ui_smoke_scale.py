@@ -68,18 +68,30 @@ def test_studio_has_content_type_and_simple_system():
     assert "Avançado" in html
     assert 'id="hwAccelDetail"' in html
     assert 'id="btnHwBench"' in html
-    # menu lateral não ganhou item novo
-    for forbidden in ("Histórico", "Biblioteca", "Presets", "Versões"):
-        # esses nomes podem aparecer no conteúdo, mas não como item do menu
-        pass
-    assert html.count('data-view="') >= 6
-    assert 'data-view="import"' in html
-    assert 'data-view="fila"' in html
-    assert 'data-view="done"' in html
-    assert 'data-view="estilo"' in html
-    assert 'data-view="sistema"' in html
+    # Menu lateral: as quatro seções pedidas, na ordem, e cada item com uma
+    # tela de verdade por trás. O guarda antigo travava o menu em 6 itens —
+    # virou o contrário: fixa a estrutura para ninguém encolher sem querer.
+    for secao in ("Trabalho", "Criação", "Automação", "Aplicativo"):
+        assert f'<p class="sb-label">{secao}</p>' in html, secao
+    itens = (
+        "import", "fila", "done", "projetos",           # trabalho
+        "estilo", "marca", "biblioteca", "presets",     # criação
+        "ia", "integracoes",                            # automação
+        "sistema",                                      # aplicativo
+    )
+    for v in itens:
+        assert f'data-view="{v}"' in html, v
+        assert f'data-view-panel="{v}"' in html, f"{v} sem tela"
+    # Saíram do menu principal (licença foi para o menu do workspace, chaves
+    # viraram IA/Integrações, sistema virou Configurações).
+    assert 'data-view="licenca"' not in html
+    assert 'data-view="keys"' not in html
     assert 'data-view="historico"' not in html
-    assert 'data-view="biblioteca"' not in html
+    assert "Chaves &amp; IA" not in html
+    # Rodapé é o workspace, não um painel de conta.
+    assert 'id="btnWorkspace"' in html and 'id="wsMenu"' in html
+    assert 'id="btnSbAccount"' not in html
+    assert 'class="sb-acc-dot"' not in html
     js = (REPO / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
     assert "function jobInFila" in js
     assert 'badge: "ATUALIZANDO"' in js
@@ -93,8 +105,15 @@ def test_studio_has_content_type_and_simple_system():
     assert "Ver detalhe" in js
     assert "Lixeira" in html
     assert "data-act=\"detail\"" in js
+    # `?view=keys` é link antigo salvo por aí — tem de continuar abrindo IA.
+    assert 'if (name === "keys") name = "ia";' in js
+    assert "workspacePlanMeta" in js and "renderWorkspaceCard" in js
     shell = (REPO / "assets" / "studio" / "shell.js").read_text(encoding="utf-8")
     assert "quickApply" in shell
+    # A página do editor usa o MESMO menu (mesmo CSS, mesmos itens).
+    prev = (REPO / "assets" / "preview" / "index.html").read_text(encoding="utf-8")
+    for v in itens:
+        assert f'data-hub-view="{v}"' in prev, v
 
 
 def test_score_labels_from_real_numbers():
