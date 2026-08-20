@@ -223,8 +223,31 @@ def opacidade(p: Palavra, fl: float) -> float:
     return 1 - (1 - t) ** 3
 
 
+def caixa_de(legendas: list["Legenda"], folga: int = 8) -> tuple[int, int, int, int]:
+    """Uniao das caixas de TODAS as legendas, com folga.
+
+    As legendas vivem sempre na mesma faixa da tela. Renderizar e transmitir a
+    tela inteira e desperdicio puro: sao 8,3 MB por quadro no cano, contra ~2
+    MB da faixa que realmente tem texto.
+    """
+    if not legendas:
+        return 0, 0, W, H
+    x0 = min(p.x0 for l in legendas for p in l.palavras)
+    y0 = min(p.y0 for l in legendas for p in l.palavras)
+    x1 = max(p.x0 + p.alpha.shape[1] for l in legendas for p in l.palavras)
+    y1 = max(p.y0 + p.alpha.shape[0] for l in legendas for p in l.palavras)
+    # largura par: o encoder reclama de dimensao impar
+    x0, y0 = max(0, x0 - folga), max(0, y0 - folga)
+    x1, y1 = min(W, x1 + folga), min(H, y1 + folga)
+    if (x1 - x0) % 2:
+        x1 = min(W, x1 + 1) if x1 < W else x1 - 1
+    if (y1 - y0) % 2:
+        y1 = min(H, y1 + 1) if y1 < H else y1 - 1
+    return x0, y0, x1, y1
+
+
 def desenhar(leg: "Legenda | None", fl: float, buf: np.ndarray,
-             sujo: list[int]) -> None:
+             sujo: list[int], origem: tuple[int, int] = (0, 0)) -> None:
     """Compoe SO na uniao das caixas visiveis. `buf` e uint8 (H, W, 4).
 
     Nada de operacao em tela inteira: a versao anterior multiplicava e
@@ -246,21 +269,24 @@ def desenhar(leg: "Legenda | None", fl: float, buf: np.ndarray,
     if not visiveis:
         return
 
-    x0 = max(0, min(p.x0 for p, _ in visiveis))
-    y0 = max(0, min(p.y0 for p, _ in visiveis))
-    x1 = min(W, max(p.x0 + p.alpha.shape[1] for p, _ in visiveis))
-    y1 = min(H, max(p.y0 + p.alpha.shape[0] for p, _ in visiveis))
+    ox, oy = origem
+    alt_buf, larg_buf = buf.shape[0], buf.shape[1]
+    x0 = max(0, min(p.x0 - ox for p, _ in visiveis))
+    y0 = max(0, min(p.y0 - oy for p, _ in visiveis))
+    x1 = min(larg_buf, max(p.x0 - ox + p.alpha.shape[1] for p, _ in visiveis))
+    y1 = min(alt_buf, max(p.y0 - oy + p.alpha.shape[0] for p, _ in visiveis))
     if x1 <= x0 or y1 <= y0:
         return
 
     tela = np.zeros((y1 - y0, x1 - x0, 4), dtype=np.float32)
     for p, op in visiveis:
         h, w = p.alpha.shape
-        ys0, xs0 = max(y0, p.y0), max(x0, p.x0)
-        ys1, xs1 = min(y1, p.y0 + h), min(x1, p.x0 + w)
+        py, px = p.y0 - oy, p.x0 - ox
+        ys0, xs0 = max(y0, py), max(x0, px)
+        ys1, xs1 = min(y1, py + h), min(x1, px + w)
         if ys1 <= ys0 or xs1 <= xs0:
             continue
-        sy, sx = ys0 - p.y0, xs0 - p.x0
+        sy, sx = ys0 - py, xs0 - px
         alt, larg = ys1 - ys0, xs1 - xs0
         sub = tela[ys0 - y0:ys1 - y0, xs0 - x0:xs1 - x0]
         a_s = p.sombra[sy:sy + alt, sx:sx + larg] * op

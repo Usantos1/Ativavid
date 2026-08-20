@@ -22,16 +22,29 @@ Remotion é um navegador e não tem como receber o vídeo para desenhar por cima
 
 ## Sem o intermediário
 
-Desenhar e compor numa passada só, entregando o MP4 final:
+Desenhar e compor numa passada só, entregando o MP4 final. **Mediana de 3
+rodadas** — a primeira medição deste teste deu 76 ms e era partida a frio;
+número único nesta máquina não vale.
 
-| Caminho | Por quadro |
-|---|---|
-| Hoje: Remotion (158) + compose (30) | **188 ms** |
-| Uma passada só | **76 ms** |
+| Caminho | Por quadro | Tempo real |
+|---|---|---|
+| Hoje: Remotion (158) + compose (30) | **188 ms** | 0,16× |
+| Uma passada, tela inteira no cano | 27 ms | 1,2× |
+| **Uma passada, só a faixa da legenda** | **21 ms** | **1,6×** |
 
-**2,5× no fim a fim**, e ainda sobra folga: os 76 ms são dominados por empurrar
-8,3 MB de RGBA por quadro pelo cano. Mandar só a caixa da legenda em vez da
-tela inteira é a próxima economia óbvia.
+**~9× no fim a fim.** A faixa da legenda tem 560×432 — 0,9 MB por quadro no
+cano contra 7,9 MB da tela inteira. A legenda mora sempre na mesma parte da
+tela, então transmitir o resto era desperdício puro.
+
+Saída conferida contra o caminho atual em
+`comparacao_final_uma_passada.png`: mesma posição, mesma cor, mesmo peso.
+
+### Contra o CapCut
+
+A referência que motivou tudo isto: o CapCut exporta a 5,3× o tempo real nesta
+máquina. Estamos em **1,6×**. Ainda 3× atrás — e não vou chamar de empate o que
+não é. Mas as duas medidas não são a mesma coisa: a nossa **rasteriza legenda
+do zero em todo quadro**, a do CapCut é exportação de uma timeline já montada.
 
 ## Aparência
 
