@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.29
+
+Menu lateral redesenhado, com quatro telas que estavam escondidas.
+
+- **O menu agora tem quatro seções**: Trabalho, Criação, Automação e Aplicativo. Licença saiu do menu e foi para o card da empresa; "Chaves & IA" virou **IA** + **Integrações**; Sistema virou **Configurações**
+- **Projetos**: todos os seus trabalhos num lugar só, com filtro (em andamento, prontos, parados) e busca por nome
+- **Marca**: escolher e criar marcas, que antes ficava numa barra dentro de Estilos
+- **Biblioteca**: as imagens que a IA usa como b-roll agora aparecem em miniatura, e dá para adicionar por ali
+- **Presets**: renomear, duplicar, apagar e escolher o padrão da marca
+- **Rodapé virou a sua empresa**, não a sua conta: `Prime Camp · Plano Pro`. O clique abre conta, empresa, licença, atualizações e sair
+- Item selecionado ficou discreto, os contadores alinhados, e o menu mais compacto
+- **Em janela estreita o menu vira gaveta** e as telas se ajustam sem cortar nada
+- Se o app não responder, as telas dizem o que houve e oferecem **Tentar de novo** — antes ficavam em branco
+
 ## 2.28
 
 Emoji e b-roll no motor rápido — nenhum recurso cai mais no caminho lento.
