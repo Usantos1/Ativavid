@@ -486,7 +486,12 @@ def _color_tags(video: Path) -> dict[str, str]:
              "-of", "default=noprint_wrappers=1", str(video)],
             capture_output=True, text=True, check=True,
         )
-    except subprocess.CalledProcessError:
+    except subprocess.CalledProcessError as e:
+        # Sem as tags, `is_hdr_source` diz False e o TONEMAP e pulado: fonte
+        # HDR sai lavada. O padrao continua o mesmo — mas agora com aviso, em
+        # vez de imagem errada sem explicacao.
+        print(f"  [warn] tags de cor de {Path(video).name}: {e} — "
+              f"seguindo como SDR (sem tonemap)", flush=True)
         return {}
     tags = {}
     for line in out.stdout.splitlines():
@@ -571,8 +576,11 @@ def is_portrait_source(video: Path) -> bool:
         vals = [v for v in r.stdout.split() if v.lstrip("-").isdigit()]
         if vals:
             rot = int(vals[0])
-    except Exception:
-        pass
+    except Exception as e:  # noqa: BLE001
+        # Sem rotacao lida, a escala pode sair pelo lado errado numa fonte
+        # girada — o prep fica deitado ou cortado. `vals` vazio NAO e falha
+        # (video sem rotacao e o caso comum), por isso o aviso mora aqui.
+        print(f"  [warn] rotacao de {Path(video).name}: {e} — assumindo 0", flush=True)
     if abs(rot) % 180 == 90:
         w, h = h, w
     return h > w
