@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.23
+
+Preparação do vídeo mais rápida — e sem a armadilha que quase entrou junto.
+
+- **Vídeos de câmera 4K são preparados com ajuda da placa de vídeo** na etapa mais pesada do corte: mesma imagem, bit a bit idêntica, ~18% mais rápido
+- **Com mais de uma fonte, elas são preparadas ao mesmo tempo** (~16% mais rápido). Máquina sem placa compatível continua funcionando igual, pelo caminho antigo
+- **Cuidado que evitou uma regressão**: as duas melhorias juntas *pioravam* tudo (a placa satura com duas conversões simultâneas e o tempo quase dobrava). Agora a placa só entra quando há uma fonte só — foi medido antes de shipar
+- Todos os 4 estilos de legenda do catálogo já estão desenhados pelo motor novo. Por enquanto só o empilhado (o seu) roda por padrão; os outros esperam validação lado a lado
+
 ## 2.22
 
 Renderização em passada única: desenhar e montar viraram uma etapa só.
