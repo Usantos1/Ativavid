@@ -226,6 +226,11 @@ def ebur128_summary(path: Path) -> dict[str, float | None]:
     """Integrated / LRA / true peak do Summary do ebur128 (não o I: inicial)."""
     r = _run([
         _ffmpeg(), "-hide_banner", "-i", str(path),
+        # `-vn`: isto roda no video FINAL e so le audio. Sem ele o ffmpeg
+        # mapeia tambem o video e decodifica o arquivo inteiro para o muxer
+        # nulo. O `measure_loudnorm` logo abaixo ja tinha o -vn — era
+        # inconsistencia, nao decisao.
+        "-vn",
         "-filter_complex", "ebur128=peak=true,volumedetect", "-f", "null", "-",
     ])
     log = r.stderr or ""

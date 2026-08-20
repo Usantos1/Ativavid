@@ -230,3 +230,21 @@ def test_mesma_duracao_e_mesmos_graficos_reusa_inteiro():
     s = _snap_dur(30.0, [_cue(0), _cue(10000)])
     plano = _incremental_ranges(s, s, FPS, FRAMES)
     assert plano.ranges == [] and plano.audio_do_cache is True
+
+
+def test_medida_de_loudness_nao_abre_o_video():
+    """`ebur128_summary` roda no vídeo FINAL e só lê áudio, mas não tinha
+    `-vn`: sem ele o ffmpeg mapeia também o vídeo e decodifica o arquivo
+    inteiro para o muxer nulo. O `measure_loudnorm`, no mesmo arquivo, já
+    tinha — era inconsistência, não decisão.
+
+    A medida não muda: conferido no mesmo clipe, I=-21,8 LUFS dos dois jeitos.
+    """
+    from pathlib import Path
+
+    fonte = (Path(__file__).resolve().parent.parent
+             / "app" / "overlay_compose.py").read_text(encoding="utf-8")
+    i = fonte.index("def ebur128_summary")
+    corpo = fonte[i:fonte.index("\ndef ", i + 10)]
+    assert '"-vn"' in corpo
+    assert corpo.index('"-vn"') < corpo.index("ebur128=peak")
