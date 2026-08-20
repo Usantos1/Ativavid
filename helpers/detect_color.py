@@ -34,6 +34,8 @@ import _utf8  # noqa: F401  — UTF-8 no stdout antes de qualquer print
 
 import argparse
 import json
+import pathlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -86,14 +88,29 @@ def _sample_stats(video: Path, n: int = 24) -> dict[str, float] | None:
         dur = 10.0
     fps = max(0.2, min(n / max(dur, 0.1), 8.0))
 
-    with tempfile.NamedTemporaryFile(mode="w+", suffix=".txt", delete=False) as f:
-        meta = f.name
+    # `file=` vai RELATIVO e o ffmpeg roda com o cwd aqui: um caminho
+    # absoluto do Windows leva `C:` e o `:` e separador de opcao no parser de
+    # filtro — o grafo nem abria (ver docstring do modulo).
+    tmpdir = tempfile.mkdtemp(prefix="ativavid-color-")
+    meta = str(pathlib.Path(tmpdir) / "meta.txt")
+
+    def _cmd(hwaccel: bool) -> list[str]:
+        # O `fps` so filtra DEPOIS do decode, entao amostrar 8 quadros de uma
+        # 4K60 custa decodificar os 4.900. Nao da para filtrar antes; da para
+        # decodificar na GPU, que entrega os MESMOS quadros.
+        hw = ["-hwaccel", "cuda"] if hwaccel else []
+        return ["ffmpeg", "-y", "-hide_banner", "-nostats", *hw, "-i", str(video),
+                "-vf", f"fps={fps:.3f},signalstats,metadata=print:file=meta.txt",
+                "-an", "-f", "null", "-"]
+
     try:
-        subprocess.run(
-            ["ffmpeg", "-y", "-hide_banner", "-nostats", "-i", str(video),
-             "-vf", f"fps={fps:.3f},signalstats,metadata=print:file={meta}",
-             "-an", "-f", "null", "-"],
-            check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            subprocess.run(_cmd(True), check=True, cwd=tmpdir,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except (subprocess.CalledProcessError, OSError):
+            # sem NVDEC (ou codec que ele nao aceita): CPU, como antes
+            subprocess.run(_cmd(False), check=True, cwd=tmpdir,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
         ymin: list[float] = []
         ymax: list[float] = []
@@ -139,7 +156,7 @@ def _sample_stats(video: Path, n: int = 24) -> dict[str, float] | None:
     except subprocess.CalledProcessError:
         return None
     finally:
-        Path(meta).unlink(missing_ok=True)
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 def _measured_log_expansion(s: dict[str, float]) -> str:

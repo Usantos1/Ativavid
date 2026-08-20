@@ -28,6 +28,10 @@ from pathlib import Path
 def detect_silences(video: Path, noise: str, min_silence: float) -> list[tuple[float, float]]:
     cmd = [
         "ffmpeg", "-hide_banner", "-i", str(video),
+        # `-vn`: sem ele o ffmpeg mapeia tambem o video e decodifica a fonte
+        # inteira para o muxer nulo. Aqui so se olha audio, e numa 4K60 isso
+        # custava a fase inteira do ANALYZE (que paga o helper mais lento).
+        "-vn",
         "-af", f"silencedetect=noise={noise}:d={min_silence}",
         "-f", "null", "-",
     ]
