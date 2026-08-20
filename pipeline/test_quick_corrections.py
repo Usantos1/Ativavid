@@ -570,3 +570,82 @@ def test_conversao_de_altura_da_legenda_ida_e_volta():
         chave2, v2 = legenda_y_para_valor(estilo, 700)
         assert abs(legenda_valor_para_y(estilo, v2) - 700) < 2.0, estilo
     assert legenda_y_para_valor("simples", 900) is None
+
+
+def test_reset_volta_a_altura_ao_padrao(tmp_path):
+    """Desfazer o PRIMEIRO arrasto precisa disso: o estado anterior é "campo
+    ausente", e gravar o valor do padrão de hoje congelaria o projeto se o
+    padrão mudar amanhã."""
+    import json
+    from app.quick_corrections import (
+        limpar_caption_pos, limpar_headline_pos, set_caption_pos, set_headline_pos,
+    )
+
+    edit = tmp_path / "edit"
+    (edit / "remotion" / "public").mkdir(parents=True)
+    p = edit / "remotion" / "public" / "edit-data.json"
+    p.write_text(json.dumps({"hook": {"enabled": True, "lines": ["a"]},
+                             "captions": {"style": "stacked"}}), encoding="utf-8")
+    set_headline_pos(edit, 800)
+    set_caption_pos(edit, 700)
+    d = json.loads(p.read_text(encoding="utf-8"))
+    assert d["hook"]["paddingTop"] == 800 and d["captions"]["stackedOffsetY"]
+
+    assert limpar_headline_pos(edit)["padrao"] is True
+    assert limpar_caption_pos(edit)["padrao"] is True
+    d = json.loads(p.read_text(encoding="utf-8"))
+    assert "paddingTop" not in d["hook"] and "paddingBottom" not in d["hook"]
+    assert "stackedOffsetY" not in d["captions"]
+    assert d["hook"]["lines"] == ["a"], "o texto não pode ir junto"
+
+
+def test_reset_pelo_dispatcher(tmp_path):
+    import json
+    from app.quick_corrections import handle, set_headline_pos
+
+    edit = tmp_path / "edit"
+    (edit / "remotion" / "public").mkdir(parents=True)
+    p = edit / "remotion" / "public" / "edit-data.json"
+    p.write_text(json.dumps({"hook": {"enabled": True}, "captions": {"style": "scatter"}}),
+                 encoding="utf-8")
+    set_headline_pos(edit, 900)
+    handle(edit, {"op": "set_headline_pos", "reset": True})
+    assert "paddingTop" not in json.loads(p.read_text(encoding="utf-8"))["hook"]
+    handle(edit, {"op": "set_caption_pos", "y": 700})
+    assert json.loads(p.read_text(encoding="utf-8"))["captions"]["scatterOffsetY"]
+    handle(edit, {"op": "set_caption_pos", "reset": True})
+    assert "scatterOffsetY" not in json.loads(p.read_text(encoding="utf-8"))["captions"]
+
+
+def test_reset_da_legenda_nao_leva_ajuste_de_outro_estilo(tmp_path):
+    """`paddingBottom` é o botão do impacto, mas também é a posição genérica
+    que o karaoke lê. Num projeto `stacked` ele não é a altura da vez — e
+    sumiu quando o reset apagava o botão de todos os estilos."""
+    import json
+    from app.quick_corrections import limpar_caption_pos, set_caption_pos
+
+    edit = tmp_path / "edit"
+    (edit / "remotion" / "public").mkdir(parents=True)
+    p = edit / "remotion" / "public" / "edit-data.json"
+    p.write_text(json.dumps({"captions": {"style": "stacked", "paddingBottom": 420}}),
+                 encoding="utf-8")
+    set_caption_pos(edit, 700)
+    limpar_caption_pos(edit)
+    caps = json.loads(p.read_text(encoding="utf-8"))["captions"]
+    assert "stackedOffsetY" not in caps, "a altura do estilo tem de sair"
+    assert caps["paddingBottom"] == 420, "o que não é da vez fica"
+
+
+def test_reset_no_impacto_tira_o_padding_bottom(tmp_path):
+    """No impacto o paddingBottom É a altura — aí sai mesmo."""
+    import json
+    from app.quick_corrections import limpar_caption_pos, set_caption_pos
+
+    edit = tmp_path / "edit"
+    (edit / "remotion" / "public").mkdir(parents=True)
+    p = edit / "remotion" / "public" / "edit-data.json"
+    p.write_text(json.dumps({"captions": {"style": "impacto"}}), encoding="utf-8")
+    set_caption_pos(edit, 1200)
+    assert json.loads(p.read_text(encoding="utf-8"))["captions"]["paddingBottom"] == 720
+    limpar_caption_pos(edit)
+    assert "paddingBottom" not in json.loads(p.read_text(encoding="utf-8"))["captions"]

@@ -238,6 +238,44 @@ def set_headline_answer(edit_dir: Path, text_or_lines: Any) -> dict[str, Any]:
     return {"ok": True, "answer": lines, "corrections": corr}
 
 
+def limpar_headline_pos(edit_dir: Path) -> dict[str, Any]:
+    """Volta a headline para a altura padrao do estilo (campo ausente)."""
+    prepare_correction(edit_dir)
+    path = edit_data_path(edit_dir)
+    data = _read_json(path, {})
+    if not isinstance(data, dict):
+        data = {}
+    hook = dict(data.get("hook") or {}) if isinstance(data.get("hook"), dict) else {}
+    hook.pop("paddingTop", None)
+    hook.pop("paddingBottom", None)
+    data["hook"] = hook
+    _write_json(path, data)
+    return {"ok": True, "padrao": True, "corrections": mark_dirty(edit_dir, "headline")}
+
+
+def limpar_caption_pos(edit_dir: Path) -> dict[str, Any]:
+    """Volta a legenda para a altura padrao do estilo (campo ausente)."""
+    from app.render_proprio import LEGENDA_ANCORAS
+
+    prepare_correction(edit_dir)
+    path = edit_data_path(edit_dir)
+    data = _read_json(path, {})
+    if not isinstance(data, dict):
+        data = {}
+    caps = dict(data.get("captions") or {}) if isinstance(data.get("captions"), dict) else {}
+    # SO o botao do estilo em uso. `paddingBottom` e o botao do impacto, mas
+    # tambem e a posicao generica que o karaoke le — apagar sempre tirava um
+    # ajuste que este estilo nem usa (visto num projeto `stacked`: o 420 foi
+    # embora sem ninguem pedir).
+    estilo = str(caps.get("style") or "stacked")
+    a = LEGENDA_ANCORAS.get(estilo)
+    if a:
+        caps.pop(a["chave"], None)
+    data["captions"] = caps
+    _write_json(path, data)
+    return {"ok": True, "padrao": True, "corrections": mark_dirty(edit_dir, "style")}
+
+
 def set_headline_pos(edit_dir: Path, valor: Any, *, base: str = "top") -> dict[str, Any]:
     """Altura da headline, em pixels do quadro de 1920.
 
@@ -547,8 +585,12 @@ def handle(
     if op in ("set_headline_answer", "headline_answer"):
         return set_headline_answer(edit, body.get("lines") or body.get("text") or body.get("answer"))
     if op in ("set_caption_pos", "caption_pos"):
+        if body.get("reset"):
+            return limpar_caption_pos(edit)
         return set_caption_pos(edit, body.get("y"))
     if op in ("set_headline_pos", "headline_pos"):
+        if body.get("reset"):
+            return limpar_headline_pos(edit)
         return set_headline_pos(
             edit,
             body.get("paddingTop") if body.get("paddingTop") is not None

@@ -3631,6 +3631,39 @@ function updateCapOverlay() {
 
 
 
+/**
+ * Volta a altura ao padrao do estilo. `alvo` e 'headline' ou 'legenda'.
+ *
+ * Manda `reset` em vez do numero do padrao de hoje: gravar o numero
+ * congelaria o projeto se o padrao mudar amanha.
+ */
+async function voltarAoPadrao(alvo) {
+  const op = alvo === 'legenda' ? 'set_caption_pos' : 'set_headline_pos';
+  try {
+    const data = await persistCorrection({ op, reset: true });
+    if (!data || data.ok === false) {
+      toast((data && data.error) || 'Não deu para voltar ao padrão');
+      return;
+    }
+    if (S.editData) {
+      if (alvo === 'legenda') {
+        const caps = { ...(S.editData.captions || {}) };
+        for (const k of ['stackedOffsetY', 'scatterOffsetY']) delete caps[k];
+        if (capEstilo() === 'impacto') delete caps.paddingBottom;
+        S.editData.captions = caps;
+      } else {
+        const hk = { ...(S.editData.hook || {}) };
+        delete hk.paddingTop;
+        delete hk.paddingBottom;
+        S.editData.hook = hk;
+      }
+    }
+    toast('Voltou para a altura padrão do estilo', 2000);
+  } catch (err) {
+    toast((err && err.message) || 'Não deu para voltar ao padrão');
+  }
+}
+
 // ---------- legenda arrastavel --------------------------------------------
 // Cada estilo guarda a altura num botao diferente; a tabela vem do MOTOR
 // junto com a da headline. A familia `simples` nao aparece la porque
@@ -3736,6 +3769,11 @@ function capArrastavel(line) {
   };
   line.addEventListener('pointerup', soltar);
   line.addEventListener('pointercancel', soltar);
+  line.addEventListener('dblclick', (e) => {
+    e.stopPropagation();
+    voltarAoPadrao('legenda');
+  });
+  line.title = 'Arraste para mover · toque duplo volta ao padrão · clique edita o texto';
 }
 
 // ---------- headline arrastavel -------------------------------------------
@@ -3868,6 +3906,11 @@ function hlArrastavel(line) {
   };
   line.addEventListener('pointerup', soltar);
   line.addEventListener('pointercancel', soltar);
+  line.addEventListener('dblclick', (e) => {
+    e.stopPropagation();
+    voltarAoPadrao('headline');
+  });
+  line.title = 'Arraste para mover · toque duplo volta ao padrão · clique edita o texto';
 }
 
 function updateHlOverlay() {

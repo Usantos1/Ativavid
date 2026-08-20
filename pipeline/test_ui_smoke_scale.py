@@ -266,3 +266,17 @@ def test_conversao_de_altura_vive_num_lugar_so():
     assert "LEGENDA_ANCORAS" in motor
     # o editor manda PIXEL e deixa a conversão com quem desenha
     assert "op: 'set_caption_pos', y" in js
+
+
+def test_duplo_clique_volta_a_altura_ao_padrao():
+    """Sem isto, desfazer o primeiro arrasto era impossível: o estado
+    anterior é "campo ausente", e não havia gesto para chegar nele."""
+    js = (REPO / "assets" / "preview" / "app.js").read_text(encoding="utf-8")
+    assert "async function voltarAoPadrao" in js
+    assert js.count("addEventListener('dblclick'") >= 2, "headline e legenda"
+    assert "voltarAoPadrao('legenda')" in js and "voltarAoPadrao('headline')" in js
+    # manda `reset`, não o número do padrão de hoje — senão o projeto congela
+    # no valor de hoje se o padrão do estilo mudar amanhã
+    assert "op, reset: true" in js
+    # o gesto é anunciado: sem isso ninguém descobre
+    assert "toque duplo volta ao padrão" in js
