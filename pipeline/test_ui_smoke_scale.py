@@ -135,3 +135,40 @@ if __name__ == "__main__":
     test_studio_has_content_type_and_simple_system()
     test_score_labels_from_real_numbers()
     print("ok")
+
+def test_grades_das_telas_novas_nao_estouram_em_tela_estreita():
+    """`minmax(320px, 1fr)` reserva 320px mesmo quando sobra menos que
+    isso — medido: 44px de estouro na Marca a 390px de janela. O
+    `min(Npx, 100%)` deixa o track encolher junto."""
+    css = (REPO / "assets" / "studio" / "studio.css").read_text(encoding="utf-8")
+    for grade in (".pane-grid", ".ident-grid", ".lib-grid"):
+        i = css.index(grade + " {")
+        bloco = css[i:css.index("}", i)]
+        assert "minmax(min(" in bloco, f"{grade} precisa de minmax(min(...))"
+    # o filtro de Projetos tem 4 botões: em tela estreita quebra, não corta
+    i = css.index(".seg {")
+    assert "flex-wrap: wrap" in css[i:css.index("}", i)]
+    # empilhado, a busca não pode carregar o flex-basis da versão em linha
+    # (200px viravam ALTURA e abriam um buraco de 145px — medido)
+    assert ".proj-search { flex: 0 0 auto; max-width: none; }" in css
+    # caminho longo do Windows precisa poder quebrar
+    assert "overflow-wrap: anywhere" in css
+
+
+def test_telas_avisam_quando_a_leitura_falha():
+    """Servidor fora do ar deixava Biblioteca, Presets e Estilos mudos —
+    Estilos ficava totalmente em branco, sem nem dizer o que houve."""
+    js = (REPO / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
+    html = (REPO / "assets" / "studio" / "index.html").read_text(encoding="utf-8")
+    assert "function falhaDaTela" in js
+    assert js.count('falhaDaTela("') >= 2, "biblioteca e presets"
+    # o iframe do editor de estilo nao avisa sozinho: `load` dispara ate na
+    # pagina de erro do Chrome, entao quem decide e o CONTEUDO
+    assert "function estiloCarregou" in js
+    assert "contentDocument" in js and "body.children.length" in js
+    assert 'id="estiloFalha"' in html and 'id="btnEstiloRetry"' in html
+    # e o retry precisa recriar o iframe: trocar o src deixa o frame preso
+    # na pagina de erro (contentDocument segue nulo, medido)
+    i = js.index("btn.onclick")
+    assert "createElement(\"iframe\")" in js[i:i + 1200]
+

@@ -181,6 +181,54 @@ async function api(path, opts) {
   return data;
 }
 
+
+function estiloCarregou(fr) {
+  try {
+    const doc = fr.contentDocument;
+    return !!(doc && doc.body && doc.body.children.length > 0);
+  } catch {
+    return false;      // outra origem = pagina de erro do navegador
+  }
+}
+
+function mostrarFalhaDoEstilo() {
+  const aviso = $("#estiloFalha");
+  if (!aviso) return;
+  aviso.classList.remove("hidden");
+  const btn = $("#btnEstiloRetry");
+  if (btn && !btn.dataset.wired) {
+    btn.dataset.wired = "1";
+    btn.onclick = () => {
+      const velho = $("#estiloFrame");
+      if (!velho) return;
+      aviso.classList.add("hidden");
+      // Trocar so o `src` nao basta: o Chrome deixa o frame preso na
+      // propria pagina de erro (contentDocument continua nulo, medido).
+      // Um iframe NOVO comeca limpo.
+      const fr = document.createElement("iframe");
+      fr.id = "estiloFrame";
+      fr.className = velho.className;
+      fr.title = velho.title;
+      fr.dataset.loaded = "1";
+      fr.onload = () => {
+        if (!estiloCarregou(fr)) {
+          mostrarFalhaDoEstilo();
+          return;
+        }
+        fr.dataset.ok = "1";
+        aviso.classList.add("hidden");
+        applyThemeToIframes(
+          document.documentElement.getAttribute("data-theme") || "dark");
+      };
+      velho.replaceWith(fr);
+      fr.src = estiloFrameSrc();
+      setTimeout(() => {
+        if (fr.dataset.ok !== "1") mostrarFalhaDoEstilo();
+      }, 6000);
+    };
+  }
+}
+
 function goHome() {
   setView("import");
 }
@@ -212,10 +260,25 @@ function setView(name) {
     if (fr && !fr.dataset.loaded) {
       fr.dataset.loaded = "1";
       fr.onload = () => {
+        // `load` dispara MESMO com conexao recusada — o Chrome carrega a
+        // propria pagina de erro nele. So o conteudo diz se deu certo: a
+        // pagina de erro fica noutra origem e o contentDocument some.
+        if (!estiloCarregou(fr)) {
+          mostrarFalhaDoEstilo();
+          return;
+        }
+        fr.dataset.ok = "1";
+        const aviso = $("#estiloFalha");
+        if (aviso) aviso.classList.add("hidden");
         const t = document.documentElement.getAttribute("data-theme") || "dark";
         applyThemeToIframes(t);
       };
       fr.src = estiloFrameSrc();
+      // O iframe não dispara erro quando o servidor recusa a conexão: ele
+      // simplesmente fica em branco. Sem este relógio a tela some calada.
+      setTimeout(() => {
+        if (fr.dataset.ok !== "1") mostrarFalhaDoEstilo();
+      }, 8000);
     } else {
       applyThemeToIframes(document.documentElement.getAttribute("data-theme") || "dark");
     }
@@ -3527,6 +3590,29 @@ async function loadBrandsUi() {
 }
 
 /**
+ * Estado de falha de uma tela: diz o que houve e oferece a saída. Sem isto
+ * a tela fica muda e parece que o recurso sumiu.
+ */
+function falhaDaTela(hostId, msg, recarregar) {
+  const host = $(`#${hostId}`);
+  if (!host) return;
+  host.classList.remove("hidden");
+  host.innerHTML = "";
+  const txt = document.createElement("p");
+  txt.className = "falha-msg";
+  txt.textContent = msg;
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "ghost-btn";
+  btn.textContent = "Tentar de novo";
+  btn.onclick = () => {
+    host.textContent = "Carregando…";
+    recarregar().catch(() => {});
+  };
+  host.append(txt, btn);
+}
+
+/**
  * Biblioteca. O acervo já existia (/api/library alimenta o b-roll da IA),
  * mas só aparecia como um botão "abrir pasta" perdido dentro de Estilos —
  * aqui ele ganha tela própria. Nada de backend novo.
@@ -3538,7 +3624,11 @@ async function loadLibraryUi() {
   try {
     lib = await api("/api/library");
   } catch {
-    $("#libraryHint").textContent = "Não foi possível ler a biblioteca.";
+    grid.innerHTML = "";
+    $("#libraryHint").textContent = "A biblioteca não respondeu.";
+    falhaDaTela("libraryEmpty",
+      "Não deu para ler a biblioteca — o ATIVAVID pode estar iniciando ou ter sido fechado.",
+      loadLibraryUi);
     return;
   }
   state.libraryRoot = lib.root || "";
@@ -3579,7 +3669,11 @@ async function loadPresetsUi() {
   try {
     pack = await api("/api/brand-presets");
   } catch {
-    $("#presetsHint").textContent = "Não foi possível ler os presets.";
+    lista.innerHTML = "";
+    $("#presetsHint").textContent = "Os presets não responderam.";
+    falhaDaTela("presetsEmpty",
+      "Não deu para ler os presets — o ATIVAVID pode estar iniciando ou ter sido fechado.",
+      loadPresetsUi);
     return;
   }
   const presets = pack.presets || [];

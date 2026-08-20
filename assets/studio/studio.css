@@ -2780,10 +2780,12 @@ body.home-working .hero-import .hero-inner { padding: 10px 0; }
 }
 .seg {
   display: inline-flex;
+  flex-wrap: wrap;
   gap: 2px;
   padding: 3px;
   border: 1px solid var(--hairline);
   border-radius: 11px;
+  max-width: 100%;
   background: color-mix(in srgb, var(--panel) 60%, transparent);
 }
 .seg-btn {
@@ -2803,8 +2805,10 @@ body.home-working .hero-import .hero-inner { padding: 10px 0; }
   color: var(--text);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 26%, transparent);
 }
+.proj-search { flex: 1 1 200px; max-width: 280px; min-width: 0; }
 .proj-search input {
-  min-width: 220px;
+  width: 100%;
+  min-width: 0;
   border: 1px solid var(--line);
   background: var(--panel2);
   color: var(--text);
@@ -2818,7 +2822,7 @@ body.home-working .hero-import .hero-inner { padding: 10px 0; }
 /* ---- Marca: cartões de identidade ---- */
 .pane-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
   gap: 14px;
   align-items: start;
 }
@@ -2838,7 +2842,7 @@ body.home-working .hero-import .hero-inner { padding: 10px 0; }
 .brand-active-name { font-size: 15px; font-weight: 750; }
 .ident-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr));
   gap: 10px;
 }
 .ident-tile {
@@ -2903,7 +2907,8 @@ body.home-working .hero-import .hero-inner { padding: 10px 0; }
 .lib-bar-copy .hint { margin: 0; }
 .lib-bar-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .lib-bar-actions input[type="text"] {
-  min-width: 180px;
+  flex: 1 1 160px;
+  min-width: 0;
   border: 1px solid var(--line);
   background: var(--panel2);
   color: var(--text);
@@ -2914,7 +2919,7 @@ body.home-working .hero-import .hero-inner { padding: 10px 0; }
 }
 .lib-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(148px, 100%), 1fr));
   gap: 12px;
 }
 .lib-item {
@@ -2983,3 +2988,63 @@ body.home-working .hero-import .hero-inner { padding: 10px 0; }
 /* A barra de marca em Estilos ficou só com o nome da marca ativa. */
 .estilo-brand-bar--slim { padding: 10px 16px; gap: 10px 20px; }
 .keys-grid--single { grid-template-columns: minmax(0, 1fr); max-width: 900px; }
+/* Caminhos como %USERPROFILE%\ATIVAVID\extension\llm-session não têm onde
+   quebrar e furavam o painel em tela estreita (medido: 33px). */
+.keys-block code,
+.keys-block pre { overflow-wrap: anywhere; word-break: break-word; }
+
+/* ---- Telas novas em tela estreita ------------------------------------
+   Abaixo de 620px de janela o sidebar já virou trilho de 72px, então o
+   conteúdo fica com ~290px: as barras de ação passam a empilhar e os
+   botões ocupam a linha em vez de espremer. */
+@media (max-width: 620px) {
+  .proj-bar,
+  .lib-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  /* Empilhado, o eixo principal vira o VERTICAL: `flex: 1 1 200px` da
+     barra em linha passaria a valer como ALTURA e abria um buraco de
+     145px entre a busca e o primeiro card (medido). */
+  .proj-search { flex: 0 0 auto; max-width: none; }
+  .seg { justify-content: stretch; }
+  .seg-btn { flex: 1 1 auto; padding-inline: 8px; }
+  .lib-bar-actions > * { flex: 1 1 auto; }
+  .preset-row { flex-direction: column; align-items: stretch; }
+  .preset-acts > * { flex: 1 1 auto; }
+  .pane-card { padding: 14px; }
+  .brand-group-row { align-items: stretch; }
+  .brand-group-row > * { flex: 1 1 auto; }
+  .brand-group-row select,
+  .brand-group-row input[type="text"] { min-width: 0; }
+  .lib-soon { margin-top: 12px; }
+}
+@media (max-width: 420px) {
+  .ident-grid { grid-template-columns: 1fr 1fr; }
+  .lib-grid { grid-template-columns: repeat(auto-fill, minmax(min(120px, 100%), 1fr)); }
+}
+
+/* ---- Estado de falha de leitura --------------------------------------
+   Tela muda é pior que tela com erro: o usuario nao sabe se o recurso
+   sumiu ou se o app caiu. Todo carregamento que pode falhar tem saida. */
+.hub-empty .falha-msg,
+.estilo-falha .falha-msg {
+  margin: 0 0 12px;
+  max-width: 46ch;
+  line-height: 1.5;
+}
+.hub-empty:has(.falha-msg) {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.estilo-falha {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 18px clamp(16px, 2.5vw, 28px);
+  color: var(--dim);
+  font-size: 13.5px;
+}
+.estilo-falha.hidden { display: none; }
