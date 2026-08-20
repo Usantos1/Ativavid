@@ -12,9 +12,13 @@ RENDERIZADOR_PROPRIO.md): tinta mediana nosso/Remotion = 1,003 na tela inteira,
 851 quadros, todos os elementos. Os 74 projetos reais do usuário usam
 exatamente o conjunto coberto (legenda `stacked`, headline `realce`).
 
-O que este módulo NÃO desenha (o gate `motivo_nao_suportado` derruba para o
-Remotion): outros estilos de legenda/headline, contador de lista, emoji,
-pergunta→resposta, logo no cartão, fonte de marca, b-roll/inserts.
+Todo elemento do template está portado — legendas (8 estilos), headline
+(11), cartão final com logo, contador de lista, flashes, emoji, fonte de
+marca e b-roll. O gate `motivo_nao_suportado` não barra mais nenhum
+RECURSO: só o que é desconhecido (um estilo/preset/transição que o template
+ganhou e este módulo ainda não conhece), o que não abre (cue ou fonte
+ilegível), resolução fora de 1080x1920, e o emoji num Windows sem a Segoe
+UI Emoji. Nesses casos o job cai para o Remotion, que continua no repo.
 
 Kill switch: ATIVAVID_RENDER_PROPRIO=0.
 """
@@ -44,6 +48,50 @@ WORD_PAD_EM = 0.06
 # O CSS especifica sigma = raio/2, mas o que o Chrome desenha bate com
 # sigma = raio (varrido de 0,5 a 2,5 no estudo; pico em 1,05).
 BLUR_K = 1.05
+
+# InsertCard.tsx: cartao fixo, 780x500 a 90px do topo, canto 28, sombra
+# 0 18px 50px rgba(0,0,0,.45).
+INSERT_W, INSERT_H, INSERT_TOP, INSERT_RAIO = 780, 500, 90, 28
+
+# Emoji: o Chrome no Windows desenha com a Segoe UI Emoji do SISTEMA. Lendo o
+# MESMO arquivo, o glifo sai identico ao das versoes anteriores — e nada e
+# redistribuido junto com o app. Se ela nao existir, o gate manda o caso para
+# o Remotion (que tambem cairia na fonte do sistema).
+EMOJI_FONT = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "Fonts" / "seguiemj.ttf"
+EMOJI_FAIXAS = ((0x231A, 0x23FF), (0x2600, 0x27BF), (0x2B00, 0x2BFF),
+                (0x1F000, 0x1FAFF))
+# FE0F (apresentacao emoji), ZWJ, keycap e tons de pele continuam a MESMA
+# sequencia — separa-los desenharia dois glifos onde o Chrome desenha um.
+EMOJI_CONT = {0xFE0F, 0x200D, 0x20E3} | set(range(0x1F3FB, 0x1F400))
+
+
+def tem_emoji(texto: str) -> bool:
+    return any(_eh_emoji(c) for c in texto or "")
+
+
+def _eh_emoji(ch: str) -> bool:
+    o = ord(ch)
+    return any(a <= o <= b for a, b in EMOJI_FAIXAS)
+
+
+def fatiar_emoji(texto: str):
+    """[(trecho, eh_emoji)] — trechos de emoji separados do texto comum."""
+    partes, buf, modo = [], "", None
+    for ch in texto:
+        e = _eh_emoji(ch)
+        if not e and ord(ch) in EMOJI_CONT and modo is True:
+            buf += ch                    # continuacao da sequencia anterior
+            continue
+        if modo is None or e == modo:
+            buf += ch
+            modo = e
+        else:
+            partes.append((buf, modo))
+            buf, modo = ch, e
+    if buf:
+        partes.append((buf, modo))
+    return partes
+
 SHADOW = [(0, 5, 9, 0.5)]
 SHADOW_STRONG = [(0, 5, 10, 0.55), (0, 2, 3, 0.55)]
 
@@ -119,16 +167,9 @@ def motivo_nao_suportado(edit_data: dict[str, Any], public: Path) -> str | None:
     if hook.get("enabled"):
         if (hook.get("style") or "outline") not in Renderizador.HL_STYLES:
             return f"estilo de headline '{hook.get('style')}'"
-        if hook.get("logo") or hook.get("sign"):
-            return "logo/assinatura na headline"
     els = edit_data.get("elements") or {}
-    if els.get("emojiCaptions"):
-        # As fontes que embarcamos nao tem glifo de emoji — desenham TOFU
-        # (caixa com X), verificado. Sem uma fonte de emoji, este caso tem
-        # de ir para o Remotion, que usa a do sistema.
-        return "emoji nas legendas"
-    if edit_data.get("inserts"):
-        return "inserts/b-roll"
+    if els.get("emojiCaptions") and not EMOJI_FONT.exists():
+        return "emoji nas legendas (Segoe UI Emoji ausente)"
     if int(edit_data.get("width") or 1080) != 1080 or int(edit_data.get("height") or 1920) != 1920:
         return f"resolucao {edit_data.get('width')}x{edit_data.get('height')}"
     for tr in edit_data.get("transitions") or []:
@@ -177,6 +218,7 @@ class Camada:
     dim: float = 0.0
     dim_fade: int = 10
     caixa: tuple[int, int, int, int] | None = None
+    insert: tuple | None = None      # (imagem do cartao, quadros) — Ken-Burns
     cache_chave: tuple | None = None
     cache_tela: np.ndarray | None = None
     cache_pronto: np.ndarray | None = None
@@ -305,6 +347,87 @@ class Renderizador:
             x = f.getlength(texto[: i + 1]) + ls * (i + 1)
         return np.asarray(img, dtype=np.float32) / 255.0
 
+    def _fonte_emoji(self, tam: int):
+        """None se a Segoe UI Emoji nao estiver instalada. O gate ja barra o
+        caso do emojiCaptions, mas a fala transcrita pode trazer um emoji
+        digitado — ai desenha-se o texto sem ele em vez de estourar."""
+        chave = ("__emoji__", tam)
+        if chave not in self._fontes:
+            try:
+                self._fontes[chave] = ImageFont.truetype(str(EMOJI_FONT), tam)
+            except OSError:
+                self._fontes[chave] = None
+        return self._fontes[chave]
+
+    def _mascara_cor(self, f: ImageFont.FreeTypeFont, texto: str,
+                     ls: float = LETTER_SPACING):
+        """(mascara, cor) — `cor` e a camada RGBA dos emojis, ou None.
+
+        A mascara leva o emoji na silhueta dele, entao sombra e contorno o
+        acompanham (e o que o Chrome faz com text-shadow sobre emoji). A cor
+        volta separada porque o emoji nao aceita a tinta do texto.
+        """
+        if not tem_emoji(texto):
+            return self._mascara(f, texto, ls), None
+        partes = fatiar_emoji(texto)
+        asc, desc = f.getmetrics()
+        tam_e = max(8, int(round(f.size)))   # o CSS desenha emoji no font-size
+        fe = self._fonte_emoji(tam_e)
+        if fe is None:
+            limpo = "".join(c for c in texto
+                            if not _eh_emoji(c) and ord(c) not in EMOJI_CONT)
+            return self._mascara(f, limpo.strip() or texto, ls), None
+        asc_e, _ = fe.getmetrics()
+
+        def _av(trecho: str, eh: bool) -> float:
+            """Avanco do trecho. Numa sequencia de emoji so o glifo BASE
+            avanca — FE0F/ZWJ/tom de pele nao ocupam largura. Sem Raqm o
+            getlength mede code point a code point e dobrava o avanco."""
+            if not eh:
+                return f.getlength(trecho) + ls * len(trecho)
+            base = "".join(c for c in trecho if ord(c) not in EMOJI_CONT)
+            return fe.getlength(base or trecho) + ls
+
+        larg = 0.0
+        for trecho, eh in partes:
+            larg += _av(trecho, eh)
+        img = Image.new("L", (max(1, int(larg) + 8), asc + desc + 8), 0)
+        cor = Image.new("RGBA", img.size, (0, 0, 0, 0))
+        d, dc = ImageDraw.Draw(img), ImageDraw.Draw(cor)
+        x = 0.0
+        for trecho, eh in partes:
+            if eh:
+                dc.text((x, asc - asc_e), trecho, font=fe, embedded_color=True)
+                d.text((x, asc - asc_e), trecho, font=fe, fill=255)
+                x += _av(trecho, True)
+                continue
+            for i, ch in enumerate(trecho):
+                d.text((x + f.getlength(trecho[:i]) + ls * i, 0), ch,
+                       font=f, fill=255)
+            x += _av(trecho, False)
+        m = np.asarray(img, dtype=np.float32) / 255.0
+        c = np.asarray(cor, dtype=np.float32)
+        # o alpha do emoji manda na mascara (o fill=255 chapado exagerava
+        # a borda: o glifo colorido tem antialias proprio)
+        vis = c[..., 3] / 255.0
+        m = np.where(vis > 0, vis, m)
+        return m, c
+
+    @staticmethod
+    def _pintar_emoji(rgb: np.ndarray, cor, dx: int, dy: int = None) -> None:
+        """Cola os pixels coloridos do emoji por cima da tinta do texto."""
+        if cor is None:
+            return
+        dy = dx if dy is None else dy
+        h = min(cor.shape[0], rgb.shape[0] - dy)
+        w = min(cor.shape[1], rgb.shape[1] - dx)
+        if h <= 0 or w <= 0:
+            return
+        c = cor[:h, :w]
+        a = c[..., 3:4] / 255.0
+        reg = rgb[dy:dy + h, dx:dx + w]
+        reg[:] = reg * (1.0 - a) + c[..., :3] * a
+
     @staticmethod
     def _gradiente(altura: int) -> np.ndarray:
         """linear-gradient(180deg,#fff 0%,#fff 46%,#cfcfcf 100%)."""
@@ -372,6 +495,7 @@ class Renderizador:
         self.camadas.sort(key=lambda l: l.inicio_f)
         if (self.ed.get("elements") or {}).get("listCounter"):
             self.camadas.extend(self._montar_contador())
+        self.camadas.extend(self._montar_inserts())
         ec = self.ed.get("endCard") or {}
         if ec.get("enabled"):
             self.camadas.append(self._montar_endcard(ec, hook.get("accent")))
@@ -401,7 +525,7 @@ class Renderizador:
                        topo_caixa: float, alt_caixa: float, y_base: int,
                        cor_fixa: str | None, inicio_f: float, enter: int,
                        especs=SHADOW) -> None:
-        m = self._mascara(f, texto, ls)
+        m, cor_e = self._mascara_cor(f, texto, ls)
         h_m, w_m = m.shape
         folga = 24
         pad_m = np.zeros((h_m + 2 * folga, w_m + 2 * folga), dtype=np.float32)
@@ -415,6 +539,7 @@ class Renderizador:
             idxs = np.clip(np.arange(pad_m.shape[0]) + off, 0, len(col) - 1)
             rgb = np.repeat(col[idxs][:, None, None], 3, axis=2) * np.ones(
                 (1, pad_m.shape[1], 1), dtype=np.float32)
+        self._pintar_emoji(rgb, cor_e, folga)
         leg.palavras.append(Palavra(x0 - folga, y_base - folga, rgb, pad_m,
                                     sombra, inicio_f=inicio_f, enter=enter))
 
@@ -891,15 +1016,39 @@ class Renderizador:
             return leg
 
         if estilo == "card":
+            # linha opcional de logo + assinatura acima do bloco (gap 28),
+            # como o container em coluna do template. O logo tem canto
+            # arredondado e box-shadow (sigma raio/2); a assinatura tem
+            # drop-shadow (sigma ~= raio).
             y = top
-            larg_max = max(self._larg_hl(l, tam, 900) for l in linhas) if linhas else 0
-            for i, l in enumerate(linhas):
-                pad = (46, 28 if i == 0 else 0, 28 if i == len(linhas) - 1 else 0)
-                alt = self._hl_bloco_texto(
-                    leg, l, tam, 900, (self.w - (larg_max + 92)) / 2, y, alt_cx,
-                    "#ffffff", [(0, 18, 50, 0.45)], fundo="#232326", raio=24,
-                    pad_xy=(46, pad[1], pad[2]), sobe=sobe)
-                y += alt
+            imgs = []
+            lg = self._abrir_imagem(hook.get("logo"), 300, raio=18)
+            if lg:
+                imgs.append((lg, [(0, 12, 34, 0.4)], 0.5))
+            sg = self._abrir_imagem(hook.get("sign"), 128)
+            if sg:
+                imgs.append((sg, [(0, 8, 20, 0.45)], BLUR_K))
+            if imgs:
+                gap_i = 34
+                larg_l = sum(i[0][1].shape[1] for i in imgs) + gap_i * (len(imgs) - 1)
+                alt_l = max(i[0][1].shape[0] for i in imgs)
+                x = (self.w - larg_l) / 2
+                for img, esp, k in imgs:          # centralizados na linha
+                    h_i, w_i = img[1].shape
+                    self._palavra_imagem(leg, img, x, y + (alt_l - h_i) / 2,
+                                         esp, k, 8, sobe)
+                    x += w_i + gap_i
+                y += alt_l + 28
+            # a caixa escura envolve o BLOCO. Aplicada por linha, a segunda
+            # (mais curta) ganhava uma caixa mais estreita e a borda direita
+            # saia em degrau — o mesmo defeito que a manchete tinha.
+            larg_max = max((self._larg_hl(l, tam, 900) for l in linhas),
+                           default=0)
+            self._hl_bloco_multi(
+                leg, linhas, tam, 900, alt_cx,
+                (self.w - (larg_max + 92)) / 2, y, "#ffffff",
+                [(0, 18, 50, 0.45)], raio=24, pad_xy=(46, 28, 28),
+                fundo="#232326", sobe=sobe)
             return leg
 
         if estilo == "misto":
@@ -1211,7 +1360,7 @@ class Renderizador:
                                 radius=max(2, int(raio * esc)), fill=255)
                             a_caixa = np.asarray(img, dtype=np.float32) / 255.0
                             fe = self.fonte(4, max(8, int(tam * esc)))
-                            m = self._mascara(fe, texto, 0.0)
+                            m, cor_emj = self._mascara_cor(fe, texto, 0.0)
                             t_a = np.zeros_like(a_caixa)
                             tx = 32 + int(pad * esc)
                             # texto centrado na caixa de linha (meia-entrelinha)
@@ -1224,6 +1373,7 @@ class Renderizador:
                             cor_t = self._cor(cor_tinta)
                             rgb = np.broadcast_to(cor_c, (*a_caixa.shape, 3)).copy()
                             rgb = rgb * (1 - t_a[..., None]) + cor_t * t_a[..., None]
+                            self._pintar_emoji(rgb, cor_emj, tx, ty)
                             alpha = np.maximum(a_caixa, t_a)
                             # boxShadow 0 10px 26px rgba(0,0,0,.45): para
                             # box-shadow o sigma e raio/2 (ao contrario do
@@ -1377,7 +1527,7 @@ class Renderizador:
                     peso = 600 if eh_hi else 400
                     italico = eh_hi and self._hash_det(li * 7 + i) > 0.65
                     f = self.fonte(6 if italico else 5, tam_i, peso)
-                    m = self._mascara(f, limpar(w["text"]), 0.0)
+                    m, cor_e = self._mascara_cor(f, limpar(w["text"]), 0.0)
                     h_m, w_m = m.shape
                     folga = 40
                     pad_m = np.zeros((h_m + 2 * folga, w_m + 2 * folga),
@@ -1393,6 +1543,7 @@ class Renderizador:
                                         0, h_m - 1)
                         rgb = np.repeat(col[idx_l][:, None, :],
                                         pad_m.shape[1], axis=1)
+                    self._pintar_emoji(rgb, cor_e, folga)
                     asc, desc = f.getmetrics()
                     x0 = int(round(x)) - folga
                     y0 = int(round(y + (alturas[li] - (asc + desc)) / 2)) - folga
@@ -1546,15 +1697,20 @@ class Renderizador:
                     # so redimensionar deixava o texto 44% mais gordo que o
                     # do Remotion (medido). Rasteriza-se maior e reduz.
                     f_big = self._fonte_arquivo(arq, max(8, int(tam / sq_y)), eixo)
-                    m = self._mascara(f_big, texto, float(track) / sq_x)
+                    m, cor_emj = self._mascara_cor(f_big, texto,
+                                                   float(track) / sq_x)
                     novo_t = (max(1, int(m.shape[1] * sq_x * sq_y)),
                               max(1, int(m.shape[0] * sq_y * sq_y)))
                     m = np.asarray(
                         Image.fromarray((m * 255).astype(np.uint8))
                         .resize(novo_t, Image.LANCZOS),
                         dtype=np.float32) / 255.0
+                    if cor_emj is not None:    # o emoji aperta junto
+                        cor_emj = np.asarray(
+                            Image.fromarray(cor_emj.astype(np.uint8), "RGBA")
+                            .resize(novo_t, Image.LANCZOS), dtype=np.float32)
                 else:
-                    m = self._mascara(f, texto, float(track))
+                    m, cor_emj = self._mascara_cor(f, texto, float(track))
                 h_m, w_m = m.shape
                 folga = 48
                 x0 = int((self.w - w_m) / 2)
@@ -1580,6 +1736,7 @@ class Renderizador:
                     rgb = np.broadcast_to(self._cor(slab), (*a_c.shape, 3)).copy()
                     rgb = rgb * (1 - t_a[..., None]) \
                         + self._cor(tinta) * t_a[..., None]
+                    self._pintar_emoji(rgb, cor_emj, tx, ty)
                     alpha = np.maximum(a_c, t_a)
                     b = np.asarray(Image.fromarray((a_c * 255).astype(np.uint8))
                                    .filter(ImageFilter.GaussianBlur(30 * 0.5)),
@@ -1613,6 +1770,7 @@ class Renderizador:
                     alpha = np.maximum(contorno, pad_m)
                     rgb = np.broadcast_to(cor_e, (*pad_m.shape, 3)).copy()
                     rgb = rgb * (1 - pad_m[..., None]) + cor_t * pad_m[..., None]
+                    self._pintar_emoji(rgb, cor_emj, folga)
                     # A sombra do CSS parte do GLIFO, nao do contorno: usar
                     # `alpha` (glifo+contorno, ~25% maior) inflava o halo em
                     # 60% (medido: 35.816 contra 22.335 pixels).
@@ -1625,6 +1783,7 @@ class Renderizador:
                     sombra = self._sombra_de(pad_m, [(0, 4, 18, 0.55)], k=0.5)
                     cor = self._cor(accent or "#f4f1e9")
                     rgb = np.broadcast_to(cor, (*pad_m.shape, 3)).copy()
+                    self._pintar_emoji(rgb, cor_emj, folga)
                     leg.palavras.append(Palavra(
                         x0 - folga,
                         int(y + (alt_l * sq_y - (asc + desc) * sq_y) / 2) - folga,
@@ -1699,6 +1858,140 @@ class Renderizador:
             camadas.append(leg)
         return camadas
 
+    def _abrir_imagem(self, rel, larg: int, raio: int = 0):
+        """(rgb, alpha) de uma imagem de public/, redimensionada para `larg`.
+
+        `raio` arredonda os cantos como o borderRadius do template. Devolve
+        None se o arquivo sumiu ou nao abre — imagem faltando nao pode
+        derrubar o render inteiro.
+        """
+        if not rel:
+            return None
+        cam = self.public / str(rel)
+        if not cam.exists():
+            return None
+        try:
+            im = Image.open(cam).convert("RGBA")
+        except OSError:
+            print(f"  [warn] imagem ilegivel: {cam.name}", flush=True)
+            return None
+        alt = max(1, int(round(im.height * larg / max(1, im.width))))
+        im = im.resize((larg, alt), Image.LANCZOS)
+        arr = np.asarray(im, dtype=np.float32)
+        a = arr[..., 3] / 255.0
+        if raio > 0:
+            m = Image.new("L", (larg, alt), 0)
+            ImageDraw.Draw(m).rounded_rectangle(
+                [0, 0, larg - 1, alt - 1], radius=raio, fill=255)
+            a = a * (np.asarray(m, dtype=np.float32) / 255.0)
+        return arr[..., :3].copy(), a
+
+    def _palavra_imagem(self, leg, img, x: int, y: int, especs,
+                        k: float, enter: int, sobe: float):
+        """Empilha uma imagem como Palavra, com folga para a sombra caber."""
+        rgb, a = img
+        h, w = a.shape
+        folga = 60
+        A = np.zeros((h + 2 * folga, w + 2 * folga), dtype=np.float32)
+        A[folga:folga + h, folga:folga + w] = a
+        R = np.zeros((*A.shape, 3), dtype=np.float32)
+        R[folga:folga + h, folga:folga + w] = rgb
+        leg.palavras.append(Palavra(
+            int(x) - folga, int(y) - folga, R, A,
+            self._sombra_de(A, especs, k=k),
+            inicio_f=0, enter=enter, sobe=sobe))
+
+    # ----- b-roll / inserts (InsertCard.tsx) --------------------------------
+    def _montar_inserts(self):
+        """Uma camada por insert. A imagem entra em `cover` no cartao e o
+        arredondamento ja vem no alpha; o resto (escala, opacidade, subida)
+        e por quadro, em `_desenhar_insert`."""
+        camadas = []
+        for it in (self.ed.get("inserts") or []):
+            src = it.get("src")
+            if not src:
+                continue
+            cam = self.public / str(src)
+            if not cam.exists():
+                print(f"  [warn] insert ausente: {src}", flush=True)
+                continue
+            try:
+                im = Image.open(cam).convert("RGBA")
+            except OSError:
+                print(f"  [warn] insert ilegivel: {src}", flush=True)
+                continue
+            ini = int(round(float(it.get("start") or 0.0) * self.fps))
+            fim = int(round(float(it.get("end") or 0.0) * self.fps))
+            total = fim - ini
+            if total <= 0:
+                continue
+            # objectFit: cover — recorta o excedente, nao deforma
+            esc = max(INSERT_W / im.width, INSERT_H / im.height)
+            nw, nh = max(1, round(im.width * esc)), max(1, round(im.height * esc))
+            im = im.resize((nw, nh), Image.LANCZOS).crop((
+                (nw - INSERT_W) // 2, (nh - INSERT_H) // 2,
+                (nw - INSERT_W) // 2 + INSERT_W,
+                (nh - INSERT_H) // 2 + INSERT_H))
+            masc = Image.new("L", (INSERT_W, INSERT_H), 0)
+            ImageDraw.Draw(masc).rounded_rectangle(
+                [0, 0, INSERT_W - 1, INSERT_H - 1], radius=INSERT_RAIO,
+                fill=255)
+            im.putalpha(masc)
+            folga = 70
+            base = np.zeros((INSERT_H + 2 * folga, INSERT_W + 2 * folga),
+                            dtype=np.float32)
+            base[folga:folga + INSERT_H, folga:folga + INSERT_W] = \
+                np.asarray(masc, dtype=np.float32) / 255.0
+            sombra = self._sombra_de(base, [(0, 18, 50, 0.45)], k=0.5)
+            leg = Camada(ini, min(self.frames, fim) - 1)
+            leg.dur_f = total
+            leg.saida_f = 1e9
+            s_rgba = np.zeros((*sombra.shape, 4), dtype=np.uint8)
+            s_rgba[..., 3] = (sombra * 255).astype(np.uint8)   # preta
+            leg.insert = (im, total, Image.fromarray(s_rgba, "RGBA"))
+            camadas.append(leg)
+            self.eventos_sfx.append(("whoosh.mp3", ini / self.fps, 0.09))
+        return camadas
+
+    def _desenhar_insert(self, leg, fl: float, buf, sujo, mesclar) -> None:
+        im, total, sombra_im = leg.insert
+        f = max(0.0, fl)
+        # entra em 9 quadros (Easing.out cubic), sai nos ultimos 7
+        ent = min(1.0, f / 9.0)
+        ent = 1.0 - (1.0 - ent) ** 3
+        sai = 1.0 if f <= total - 7 else max(0.0, (total - f) / 7.0)
+        op = min(ent, sai)
+        if op <= 0.004:
+            return
+        # Ken-Burns: a imagem cresce 8% enquanto esta na tela
+        cresce = 1.0 + 0.08 * min(1.0, f / max(1.0, total))
+        escala = (0.92 + 0.08 * ent) * cresce
+        dy = 26.0 * (1.0 - ent)
+        lw = max(1, int(round(INSERT_W * escala)))
+        lh = max(1, int(round(INSERT_H * escala)))
+        # `scale` do CSS cresce a partir do CENTRO da caixa
+        cx = self.w / 2.0
+        cy = INSERT_TOP + INSERT_H / 2.0 + dy
+        x0, y0 = int(round(cx - lw / 2)), int(round(cy - lh / 2))
+        folga = 70
+        L, A = lw + 2 * folga, lh + 2 * folga
+        tela_im = sombra_im.resize((L, A), Image.BILINEAR)
+        tela_im.alpha_composite(im.resize((lw, lh), Image.BILINEAR),
+                                (folga, folga))
+        comp = np.asarray(tela_im, dtype=np.uint8)
+        if op < 0.996:
+            comp = comp.copy()
+            comp[..., 3] = (comp[..., 3] * op).astype(np.uint8)
+        # recorta no que cabe no quadro
+        fx, fy = x0 - folga, y0 - folga
+        cx0, cy0 = max(0, fx), max(0, fy)
+        cx1 = min(buf.shape[1], fx + L)
+        cy1 = min(buf.shape[0], fy + A)
+        if cx1 <= cx0 or cy1 <= cy0:
+            return
+        comp = comp[cy0 - fy:cy1 - fy, cx0 - fx:cx1 - fx]
+        self._blit(comp, leg, buf, sujo, cx0, cy0, cx1, cy1, 0, mesclar)
+
     # ------------------------------------------------------------ desenho ----
     def _caixa_leg(self, leg: Camada) -> tuple[int, int, int, int]:
         if leg.caixa is None:
@@ -1767,6 +2060,9 @@ class Renderizador:
 
     def desenhar(self, leg: Camada, fl: float, buf: np.ndarray,
                  sujo: list[int], mesclar: bool) -> None:
+        if leg.insert is not None:
+            self._desenhar_insert(leg, fl, buf, sujo, mesclar)
+            return
         op_cue, dy_cue, blur_cue = leg.saida(fl)
         if op_cue <= 0.004:
             return
@@ -1899,6 +2195,9 @@ class Renderizador:
             if not (leg.inicio_f <= f <= leg.fim_f):
                 continue
             fl = f - leg.inicio_f
+            if leg.insert is not None:
+                chave.append((id(leg), f))    # zoom continuo: sempre muda
+                continue
             op_cue, dy_cue, blur_cue = leg.saida(fl)
             if op_cue <= 0.004:
                 continue

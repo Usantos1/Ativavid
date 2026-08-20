@@ -9,11 +9,18 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import numpy as np  # noqa: E402
+import pytest  # noqa: E402
+from PIL import Image  # noqa: E402
+
 from app.render_proprio import (  # noqa: E402
+    EMOJI_FONT,
     Renderizador,
     motivo_nao_suportado,
     render_overlay_proprio,
 )
+
+_EMOJI_OK = EMOJI_FONT.exists()
 
 NOWIN = {"creationflags": subprocess.CREATE_NO_WINDOW} if hasattr(subprocess, "CREATE_NO_WINDOW") else {}
 
@@ -50,8 +57,6 @@ def test_gate_derruba_o_que_nao_desenha(tmp_path):
     casos = [
         (_ed(captions={"style": "estilo_do_futuro"}), "estilo de legenda"),
         (_ed(hook={"enabled": True, "style": "estilo_novo", "lines": ["a"]}), "headline"),
-        (_ed(elements={"emojiCaptions": True}), "emoji"),
-        (_ed(inserts=[{"file": "x.png"}]), "inserts"),
         (_ed(width=720), "resolucao"),
     ]
     for ed, trecho in casos:
@@ -252,14 +257,6 @@ def test_contador_e_logo_agora_sao_suportados(tmp_path):
         _public(tmp_path)) is None
 
 
-def test_emoji_continua_barrado_por_falta_de_glifo(tmp_path):
-    """As fontes embarcadas desenham TOFU no lugar do emoji (verificado):
-    sem fonte de emoji, este caso TEM de ir para o Remotion."""
-    motivo = motivo_nao_suportado(_ed(elements={"emojiCaptions": True}),
-                                  _public(tmp_path))
-    assert motivo and "emoji" in motivo
-
-
 def test_contador_um_selo_por_marcador(tmp_path):
     r = Renderizador(_public(tmp_path),
                      _ed(elements={"listCounter": True},
@@ -328,4 +325,174 @@ def test_fonte_propria_ausente_nao_quebra(tmp_path):
                          brandFontFile="fonts/sumiu.ttf"),
                      frames=30, fps=30.0)
     assert r.marca_cap is None
+
+# ----------------------------------------------------------------- emoji ----
+def test_emoji_passa_quando_a_fonte_do_sistema_existe(tmp_path):
+    from app.render_proprio import EMOJI_FONT
+    motivo = motivo_nao_suportado(_ed(elements={"emojiCaptions": True}),
+                                  _public(tmp_path))
+    if EMOJI_FONT.exists():
+        assert motivo is None
+    else:
+        assert motivo and "emoji" in motivo
+
+
+def test_fatiar_separa_emoji_do_texto():
+    from app.render_proprio import fatiar_emoji
+    assert fatiar_emoji("gratis \U0001F193") == [("gratis ", False),
+                                                 ("\U0001F193", True)]
+    assert fatiar_emoji("so texto") == [("so texto", False)]
+    assert fatiar_emoji("a\U0001F525b") == [("a", False), ("\U0001F525", True),
+                                            ("b", False)]
+
+
+def test_seletor_de_variacao_fica_no_mesmo_glifo():
+    """FE0F nao pode virar um segundo pedaco — o Chrome desenha UM glifo, e
+    medi-lo em separado dobrava o avanco (medido: 223px contra 113px)."""
+    from app.render_proprio import fatiar_emoji
+    assert fatiar_emoji("cuidado \u26A0\uFE0F") == [("cuidado ", False),
+                                                    ("\u26A0\uFE0F", True)]
+
+
+def test_texto_comum_nao_e_confundido_com_emoji():
+    from app.render_proprio import tem_emoji
+    for t in ("Nao, senhora", "R$ 1.200,00", "voce ja tentou\u2026", "aspas \u201cx\u201d"):
+        assert not tem_emoji(t), t
+
+
+@pytest.mark.skipif(not _EMOJI_OK, reason="Segoe UI Emoji ausente")
+def test_emoji_sai_colorido_e_do_tamanho_do_texto(tmp_path):
+    """A cor volta separada da mascara (o emoji nao aceita a tinta do texto)
+    e o glifo ocupa o font-size, nao a ascendente."""
+    r = Renderizador(_public(tmp_path), _ed(), frames=30, fps=30.0)
+    f = r.fonte(2, 64)
+    m_so, cor_so = r._mascara_cor(f, "grande", 0.0)
+    assert cor_so is None
+    m, cor = r._mascara_cor(f, "grande \U0001F525", 0.0)
+    assert cor is not None and cor.shape[:2] == m.shape
+    vis = cor[..., 3] > 128
+    assert vis.any(), "o emoji tem de deixar tinta"
+    px = cor[vis][:, :3]
+    assert (px.max(axis=1) - px.min(axis=1) > 40).sum() > 100, "tem de ser colorido"
+    ys = np.nonzero(vis.any(axis=1))[0]
+    assert 40 <= ys.max() - ys.min() <= 64, "o glifo cabe no font-size"
+
+
+@pytest.mark.skipif(not _EMOJI_OK, reason="Segoe UI Emoji ausente")
+def test_emoji_nao_dobra_a_largura_da_palavra(tmp_path):
+    """Regressao do avanco: `getlength` sem Raqm media FE0F como um segundo
+    glifo e a palavra saia com o dobro do espaco depois do emoji."""
+    r = Renderizador(_public(tmp_path), _ed(), frames=30, fps=30.0)
+    f = r.fonte(2, 64)
+    um, _ = r._mascara_cor(f, "x \U0001F525", 0.0)
+    vs, _ = r._mascara_cor(f, "x \u26A0\uFE0F", 0.0)
+    assert abs(um.shape[1] - vs.shape[1]) <= 12, (um.shape, vs.shape)
+
+
+def test_sem_a_fonte_de_emoji_o_texto_ainda_sai(tmp_path, monkeypatch):
+    """Emoji digitado na fala + Windows sem a fonte: desenha o resto."""
+    r = Renderizador(_public(tmp_path), _ed(), frames=30, fps=30.0)
+    monkeypatch.setattr(r, "_fonte_emoji", lambda tam: None)
+    m, cor = r._mascara_cor(r.fonte(2, 64), "oferta \U0001F525", 0.0)
+    assert cor is None and m.shape[1] > 10
+
+
+# ------------------------------------------------- logo/assinatura da headline ----
+def test_headline_com_logo_e_assinatura_suportada(tmp_path):
+    pub = _public(tmp_path)
+    Image.new("RGBA", (600, 300), (255, 82, 0, 255)).save(pub / "lg.png")
+    base = {"enabled": True, "style": "card", "text": "oi", "endSec": 3.0}
+    ed = _ed(hook=dict(base, logo="lg.png", sign="lg.png"),
+             endCard={"enabled": False})
+    assert motivo_nao_suportado(ed, pub) is None
+    com = Renderizador(pub, ed, frames=30, fps=30.0).camadas[0]
+    sem = Renderizador(pub, _ed(hook=base, endCard={"enabled": False}),
+                       frames=30, fps=30.0).camadas[0]
+    assert len(com.palavras) == len(sem.palavras) + 2, "logo + assinatura"
+    # a linha de imagens empurra o bloco de texto para baixo
+    assert max(p.y0 for p in com.palavras) > max(p.y0 for p in sem.palavras)
+
+
+def test_logo_ausente_nao_derruba_a_headline(tmp_path):
+    ed = _ed(hook={"enabled": True, "style": "card", "text": "oi",
+                   "logo": "sumiu.png"})
+    assert motivo_nao_suportado(ed, _public(tmp_path)) is None
+    r = Renderizador(_public(tmp_path), ed, frames=30, fps=30.0)
+    assert r.camadas, "a headline continua desenhando sem o logo"
+
+
+def test_card_desenha_a_caixa_numa_peca_so(tmp_path):
+    """Aplicada por linha, a segunda (mais curta) ganhava uma caixa mais
+    estreita e a borda direita saia em degrau."""
+    ed = _ed(hook={"enabled": True, "style": "card", "endSec": 3.0,
+                   "text": "VOCE QUASE PERDEU ESSA VENDA POR UM DETALHE"},
+             endCard={"enabled": False})
+    r = Renderizador(_public(tmp_path), ed, frames=30, fps=30.0)
+    hl = r.camadas[0].palavras
+    assert len(hl) == 1, f"a caixa tem de ser uma peca so, veio {len(hl)}"
+    alt = hl[0].alpha.shape[0]
+    assert alt > 200, f"as duas linhas cabem na mesma caixa ({alt}px)"
+
+# ------------------------------------------------------------ b-roll ----
+def _com_insert(pub, **mud):
+    Image.new("RGB", (1200, 800), (18, 22, 40)).save(pub / "br.jpg")
+    it = dict({"src": "br.jpg", "start": 0.5, "end": 2.5}, **mud)
+    return _ed(inserts=[it], hook={"enabled": False},
+               endCard={"enabled": False}, captions={"style": "stacked"})
+
+
+def test_insert_suportado(tmp_path):
+    pub = _public(tmp_path)
+    assert motivo_nao_suportado(_com_insert(pub), pub) is None
+
+
+def test_insert_vira_camada_com_a_janela_certa(tmp_path):
+    pub = _public(tmp_path)
+    r = Renderizador(pub, _com_insert(pub), frames=120, fps=30.0)
+    br = [c for c in r.camadas if c.insert is not None]
+    assert len(br) == 1
+    assert (br[0].inicio_f, br[0].fim_f) == (15, 74)
+    assert not br[0].palavras, "o cartao e desenhado na hora, sem Palavras"
+    assert ("whoosh.mp3", 0.5, 0.09) in r.eventos_sfx
+
+
+def test_insert_ausente_nao_derruba_o_render(tmp_path):
+    pub = _public(tmp_path)
+    ed = _com_insert(pub)
+    ed["inserts"][0]["src"] = "sumiu.jpg"
+    assert motivo_nao_suportado(ed, pub) is None
+    r = Renderizador(pub, ed, frames=120, fps=30.0)
+    assert not [c for c in r.camadas if c.insert is not None]
+
+
+def test_insert_de_duracao_zero_e_ignorado(tmp_path):
+    pub = _public(tmp_path)
+    r = Renderizador(pub, _com_insert(pub, end=0.5), frames=120, fps=30.0)
+    assert not [c for c in r.camadas if c.insert is not None]
+
+
+def test_ken_burns_muda_a_assinatura_de_cada_quadro(tmp_path):
+    """A camada nao tem Palavras: sem tratamento proprio a assinatura sairia
+    constante e o motor repetiria o primeiro quadro o filme inteiro."""
+    pub = _public(tmp_path)
+    r = Renderizador(pub, _com_insert(pub), frames=120, fps=30.0)
+    assinaturas = {r._assinatura(f) for f in range(20, 60)}
+    assert len(assinaturas) == 40
+
+
+def test_o_cartao_cresce_e_fica_no_lugar(tmp_path):
+    """Ken-Burns (1 -> 1,08) a partir do centro da caixa fixa."""
+    pub = _public(tmp_path)
+    r = Renderizador(pub, _com_insert(pub), frames=120, fps=30.0)
+    leg = [c for c in r.camadas if c.insert is not None][0]
+    largs, centros = [], []
+    for f in (10, 20, 30, 40):        # 53+ ja e o fade de saida
+        buf = np.zeros((1920, 1080, 4), dtype=np.uint8)
+        r.desenhar(leg, f, buf, [0, 0, 0, 0], False)
+        xs = np.nonzero((buf[..., 3] > 200).any(axis=0))[0]
+        largs.append(int(xs.max() - xs.min()))
+        centros.append(int((xs.max() + xs.min()) / 2))
+    assert largs == sorted(largs) and largs[-1] > largs[0], largs
+    assert max(largs) <= round(780 * 1.08) + 4, largs
+    assert max(centros) - min(centros) <= 2, centros
 

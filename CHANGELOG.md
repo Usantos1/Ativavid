@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.28
+
+Emoji e b-roll no motor rápido — nenhum recurso cai mais no caminho lento.
+
+- **Emoji nas legendas.** Passa a ser desenhado com a mesma fonte que o navegador usava (a Segoe UI Emoji do Windows), então o desenho é o mesmo. De quebra corrigiu um caso em que o ✅ saía como um quadradinho branco vazio
+- **B-roll / inserts.** O cartão de imagem com o zoom lento (Ken-Burns) foi portado: mesma posição, mesmo crescimento, mesmo som de entrada
+- **Logo e assinatura na headline** (estilo cartão) também entraram
+- A caixa escura do cartão passa a ser uma peça só — antes a segunda linha ganhava uma caixa mais estreita e a borda direita saía em degrau
+- Com isso o motor novo desenha **todos** os elementos. O Remotion continua instalado e assume sozinho se aparecer algo que o motor não conheça
+
 ## 2.27
 
 Fonte da marca e headline pergunta→resposta no motor rápido.
