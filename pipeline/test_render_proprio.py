@@ -50,11 +50,9 @@ def test_gate_derruba_o_que_nao_desenha(tmp_path):
     casos = [
         (_ed(captions={"style": "estilo_do_futuro"}), "estilo de legenda"),
         (_ed(hook={"enabled": True, "style": "estilo_novo", "lines": ["a"]}), "headline"),
-        (_ed(elements={"listCounter": True}), "contador"),
         (_ed(elements={"emojiCaptions": True}), "emoji"),
         (_ed(inserts=[{"file": "x.png"}]), "inserts"),
         (_ed(width=720), "resolucao"),
-        (_ed(endCard={"enabled": True, "logo": "logo.png"}), "logo"),
     ]
     for ed, trecho in casos:
         motivo = motivo_nao_suportado(ed, pub)
@@ -243,4 +241,33 @@ def test_headline_quebra_em_duas_linhas_por_largura(tmp_path):
 
 def test_headline_maiuscula_so_em_tres_estilos():
     assert set(Renderizador.HL_MAIUSCULA) == {"card", "manchete", "carimbo"}
+
+def test_contador_e_logo_agora_sao_suportados(tmp_path):
+    """Portados na v2.26 — deixaram de derrubar para o Remotion."""
+    assert motivo_nao_suportado(
+        _ed(elements={"listCounter": True},
+            listMarkers=[{"n": 1, "atSec": 0.5}]), _public(tmp_path)) is None
+    assert motivo_nao_suportado(
+        _ed(endCard={"enabled": True, "lines": ["x"], "logo": "logo.png"}),
+        _public(tmp_path)) is None
+
+
+def test_emoji_continua_barrado_por_falta_de_glifo(tmp_path):
+    """As fontes embarcadas desenham TOFU no lugar do emoji (verificado):
+    sem fonte de emoji, este caso TEM de ir para o Remotion."""
+    motivo = motivo_nao_suportado(_ed(elements={"emojiCaptions": True}),
+                                  _public(tmp_path))
+    assert motivo and "emoji" in motivo
+
+
+def test_contador_um_selo_por_marcador(tmp_path):
+    r = Renderizador(_public(tmp_path),
+                     _ed(elements={"listCounter": True},
+                         listMarkers=[{"n": 1, "atSec": 0.5},
+                                      {"n": 2, "atSec": 2.0}],
+                         hook={"enabled": False}, endCard={"enabled": False}),
+                     frames=120, fps=30.0)
+    selos = [c for c in r.camadas if c.inicio_f in (15, 60)]
+    assert len(selos) == 2, "um selo por marcador, cada um ate o proximo"
+    assert selos[0].fim_f == 59 and selos[1].fim_f == 120
 

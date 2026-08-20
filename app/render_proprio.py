@@ -113,13 +113,11 @@ def motivo_nao_suportado(edit_data: dict[str, Any], public: Path) -> str | None:
             return "fonte de marca na headline"
         if hook.get("logo") or hook.get("sign"):
             return "logo/assinatura na headline"
-    ec = edit_data.get("endCard") or {}
-    if ec.get("enabled") and ec.get("logo"):
-        return "logo no cartao final"
     els = edit_data.get("elements") or {}
-    if els.get("listCounter"):
-        return "contador de lista"
     if els.get("emojiCaptions"):
+        # As fontes que embarcamos nao tem glifo de emoji — desenham TOFU
+        # (caixa com X), verificado. Sem uma fonte de emoji, este caso tem
+        # de ir para o Remotion, que usa a do sistema.
         return "emoji nas legendas"
     if edit_data.get("inserts"):
         return "inserts/b-roll"
@@ -326,6 +324,8 @@ class Renderizador:
                     self.eventos_sfx.append((
                         "caption-scratch.mp3", t0 + 2 / self.fps, self.scratch_vol))
         self.camadas.sort(key=lambda l: l.inicio_f)
+        if (self.ed.get("elements") or {}).get("listCounter"):
+            self.camadas.extend(self._montar_contador())
         ec = self.ed.get("endCard") or {}
         if ec.get("enabled"):
             self.camadas.append(self._montar_endcard(ec, hook.get("accent")))
@@ -925,6 +925,21 @@ class Renderizador:
         leg.saida_f = 1e9
         leg.dim = float(ec.get("dim") if ec.get("dim") is not None else 0.82)
         leg.dim_fade = fade
+        # logo do cartao final: imagem 44% da largura, acima das linhas
+        logo_rel = ec.get("logo")
+        logo_arr = None
+        if logo_rel:
+            cam = self.public / str(logo_rel)
+            if cam.exists():
+                try:
+                    im = Image.open(cam).convert("RGBA")
+                    larg = int(self.w * 0.44)
+                    alt = max(1, int(im.height * larg / max(1, im.width)))
+                    im = im.resize((larg, alt), Image.LANCZOS)
+                    logo_arr = np.asarray(im, dtype=np.float32)
+                except OSError:
+                    logo_arr = None
+
         base = round(self.w * 0.058)
         safe_w = self.w * 0.70
         escala = [1.0, 0.62]
@@ -941,7 +956,16 @@ class Renderizador:
             mascaras.append((self._mascara(f, t, -1.0), i))
         gap = round(tam * 0.34)
         total = sum(m.shape[0] for m, _ in mascaras) + gap * max(0, len(mascaras) - 1)
+        if logo_arr is not None:
+            total += logo_arr.shape[0] + gap
         y = (self.h - total) / 2.0
+        if logo_arr is not None:
+            a_l = logo_arr[..., 3] / 255.0
+            leg.palavras.append(Palavra(
+                int((self.w - logo_arr.shape[1]) / 2), int(y),
+                logo_arr[..., :3].copy(), a_l, np.zeros_like(a_l),
+                inicio_f=0, enter=fade, sobe=26.0))
+            y += logo_arr.shape[0] + gap
         for m, i in mascaras:
             h_m, w_m = m.shape
             folga = 32
@@ -1501,6 +1525,72 @@ class Renderizador:
                         int(y + (alt_l * sq_y - (asc + desc) * sq_y) / 2) - folga,
                         rgb, pad_m, sombra, inicio_f=-1, enter=1, sobe=0.0))
                 y += alt_l * sq_y + gap_l
+            camadas.append(leg)
+        return camadas
+
+    # ----- contador de lista (ListCounter.tsx) ------------------------------
+    def _montar_contador(self):
+        """Selo com o numero, canto superior direito, girado 4 graus, com pop.
+        Cada marcador vale ate o proximo (o ultimo vai ate o fim)."""
+        marcadores = self.ed.get("listMarkers") or []
+        if not marcadores:
+            return []
+        accent = (self.ed.get("hook") or {}).get("accent") or "#ff5200"
+        tinta = self._tinta_na_caixa(accent)
+        tam = 64
+        f = self.fonte(4, tam)
+        camadas = []
+        for i, mk in enumerate(marcadores):
+            ini = int(round(float(mk["atSec"]) * self.fps))
+            fim = (int(round(float(marcadores[i + 1]["atSec"]) * self.fps)) - 1
+                   if i + 1 < len(marcadores) else self.frames)
+            if fim < ini:
+                continue
+            leg = Camada(ini, fim)
+            leg.dur_f = fim - ini + 1
+            leg.saida_f = 1e9
+            texto = str(mk["n"])
+            asc, desc = f.getmetrics()
+            for est in range(9):
+                t = min(1.0, est / 8)
+                esc = 0.6 + 0.4 * self._ease_back(t)
+                m = self._mascara(self.fonte(4, max(8, int(tam * esc))), texto, 0.0)
+                h_m, w_m = m.shape
+                pad_x, pad_t, pad_b = (int(26 * esc), int(18 * esc), int(22 * esc))
+                cw, ch = w_m + 2 * pad_x, int(tam * esc) + pad_t + pad_b
+                folga = 40
+                L, A = cw + 2 * folga, ch + 2 * folga
+                img = Image.new("L", (L, A), 0)
+                ImageDraw.Draw(img).rounded_rectangle(
+                    [folga, folga, folga + cw, folga + ch],
+                    radius=max(2, int(20 * esc)), fill=255)
+                a_c = np.asarray(img, dtype=np.float32) / 255.0
+                t_a = np.zeros_like(a_c)
+                tx, ty = folga + pad_x, folga + pad_t
+                hh, ww = min(h_m, A - ty), min(w_m, L - tx)
+                t_a[ty:ty + hh, tx:tx + ww] = m[:hh, :ww]
+                rgb = np.broadcast_to(self._cor(accent), (*a_c.shape, 3)).copy()
+                rgb = rgb * (1 - t_a[..., None]) + self._cor(tinta) * t_a[..., None]
+                alpha = np.maximum(a_c, t_a)
+                sombra = self._sombra_de(a_c, [(0, 12, 32, 0.4)], k=0.5)
+
+                def _g(arr, modo="L"):
+                    im = Image.fromarray(
+                        (arr * 255).astype(np.uint8) if modo == "L"
+                        else arr.astype(np.uint8), modo)
+                    out = im.rotate(-4.0, expand=False, resample=Image.BICUBIC)
+                    return (np.asarray(out, dtype=np.float32) / 255.0
+                            if modo == "L" else
+                            np.asarray(out, dtype=np.float32))
+                alpha, sombra = _g(alpha), _g(sombra)
+                rgb = _g(rgb, "RGB")
+                # canto superior direito: paddingTop 150, paddingRight 54
+                x0 = self.w - 54 - cw - folga
+                y0 = 150 - folga
+                jan = (est, est + 1) if est < 8 else (8, 1e9)
+                leg.palavras.append(Palavra(
+                    x0, y0, rgb, alpha, sombra, inicio_f=0, enter=1,
+                    janela=jan, sobe=0.0))
             camadas.append(leg)
         return camadas
 

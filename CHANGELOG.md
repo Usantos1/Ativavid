@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.26
+
+Contador de lista e logo no cartão final também no motor rápido.
+
+- **Vídeos com contador de lista** (aquele selo numerado no canto) e **cartão final com logo** deixaram de cair no caminho lento
+- **O emoji nas legendas continua indo pelo caminho antigo, e agora sei o porquê**: as fontes que embarcamos não têm o desenho dos emojis — sairiam como quadradinho vazio. Enquanto não houver uma fonte de emoji, esse caso precisa mesmo do caminho antigo
+- Sobram no caminho antigo: emoji, headline pergunta→resposta, fonte de marca e b-roll
+
 ## 2.25
 
 Todas as headlines agora usam o motor rápido.
