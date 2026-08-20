@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.31.2
+
+- **A conferência de áudio do vídeo final parou de abrir o vídeo à toa** — ela só precisa do som
+- **A correção de cor por trecho voltou a funcionar.** Era o mesmo defeito de caminho que a detecção de cor tinha: ela media, não conseguia ler o resultado e devolvia "sem correção" caladamente. Só afeta quem usa o modo automático de cor
+- Quando o app não consegue ler as informações de cor de um vídeo, agora ele avisa no log em vez de seguir e entregar a imagem errada sem explicação
+
 ## 2.31.1
 
 - **O menu "•••" abre inteiro.** Ele não estava atrás do vídeo — estava sendo cortado pela barra do topo. Agora sai da barra e aparece por cima de tudo
