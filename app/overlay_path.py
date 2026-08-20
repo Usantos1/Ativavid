@@ -172,6 +172,8 @@ def _incremental_ranges(
     de (start, end) exclusivo de frames a re-renderizar."""
     if old.get("_template") != new.get("_template"):
         return None
+    if (old.get("_engine") or "remotion") != (new.get("_engine") or "remotion"):
+        return None  # nunca emendar quadros de motores diferentes
     old_ed = old.get("edit-data.json") or {}
     new_ed = new.get("edit-data.json") or {}
 
@@ -746,7 +748,31 @@ def try_overlay_final(
         ov_remotion = prepare_overlay_remotion(remotion, work / "remotion")
         t0 = time.perf_counter()
         snapshot = _overlay_snapshot(public, ov_remotion)
-        cached = load_overlay_cache(edit_dir)
+
+        # Renderizador próprio (app/render_proprio): desenha o MESMO overlay
+        # sem abrir o Chrome — 3,3x mais rápido e a máquina fica utilizável.
+        # Qualquer problema derruba para o Remotion; o validate_overlay_alpha
+        # continua sendo o gate final para os dois.
+        motivo_proprio = None
+        try:
+            from app.render_proprio import motivo_nao_suportado, render_overlay_proprio
+            motivo_proprio = motivo_nao_suportado(edit_data, public)
+        except Exception as e:  # noqa: BLE001
+            motivo_proprio = f"modulo indisponivel: {e}"
+        snapshot["_engine"] = "proprio" if motivo_proprio is None else "remotion"
+        if motivo_proprio is None:
+            try:
+                overlay = render_overlay_proprio(
+                    public, edit_data, frames=frames, fps=fps,
+                    width=width, height=height, out=work / "overlay.mov")
+            except Exception as e:  # noqa: BLE001
+                print(f"RENDER_PROPRIO_FALLBACK erro: {e}", flush=True)
+                overlay = None
+                snapshot["_engine"] = "remotion"
+        else:
+            print(f"RENDER_PROPRIO_PULADO {motivo_proprio}", flush=True)
+
+        cached = load_overlay_cache(edit_dir) if overlay is None else None
         if cached is not None:
             c_mov, c_snap = cached
             plan = _incremental_ranges(c_snap, snapshot, fps, frames)

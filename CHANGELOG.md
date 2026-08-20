@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.21
+
+Renderizador próprio: as legendas passam a ser desenhadas sem navegador.
+
+- **A etapa mais lenta do processamento caiu de ~107 s para ~33 s** no vídeo de teste (medido com a máquina livre). Antes, desenhar legendas, headline e cartão exigia abrir um navegador escondido (Remotion/Chrome), que ocupava mais de 90% da máquina; o desenho agora é feito direto, usando ~50%
+- **A imagem é a mesma**: fidelidade medida quadro a quadro contra o desenho antigo (razão de tinta mediana 1,003 em 851 quadros), com os efeitos sonoros e a trilha preservados
+- **Cobre o que seus vídeos usam** (legenda empilhada + headline realce + cartão + flashes — 100% dos seus 74 projetos). O que ainda não cobre (outros estilos, contador de lista, emoji, b-roll) continua indo pelo caminho antigo, automaticamente
+- Se qualquer coisa falhar no desenho novo, ele volta sozinho para o antigo — e a validação final continua a mesma para os dois
+- Para desligar à mão: variável de ambiente `ATIVAVID_RENDER_PROPRIO=0`
+
 ## 2.20
 
 Corrigir corte parou de refazer o vídeo inteiro.
