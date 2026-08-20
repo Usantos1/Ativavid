@@ -149,6 +149,57 @@ WHOOSH_VOL = 0.1
 
 
 # ---------------------------------------------------------------- suporte ----
+# Como cada estilo de legenda guarda a altura. `base` diz o que o numero
+# significa; `chave` e o campo em edit-data["captions"]. Os dois motores leem
+# exatamente estes campos (render_proprio e StackedCaptions/ScatterCaptions/
+# ImpactCaptions no template).
+LEGENDA_ANCORAS = {
+    "stacked": {"chave": "stackedOffsetY", "base": "centro_meio", "padrao": 0.156},
+    "scatter": {"chave": "scatterOffsetY", "base": "centro_frac", "padrao": 0.72},
+    "impacto": {"chave": "paddingBottom", "base": "bottom_px", "padrao": 430.0},
+}
+
+
+def ancoras_de_legenda() -> dict[str, dict[str, object]]:
+    """{estilo: {chave, base, padrao}} — so os estilos com botao LIVRE.
+
+    A familia `simples` fica de fora de proposito: ela posiciona por
+    `position` discreto, entao arrastar nao teria onde gravar.
+    """
+    return {k: dict(v) for k, v in LEGENDA_ANCORAS.items()}
+
+
+def legenda_y_para_valor(estilo: str, y_px: float, altura: int = 1920):
+    """Converte a altura na TELA para o botao do estilo. None se nao suporta.
+
+    `y_px` e o ponto que a ancora do estilo descreve: o CENTRO do bloco para
+    stacked/scatter, a BASE dele para o impacto.
+    """
+    a = LEGENDA_ANCORAS.get(str(estilo or "stacked"))
+    if not a or altura <= 0:
+        return None
+    base = a["base"]
+    if base == "centro_meio":          # centro = h/2 + h*off
+        return a["chave"], round((y_px - altura / 2) / altura, 4)
+    if base == "centro_frac":          # centro = h*off
+        return a["chave"], round(y_px / altura, 4)
+    return a["chave"], round(altura - y_px)      # bottom_px
+
+
+def legenda_valor_para_y(estilo: str, valor, altura: int = 1920):
+    """Inversa de `legenda_y_para_valor` — usada pelo editor e pelo teste."""
+    a = LEGENDA_ANCORAS.get(str(estilo or "stacked"))
+    if not a:
+        return None
+    v = float(a["padrao"] if valor is None else valor)
+    base = a["base"]
+    if base == "centro_meio":
+        return altura / 2 + altura * v
+    if base == "centro_frac":
+        return altura * v
+    return altura - v
+
+
 def ancoras_de_headline() -> dict[str, dict[str, object]]:
     """{estilo: {"base": "top"|"bottom", "px": N}} — a altura padrao.
 

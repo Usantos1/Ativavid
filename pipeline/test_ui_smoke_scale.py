@@ -237,3 +237,32 @@ def test_headline_arrastavel_no_editor():
     i = limpo.index(".hl-overlay {")
     assert "padding-top" not in limpo[i:limpo.index("}", i)]
     assert ".hl-overlay-line.dragging" in css
+
+
+def test_legenda_arrastavel_no_editor():
+    """Mesma mecânica da headline, mas cada estilo guarda a altura num botão
+    diferente — e a família `simples` não tem botão livre nenhum."""
+    js = (REPO / "assets" / "preview" / "app.js").read_text(encoding="utf-8")
+    for fn in ("function capEstilo", "function capAncoraY",
+               "function capPosicionar", "function capArrastavel"):
+        assert fn in js, fn
+    assert "set_caption_pos" in js
+    # a tabela vem do motor, junto com a da headline
+    assert "CAP_ANCORAS = d.captions" in js
+    # estilo sem altura livre não vira arrastável
+    assert "if (capAncoraY() == null) return;" in js
+    # a marca do arrasto é limpa no INÍCIO do gesto: presa ao clique que a
+    # consome, ela sobrevivia a um arrasto sem click e comia o clique seguinte
+    assert js.count("dataset.acabouDeArrastar = '0';") >= 2
+
+
+def test_conversao_de_altura_vive_num_lugar_so():
+    """A ida (pixel -> botão) é do motor. Se ela virar cópia no JavaScript,
+    as duas saem de sincronia no primeiro estilo novo."""
+    js = (REPO / "assets" / "preview" / "app.js").read_text(encoding="utf-8")
+    motor = (REPO / "app" / "render_proprio.py").read_text(encoding="utf-8")
+    assert "def legenda_y_para_valor" in motor
+    assert "def legenda_valor_para_y" in motor
+    assert "LEGENDA_ANCORAS" in motor
+    # o editor manda PIXEL e deixa a conversão com quem desenha
+    assert "op: 'set_caption_pos', y" in js

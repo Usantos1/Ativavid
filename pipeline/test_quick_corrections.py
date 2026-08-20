@@ -510,3 +510,63 @@ def test_ancoras_cobrem_todos_os_estilos_de_headline():
     # a manchete é a única que se ancora pela base
     assert anc["manchete"]["base"] == "bottom"
     assert [n for n, a in anc.items() if a["base"] == "bottom"] == ["manchete"]
+
+
+# --------------------------------------------- posição da legenda (arrastar) ----
+def test_set_caption_pos_stacked(tmp_path):
+    """stacked guarda a altura como FRAÇÃO da altura, com o bloco centrado em
+    h/2 + h*offset — é o que os dois motores leem."""
+    import json
+    from app.quick_corrections import set_caption_pos
+
+    edit = tmp_path / "edit"
+    (edit / "remotion" / "public").mkdir(parents=True)
+    p = edit / "remotion" / "public" / "edit-data.json"
+    p.write_text(json.dumps({"captions": {"style": "stacked"}}), encoding="utf-8")
+    r = set_caption_pos(edit, 1259.5)          # o padrão 0.156
+    assert r["ok"] is True
+    assert abs(r["stackedOffsetY"] - 0.156) < 0.001
+    assert json.loads(p.read_text(encoding="utf-8"))["captions"]["stackedOffsetY"]
+
+
+def test_set_caption_pos_impacto_usa_a_base(tmp_path):
+    import json
+    from app.quick_corrections import set_caption_pos
+
+    edit = tmp_path / "edit"
+    (edit / "remotion" / "public").mkdir(parents=True)
+    p = edit / "remotion" / "public" / "edit-data.json"
+    p.write_text(json.dumps({"captions": {"style": "impacto"}}), encoding="utf-8")
+    r = set_caption_pos(edit, 1490)            # 1920 - 430
+    assert r["paddingBottom"] == 430
+    assert "stackedOffsetY" not in json.loads(p.read_text(encoding="utf-8"))["captions"]
+
+
+def test_set_caption_pos_recusa_estilo_sem_altura_livre(tmp_path):
+    """A família `simples` posiciona por valor discreto — arrastar não teria
+    onde gravar, e gravar num campo que ninguém lê seria mentira na tela."""
+    import json
+    from app.quick_corrections import set_caption_pos
+
+    edit = tmp_path / "edit"
+    (edit / "remotion" / "public").mkdir(parents=True)
+    p = edit / "remotion" / "public" / "edit-data.json"
+    p.write_text(json.dumps({"captions": {"style": "simples"}}), encoding="utf-8")
+    r = set_caption_pos(edit, 900)
+    assert r["ok"] is False and "simples" in r["error"]
+
+
+def test_conversao_de_altura_da_legenda_ida_e_volta():
+    from app.render_proprio import (
+        ancoras_de_legenda, legenda_valor_para_y, legenda_y_para_valor,
+    )
+
+    for estilo, a in ancoras_de_legenda().items():
+        y = legenda_valor_para_y(estilo, None)
+        chave, valor = legenda_y_para_valor(estilo, y)
+        assert chave == a["chave"], estilo
+        assert abs(float(valor) - float(a["padrao"])) < 0.002, estilo
+        # e uma altura arbitrária também tem de voltar
+        chave2, v2 = legenda_y_para_valor(estilo, 700)
+        assert abs(legenda_valor_para_y(estilo, v2) - 700) < 2.0, estilo
+    assert legenda_y_para_valor("simples", 900) is None

@@ -3269,3 +3269,21 @@ body.styles-wide .setup-actions .btn.primary {
   flex-wrap: wrap;
   margin-top: 18px;
 }
+
+/* Legenda arrastável: mesma linguagem da headline — pega, move, solta. */
+.cap-overlay-line.movivel {
+  pointer-events: auto;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.cap-overlay-line.movivel:hover {
+  outline: 1px dashed color-mix(in srgb, var(--interact) 55%, transparent);
+  outline-offset: 6px;
+}
+.cap-overlay-line.dragging {
+  cursor: grabbing;
+  outline: 2px solid var(--interact);
+  outline-offset: 6px;
+  opacity: 0.92;
+}

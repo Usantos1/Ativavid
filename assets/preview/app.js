@@ -3597,7 +3597,12 @@ function updateCapOverlay() {
   const capScale = { p: 0.85, m: 1, g: 1.18 }[S.style.captionSize] || 1;
 
   box.classList.remove('hidden');
-  box.style.paddingBottom = `${posBottom * s}px`;
+  // Sem ancora livre (familia `simples`) fica o mapa discreto de sempre; com
+  // ancora, quem manda e o valor que o motor vai ler.
+  if (capAncoraY() == null) {
+    box.style.paddingBottom = `${posBottom * s}px`;
+    box.style.alignItems = 'flex-end';
+  }
   const sig = `${i}|${text}|${style}|${capPos}|${capScale}|${Math.round(s * 100)}`;
   if (box.dataset.sig === sig && box.querySelector('.cap-overlay-line')) {
     highlightCurrentCaption(i);
@@ -3619,18 +3624,132 @@ function updateCapOverlay() {
   }
   line.textContent = text;
   if (fix) line.classList.add('fixed');
+  capArrastavel(line);
+  capPosicionar(line);
   highlightCurrentCaption(i);
 }
 
+
+
+// ---------- legenda arrastavel --------------------------------------------
+// Cada estilo guarda a altura num botao diferente; a tabela vem do MOTOR
+// junto com a da headline. A familia `simples` nao aparece la porque
+// posiciona por valor DISCRETO — nesses a legenda continua so clicavel.
+
+/** Estilo de legenda em uso neste projeto. */
+function capEstilo() {
+  const ed = (S.editData && S.editData.captions) || {};
+  return String(ed.style || (S.style && S.style.captions) || 'stacked');
+}
+
+/** Altura da legenda em pixels do QUADRO, ou null se o estilo nao suporta. */
+function capAncoraY() {
+  if (!CAP_ANCORAS) return null;
+  const a = CAP_ANCORAS[capEstilo()];
+  if (!a) return null;
+  const salvo = ((S.editData && S.editData.captions) || {})[a.chave];
+  const v = salvo == null ? Number(a.padrao) : Number(salvo);
+  const H = HL_QUADRO_H;
+  // Mesmas formulas de `legenda_valor_para_y` no render_proprio.
+  if (a.base === 'centro_meio') return H / 2 + H * v;
+  if (a.base === 'centro_frac') return H * v;
+  return H - v;                                   // bottom_px
+}
+
+/** Coloca a linha da legenda na altura real do quadro. */
+function capPosicionar(line) {
+  const y = capAncoraY();
+  const m = hlMetrica('capOverlay');
+  if (y == null || !m || !line) return false;
+  const a = CAP_ANCORAS[capEstilo()];
+  const box = $('capOverlay');
+  box.style.paddingBottom = '0px';
+  box.style.alignItems = 'flex-start';
+  line.style.position = 'absolute';
+  line.style.left = '50%';
+  line.style.transform = 'translateX(-50%)';
+  const alvo = m.topo + y * m.escala;
+  // stacked/scatter marcam o CENTRO do bloco; o impacto marca a BASE.
+  line.style.top = Math.round(
+    a.base === 'bottom_px' ? alvo - line.offsetHeight : alvo - line.offsetHeight / 2,
+  ) + 'px';
+  return true;
+}
+
+function capArrastavel(line) {
+  if (!line || line.dataset.arrasta) return;
+  if (capAncoraY() == null) return;      // estilo sem altura livre
+  line.dataset.arrasta = '1';
+  line.classList.add('movivel');
+  let arrasto = null;
+
+  line.addEventListener('pointerdown', (e) => {
+    if (S.applying || e.button !== 0) return;
+    line.dataset.acabouDeArrastar = '0';   // ver comentario na headline
+    const m = hlMetrica('capOverlay');
+    if (!m) return;
+    arrasto = { y0: e.clientY, topo0: parseFloat(line.style.top) || 0, moveu: false, m };
+    line.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+
+  line.addEventListener('pointermove', (e) => {
+    if (!arrasto) return;
+    const dy = e.clientY - arrasto.y0;
+    if (!arrasto.moveu && Math.abs(dy) < 4) return;   // tremor de clique
+    arrasto.moveu = true;
+    line.classList.add('dragging');
+    const m = arrasto.m;
+    const min = m.topo;
+    const max = m.topo + m.alturaVideo - line.offsetHeight;
+    line.style.top = Math.round(Math.max(min, Math.min(max, arrasto.topo0 + dy))) + 'px';
+  });
+
+  const soltar = async (e) => {
+    if (!arrasto) return;
+    const { moveu, m } = arrasto;
+    arrasto = null;
+    line.classList.remove('dragging');
+    try { line.releasePointerCapture(e.pointerId); } catch { /* ja solto */ }
+    if (!moveu) return;
+    line.dataset.acabouDeArrastar = '1';
+    const a = CAP_ANCORAS[capEstilo()];
+    const topoPx = parseFloat(line.style.top) || 0;
+    const alvoTela = a.base === 'bottom_px'
+      ? topoPx + line.offsetHeight
+      : topoPx + line.offsetHeight / 2;
+    const y = Math.round((alvoTela - m.topo) / m.escala);
+    try {
+      const data = await persistCorrection({ op: 'set_caption_pos', y });
+      if (data && data.ok !== false) {
+        const caps = (S.editData && S.editData.captions) || {};
+        if (data[a.chave] !== undefined) caps[a.chave] = data[a.chave];
+        if (S.editData) S.editData.captions = caps;
+        toast('Legenda reposicionada — Aplicar alterações para valer no vídeo', 2600);
+      } else if (data && data.error) {
+        toast(data.error);
+      }
+    } catch (err) {
+      toast((err && err.message) || 'Não deu para salvar a posição');
+      capPosicionar(line);
+    }
+  };
+  line.addEventListener('pointerup', soltar);
+  line.addEventListener('pointercancel', soltar);
+}
 
 // ---------- headline arrastavel -------------------------------------------
 // A altura padrao de cada estilo vem do MOTOR (/api/headline-anchors), nao de
 // uma copia aqui: a tabela ja vive no template e no render_proprio, e uma
 // terceira copia sairia de sincronia no primeiro estilo novo.
 let HL_ANCORAS = null;
+let CAP_ANCORAS = null;
 fetch('/api/headline-anchors', { cache: 'no-store' })
   .then((r) => (r.ok ? r.json() : null))
-  .then((d) => { if (d && d.anchors) HL_ANCORAS = d.anchors; })
+  .then((d) => {
+    if (d && d.anchors) HL_ANCORAS = d.anchors;
+    if (d && d.captions) CAP_ANCORAS = d.captions;
+  })
   .catch(() => {});
 
 const HL_QUADRO_H = 1920;   // altura do quadro que o motor desenha
@@ -3648,8 +3767,8 @@ function hlAncora() {
 }
 
 /** Escala e deslocamento do VIDEO dentro da caixa da camada. */
-function hlMetrica() {
-  const box = $('hlOverlay');
+function hlMetrica(boxId) {
+  const box = $(boxId || 'hlOverlay');
   if (!box || !video) return null;
   const v = video.getBoundingClientRect();
   const b = box.getBoundingClientRect();
@@ -3684,6 +3803,9 @@ function hlArrastavel(line) {
   line.addEventListener('pointerdown', (e) => {
     if (S.applying || line.contentEditable === 'true') return;
     if (e.button !== 0) return;
+    // Limpa aqui, no INICIO do gesto: presa ao clique que a consome, a marca
+    // sobrevivia a um arrasto que nao emitiu click e comia o clique seguinte.
+    line.dataset.acabouDeArrastar = '0';
     const m = hlMetrica();
     if (!m) return;
     arrasto = {
@@ -4905,8 +5027,15 @@ if ($('hlOverlay')) {
 if ($('capOverlay')) {
   $('capOverlay').addEventListener('click', (e) => {
     e.stopPropagation();
+    // Um arrasto termina com click: sem esta guarda, soltar a legenda abriria
+    // o editor de texto por cima do que acabou de ser movido.
+    const l = e.target.closest('.cap-overlay-line');
+    if (l && l.dataset.acabouDeArrastar === '1') {
+      l.dataset.acabouDeArrastar = '0';
+      return;
+    }
     const i = currentCaptionIndex();
-    if (i >= 0) openCaptionEditor(i, e.target.closest('.cap-overlay-line') || e.target);
+    if (i >= 0) openCaptionEditor(i, l || e.target);
   });
 }
 if ($('hlChip')) {

@@ -268,6 +268,39 @@ def set_headline_pos(edit_dir: Path, valor: Any, *, base: str = "top") -> dict[s
     return {"ok": True, campo: hook[campo], "corrections": corr}
 
 
+def set_caption_pos(edit_dir: Path, y_px: Any, altura: int = 1920) -> dict[str, Any]:
+    """Altura da legenda, pela ancora do estilo que o projeto usa.
+
+    Recebe PIXEL do quadro e grava o botao certo — a conversao mora no
+    render_proprio (`legenda_y_para_valor`), que e quem desenha.
+    """
+    from app.render_proprio import legenda_y_para_valor
+
+    try:
+        y = float(y_px)
+    except (TypeError, ValueError):
+        return {"ok": False, "error": "posicao invalida"}
+    if y != y or y in (float("inf"), float("-inf")):
+        return {"ok": False, "error": "posicao invalida"}
+    y = max(0.0, min(float(altura), y))
+    path = edit_data_path(edit_dir)
+    data = _read_json(path, {})
+    if not isinstance(data, dict):
+        data = {}
+    caps = dict(data.get("captions") or {}) if isinstance(data.get("captions"), dict) else {}
+    estilo = str(caps.get("style") or "stacked")
+    par = legenda_y_para_valor(estilo, y, altura)
+    if par is None:
+        return {"ok": False, "error": f"estilo '{estilo}' nao tem altura livre"}
+    chave, valor = par
+    prepare_correction(edit_dir)
+    caps[chave] = valor
+    data["captions"] = caps
+    _write_json(path, data)
+    corr = mark_dirty(edit_dir, "style")
+    return {"ok": True, "style": estilo, chave: valor, "corrections": corr}
+
+
 def fix_caption(edit_dir: Path, *, src: str, dst: str, **target: Any) -> dict[str, Any]:
     """Aplica o texto corrigido na fonte real da legenda. Preserva timings."""
     from app.caption_fixes import apply_caption_fixes
@@ -513,6 +546,8 @@ def handle(
         return set_headline(edit, body.get("lines") or body.get("text") or body.get("headline"))
     if op in ("set_headline_answer", "headline_answer"):
         return set_headline_answer(edit, body.get("lines") or body.get("text") or body.get("answer"))
+    if op in ("set_caption_pos", "caption_pos"):
+        return set_caption_pos(edit, body.get("y"))
     if op in ("set_headline_pos", "headline_pos"):
         return set_headline_pos(
             edit,

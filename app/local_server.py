@@ -1454,9 +1454,10 @@ class StudioHandler(BaseHTTPRequestHandler):
             self._json({"ok": True, **pack, "active": get_active(brand_id)})
             return
         if path == "/api/headline-anchors":
-            from app.render_proprio import ancoras_de_headline
+            from app.render_proprio import ancoras_de_headline, ancoras_de_legenda
 
-            self._json({"ok": True, "anchors": ancoras_de_headline()})
+            self._json({"ok": True, "anchors": ancoras_de_headline(),
+                        "captions": ancoras_de_legenda()})
             return
         if path == "/api/system":
             from app.system_info import system_payload
