@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.21.1
+
+O "tempo restante" parou de mentir.
+
+- **Antes ele ficava parado** ("~23 min restantes" por horas): era o chute da média histórica, sem olhar o relógio nem o andamento. Agora ele **desce com o tempo** e, a partir de 15% de progresso, o ritmo real do seu vídeo corrige a previsão — quanto mais anda, mais o número reflete o que está acontecendo de verdade
+- Continua honesto: sem histórico e sem progresso, não inventa número
+
 ## 2.21
 
 Renderizador próprio: as legendas passam a ser desenhadas sem navegador.

@@ -132,15 +132,66 @@ def collect_history(projects_root: Path | None, *, limit: int = 30) -> list[dict
     return out
 
 
+def _elapsed_s(job: dict) -> float | None:
+    raw = str(job.get("startedAt") or "").strip().replace("Z", "+00:00")
+    if not raw:
+        return None
+    from datetime import datetime, timezone
+
+    try:
+        t0 = datetime.fromisoformat(raw)
+        if t0.tzinfo is None:
+            t0 = t0.replace(tzinfo=timezone.utc)
+        return max(0.0, (datetime.now(timezone.utc) - t0).total_seconds())
+    except ValueError:
+        return None
+
+
+def remaining_seconds(job: dict, est_total: float | None) -> float | None:
+    """Tempo restante que RESPEITA o relógio e o progresso.
+
+    O rótulo antigo era o total previsto pela média histórica, parado: ficava
+    "~23 min restantes" por horas enquanto o trabalho corria — o usuário
+    reclamou disso três vezes num dia, com razão. Regras:
+
+      - o previsto ENCOLHE com o tempo já decorrido (nunca fica parado);
+      - com progresso real (>15%), o ritmo observado corrige a previsão
+        (elapsed * restante/feito), com peso crescente no observado;
+      - nunca sobe de volta; nunca abaixo de 10 s enquanto roda.
+    """
+    elapsed = _elapsed_s(job)
+    if est_total is None and elapsed is None:
+        return None
+    rest_hist = None
+    if est_total is not None:
+        rest_hist = max(10.0, est_total - (elapsed or 0.0))
+    try:
+        p = float(job.get("progress") or 0) / 100.0
+    except (TypeError, ValueError):
+        p = 0.0
+    if elapsed is not None and elapsed > 20 and 0.15 <= p < 1.0:
+        rest_obs = elapsed * (1.0 - p) / p
+        if rest_hist is None:
+            return rest_obs
+        peso = min(1.0, (p - 0.15) / 0.45)   # 15% -> só histórico; 60%+ -> só observado
+        return rest_obs * peso + rest_hist * (1.0 - peso)
+    return rest_hist
+
+
 def attach_eta(job: dict, history: list[dict] | None, edit_dir: Path | None = None) -> dict:
-    """Anexa etaLabel só se houver histórico. Não inventa cronômetro."""
+    """Anexa etaLabel só se houver base. Não inventa cronômetro."""
     status = str(job.get("status") or "")
     if status not in ("processing", "queued", "importing"):
         return job
     feat = enrich_from_edit({}, edit_dir)
     if job.get("durationSec"):
         feat["sourceDuration"] = job["durationSec"]
-    label = label_for_job(feat, history)
+    est_total = estimate_seconds(feat, history)
+    if status == "processing":
+        rest = remaining_seconds(job, est_total)
+        label = format_eta(rest)
+    else:
+        label = format_eta(est_total)
     if label:
         job["etaLabel"] = label
     return job

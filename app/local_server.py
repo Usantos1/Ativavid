@@ -900,6 +900,7 @@ class Worker:
             message="IA + edição…",
             phase=1,
             recovered=False,
+            startedAt=_utc(),   # âncora do tempo restante REAL (eta_estimate)
         )
 
         source = Path(job["source"])
