@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.24
+
+Todos os estilos de legenda agora usam o motor rápido.
+
+- **Os 4 estilos do catálogo (7 variantes) passaram a ser desenhados sem navegador**: empilhado, impacto, disperso e simples (simples, serifada, clássica, bloco, recorte). Antes só o empilhado; os outros caíam no caminho lento sem você saber
+- **Cada um foi conferido quadro a quadro contra o desenho antigo** — 140 quadros de fala contínua por estilo, diferença de imagem entre 1% e 9%. Cinco defeitos reais foram encontrados e corrigidos nessa conferência (altura de caixa, espessura de sombra e origem do contorno)
+- Na medição, desenhar ficou entre 5x e 18x mais rápido conforme o estilo
+- Estilo que o app ainda não conheça continua indo pelo caminho antigo, automaticamente
+
 ## 2.23
 
 Preparação do vídeo mais rápida — e sem a armadilha que quase entrou junto.

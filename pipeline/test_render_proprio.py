@@ -48,7 +48,7 @@ def test_projeto_padrao_e_suportado(tmp_path):
 def test_gate_derruba_o_que_nao_desenha(tmp_path):
     pub = _public(tmp_path)
     casos = [
-        (_ed(captions={"style": "impacto"}), "estilo de legenda"),
+        (_ed(captions={"style": "estilo_do_futuro"}), "estilo de legenda"),
         (_ed(hook={"enabled": True, "style": "card", "lines": ["a"]}), "headline"),
         (_ed(elements={"listCounter": True}), "contador"),
         (_ed(elements={"emojiCaptions": True}), "emoji"),
@@ -199,11 +199,16 @@ def test_ease_back_assenta_em_1():
     assert Renderizador._ease_back(0.6) > 1.0, "overshoot no meio"
 
 
-def test_impacto_fora_do_gate_por_padrao(tmp_path, monkeypatch):
-    monkeypatch.delenv("ATIVAVID_PROPRIO_IMPACTO", raising=False)
-    assert "impacto" in (motivo_nao_suportado(
-        _ed(captions={"style": "impacto"}), _public(tmp_path)) or "")
-    monkeypatch.setenv("ATIVAVID_PROPRIO_IMPACTO", "1")
-    assert motivo_nao_suportado(
-        _ed(captions={"style": "impacto"}), _public(tmp_path)) is None
+def test_catalogo_de_legendas_todo_suportado(tmp_path):
+    """Os 4 estilos (7 variantes) validados contra o Remotion — tinta mediana
+    entre 1,009 e 1,094 em 140 quadros cada."""
+    for estilo in ("stacked", "impacto", "scatter", "simples",
+                   "serifada", "classica", "bloco", "recorte"):
+        assert motivo_nao_suportado(
+            _ed(captions={"style": estilo}), _public(tmp_path)) is None, estilo
+
+
+def test_estilo_desconhecido_ainda_derruba(tmp_path):
+    assert "estilo de legenda" in (motivo_nao_suportado(
+        _ed(captions={"style": "estilo_do_futuro"}), _public(tmp_path)) or "")
 

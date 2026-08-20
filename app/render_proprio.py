@@ -94,15 +94,13 @@ def motivo_nao_suportado(edit_data: dict[str, Any], public: Path) -> str | None:
     if (os.environ.get("ATIVAVID_RENDER_PROPRIO") or "").strip() == "0":
         return "desligado por ATIVAVID_RENDER_PROPRIO=0"
     caps = edit_data.get("captions") or {}
+    # Os 4 estilos do catalogo, todos validados quadro a quadro contra o
+    # Remotion (tinta mediana; 140 quadros de fala continua cada):
+    #   serifada 1,009 · recorte 1,014 · scatter 1,024 · bloco 1,033
+    #   classica 1,036 · simples 1,059 · impacto 1,094
     estilo = caps.get("style") or "stacked"
-    permitidos = {"stacked"}
-    if os.environ.get("ATIVAVID_PROPRIO_IMPACTO") == "1":
-        # portado, aguardando validacao visual — liga por env para testar
-        permitidos.add("impacto")
-    if os.environ.get("ATIVAVID_PROPRIO_SCATTER") == "1":
-        permitidos.add("scatter")
-    if os.environ.get("ATIVAVID_PROPRIO_SIMPLE") == "1":
-        permitidos.update(("simples", "serifada", "classica", "bloco", "recorte"))
+    permitidos = {"stacked", "impacto", "scatter",
+                  "simples", "serifada", "classica", "bloco", "recorte"}
     if estilo not in permitidos:
         return f"estilo de legenda '{caps.get('style')}'"
     if caps.get("fontFamily"):
@@ -277,11 +275,15 @@ class Renderizador:
         h = hexa.lstrip("#")
         return np.array([int(h[i:i + 2], 16) for i in (0, 2, 4)], dtype=np.float32)
 
-    def _sombra_de(self, mask: np.ndarray, especs) -> np.ndarray:
+    def _sombra_de(self, mask: np.ndarray, especs, k: float = BLUR_K) -> np.ndarray:
+        """`k` e o fator sigma/raio. O padrao 1,05 vale para drop-shadow (o
+        que o Chrome desenha, medido). Para text-shadow e box-shadow o sigma
+        e raio/2 — passe k=0,5, senao o halo sai ~80% maior (medido no
+        estilo `simples`: 44.930 contra 25.057 pixels de halo)."""
         out = np.zeros_like(mask)
         for dx, dy, blur, sa in especs:
             b = np.asarray(Image.fromarray((mask * 255).astype(np.uint8))
-                           .filter(ImageFilter.GaussianBlur(blur * BLUR_K)),
+                           .filter(ImageFilter.GaussianBlur(blur * k)),
                            dtype=np.float32) / 255.0
             desl = np.zeros_like(b)
             desl[max(0, dy):, max(0, dx):] = b[:b.shape[0] - max(0, dy),
@@ -748,7 +750,10 @@ class Renderizador:
                     else:
                         lw = larg_pal(w)
                         cw = int(lw + 2 * pad)
-                        ch = int(asc + desc + pad * 0.35 + pad * 0.5)
+                        # caixa CSS = line-height (1.08em) + paddings, NAO
+                        # ascent+descent (medido: 113px contra 92px do
+                        # Remotion). Mesmo erro que a headline teve.
+                        ch = int(tam * 1.08 + pad * 0.35 + pad * 0.5)
                         for est in range(POP + 1):
                             t = min(1.0, est / POP)
                             esc = 0.7 + 0.3 * self._ease_back(t)
@@ -762,7 +767,9 @@ class Renderizador:
                             m = self._mascara(fe, texto, 0.0)
                             t_a = np.zeros_like(a_caixa)
                             tx = 32 + int(pad * esc)
-                            ty = 32 + int(pad * 0.35 * esc)
+                            # texto centrado na caixa de linha (meia-entrelinha)
+                            ty = 32 + int((pad * 0.35
+                                           + (tam * 1.08 - (asc + desc)) / 2) * esc)
                             hm = min(m.shape[0], t_a.shape[0] - ty)
                             wm = min(m.shape[1], t_a.shape[1] - tx)
                             t_a[ty:ty + hm, tx:tx + wm] = m[:hm, :wm]
@@ -771,9 +778,14 @@ class Renderizador:
                             rgb = np.broadcast_to(cor_c, (*a_caixa.shape, 3)).copy()
                             rgb = rgb * (1 - t_a[..., None]) + cor_t * t_a[..., None]
                             alpha = np.maximum(a_caixa, t_a)
+                            # boxShadow 0 10px 26px rgba(0,0,0,.45): para
+                            # box-shadow o sigma e raio/2 (ao contrario do
+                            # drop-shadow, onde o Chrome usa ~raio). Medido:
+                            # com sigma=raio o halo saia 49% maior que o do
+                            # Remotion.
                             b = np.asarray(
                                 Image.fromarray((a_caixa * 255).astype(np.uint8))
-                                .filter(ImageFilter.GaussianBlur(26 * 0.5)),
+                                .filter(ImageFilter.GaussianBlur(26 * 0.25)),
                                 dtype=np.float32) / 255.0
                             sombra = np.zeros_like(b)
                             sombra[10:, :] = b[:-10, :] * 0.45
@@ -1080,14 +1092,21 @@ class Renderizador:
 
             for ln in linhas:
                 texto = " ".join(limpar(w["text"]) for w in ln)
-                m = self._mascara(f, texto, float(track))
                 if sq_x != 1.0 or sq_y != 1.0:
-                    novo_t = (max(1, int(m.shape[1] * sq_x)),
-                              max(1, int(m.shape[0] * sq_y)))
+                    # scale(0.9, 0.9) do CSS espreme a CAIXA e, com ela, a
+                    # espessura do traco. Rasterizar no tamanho final e
+                    # so redimensionar deixava o texto 44% mais gordo que o
+                    # do Remotion (medido). Rasteriza-se maior e reduz.
+                    f_big = self._fonte_arquivo(arq, max(8, int(tam / sq_y)), eixo)
+                    m = self._mascara(f_big, texto, float(track) / sq_x)
+                    novo_t = (max(1, int(m.shape[1] * sq_x * sq_y)),
+                              max(1, int(m.shape[0] * sq_y * sq_y)))
                     m = np.asarray(
                         Image.fromarray((m * 255).astype(np.uint8))
-                        .resize(novo_t, Image.BILINEAR),
+                        .resize(novo_t, Image.LANCZOS),
                         dtype=np.float32) / 255.0
+                else:
+                    m = self._mascara(f, texto, float(track))
                 h_m, w_m = m.shape
                 folga = 48
                 x0 = int((self.w - w_m) / 2)
@@ -1146,13 +1165,16 @@ class Renderizador:
                     alpha = np.maximum(contorno, pad_m)
                     rgb = np.broadcast_to(cor_e, (*pad_m.shape, 3)).copy()
                     rgb = rgb * (1 - pad_m[..., None]) + cor_t * pad_m[..., None]
-                    sombra = self._sombra_de(alpha, [(0, 14, 30, 0.5)])
+                    # A sombra do CSS parte do GLIFO, nao do contorno: usar
+                    # `alpha` (glifo+contorno, ~25% maior) inflava o halo em
+                    # 60% (medido: 35.816 contra 22.335 pixels).
+                    sombra = self._sombra_de(pad_m, [(0, 14, 30, 0.5)], k=0.5)
                     leg.palavras.append(Palavra(
                         x0 - folga,
                         int(y + (alt_l - (asc + desc)) / 2) - folga,
                         rgb, alpha, sombra, inicio_f=-1, enter=1, sobe=0.0))
                 else:
-                    sombra = self._sombra_de(pad_m, [(0, 4, 18, 0.55)])
+                    sombra = self._sombra_de(pad_m, [(0, 4, 18, 0.55)], k=0.5)
                     cor = self._cor(accent or "#f4f1e9")
                     rgb = np.broadcast_to(cor, (*pad_m.shape, 3)).copy()
                     leg.palavras.append(Palavra(
