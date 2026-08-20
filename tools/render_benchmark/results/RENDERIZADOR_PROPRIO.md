@@ -87,6 +87,43 @@ foi implementada no renderizador — não existia e era visível.
 nada no nosso — um quadro de defasagem na entrada da palavra. Pequeno, mas
 real; fica anotado.
 
+## Terceiro teste: o vídeo inteiro
+
+851 quadros, 21 legendas, os três presets juntos (`phase23_video_inteiro.py`),
+contra o Remotion renderizando o MESMO overlay completo.
+
+**Overlay completo, mesmo formato (ProRes 4444 de tela inteira):**
+
+| | Tempo | Por quadro |
+|---|---|---|
+| Remotion | 172,5 s | 203 ms |
+| Nosso | 88,1 s | 104 ms |
+
+Aqui o ProRes de tela inteira domina o NOSSO tempo — é o formato do
+intermediário, não o do caminho final.
+
+**Fim a fim (corte → legenda → MP4 final com áudio), 3 rodadas:**
+
+| | Tempo |
+|---|---|
+| Caminho atual (Remotion 172,5 + compose ~25) | ~197 s |
+| Uma passada, faixa da legenda (636×432) | **39,4 s** (mediana; 27,9 s fria) |
+
+**5× de ponta a ponta** (7× com a máquina fria — as rodadas 2 e 3 subiram de
+27,9 para ~39,7 s: térmica, de novo). 0,7× do tempo real contra 0,14× do
+caminho atual. CapCut segue na frente (5,3×).
+
+**Fidelidade, tinta por quadro na faixa das legendas** (696 quadros com
+legenda, fora do cartão final): mediana da razão nosso/Remotion **1,003**
+(p5 0,874 · p95 1,048). Os quadros fora de ±25%: os 4 flashes de transição
+(elemento de tela cheia, fora do escopo — e trivial: branco que desbota), o
+quadro 0 (defasagem de 1 quadro na entrada, já anotada) e a curva de entrada
+de uma cue. `comparacao_video_inteiro.png`: quadro 13 s, produção vs nosso.
+
+No caminho entraram: `SOLO_BIG`, a entrada com subida (translate 46→0 acoplado
+à opacidade — valia para todos os estilos e estava faltando) e a saída
+blur_up/abrupt.
+
 ## O que estes testes NÃO respondem
 
 - `SOLO_BIG` não foi feito (mas é o texto grande sem traço — subconjunto do

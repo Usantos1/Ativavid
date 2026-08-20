@@ -122,6 +122,9 @@ class Palavra:
     # Elemento que nao "entra" com fade e sim vale num intervalo de quadros —
     # e o caso do traco do Recorte, que e um estagio por quadro.
     janela: tuple[float, float] | None = None
+    # Entrada do template: a palavra SOBE enquanto aparece (translate 46->0,
+    # acoplado a opacidade). Ignorar isso deixava a entrada visivelmente dura.
+    sobe: float = 46.0
 
 
 @dataclass
@@ -313,7 +316,8 @@ def desenhar(leg: "Legenda | None", fl: float, buf: np.ndarray,
     tela = np.zeros((y1 - y0, x1 - x0, 4), dtype=np.float32)
     for p, op in visiveis:
         h, w = p.alpha.shape
-        py, px = p.y0 - oy, p.x0 - ox
+        desloc = int(round(p.sobe * (1.0 - op))) if p.janela is None else 0
+        py, px = p.y0 - oy + desloc, p.x0 - ox
         ys0, xs0 = max(y0, py), max(x0, px)
         ys1, xs1 = min(y1, py + h), min(x1, px + w)
         if ys1 <= ys0 or xs1 <= xs0:
