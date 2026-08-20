@@ -145,6 +145,37 @@ de flash e o quadro 0 já conhecido.
 Os tempos desta rodada saíram COM a fila do usuário rodando — ficam de fora
 do relatório; a remedição limpa está pendente.
 
+## Números LIMPOS (fila zerada, app fechado, mediana de 3)
+
+A remedição derrubou números dos DOIS lados. O Remotion sob carga tinha dado
+172,5 s — limpo faz em **107,0 s**; o "5×" anunciado antes estava contaminado
+nos dois sentidos e **fica retirado**.
+
+| Caminho completo (851 quadros, todos os elementos) | Tempo |
+|---|---|
+| Produção: Remotion (107,0) + compose (19,5) | **126,5 s** |
+| Nosso, uma passada até o MP4 final | **77,6 s** |
+
+**1,63× de ponta a ponta** com o overlay completo. Dois caches fizeram o
+número (fidelidade conferida idêntica antes/depois — mediana 1,003):
+
+1. **Quadro parado não recompõe**: assinatura do estado visual por quadro;
+   419/851 quadros são bit-idênticos ao anterior e só reenviam os bytes.
+2. **Palavra assentada não recompõe**: o composto das palavras paradas fica
+   cacheado na camada; por quadro só as 1–2 animando entram por cima.
+
+**Formato a formato, o Remotion ganha o ProRes:** overlay completo em ProRes
+4444 deu 129,9 s nosso contra 107,0 dele. Nosso ganho vem de NÃO precisar do
+intermediário — não de encodar ProRes mais rápido.
+
+**Observação do usuário durante os testes:** nosso caminho ocupa ~50% de
+CPU/memória; o do Remotion passa de 90%. A máquina continua utilizável.
+
+**Contra o CapCut (5,3× tempo real): estamos a 0,37×.** O perfil diz onde
+está o resto: 24 ms/quadro de composição Python nos quadros dinâmicos
+(conversão sobre a caixa inteira quando só uma palavra anima) e 8,3 MB/quadro
+de cano de tela cheia. Ambos têm solução conhecida; nenhum foi feito.
+
 ## O que estes testes NÃO respondem
 
 - `SOLO_BIG` não foi feito (mas é o texto grande sem traço — subconjunto do

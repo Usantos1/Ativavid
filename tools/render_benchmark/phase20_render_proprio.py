@@ -139,6 +139,9 @@ class Legenda:
     dur_f: float = 0.0
     exit_abrupto: bool = False
     exit_fade: bool = False        # headline: sai so com fade, sem subir/desfocar
+    caixa: tuple[int, int, int, int] | None = None
+    cache_chave: tuple | None = None
+    cache_tela: np.ndarray | None = None
 
     def saida(self, fl: float) -> tuple[float, float, float]:
         """(opacidade, deslocamento vertical, desfoque) no quadro `fl`."""
@@ -281,105 +284,135 @@ def caixa_de(legendas: list["Legenda"], folga: int = 8) -> tuple[int, int, int, 
     return x0, y0, x1, y1
 
 
+def _caixa_leg(leg: "Legenda") -> tuple[int, int, int, int]:
+    """Caixa fixa da legenda inteira (todas as palavras) — e o dominio do
+    cache: dimensao estavel permite reusar o composto entre quadros."""
+    if leg.caixa is None:
+        x0 = max(0, min(p.x0 for p in leg.palavras))
+        y0 = max(0, min(p.y0 for p in leg.palavras))
+        x1 = min(W, max(p.x0 + p.alpha.shape[1] for p in leg.palavras))
+        y1 = min(H, max(p.y0 + p.alpha.shape[0] for p in leg.palavras))
+        leg.caixa = (x0, y0, max(x0 + 1, x1), max(y0 + 1, y1))
+    return leg.caixa
+
+
+def _blend_palavra(tela: np.ndarray, p: "Palavra", op: float,
+                   x0: int, y0: int) -> None:
+    """Compoe uma palavra (sombra + texto) PRE-MULTIPLICADA em `tela`."""
+    h, w = p.alpha.shape
+    desloc = int(round(p.sobe * (1.0 - op))) if p.janela is None else 0
+    py, px = p.y0 - y0 + desloc, p.x0 - x0
+    alt_t, larg_t = tela.shape[0], tela.shape[1]
+    ys0, xs0 = max(0, py), max(0, px)
+    ys1, xs1 = min(alt_t, py + h), min(larg_t, px + w)
+    if ys1 <= ys0 or xs1 <= xs0:
+        return
+    sy, sx = ys0 - py, xs0 - px
+    alt, larg = ys1 - ys0, xs1 - xs0
+    sub = tela[ys0:ys1, xs0:xs1]
+    a_s = p.sombra[sy:sy + alt, sx:sx + larg] * op
+    a_t = p.alpha[sy:sy + alt, sx:sx + larg] * op
+    rgb = p.rgb[sy:sy + alt, sx:sx + larg]
+    inv = 1.0 - a_s
+    sub[..., :3] *= inv[..., None]
+    sub[..., 3] = sub[..., 3] * inv + a_s
+    inv = 1.0 - a_t
+    sub[..., :3] = sub[..., :3] * inv[..., None] + rgb * a_t[..., None]
+    sub[..., 3] = sub[..., 3] * inv + a_t
+
+
 def desenhar(leg: "Legenda | None", fl: float, buf: np.ndarray,
              sujo: list[int], origem: tuple[int, int] = (0, 0),
              mesclar: bool = False) -> None:
-    """Compoe SO na uniao das caixas visiveis. `buf` e uint8 (H, W, 4).
+    """Compoe a legenda no quadro `fl` dentro de `buf` (uint8 H x W x 4).
 
-    Nada de operacao em tela inteira: a versao anterior multiplicava e
-    convertia 2 milhoes de pixels por quadro so para escrever texto que ocupa
-    um oitavo da tela — 66% do tempo ia nisso. `sujo` guarda a caixa escrita
-    no quadro anterior, que e a unica coisa que precisa ser apagada.
+    Duas economias, ambas apontadas por perfil:
+      - so a caixa da legenda e tocada, nunca a tela inteira;
+      - as palavras JA ASSENTADAS (opacidade 1, sem deslocamento) sao
+        compostas UMA vez e guardadas na propria legenda; por quadro so as
+        que estao animando entram por cima. Sem isso, um quadro com uma
+        palavra entrando recompunha as dez paradas junto.
     """
     if not mesclar:
-        # camada unica: limpa a caixa do quadro anterior e escreve por cima
         if sujo[2] > sujo[0] and sujo[3] > sujo[1]:
             buf[sujo[1]:sujo[3], sujo[0]:sujo[2]] = 0
         sujo[:] = [0, 0, 0, 0]
     if leg is None:
         return
-
     op_cue, dy_cue, blur_cue = leg.saida(fl)
     if op_cue <= 0.004:
         return
-    visiveis = []
+
+    assentadas: list[Palavra] = []
+    animando: list[tuple[Palavra, float]] = []
     for p in leg.palavras:
-        op = opacidade(p, fl) * op_cue
-        if op > 0.004:
-            visiveis.append((p, op))
-    if not visiveis:
+        op = opacidade(p, fl)
+        if op <= 0.004:
+            continue
+        if op >= 0.996 and (p.janela is None or True):
+            assentadas.append(p)
+        else:
+            animando.append((p, op))
+    if not assentadas and not animando:
         return
 
     ox, oy = origem
-    alt_buf, larg_buf = buf.shape[0], buf.shape[1]
-    x0 = max(0, min(p.x0 - ox for p, _ in visiveis))
-    y0 = max(0, min(p.y0 - oy for p, _ in visiveis))
-    x1 = min(larg_buf, max(p.x0 - ox + p.alpha.shape[1] for p, _ in visiveis))
-    y1 = min(alt_buf, max(p.y0 - oy + p.alpha.shape[0] for p, _ in visiveis))
-    if x1 <= x0 or y1 <= y0:
+    x0, y0, x1, y1 = _caixa_leg(leg)
+    # recorta ao buffer (que pode ser so a faixa da legenda)
+    bx0, by0 = max(0, x0 - ox), max(0, y0 - oy)
+    bx1 = min(buf.shape[1], x1 - ox)
+    by1 = min(buf.shape[0], y1 - oy)
+    if bx1 <= bx0 or by1 <= by0:
         return
 
-    tela = np.zeros((y1 - y0, x1 - x0, 4), dtype=np.float32)
-    for p, op in visiveis:
-        h, w = p.alpha.shape
-        desloc = int(round(p.sobe * (1.0 - op))) if p.janela is None else 0
-        py, px = p.y0 - oy + desloc, p.x0 - ox
-        ys0, xs0 = max(y0, py), max(x0, px)
-        ys1, xs1 = min(y1, py + h), min(x1, px + w)
-        if ys1 <= ys0 or xs1 <= xs0:
-            continue
-        sy, sx = ys0 - py, xs0 - px
-        alt, larg = ys1 - ys0, xs1 - xs0
-        sub = tela[ys0 - y0:ys1 - y0, xs0 - x0:xs1 - x0]
-        a_s = p.sombra[sy:sy + alt, sx:sx + larg] * op
-        a_t = p.alpha[sy:sy + alt, sx:sx + larg] * op
-        rgb = p.rgb[sy:sy + alt, sx:sx + larg]
-        # sombra (preta) por baixo, texto por cima — "over" nos dois
-        inv = 1.0 - a_s
-        sub[..., :3] *= inv[..., None]
-        sub[..., 3] = sub[..., 3] * inv + a_s
-        inv = 1.0 - a_t
-        sub[..., :3] = sub[..., :3] * inv[..., None] + rgb * a_t[..., None]
-        sub[..., 3] = sub[..., 3] * inv + a_t
+    chave = tuple(id(p) for p in assentadas)
+    if chave != leg.cache_chave:
+        base = np.zeros((y1 - y0, x1 - x0, 4), dtype=np.float32)
+        for p in assentadas:
+            _blend_palavra(base, p, 1.0, x0, y0)
+        leg.cache_chave, leg.cache_tela = chave, base
+    tela = leg.cache_tela
+    if animando:
+        tela = tela.copy()
+        for p, op in animando:
+            _blend_palavra(tela, p, op, x0, y0)
 
-    # A composicao acima acumula RGB *pre-multiplicado* pelo alpha (comeca do
-    # zero e vai somando cor*alpha). Quem le RGBA — o overlay do ffmpeg, o
-    # ProRes 4444 — espera alpha DIRETO. Entregar premultiplicado deixava o
-    # texto lavado: o laranja e o branco saiam sem contraste na borda.
     if blur_cue > 0.25:
         tela = np.asarray(
             Image.fromarray(np.clip(tela * [1, 1, 1, 255], 0, 255).astype(np.uint8),
                             mode="RGBA").filter(ImageFilter.GaussianBlur(blur_cue / 2)),
             dtype=np.float32)
         tela[..., 3] /= 255.0
-    a = tela[..., 3:4]
-    np.divide(tela[..., :3], np.maximum(a, 1e-6), out=tela[..., :3])
-    tela[..., 3] = a[..., 0] * 255.0
-    np.clip(tela, 0.0, 255.0, out=tela)
+
+    # premultiplicado -> alpha direto, com a opacidade da cue aplicada
+    a = np.clip(tela[..., 3:4], 0.0, 1.0)
+    rgb = np.clip(tela[..., :3] / np.maximum(a, 1e-6), 0.0, 255.0)
+    saida_px = np.empty((tela.shape[0], tela.shape[1], 4), dtype=np.float32)
+    saida_px[..., :3] = rgb
+    saida_px[..., 3] = a[..., 0] * (255.0 * op_cue)
+
     dy = int(round(dy_cue))
-    dy0, dy1 = y0 + dy, y1 + dy
+    dy0, dy1 = by0 + dy, by1 + dy
     corte0 = max(0, -dy0)
-    dy0, dy1 = max(0, dy0), min(alt_buf, dy1)
+    dy0, dy1 = max(0, dy0), min(buf.shape[0], dy1)
     if dy1 <= dy0:
         return
-    pronto = tela[corte0:corte0 + (dy1 - dy0)]
+    pronto = saida_px[corte0:corte0 + (dy1 - dy0)]
     if mesclar:
-        # "over" desta camada sobre o que ja esta no buf (RGBA alpha direto):
-        # e o caso de headline + legenda + cartao no mesmo quadro.
-        fundo = buf[dy0:dy1, x0:x1].astype(np.float32)
+        fundo = buf[dy0:dy1, bx0:bx1].astype(np.float32)
         a_f = pronto[..., 3:4] / 255.0
         a_b = fundo[..., 3:4] / 255.0
         a_o = a_f + a_b * (1.0 - a_f)
-        rgb = (pronto[..., :3] * a_f + fundo[..., :3] * a_b * (1.0 - a_f)) / np.maximum(a_o, 1e-6)
-        saida_px = np.concatenate([rgb, a_o * 255.0], axis=2)
-        buf[dy0:dy1, x0:x1] = np.clip(saida_px, 0, 255).astype(np.uint8)
-        sujo[0] = min(sujo[0], x0) if sujo[2] > sujo[0] else x0
+        out_rgb = (pronto[..., :3] * a_f + fundo[..., :3] * a_b * (1.0 - a_f))             / np.maximum(a_o, 1e-6)
+        buf[dy0:dy1, bx0:bx1] = np.clip(
+            np.concatenate([out_rgb, a_o * 255.0], axis=2), 0, 255).astype(np.uint8)
+        sujo[0] = min(sujo[0], bx0) if sujo[2] > sujo[0] else bx0
         sujo[1] = min(sujo[1], dy0) if sujo[3] > sujo[1] else dy0
-        sujo[2] = max(sujo[2], x1)
+        sujo[2] = max(sujo[2], bx1)
         sujo[3] = max(sujo[3], dy1)
     else:
-        buf[dy0:dy1, x0:x1] = pronto.astype(np.uint8)
-        sujo[:] = [x0, dy0, x1, dy1]
+        buf[dy0:dy1, bx0:bx1] = np.clip(pronto, 0, 255).astype(np.uint8)
+        sujo[:] = [bx0, dy0, bx1, dy1]
 
 
 def renderizar(cues: list[dict], n_frames: int, saida: Path) -> float:
