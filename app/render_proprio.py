@@ -406,11 +406,24 @@ class Renderizador:
         return (str(cam), item[1]) if cam.exists() else None
 
 
-    def fonte(self, idx: int, tam: int,
-              peso: int | None = None) -> ImageFont.FreeTypeFont:
+    def fonte(self, idx: int, tam: int, peso: int | None = None,
+              marca: str | None = "cap") -> ImageFont.FreeTypeFont:
+        """`marca`: "cap", "hook" ou None (tipografia assinada do template).
+
+        Nem todo desenho aceita a fonte da marca. O template diz quem aceita
+        pelo import: SimpleCaptions/Scatter/Impact usam `capFamily`,
+        ListCounter usa `hookFamily`, e StackedCaptions nao importa nenhum
+        dos dois — o stacked e o end card mantem a tipografia do template de
+        proposito, porque a familia deles E o estilo (Poppins italico 900 +
+        Playfair laranja). O editor ja segue essa regra
+        (`style !== 'stacked' && FONT_CSS[captionFont]`); so o motor proprio
+        vestia a marca em tudo.
+        """
         arq, teto = str(FONTES / self.font_file[idx][0]), None
-        if self.marca_cap:
-            arq, teto = self.marca_cap
+        escolhida = self.marca_hook if marca == "hook" else (
+            self.marca_cap if marca == "cap" else None)
+        if escolhida:
+            arq, teto = escolhida
         chave = (arq, tam, peso, teto)
         if chave not in self._fontes:
             f = ImageFont.truetype(arq, tam)
@@ -682,7 +695,7 @@ class Renderizador:
         for li, ln in enumerate(linhas):
             if li > 0:
                 y += MARGIN_TOP_EM * ln["size"]
-            f = self.fonte(ln["idx"], ln["size"])
+            f = self.fonte(ln["idx"], ln["size"], marca=None)
             pad = WORD_PAD_EM * ln["size"]
             gap = f.getlength(" ")
             largs = [f.getlength(w["text"]) + LETTER_SPACING * len(w["text"]) + 2 * pad
@@ -707,7 +720,7 @@ class Renderizador:
         leg, enter, dur = self._nova_camada(cue)
         w = cue["lines"][0][0]
         tam = self.fit_font(w["text"], 150, self.avail / self.scale, 0.6)
-        f = self.fonte(0, tam)
+        f = self.fonte(0, tam, marca=None)
         ls = -3.0
         pad = 0.14 * tam
         larg = f.getlength(w["text"]) + ls * len(w["text"]) + 2 * pad
@@ -740,7 +753,7 @@ class Renderizador:
         leg, enter, dur = self._nova_camada(cue)
         w = cue["lines"][0][0]
         tam = self.fit_font(w["text"], 118, (self.avail - 80) / self.scale, 0.6)
-        f = self.fonte(4, tam)
+        f = self.fonte(4, tam, marca=None)
         ls = -2.0
         pad = 0.1 * tam
         larg_c = f.getlength(w["text"]) + ls * len(w["text"]) + 2 * pad
@@ -834,7 +847,10 @@ class Renderizador:
             arq, teto = self.marca_hook
             eixo = min(peso, teto) if teto is not None else peso
             return self._fonte_arquivo(arq, tam, eixo)
-        return self.fonte(self.HL_FONTE.get(peso, 4), tam)
+        # `marca=None`: sem fonte de HEADLINE escolhida, a headline volta
+        # para a do template — nunca para a das LEGENDAS. O template faz
+        # `hookFamily(fontFamily)`, que cai no padrao, nao em CAP_FF.
+        return self.fonte(self.HL_FONTE.get(peso, 4), tam, marca=None)
 
     def _larg_hl(self, texto: str, tam: int, peso: int = 900) -> float:
         f = self._hl_fonte(peso, tam)
@@ -1319,14 +1335,14 @@ class Renderizador:
         escala = [1.0, 0.62]
         ajuste = 1.0
         for i, t in enumerate(linhas):
-            f = self.fonte(4 if i == 0 else 3, int(base * escala[i]))
+            f = self.fonte(4 if i == 0 else 3, int(base * escala[i]), marca=None)
             wl = f.getlength(t) - 1.0 * max(0, len(t) - 1)
             if wl > safe_w:
                 ajuste = min(ajuste, safe_w / wl)
         tam = max(28, round(base * ajuste))
         mascaras = []
         for i, t in enumerate(linhas):
-            f = self.fonte(4 if i == 0 else 3, int(tam * escala[i]))
+            f = self.fonte(4 if i == 0 else 3, int(tam * escala[i]), marca=None)
             mascaras.append((self._mascara(f, t, -1.0), i))
         gap = round(tam * 0.34)
         total = sum(m.shape[0] for m, _ in mascaras) + gap * max(0, len(mascaras) - 1)
@@ -1714,6 +1730,20 @@ class Renderizador:
     _ORFAO = ("o", "a", "os", "as", "e", "\u00e9", "de", "do", "da", "em", "no",
               "na", "um", "uma", "que", "se", "ao", "\u00e0", "por", "com")
 
+    def _fonte_estilo(self, nome: str, tam: int, eixo) -> ImageFont.FreeTypeFont:
+        """Fonte de um estilo que ACEITA a marca (`capFamily` no template).
+
+        O eixo do estilo (peso 700, instancia "Medium") nao existe na fonte
+        da marca; o que passa e o TETO dela, como `capWeight` faz — clampar
+        em vez de pedir um negrito que a fonte nao tem.
+        """
+        if not self.marca_cap:
+            return self._fonte_arquivo(nome, tam, eixo)
+        arq, teto = self.marca_cap
+        e = min(eixo, teto) if isinstance(eixo, int) and teto is not None else (
+            eixo if isinstance(eixo, int) else teto)
+        return self._fonte_arquivo(arq, tam, e)
+
     def _fonte_arquivo(self, nome: str, tam: int, eixo) -> ImageFont.FreeTypeFont:
         chave = (nome, tam, str(eixo))
         if chave not in self._fontes:
@@ -1746,7 +1776,7 @@ class Renderizador:
         pos = {"centro": 900, "alto": 1330}.get(caps_cfg.get("position") or "")
         bottom = pos if pos else bottom0
         accent = caps_cfg.get("accent")
-        f = self._fonte_arquivo(arq, tam, eixo)
+        f = self._fonte_estilo(arq, tam, eixo)
 
         def limpar(t):
             t = re.sub(r"[.,!?\u2026]+$", "", t)
@@ -1817,7 +1847,7 @@ class Renderizador:
                     # espessura do traco. Rasterizar no tamanho final e
                     # so redimensionar deixava o texto 44% mais gordo que o
                     # do Remotion (medido). Rasteriza-se maior e reduz.
-                    f_big = self._fonte_arquivo(arq, max(8, int(tam / sq_y)), eixo)
+                    f_big = self._fonte_estilo(arq, max(8, int(tam / sq_y)), eixo)
                     m, cor_emj = self._mascara_cor(f_big, texto,
                                                    float(track) / sq_x)
                     novo_t = (max(1, int(m.shape[1] * sq_x * sq_y)),
@@ -1923,7 +1953,7 @@ class Renderizador:
         accent = (self.ed.get("hook") or {}).get("accent") or "#ff5200"
         tinta = self._tinta_na_caixa(accent)
         tam = 64
-        f = self.fonte(4, tam)
+        f = self.fonte(4, tam, marca="hook")
         camadas = []
         for i, mk in enumerate(marcadores):
             ini = int(round(float(mk["atSec"]) * self.fps))
@@ -1939,7 +1969,7 @@ class Renderizador:
             for est in range(9):
                 t = min(1.0, est / 8)
                 esc = 0.6 + 0.4 * self._ease_back(t)
-                m = self._mascara(self.fonte(4, max(8, int(tam * esc))), texto, 0.0)
+                m = self._mascara(self.fonte(4, max(8, int(tam * esc)), marca="hook"), texto, 0.0)
                 h_m, w_m = m.shape
                 pad_x, pad_t, pad_b = (int(26 * esc), int(18 * esc), int(22 * esc))
                 cw, ch = w_m + 2 * pad_x, int(tam * esc) + pad_t + pad_b
