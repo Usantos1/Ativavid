@@ -32,6 +32,15 @@ def _split_tokens(text: str) -> list[str]:
 def _item_span_s(item: dict) -> tuple[float, float]:
     if item.get("startMs") is not None or item.get("endMs") is not None:
         return float(item.get("startMs") or 0) / 1000.0, float(item.get("endMs") or 0) / 1000.0
+    # As palavras das CUES usam `fromMs`/`toMs` — nomes proprios delas. Sem
+    # este ramo elas mediam (0,0) e o filtro de tempo do
+    # `resolve_replacement_index` derrubava TODO candidato: a correcao nunca
+    # entrava na cue, calada. Nao aparecia no video porque o pipeline
+    # regenera as cues a partir do captions.json corrigido — mas o PREVIEW
+    # desenha a partir das cues, entao a correcao so aparecia depois de
+    # refazer o video.
+    if item.get("fromMs") is not None or item.get("toMs") is not None:
+        return float(item.get("fromMs") or 0) / 1000.0, float(item.get("toMs") or 0) / 1000.0
     return float(item.get("start") or 0), float(item.get("end") or 0)
 
 
@@ -181,11 +190,16 @@ def replace_caption_tokens(
             continue
         src = str(fix.get("from") or "").strip()
         dst = str(fix.get("to") or "").strip()
-        if not src or not dst:
+        # `delete` e o pedido de APAGAR a legenda, nao de troca-la por vazio.
+        # Sem uma marca explicita nao daria para distinguir "apague isto" de
+        # "o campo veio vazio por engano" — e trocar por vazio calado e
+        # exatamente o tipo de coisa que apaga trabalho sem querer.
+        apagar = bool(fix.get("delete"))
+        if not src or (not dst and not apagar):
             continue
         src_toks = _split_tokens(src)
-        dst_toks = _split_tokens(dst)
-        if not src_toks or not dst_toks:
+        dst_toks = [] if apagar else _split_tokens(dst)
+        if not src_toks or (not dst_toks and not apagar):
             continue
         status, hits = resolve_replacement_index(words, src_toks, fix)
         if status == "none":
@@ -212,6 +226,19 @@ def _apply_window(
     window = words[i : i + len(src_toks)]
     if len(window) != len(src_toks):
         return 0
+    if not dst_toks:
+        # APAGAR. Em captions.json as palavras saem da lista; nas cues elas
+        # ficam com texto vazio e o `_prune_empty_cue_words` as remove depois
+        # — os nos das cues carregam layout que nao da para recortar aqui.
+        if splice:
+            del words[i : i + len(src_toks)]
+            return 1
+        n = 0
+        for w in window:
+            if str(w.get("text") or "").strip():
+                w["text"] = ""
+                n += 1
+        return n
     t0 = float(window[0].get("startMs") if window[0].get("startMs") is not None else window[0].get("start") or 0)
     t1 = float(window[-1].get("endMs") if window[-1].get("endMs") is not None else window[-1].get("end") or 0)
     use_ms = window[0].get("startMs") is not None or window[0].get("endMs") is not None
@@ -345,13 +372,31 @@ def patch_edit_data_text(edit_dir: Path, fixes: list[dict] | None = None) -> int
     return changed
 
 
+def _e_lista_de_palavras(v: Any) -> bool:
+    return isinstance(v, list) and bool(v) and isinstance(v[0], dict) and "text" in v[0]
+
+
 def _prune_empty_cue_words(node: Any) -> None:
     if isinstance(node, dict):
         for v in node.values():
             _prune_empty_cue_words(v)
         for key, v in list(node.items()):
-            if isinstance(v, list) and v and isinstance(v[0], dict) and "text" in v[0]:
+            if _e_lista_de_palavras(v):
                 node[key] = [x for x in v if str(x.get("text") or "").strip()]
+            elif isinstance(v, list) and v and isinstance(v[0], list):
+                # `lines` da cue e uma lista de LINHAS, cada uma com as
+                # palavras. So o ramo acima existia, e ele exige que a lista
+                # seja valor direto de uma chave — as linhas nao sao, entao a
+                # palavra apagada ficava com texto vazio dentro da linha para
+                # sempre. Linha que fica sem palavra tambem sai.
+                linhas = []
+                for linha in v:
+                    if _e_lista_de_palavras(linha):
+                        linha = [x for x in linha if str(x.get("text") or "").strip()]
+                        if not linha:
+                            continue
+                    linhas.append(linha)
+                node[key] = linhas
     elif isinstance(node, list):
         for v in node:
             _prune_empty_cue_words(v)
@@ -446,6 +491,12 @@ def _destino_ja_no_lugar(words: list[dict] | None, fixes: list[dict]) -> bool:
         return False
     for fix in fixes or []:
         if not isinstance(fix, dict):
+            continue
+        if fix.get("delete"):
+            # apagar ja aplicado = a ORIGEM sumiu
+            src = _split_tokens(str(fix.get("from") or ""))
+            if src and resolve_replacement_index(words, src, fix)[0] != "none":
+                return False
             continue
         dst = _split_tokens(str(fix.get("to") or ""))
         if not dst:

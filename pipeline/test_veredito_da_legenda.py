@@ -105,3 +105,62 @@ def test_a_tela_nao_joga_fora_a_correcao_que_falhou():
     assert "capFalhou" in js[i:i + 400], (
         "o ramo de legenda ainda canta sucesso sem olhar o veredito"
     )
+
+
+def test_apagar_tira_a_palavra_de_captions_e_das_cues(tmp_path):
+    """O usuário pediu: "quero poder selecionar e deletar algumas legendas".
+
+    Antes só dava para TROCAR o texto. Salvar vazio não apagava — e também não
+    dizia nada, então parecia que o editor tinha ignorado o clique.
+    """
+    from app.caption_fixes import apply_caption_fixes
+
+    edit = _projeto(tmp_path, [
+        ("moço", 0, 500), ("nossa", 500, 1000), ("capinha", 1000, 1600),
+    ])
+    pub = edit / "remotion" / "public"
+    (pub / "caption-cues.json").write_text(json.dumps([
+        {"i": 0, "startMs": 0, "endMs": 1600,
+         # `fromMs`/`toMs` sao os nomes REAIS das palavras de cue (conferido em
+         # caption-cues.json dos projetos): so `fromMs` faria o filtro de tempo
+         # medir fim 0 e o teste passaria por motivo errado.
+         "lines": [[{"text": "moço", "fromMs": 0, "toMs": 500},
+                    {"text": "nossa", "fromMs": 500, "toMs": 1000},
+                    {"text": "capinha", "fromMs": 1000, "toMs": 1600}]]},
+    ]), encoding="utf-8")
+
+    out = apply_caption_fixes(edit, [{"from": "nossa", "to": "", "delete": True,
+                                      "startMs": 500, "endMs": 1000}])
+    assert out["ok"] is True and out["changed"] >= 1
+
+    caps = json.loads((pub / "captions.json").read_text(encoding="utf-8"))
+    assert [w["text"] for w in caps] == ["moço", "capinha"]
+    cues = json.loads((pub / "caption-cues.json").read_text(encoding="utf-8"))
+    assert [w["text"] for w in cues[0]["lines"][0]] == ["moço", "capinha"]
+
+
+def test_texto_vazio_sem_a_marca_de_apagar_nao_apaga_nada(tmp_path):
+    """A guarda que separa "apague isto" de "o campo veio vazio por engano"."""
+    from app.caption_fixes import apply_caption_fixes
+
+    edit = _projeto(tmp_path, [("moço", 0, 500), ("nossa", 500, 1000)])
+    apply_caption_fixes(edit, [{"from": "nossa", "to": "", "startMs": 500, "endMs": 1000}])
+    caps = json.loads((edit / "remotion/public/captions.json").read_text(encoding="utf-8"))
+    assert [w["text"] for w in caps] == ["moço", "nossa"], "campo vazio apagou sozinho"
+
+
+def test_a_tela_oferece_apagar_e_nao_engole_o_campo_vazio():
+    js = (REPO / "assets" / "preview" / "app.js").read_text(encoding="utf-8")
+    assert "del.textContent = 'apagar';" in js, "o editor de legenda não tem apagar"
+    assert "delete: true" in js, "o pedido de apagar não chega ao servidor"
+    assert 'use o botão "apagar"' in js, "campo vazio ainda some calado"
+
+
+def test_o_cursor_da_headline_vai_para_onde_se_clica():
+    """Editar a headline selecionava TUDO: clicar no meio para apagar uma
+    palavra não funcionava e só restava andar com as setas."""
+    js = (REPO / "assets" / "preview" / "app.js").read_text(encoding="utf-8")
+    i = js.index("function beginHeadlineEdit(")
+    trecho = js[i:i + 2600]
+    assert "caretRangeFromPoint" in trecho, "o clique ainda não posiciona o cursor"
+    assert "beginHeadlineEdit(e)" in js, "o clique na headline não passa o evento"

@@ -1769,7 +1769,10 @@ function commitHeadline(text, isAnswer) {
   refreshProjectChrome();
 }
 
-function beginHeadlineEdit() {
+// `ev` = o evento do clique que abriu a edicao, quando houve um. Com ele o
+// cursor vai para ONDE o usuario clicou; sem ele (chip da barra, atalho) o
+// texto inteiro fica selecionado, que e o certo para "digitar por cima".
+function beginHeadlineEdit(ev) {
   if (S.applying) return;
   const box = $('hlOverlay');
   const answerMode = hlAnswerMode();
@@ -1785,10 +1788,31 @@ function beginHeadlineEdit() {
     }
     line.contentEditable = 'true';
     line.focus();
-    const range = document.createRange();
-    range.selectNodeContents(line);
     const sel = window.getSelection();
     sel.removeAllRanges();
+    // O elemento so vira editavel AGORA, entao o clique que abriu a edicao nao
+    // deixou cursor nenhum: era preciso pedir o ponto ao navegador. Antes daqui
+    // saia sempre `selectNodeContents`, ou seja, TUDO selecionado — clicar no
+    // meio da manchete para apagar uma palavra nao funcionava e so restava
+    // andar com as setas.
+    let range = null;
+    if (ev && ev.clientX != null) {
+      if (document.caretRangeFromPoint) {
+        range = document.caretRangeFromPoint(ev.clientX, ev.clientY);
+      } else if (document.caretPositionFromPoint) {
+        const cp = document.caretPositionFromPoint(ev.clientX, ev.clientY);
+        if (cp) {
+          range = document.createRange();
+          range.setStart(cp.offsetNode, cp.offset);
+          range.collapse(true);
+        }
+      }
+      if (range && !line.contains(range.startContainer)) range = null;
+    }
+    if (!range) {
+      range = document.createRange();
+      range.selectNodeContents(line);
+    }
     sel.addRange(range);
     let cancelled = false;
     const finish = () => {
@@ -2255,6 +2279,13 @@ function openCaptionEditor(i, anchorEl) {
   const reset = el('button', 'btn ghost small', acts);
   reset.textContent = 'desfazer correção';
   reset.style.visibility = S.captionFixes[i] ? 'visible' : 'hidden';
+  // Apagar era o buraco: dava para trocar o texto, mas nao para tirar a
+  // legenda — e salvar com o campo vazio nao apaga de proposito, senao um
+  // campo limpo por engano levaria a legenda junto. Aqui o pedido e explicito,
+  // e o undo (pushHistory) cobre o arrependimento.
+  const del = el('button', 'btn ghost small', acts);
+  del.textContent = 'apagar';
+  del.title = 'Tira esta legenda do vídeo';
   el('div', 'spacer', acts);
   const ok = el('button', 'btn primary small', acts);
   ok.textContent = 'aplicar';
@@ -2262,7 +2293,11 @@ function openCaptionEditor(i, anchorEl) {
   const commit = () => {
     const v = input.value.trim();
     closeCaptionEditor();
-    if (!v || v === c.text) {
+    if (!v) {
+      // Antes isto apenas descartava a correcao, sem dizer nada — o usuario
+      // esvaziava o campo esperando apagar a legenda e nao acontecia NADA.
+      toast('Para tirar a legenda do vídeo, use o botão "apagar"', 3200);
+    } else if (v === c.text) {
       if (S.captionFixes[i]) { pushHistory(); delete S.captionFixes[i]; }
     } else if (!S.captionFixes[i] || S.captionFixes[i].to !== v) {
       pushHistory();
@@ -2288,6 +2323,33 @@ function openCaptionEditor(i, anchorEl) {
     }
     renderAll(); refreshHeader();
   };
+  const apagar = () => {
+    closeCaptionEditor();
+    pushHistory();
+    const from = c.text;
+    S.captionFixes[i] = { from, to: '', delete: true, start: c.start, end: c.end };
+    S.captions = S.captions.filter((_, k) => k !== i);
+    renderAll();
+    refreshHeader();
+    persistCaptionFix(from, '', {
+      delete: true,
+      start: c.start,
+      end: c.end,
+      startMs: Math.round((c.start || 0) * 1000),
+      endMs: Math.round((c.end || 0) * 1000),
+      index: c.wordIndex,
+      tokenId: c.tokenId || undefined,
+      cueId: c.cueId || undefined,
+    }).then((data) => {
+      if (data && data.ok === false) {
+        S.captions.splice(i, 0, c);
+        delete S.captionFixes[i];
+        renderAll();
+        refreshHeader();
+      }
+    });
+  };
+  del.addEventListener('click', apagar);
   ok.addEventListener('click', commit);
   reset.addEventListener('click', () => {
     closeCaptionEditor();
@@ -3759,8 +3821,12 @@ function capArrastavel(line) {
         if (data[a.chave] !== undefined) caps[a.chave] = data[a.chave];
         if (S.editData) S.editData.captions = caps;
         toast('Legenda reposicionada — Aplicar alterações para valer no vídeo', 2600);
-      } else if (data && data.error) {
-        toast(data.error);
+      } else {
+        // mesmo silencio da headline: sem gravacao, a legenda ficava no lugar
+        // novo como se tivesse sido salva
+        capPosicionar(line);
+        if (data && data.error) toast(data.error, 3200);
+        else if (!S.applying) toast('Não consegui salvar a posição da legenda', 3200);
       }
     } catch (err) {
       toast((err && err.message) || 'Não deu para salvar a posição');
@@ -3948,6 +4014,14 @@ function hlArrastavel(line) {
         else hook.paddingBottom = corpo.paddingBottom;
         if (S.editData) S.editData.hook = hook;
         toast('Headline reposicionada — Aplicar alterações para valer no vídeo', 2600);
+      } else {
+        // `persistCorrection` devolve null sem gravar nada (preview solto, ou
+        // um apply em curso). Antes disto nao acontecia NADA: a headline ficava
+        // parada no lugar novo e parecia salva. Volta para onde ela esta de
+        // verdade e diz o porque.
+        hlPosicionar(line);
+        if (data && data.error) toast(data.error, 3200);
+        else if (!S.applying) toast('Não consegui salvar a posição da headline', 3200);
       }
     } catch (err) {
       toast((err && err.message) || 'Não deu para salvar a posição');
@@ -4956,6 +5030,7 @@ async function saveEditsAndReturnToQueue() {
   if (capFixes.length) {
     payload.captionFixes = capFixes.map((f) => ({
       from: f.from, to: f.to,
+      ...(f.delete ? { delete: true } : {}),
       renderedStart: +f.start.toFixed(3),
       renderedEnd: +f.end.toFixed(3),
     }));
@@ -5207,7 +5282,7 @@ if ($('hlOverlay')) {
       line.dataset.acabouDeArrastar = '0';
       return;
     }
-    beginHeadlineEdit();
+    beginHeadlineEdit(e);
   });
 }
 if ($('capOverlay')) {

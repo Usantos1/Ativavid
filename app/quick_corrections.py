@@ -339,15 +339,24 @@ def set_caption_pos(edit_dir: Path, y_px: Any, altura: int = 1920) -> dict[str, 
     return {"ok": True, "style": estilo, chave: valor, "corrections": corr}
 
 
-def fix_caption(edit_dir: Path, *, src: str, dst: str, **target: Any) -> dict[str, Any]:
-    """Aplica o texto corrigido na fonte real da legenda. Preserva timings."""
+def fix_caption(
+    edit_dir: Path, *, src: str, dst: str, apagar: bool = False, **target: Any,
+) -> dict[str, Any]:
+    """Aplica o texto corrigido na fonte real da legenda. Preserva timings.
+
+    `apagar=True` REMOVE a legenda em vez de trocar o texto. E um pedido
+    explicito: salvar com o campo vazio nunca apaga sozinho, senao um campo
+    limpo por engano levaria a legenda junto.
+    """
     from app.caption_fixes import apply_caption_fixes
 
     src = str(src or "").strip()
-    dst = str(dst or "").strip()
-    if not src or not dst or src == dst:
+    dst = "" if apagar else str(dst or "").strip()
+    if not src or (not apagar and (not dst or src == dst)):
         return {"ok": True, "changed": 0, "corrections": load(edit_dir)}
     fix: dict[str, Any] = {"from": src, "to": dst}
+    if apagar:
+        fix["delete"] = True
     for key in (
         "index", "cueId", "tokenId", "id", "wordId",
         "start", "end", "startMs", "endMs", "cueIndex",
@@ -602,6 +611,7 @@ def handle(
             edit,
             src=str(body.get("from") or body.get("src") or ""),
             dst=str(body.get("to") or body.get("dst") or body.get("text") or ""),
+            apagar=bool(body.get("delete") or body.get("apagar")),
             index=body.get("index"),
             cueIndex=body.get("cueIndex"),
             cueId=body.get("cueId"),
