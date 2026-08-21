@@ -24,6 +24,7 @@ import subprocess
 import sys
 import textwrap
 import time
+from functools import lru_cache
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -440,6 +441,26 @@ def _uv_python(*args: str, cwd: Path | None = None, check: bool = True) -> subpr
             f"stdout:\n{proc.stdout[-4000:]}\nstderr:\n{proc.stderr[-4000:]}"
         )
     return proc
+
+
+@lru_cache(maxsize=1)
+def _backend_transcricao() -> str:
+    """Qual motor transcreve neste job. Decidido em `app/transcricao/modo`.
+
+    Em cache: os tres pontos de chamada tem de usar o MESMO motor no mesmo
+    job, senao o transcript da fonte e o do cut sairiam de motores diferentes
+    -- com tempos de palavra que nao conversam.
+    """
+    try:
+        from app.transcricao.modo import backend_para_o_pipeline
+
+        escolhido = backend_para_o_pipeline()
+    except Exception as e:  # noqa: BLE001
+        print(f"TRANSCRICAO_MODO_FALHOU {type(e).__name__}: {str(e)[:120]}",
+              flush=True)
+        escolhido = "elevenlabs"
+    print(f"TRANSCRICAO_BACKEND {escolhido}", flush=True)
+    return escolhido
 
 
 def _helper(name: str, *args: str, check: bool = True) -> subprocess.CompletedProcess:
@@ -2449,7 +2470,7 @@ def run(
             _f_tr = _an_ex.submit(
                 _helper, "transcribe.py", str(src),
                 "--edit-dir", str(edit_dir), "--language", language,
-                "--backend", "elevenlabs",
+                "--backend", _backend_transcricao(),
             )
             _f_sr = _an_ex.submit(_helper, "speech_regions.py", str(src))
             _f_vl = _an_ex.submit(
@@ -2841,7 +2862,7 @@ def run(
     if is_longform:
         # Longform gera .srt/chapters do transcript do corte — precisa transcrever.
         _helper("transcribe.py", str(cut_path), "--edit-dir", str(edit_dir),
-                "--language", language, "--backend", "elevenlabs")
+                "--language", language, "--backend", _backend_transcricao())
         cut_spoken = transcript_text(edit_dir, "cut") or spoken
     else:
         # Shortform: as palavras da fonte já foram transcritas na fase 1 e o
@@ -2946,7 +2967,7 @@ def run(
                 cut_spoken = joined
         else:
             _helper("transcribe.py", str(cut_path), "--edit-dir", str(edit_dir),
-                "--language", language, "--backend", "elevenlabs")
+                "--language", language, "--backend", _backend_transcricao())
             cut_spoken = transcript_text(edit_dir, "cut") or spoken
             # Groq/Whisper often stretches OR truncates word times vs the real
             # cut — either breaks full-video karaoke. Prefer EDL remap then.

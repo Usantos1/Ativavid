@@ -861,7 +861,8 @@ def _transcrever_local(
         t_audio = time.time()
         _extrair_wav16k(video, audio)
         t_audio = time.time() - t_audio
-        resultado = motor.transcrever(audio, idioma=language)
+        resultado = motor.transcrever(audio, idioma=language,
+                                      fonte_original=video)
 
     payload = resultado.para_schema_scribe()
     out_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False),

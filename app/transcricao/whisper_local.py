@@ -35,6 +35,7 @@ from typing import Any, Callable
 from app.transcricao import (
     Cancelado, Palavra, ResultadoDeTranscricao, Segmento,
 )
+from app.transcricao import guarda
 from app.transcricao import modelos as cat
 from app.transcricao.plataforma import detectar, resumo_tecnico
 
@@ -122,6 +123,7 @@ class MotorWhisperLocal:
         idioma: str | None = None,
         cancelar: threading.Event | None = None,
         progresso: Callable[[float, str], None] | None = None,
+        fonte_original: Path | None = None,
     ) -> ResultadoDeTranscricao:
         ok, motivo = self.disponivel()
         if not ok:
@@ -143,6 +145,9 @@ class MotorWhisperLocal:
 
         segmentos: list[Segmento] = []
         partes: list[str] = []
+        # `no_speech_prob` e do Whisper, nao do contrato -- fica de lado, por
+        # indice, para a guarda usar sem sujar `ResultadoDeTranscricao`.
+        nao_fala: dict[int, float] = {}
         # `transcribe` devolve um gerador: o trabalho acontece ao iterar. É
         # aqui, e só aqui, que dá para cancelar no meio e informar progresso.
         for s in segs_it:
@@ -161,6 +166,8 @@ class MotorWhisperLocal:
                            if getattr(s, "avg_logprob", None) is not None else None),
                 palavras=palavras,
             ))
+            nao_fala[len(segmentos) - 1] = float(
+                getattr(s, "no_speech_prob", 0.0) or 0.0)
             partes.append(s.text or "")
             if progresso and total > 0:
                 progresso(min(0.99, float(s.end) / total), "Transcrevendo áudio…")
@@ -168,7 +175,7 @@ class MotorWhisperLocal:
         if progresso:
             progresso(1.0, "Transcrevendo áudio…")
 
-        return ResultadoDeTranscricao(
+        bruto = ResultadoDeTranscricao(
             texto=" ".join(partes).strip(),
             segmentos=segmentos,
             idioma=str(getattr(info, "language", "") or idioma or ""),
@@ -179,3 +186,16 @@ class MotorWhisperLocal:
             tempos={"carregar_modelo": round(t_carga, 3),
                     "transcrever": round(t_tr, 3)},
         )
+
+        # A guarda contra texto que ninguem falou. Roda SEMPRE: e barata
+        # quando nao ha o que descartar, e o defeito que ela evita (legenda
+        # inventada) chega ao video publicado.
+        t_g = time.perf_counter()
+        regioes = guarda.regioes_de(fonte_original or audio)
+        limpo, veredito = guarda.aplicar(bruto, no_speech=nao_fala,
+                                         regioes=regioes)
+        limpo.tempos["guarda"] = round(time.perf_counter() - t_g, 3)
+        if veredito.entrou != veredito.saiu:
+            print(f"WHISPER_GUARDA {veredito.entrou} -> {veredito.saiu} palavras "
+                  f"({veredito.motivo})", flush=True)
+        return limpo

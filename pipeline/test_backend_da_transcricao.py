@@ -34,10 +34,18 @@ for extra in (REPO, REPO / "helpers"):
 RUN_FAST = REPO / "pipeline" / "run_fast.py"
 
 
-def test_todo_ponto_que_transcreve_pede_o_scribe():
-    """Lê o CÓDIGO, não o arquivo: o comentário que explica a decisão cita
-    "elevenlabs", e a primeira versão deste teste passava por causa dele —
-    com a chamada ainda sem o argumento."""
+def test_nenhum_ponto_que_transcreve_cai_no_auto():
+    """O invariante, que sobreviveu à chegada dos três modos: nenhuma chamada
+    pode omitir o `--backend`.
+
+    Antes os três pontos fixavam `"elevenlabs"`; agora leem
+    `_backend_transcricao()`, que resolve o modo. O que não pode voltar é a
+    chamada SEM backend, que cai no `auto` — e o `auto` do `transcribe.py`
+    manda fonte curta para o Groq.
+
+    Lê o CÓDIGO, não o arquivo: o comentário que explica a decisão cita
+    "elevenlabs", e uma versão anterior deste teste passava por causa dele.
+    """
     from pipeline.leitura_de_codigo import apenas_codigo
 
     s = apenas_codigo(RUN_FAST)
@@ -45,10 +53,62 @@ def test_todo_ponto_que_transcreve_pede_o_scribe():
     assert len(pontos) == 3, f"achei {len(pontos)} chamadas; o arquivo mudou"
     for i in pontos:
         trecho = s[i:i + 300]
-        assert '"elevenlabs"' in trecho, (
-            "chamada sem `--backend elevenlabs` — cai no `auto`, que manda "
-            "fonte curta para o Groq: " + " ".join(trecho.split())[:110]
+        assert "--backend" in trecho, (
+            "chamada sem `--backend` — cai no `auto`, que manda fonte curta "
+            "para o Groq: " + " ".join(trecho.split())[:110]
         )
+
+
+def test_todos_os_pontos_usam_o_MESMO_motor_no_mesmo_job():
+    """O transcript da fonte e o do cut têm de vir do mesmo motor: tempos de
+    palavra de motores diferentes não conversam."""
+    from pipeline.leitura_de_codigo import apenas_codigo
+
+    s = apenas_codigo(RUN_FAST)
+    # `[^\)\n]+` para na primeira `)`, então a chamada sai truncada em
+    # `_backend_transcricao(` — o que basta para comparar os três entre si.
+    usados = set(re.findall(r'"--backend",\s*([^\)\n]+)', s))
+    assert len(usados) == 1, f"pontos usando motores diferentes: {usados}"
+    assert "_backend_transcricao" in next(iter(usados))
+    # e a resolução é em cache, senão dois pontos podem divergir se a
+    # configuração mudar no meio do job
+    i = s.index("def _backend_transcricao(")
+    assert "lru_cache" in s[max(0, i - 200):i]
+
+
+def test_a_resolucao_nunca_devolve_auto_nem_groq(monkeypatch):
+    """`auto` e `groq` são exatamente o que a mudança veio tirar do caminho."""
+    from app.transcricao.modo import AUTO, LOCAL, SCRIBE, backend_para_o_pipeline
+
+    for pedido in ("", AUTO, LOCAL, SCRIBE, "lixo"):
+        if pedido:
+            monkeypatch.setenv("ATIVAVID_TRANSCRICAO", pedido)
+        else:
+            monkeypatch.delenv("ATIVAVID_TRANSCRICAO", raising=False)
+        assert backend_para_o_pipeline() in (LOCAL, SCRIBE)
+
+
+def test_auto_ainda_nao_vira_a_chave_sozinho():
+    """Enquanto a decisão entre local e nuvem não está tomada, `AUTO` não pode
+    mudar o resultado dos vídeos do usuário por conta própria."""
+    from app.transcricao.modo import AUTO_RESOLVE_PARA, SCRIBE
+
+    assert AUTO_RESOLVE_PARA == SCRIBE
+
+
+def test_local_indisponivel_nao_derruba_o_job(monkeypatch):
+    """O usuário quer o vídeo, não uma aula sobre backends."""
+    import app.transcricao.modo as modo
+
+    monkeypatch.setenv("ATIVAVID_TRANSCRICAO", modo.LOCAL)
+
+    class Quebrado:
+        def disponivel(self):
+            return False, "faster-whisper não instalado"
+
+    import app.transcricao.whisper_local as wl
+    monkeypatch.setattr(wl, "MotorWhisperLocal", lambda *a, **k: Quebrado())
+    assert modo.backend_para_o_pipeline() == modo.SCRIBE
 
 
 def test_o_limiar_do_auto_esta_acima_das_fontes_do_usuario():
