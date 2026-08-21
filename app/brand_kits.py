@@ -187,10 +187,39 @@ def load_brand(brand_id: str | None = None) -> dict[str, Any]:
     return {"brandId": "padrao", "brandName": "Padrão", "exportPreset": "reels"}
 
 
+def _slug_livre(base: str, name: str) -> str:
+    """Slug que nao ATROPELA outra marca.
+
+    `save_brand` derivava o slug do nome quando nao vinha `brandId`. Se o slug
+    ja estivesse ocupado por uma marca com OUTRO nome, a gravacao substituia
+    aquele arquivo — a marca antiga sumia e nenhuma nova aparecia, com o toast
+    dizendo "Marca salva e ativada". Aconteceu duas vezes nesta maquina:
+    `brands/loja-teste.json` ficou chamando "Prime Camp" e `brands/padrao.json`
+    ficou chamando "Uander" — nos dois o nome de exibicao discorda do arquivo,
+    que e a assinatura do atropelo.
+    """
+    alvo = BRANDS_DIR / f"{base}.json"
+    if not alvo.exists():
+        return base
+    try:
+        atual = json.loads(alvo.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError):
+        return base
+    if str(atual.get("brandName") or "").strip() == name:
+        return base            # mesma marca: e atualizacao, nao criacao
+    n = 2
+    while (BRANDS_DIR / f"{base}-{n}.json").exists() and n < 100:
+        n += 1
+    return f"{base}-{n}"
+
+
 def save_brand(body: dict[str, Any]) -> dict[str, Any]:
     ensure_brands_dir()
     name = str(body.get("brandName") or body.get("name") or "Marca").strip() or "Marca"
-    bid = _slug(str(body.get("brandId") or body.get("id") or name))
+    dado_id = str(body.get("brandId") or body.get("id") or "").strip()
+    # Sem `brandId` explicito e uma CRIACAO — ai o slug sai do nome e nao pode
+    # cair em cima de outra marca. Com `brandId` e atualizacao daquela marca.
+    bid = _slug(dado_id) if dado_id else _slug_livre(_slug(name), name)
     data = dict(body)
     data.pop("activate", None)
     data.pop("action", None)

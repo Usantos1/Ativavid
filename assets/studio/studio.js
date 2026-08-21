@@ -3261,11 +3261,16 @@ function wireForms() {
         }
         const exportPreset = $("#exportPresetSelect").value || "reels";
         const preset = await api("/api/preset");
+        // `/api/preset` devolve o estilo da marca ATIVA — inclusive o brandId
+        // dela. Mandar isso num "criar marca NOVA" fazia o servidor gravar por
+        // cima da marca ativa: o nome digitado apenas a renomeava, a antiga
+        // sumia e nenhuma nova nascia. Aqui o estilo vai, a identidade nao.
+        const { brandId: _bid, id: _id, brandName: _bn, ...estilo } = preset || {};
         await api("/api/brands", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            ...preset,
+            ...estilo,
             brandName: name,
             exportPreset,
             activate: true,
