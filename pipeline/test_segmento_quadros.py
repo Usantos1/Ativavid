@@ -7,9 +7,11 @@ caindo no meio de um quadro, um filtro `fps=` pode DUPLICAR o primeiro quadro
 para preencher a posição 0 — um congelamento de um quadro no início de cada
 corte, invisível num teste de comando.
 
-O índice do quadro vai na GEOMETRIA (barra branca na coluna N), não no
-brilho: já perdi um teste porque o tonemap esmagou um índice codificado em
-luminância.
+O índice do quadro vai em GEOMETRIA, não em brilho: já perdi um teste porque
+o tonemap esmagou um índice codificado em luminância. E não numa barra de 1px
+— o segmento é reescalado e reencodado no caminho, e 1px borra a ponto de dois
+quadros vizinhos lerem o mesmo índice. São 8 faixas largas, uma por bit: a
+leitura sobrevive a blur e a reescala.
 """
 from __future__ import annotations
 
@@ -31,13 +33,18 @@ NOWIN = {"creationflags": subprocess.CREATE_NO_WINDOW} if hasattr(subprocess, "C
 W, H, N, FPS_FONTE = 120, 214, 240, 60
 
 
+FAIXA = W // 8      # 8 faixas de 15px: um bit do indice em cada
+
+
 def _fonte(tmp: Path) -> Path:
-    """4s a 60fps; o quadro k tem uma barra branca na coluna k % W."""
+    """4s a 60fps; o quadro k traz o proprio indice em 8 faixas (1 bit cada)."""
     p = tmp / "fonte.mp4"
     bruto = bytearray()
     for k in range(N):
         q = np.zeros((H, W, 3), dtype=np.uint8)
-        q[:, k % W, :] = 255
+        for bit in range(8):
+            if k >> bit & 1:
+                q[:, bit * FAIXA:(bit + 1) * FAIXA, :] = 255
         bruto += q.tobytes()
     r = subprocess.run([
         "ffmpeg", "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24",
@@ -59,8 +66,17 @@ def _indices(p: Path) -> list[int]:
     n = a.size // (W * H)
     if not n:
         return []
-    a = a[:n * W * H].reshape(n, H, W)
-    return [int(q.mean(axis=0).argmax()) for q in a]
+    a = a[:n * W * H].reshape(n, H, W).astype(np.float32)
+    saida = []
+    for q in a:
+        v = 0
+        for bit in range(8):
+            # o meio de cada faixa, longe das bordas onde o blur mistura
+            m = q[:, bit * FAIXA + FAIXA // 4: (bit + 1) * FAIXA - FAIXA // 4]
+            if m.mean() > 128:
+                v |= 1 << bit
+        saida.append(v)
+    return saida
 
 
 def _extrai(tmp: Path, fonte: Path, inicio: float, dur: float,
