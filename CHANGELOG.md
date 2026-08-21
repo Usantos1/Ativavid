@@ -1,5 +1,38 @@
 # Changelog
 
+## 2.37
+
+Uma segunda auditoria, desta vez mirando só o que você usa de verdade — o
+estilo `stacked`, a headline `realce`, o editor e a fila. Achou nove coisas,
+todas conferidas nos seus projetos. Estas quatro são as que doem:
+
+- **Marcar um trecho apagava do marcador até o FIM do vídeo.** É o seu fluxo
+  de todo dia: marca com **M**, escreve a nota, salva. Testado com um vídeo de
+  60 s: marcar **2 segundos** removia **50**. Agora remove exatamente o que
+  você marcou
+- **"tira o zoom daqui" apagava o take inteiro.** A nota virava corte por
+  pedaço de palavra: `fora` casava em "fora de foco", `corte` em "aqui o corte
+  ficou estranho". E o texto que você escreveu ia junto. Agora só corta com
+  ordem explícita, e não corta quando a nota nomeia um elemento (zoom,
+  legenda, trilha, manchete...)
+- **O take de CTA que você grava e anexa sumia do corte.** Os tempos de cada
+  take são contados do zero, e a etapa que protege a fala misturava os dois
+  arquivos e engolia o mais curto. **5 dos seus projetos** estão assim — três
+  perderam o CTA, dois perderam a Parte 2
+- **Trocar o estilo de um vídeo em andamento virava card de ERRO** e não
+  reeditava nada
+
+E três acertos de desenho na legenda, que valem para todos os seus vídeos:
+
+- **A palavra aparece com a curva certa.** A entrada era mais lenta que a do
+  preview — a diferença chegava a 26% de opacidade no começo. Como a subida
+  da palavra vem da mesma conta, ela também deslizava devagar
+- **A última palavra de cada trecho agora assenta.** Quem entrava perto do
+  fim ficava com tempo de entrada longo demais e o trecho acabava antes: ela
+  piscava e sumia sem chegar ao lugar. Eram 27% das palavras
+- Cartão final com o peso certo na segunda linha, e a faixa colorida da
+  manchete sem 6 px sobrando de um lado só
+
 ## 2.36
 
 Uma auditoria de leitura no código achou dez coisas; conferi cada uma nos
