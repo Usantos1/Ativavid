@@ -301,3 +301,23 @@ def test_menu_mais_acoes_escapa_do_cabecalho():
     # o clique-fora precisa reconhecer o menu no <body>, senão ele fecharia
     # antes do handler do item rodar
     assert "'#headMore, #headMoreMenu'" in js
+
+
+def test_enviar_a_fila_nao_mente_quando_o_servidor_recusa():
+    """`fetch` não levanta em 4xx/5xx, e `/api/jobs/requeue-folder` recusa em
+    três casos reais: 403 (licença sem direito), 400 (pasta inválida) e 404
+    (projeto fora da fila). Os três viravam "✓ Enviado à fila" e o usuário ia
+    esperar na Fila um vídeo que nunca começou.
+
+    A chamada irmã da aba Estilo, no mesmo arquivo, já tratava assim — era
+    inconsistência, não decisão."""
+    js = (REPO / "assets" / "preview" / "app.js").read_text(encoding="utf-8")
+    i = js.index("'/api/jobs/requeue-folder'", js.index("extraSources }),") - 400)
+    bloco = js[i - 600:i + 900]
+    assert "if (!rq.ok)" in bloco, "o status HTTP precisa ser olhado"
+    assert bloco.index("if (!rq.ok)") < bloco.index("'✓ Enviado à fila de edição'")
+    # o servidor realmente recusa nesses casos
+    srv = (REPO / "app" / "local_server.py").read_text(encoding="utf-8")
+    j = srv.index('path == "/api/jobs/requeue-folder"')
+    trecho = srv[j:j + 1200]
+    assert "403" in trecho and "404" in trecho

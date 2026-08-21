@@ -247,3 +247,41 @@ if __name__ == "__main__":
         fn()
         print("ok", fn.__name__)
     print("ALL_OK")
+
+
+# ------------------------------------ frases depois de 16min40s (bug real) ----
+def test_frase_depois_de_1000s_continua_sendo_lida(tmp_path):
+    r"""O escritor usa `f"{seconds:06.2f}"`, que preenche até 3 dígitos mas NÃO
+    trunca: a partir de 1000,00s (16min40s) ele emite 4. A regex tinha
+    `\d{3}` e parava de casar exatamente ali.
+
+    Isso não falhava com erro — a frase só sumia da lista. E a lista alimenta
+    a guarda que RESTAURA fala que a IA quis cortar, então a proteção parava
+    de valer no resto de todo vídeo longo (podcast, "editar completo")."""
+    from app.editing_intent import load_packed_phrases
+
+    edit = tmp_path / "edit"
+    edit.mkdir()
+    (edit / "takes_packed.md").write_text(
+        "## IMG_1\n"
+        "[012.30-015.80] S1 antes de dezesseis minutos\n"
+        "[999.00-999.90] S1 no limite antigo\n"
+        "[1000.00-1004.50] S1 logo depois do limite\n"
+        "[3600.00-3605.00] S1 uma hora de video\n",
+        encoding="utf-8")
+    fr = load_packed_phrases(edit, "IMG_1")
+    inicios = [p["start"] for p in fr]
+    assert 1000.00 in inicios, "a frase de 16min40s tem de ser lida"
+    assert 3600.00 in inicios, "e a de uma hora também"
+    assert len(fr) == 4
+
+
+def test_regex_da_frase_vive_num_lugar_so():
+    r"""A cópia em pipeline/smoke_intent_report.py tinha o mesmo `\d{3}` e
+    teria mascarado o conserto no smoke."""
+    from pathlib import Path
+
+    fonte = (Path(__file__).resolve().parent
+             / "smoke_intent_report.py").read_text(encoding="utf-8")
+    assert "from app.editing_intent import PHRASE_RE" in fonte
+    assert "PHRASE_RE = re.compile(" not in fonte

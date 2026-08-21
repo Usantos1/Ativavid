@@ -17,9 +17,9 @@ from app.editing_intent import (  # noqa: E402
     looks_like_cta,
 )
 
-PHRASE_RE = re.compile(
-    r"\[(\d{3}\.\d{2})-(\d{3}\.\d{2})\]\s+S\d+\s+(.*)"
-)
+# Importa do modulo de verdade em vez de repetir: a copia com `\d{3}`
+# sobreviveu aqui e teria mascarado o conserto no smoke.
+from app.editing_intent import PHRASE_RE  # noqa: E402
 
 
 def _phrases(packed: str, stem: str) -> list[dict]:

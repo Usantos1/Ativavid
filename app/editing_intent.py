@@ -342,7 +342,12 @@ def looks_like_cta(text: str) -> bool:
     return any(h in low for h in CTA_HINTS)
 
 
-PHRASE_RE = re.compile(r"\[(\d{3}\.\d{2})-(\d{3}\.\d{2})\]\s+S\d+\s+(.*)")
+# `\d+`, nao `\d{3}`: o escritor usa `f"{seconds:06.2f}"`, que preenche
+# com zeros ate 3 digitos mas NAO trunca — a partir de 1000,00s (16min40s)
+# ele emite 4. Com `{3}` a linha deixava de casar e a frase sumia da lista;
+# como a lista alimenta a guarda que RESTAURA fala cortada pela IA, a
+# protecao simplesmente parava de valer no resto de todo video longo.
+PHRASE_RE = re.compile(r"\[(\d+\.\d{2})-(\d+\.\d{2})\]\s+S\d+\s+(.*)")
 COMPLETE_ALLOWED_CLASSES = (
     "silence", "false_start", "repetition", "abandoned_take", "non_content",
 )

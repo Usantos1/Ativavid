@@ -4920,13 +4920,26 @@ async function saveEditsAndReturnToQueue() {
   }
   if (BASE && BASE.startsWith('/p/') && !captionOnly) {
     const folder = projectFolder() || decodeURIComponent(BASE.slice('/p/'.length).split('/')[0]);
+    // `fetch` NAO levanta em 4xx/5xx, e este endpoint recusa em tres casos
+    // reais: 403 (licenca sem direito), 400 (pasta invalida) e 404 (projeto
+    // fora da fila). Antes os tres viravam "Enviado a fila" e o usuario ia
+    // esperar na Fila um video que nunca comecou. A chamada irma da aba
+    // Estilo (mais acima, no mesmo arquivo) ja tratava assim.
     try {
-      await fetch('/api/jobs/requeue-folder', {
+      const rq = await fetch('/api/jobs/requeue-folder', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ folder, extraSources }),
       });
-    } catch { /* ignore */ }
+      if (!rq.ok) {
+        const body = await rq.json().catch(() => ({}));
+        toast(body.error || 'Não deu para enviar à fila — tente de novo em Projetos', 5000);
+        return false;
+      }
+    } catch {
+      toast('Não deu para enviar à fila — verifique se o ATIVAVID está aberto', 5000);
+      return false;
+    }
     toast('✓ Enviado à fila de edição', 2800);
     setTimeout(() => { location.href = '/?view=fila'; }, 500);
     return true;
