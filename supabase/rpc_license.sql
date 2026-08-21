@@ -454,7 +454,11 @@ begin
       'entitled', true,
       'mode', 'licensed',
       'validUntil', v_lic.valid_until,
-      'licenseKeyHint', v_hint
+      'licenseKeyHint', v_hint,
+      -- O device JÁ foi vinculado acima. Sem este marcador, o force-update
+      -- abaixo devolvia entitled=false e o cliente concluía que a chave não
+      -- pegou — mas ela já tinha consumido uma vaga de max_devices.
+      'activated', true
     );
     v_upd := public.ativavid_update_payload(p_app_version);
     if coalesce((v_upd ->> 'force')::boolean, false) then
@@ -463,7 +467,7 @@ begin
         || jsonb_build_object(
           'entitled', false,
           'mode', 'update_required',
-          'message', coalesce(v_upd ->> 'message', 'Atualize o ATIVAVID para continuar.')
+          'message', 'Chave ativada neste PC. Atualize o ATIVAVID para usar.'
         )
       )::json;
     end if;

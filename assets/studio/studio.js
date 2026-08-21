@@ -1360,13 +1360,19 @@ async function activateLicenseKey(key) {
     body: JSON.stringify({ key }),
   });
   const data = await res.json();
-  if (!res.ok || !data.entitled) {
+  if (!res.ok || (!data.entitled && !data.activated)) {
     throw new Error(data.message || data.error || "Chave inválida");
   }
   renderLicense(data);
-  toast("Licença ativada");
   const dlg = $("#dlgLicense");
   if (dlg?.open) dlg.close();
+  if (!data.entitled && data.activated) {
+    // Chave aceita, mas a build está abaixo da versão mínima.
+    toast(data.message || "Chave ativada neste PC. Atualize o ATIVAVID para usar.");
+    openUpdateDialog(data);
+    return data;
+  }
+  toast("Licença ativada");
   return data;
 }
 

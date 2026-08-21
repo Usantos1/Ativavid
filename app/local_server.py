@@ -2096,9 +2096,13 @@ class StudioHandler(BaseHTTPRequestHandler):
             # UI espera o mesmo shape de /api/license (mode, message, trialDays…)
             out = lic.public_status()
             out["ok"] = bool(result.get("entitled") or result.get("ok"))
+            out["activated"] = bool(result.get("activated"))
             if result.get("message") and not out.get("entitled"):
                 out["message"] = result.get("message")
-            self._json(out, 200 if out.get("entitled") else 403)
+            # Chave aceita mas travada por force-update não é chave inválida:
+            # devolver 403 fazia a UI dizer que a ativação falhou.
+            ok_http = bool(out.get("entitled") or out["activated"])
+            self._json(out, 200 if ok_http else 403)
             return
 
         if path == "/api/cache/clear":

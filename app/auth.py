@@ -15,6 +15,7 @@ from typing import Any
 from urllib import error, request
 from urllib.parse import urlencode
 
+from app import secret_store as secrets_dpapi
 from app import settings_store as ss
 
 AUTH_PATH = Path.home() / "ATIVAVID" / "auth.json"
@@ -40,11 +41,17 @@ def _cfg() -> dict[str, str]:
     }
 
 
+_TOKEN_FIELDS = ("access_token", "refresh_token")
+
+
 def _load() -> dict[str, Any]:
     if AUTH_PATH.exists():
         try:
             raw = json.loads(AUTH_PATH.read_text(encoding="utf-8-sig"))
             if isinstance(raw, dict):
+                for k in _TOKEN_FIELDS:
+                    if raw.get(k):
+                        raw[k] = secrets_dpapi.unprotect(str(raw[k]))
                 return raw
         except (OSError, json.JSONDecodeError):
             pass
@@ -56,6 +63,11 @@ def _save(data: dict[str, Any]) -> None:
     data = dict(data)
     data["remember"] = True
     data["saved_at"] = int(time.time())
+    # Tokens cifrados com a DPAPI: copiar o auth.json para outra máquina/conta
+    # deixa de sequestrar a sessão.
+    for k in _TOKEN_FIELDS:
+        if data.get(k):
+            data[k] = secrets_dpapi.protect(str(data[k]))
     # Nome único: com duas threads o .tmp fixo virava escrita entrelaçada.
     tmp = AUTH_PATH.with_suffix(f".{os.getpid()}.{threading.get_ident()}.tmp")
     try:

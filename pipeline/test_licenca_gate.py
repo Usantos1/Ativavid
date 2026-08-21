@@ -178,3 +178,54 @@ def test_cors_nunca_devolve_wildcard():
     h = _H({"Host": "127.0.0.1:4850", "Origin": "https://site-malicioso.com"})
     assert guard.cors_origin(h) != "*"
     assert "site-malicioso" not in guard.cors_origin(h)
+
+
+# --- segredos em repouso --------------------------------------------------
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="DPAPI é do Windows")
+def test_segredo_nao_fica_legivel_em_disco():
+    from app import secret_store
+
+    cifrado = secret_store.protect("service-role-secreta")
+    assert cifrado.startswith("dpapi:")
+    assert "service-role-secreta" not in cifrado
+    assert secret_store.unprotect(cifrado) == "service-role-secreta"
+
+
+def test_valor_legado_em_texto_plano_continua_valendo():
+    """Migração não pode invalidar a sessão/chave de quem já tinha o arquivo."""
+    from app import secret_store
+
+    assert secret_store.unprotect("valor-antigo-sem-prefixo") == "valor-antigo-sem-prefixo"
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="DPAPI é do Windows")
+def test_cifrar_duas_vezes_nao_corrompe():
+    from app import secret_store
+
+    uma = secret_store.protect("abc")
+    assert secret_store.protect(uma) == uma
+    assert secret_store.unprotect(uma) == "abc"
+
+
+# --- ativação sob force-update -------------------------------------------
+
+
+def test_chave_aceita_sob_force_update_nao_conta_como_falha(monkeypatch, tmp_path):
+    """O RPC vincula o device ANTES do gate de versão: reportar falha fazia o
+    cliente tentar no segundo PC e levar device_limit."""
+    monkeypatch.setattr(lic, "LICENSE_DIR", tmp_path)
+    monkeypatch.setattr(lic, "LICENSE_PATH", tmp_path / "license.json")
+    monkeypatch.setattr(lic, "configured", lambda: True)
+    monkeypatch.setattr(lic, "_cfg", lambda: {"url": "https://x", "anon": "k", "checkout": ""})
+    monkeypatch.setattr(lic, "_call", lambda *a, **k: {
+        "entitled": False,
+        "activated": True,
+        "mode": "update_required",
+        "message": "Chave ativada neste PC. Atualize o ATIVAVID para usar.",
+        "update": {"force": True},
+    })
+    out = lic.activate("ATIV-1111-2222-3333")
+    assert out["ok"] is True
+    assert out["activated"] is True

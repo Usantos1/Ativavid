@@ -8,6 +8,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from app import secret_store
+
 REPO = Path(__file__).resolve().parent.parent
 # Legacy (dev / builds antigos)
 _LEGACY_SETTINGS = REPO / ".ativavid-settings.json"
@@ -82,6 +84,11 @@ def load_settings() -> dict[str, Any]:
     else:
         raw = {}
     data.update({k: raw[k] for k in DEFAULTS if k in raw})
+    # Service role é cifrada em repouso (DPAPI). Valor sem prefixo é legado em
+    # texto plano e continua valendo até a próxima gravação.
+    srv = str(data.get("supabaseServiceRoleKey") or "")
+    if srv:
+        data["supabaseServiceRoleKey"] = secret_store.unprotect(srv)
     # A config embutida vence a do usuário: apagar supabaseUrl no settings.json
     # não pode destravar o app.
     data.update(bundled_license_config())
@@ -103,8 +110,12 @@ def save_settings(patch: dict[str, Any]) -> dict[str, Any]:
             continue
         data[k] = v
     USER_DIR.mkdir(parents=True, exist_ok=True)
+    on_disk = dict(data)
+    srv = str(on_disk.get("supabaseServiceRoleKey") or "")
+    if srv:
+        on_disk["supabaseServiceRoleKey"] = secret_store.protect(srv)
     try:
-        SETTINGS_PATH.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        SETTINGS_PATH.write_text(json.dumps(on_disk, indent=2, ensure_ascii=False), encoding="utf-8")
     except OSError as e:
         raise OSError(
             f"Não foi possível gravar settings em {SETTINGS_PATH}: {e}"

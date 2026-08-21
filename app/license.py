@@ -410,7 +410,10 @@ def activate(key: str) -> dict[str, Any]:
         return {"ok": False, "error": "not_configured", "message": "Configure o Supabase em Sistema."}
     remote = _call("activate", {"key": key.strip().upper()})
     status = _cache(remote)
-    status["ok"] = bool(status.get("entitled"))
+    # A chave pode ter sido aceita e ainda assim vir entitled=false por
+    # force-update. Tratar como falha fazia o cliente tentar no outro PC e
+    # levar device_limit por uma ativação que funcionou.
+    status["ok"] = bool(status.get("entitled") or status.get("activated"))
     status["deviceId"] = device_id()
     status["checkoutUrl"] = _cfg()["checkout"] or None
     status["configured"] = True
