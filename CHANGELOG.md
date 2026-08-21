@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.47
+
+- **A Lixeira parou de prometer o que não fez.** Apagar um projeto sempre dizia
+  "foi para a Lixeira" — mesmo quando os arquivos **ficavam no disco** porque a
+  reciclagem falhou. Você ia procurar lá para restaurar e não achava, ou
+  contava com um espaço que nunca foi liberado. Agora ele diz o que aconteceu
+  de verdade, com o motivo
+- **"Abrir pasta" não perde mais o caminho da entrega.** O fim do processamento
+  apagava o ponteiro para `publicar/<nome>/` logo depois de criá-lo — 13 dos
+  seus projetos estavam com a pasta pronta e o caminho perdido
+
 ## 2.46
 
 - **Palavras trocadas na legenda.** A transcrição às vezes marca uma palavra
