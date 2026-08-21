@@ -20,6 +20,20 @@ dependencies = [
 
 [project.optional-dependencies]
 animations = ["manim"]
+# Transcricao 100% local (faster-whisper / CTranslate2). Opcional porque o
+# conjunto pesa: 241 MB de pacotes + 1.986 MB das bibliotecas CUDA + o modelo
+# (462 MB no `small`, 1.458 MB no `medium`) -- todos MEDIDOS. Quem transcreve
+# pela nuvem nao paga nada disso.
+#   uv sync --extra transcricao        (CPU)
+#   uv sync --extra transcricao-cuda   (com aceleracao NVIDIA)
+transcricao = ["faster-whisper>=1.2"]
+transcricao-cuda = [
+    "faster-whisper>=1.2",
+    # O wheel do ctranslate2 NAO traz cuBLAS/cuDNN no Windows: sem estes o
+    # motor falha com "Library cublas64_12.dll is not found". Medido.
+    "nvidia-cublas-cu12",
+    "nvidia-cudnn-cu12",
+]
 test = ["pytest>=8.0"]
 # Person matting for the "element behind the subject" effect (person_matte.py).
 # Robust Video Matting via torch.hub — heavy (~2GB), so it's opt-in: install with

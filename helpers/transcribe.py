@@ -808,6 +808,94 @@ def guardar_no_cache(video: Path, backend: str, modelo: str, payload: dict) -> N
         pass
 
 
+def _transcrever_local(
+    video: Path,
+    transcripts_dir: Path,
+    out_path: Path,
+    *,
+    language: str | None,
+    verbose: bool,
+    modelo: str | None = None,
+) -> Path:
+    """Ponte para `app.transcricao`: transcreve nesta maquina e grava o JSON.
+
+    O resultado sai no MESMO schema dos outros backends (`para_schema_scribe`),
+    entao `captions_for_remotion`, `pack_transcripts`, `timeline_view` e os
+    demais nao sabem que o motor mudou.
+
+    O cache ENTRE projetos entra aqui tambem, com a chave marcando modelo e
+    backend: um transcript do `small` nao pode ser servido para quem pediu
+    `medium`.
+    """
+    import sys as _sys
+
+    raiz = Path(__file__).resolve().parent.parent
+    if str(raiz) not in _sys.path:
+        _sys.path.insert(0, str(raiz))
+    from app.transcricao.whisper_local import MotorWhisperLocal
+
+    motor = MotorWhisperLocal(modelo)
+    ok, motivo = motor.disponivel()
+    if not ok:
+        raise RuntimeError(motivo)
+
+    marca = f"local-{motor.modelo.chave}"
+    guardado = buscar_no_cache(video, marca, motor.modelo.chave)
+    if guardado is not None:
+        out_path.write_text(json.dumps(guardado, indent=2), encoding="utf-8")
+        try:
+            write_source_signature(transcripts_dir, video)
+        except OSError:
+            pass
+        if verbose:
+            print(f"  reaproveitado de outra importacao: {video.name} "
+                  f"(Whisper local) -- sem transcrever de novo", flush=True)
+        return out_path
+
+    t0 = time.time()
+    with tempfile.TemporaryDirectory() as tmp:
+        # WAV mono 16 kHz PCM: e o que o Whisper consome nativamente. Passar
+        # o mp4 direto tambem funciona, mas ai o decode acontece dentro do
+        # motor e some da medicao -- e este projeto mede fase por fase.
+        audio = Path(tmp) / f"{video.stem}.wav"
+        t_audio = time.time()
+        _extrair_wav16k(video, audio)
+        t_audio = time.time() - t_audio
+        resultado = motor.transcrever(audio, idioma=language)
+
+    payload = resultado.para_schema_scribe()
+    out_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False),
+                        encoding="utf-8")
+    try:
+        write_source_signature(transcripts_dir, video)
+    except OSError:
+        pass
+    guardar_no_cache(video, marca, motor.modelo.chave, payload)
+
+    tempos = dict(resultado.tempos)
+    tempos["extrair_audio"] = round(t_audio, 3)
+    tempos["total"] = round(time.time() - t0, 3)
+    if verbose:
+        print(f"  saved: {out_path.name} "
+              f"({out_path.stat().st_size / 1024:.1f} KB)")
+        print(f"    words: {sum(1 for w in payload['words'] if w.get('type') == 'word')}")
+        print("    tempos: " + "  ".join(f"{k}={v}s" for k, v in tempos.items()))
+    return out_path
+
+
+def _extrair_wav16k(video: Path, dest: Path) -> None:
+    """WAV mono 16 kHz PCM 16-bit -- o formato nativo do Whisper.
+
+    Sem `-c:a libmp3lame` como o caminho de rede usa: ali o mp3 existe para
+    caber no limite de upload da API. Local nao tem upload, entao comprimir
+    so tiraria qualidade e gastaria CPU.
+    """
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-i", str(video),
+         "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", str(dest)],
+        check=True, capture_output=True)
+
+
 def transcribe_one(
     video: Path,
     edit_dir: Path,
@@ -819,6 +907,7 @@ def transcribe_one(
     chunk_seconds: float | None = None,
     elevenlabs_key: str | None = None,
     backend: str = "auto",
+    whisper_model: str | None = None,
 ) -> Path:
     """Transcribe a single video. Returns path to transcript JSON.
 
@@ -851,6 +940,15 @@ def transcribe_one(
         resolved = "elevenlabs" if (duration > LONG_SOURCE_SECONDS and elevenlabs_key) else "groq"
     elif resolved == "elevenlabs" and not elevenlabs_key:
         resolved = "groq"
+
+    # Motor LOCAL (faster-whisper). Nao usa chave, nao usa rede e nao tem
+    # limite de taxa. Fica fora do `auto` de proposito: baixar 1,4 GB de
+    # modelo na primeira vez tem de ser escolha, nunca surpresa.
+    if resolved == "local":
+        return _transcrever_local(
+            video, transcripts_dir, out_path, language=language,
+            verbose=verbose, modelo=whisper_model,
+        )
 
     wcpp: tuple[Path, Path] | None = None
     if resolved == "whispercpp":
@@ -983,10 +1081,17 @@ def main() -> None:
              "payloads (5xx on large chunks).",
     )
     ap.add_argument(
+        "--whisper-model",
+        type=str,
+        default=None,
+        choices=["small", "medium", "large-v3"],
+        help="Modelo do motor local. Por padrao escolhido pela VRAM da maquina.",
+    )
+    ap.add_argument(
         "--backend",
         type=str,
         default="auto",
-        choices=["auto", "groq", "elevenlabs", "whispercpp"],
+        choices=["auto", "groq", "elevenlabs", "whispercpp", "local"],
         help=f"Transcription backend. 'auto' (default) uses ElevenLabs Scribe for "
              f"sources longer than {LONG_SOURCE_SECONDS}s when ELEVENLABS_API_KEY is set, "
              "else Groq. Force with 'groq', 'elevenlabs', or 'whispercpp' (fully "
@@ -1001,7 +1106,10 @@ def main() -> None:
 
     edit_dir = (args.edit_dir or (video.parent / "edit")).resolve()
     # Local transcription must not require a cloud key — that's the whole point.
-    api_key = "" if args.backend == "whispercpp" else load_api_key()
+    # `load_api_key()` encerra o processo se a chave faltar. Motor que nao
+    # usa rede nao pode morrer por causa de chave que ele nunca vai ler.
+    sem_chave = args.backend in ("whispercpp", "local")
+    api_key = "" if sem_chave else load_api_key()
     elevenlabs_key = load_elevenlabs_key()
 
     transcribe_one(
@@ -1014,6 +1122,7 @@ def main() -> None:
         chunk_seconds=args.chunk_seconds,
         elevenlabs_key=elevenlabs_key,
         backend=args.backend,
+        whisper_model=args.whisper_model,
     )
 
 
