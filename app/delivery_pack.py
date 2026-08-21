@@ -119,21 +119,28 @@ def ensure_delivery_pack(
     #
     # Mover, nao apagar: o conteudo e o mesmo pacote, so mudou de nome.
     anterior = read_pack_dir(edit)
+    movido = False
     if anterior is not None and anterior != dest and not dest.exists():
         try:
             anterior.rename(dest)
+            movido = True
             print(f"[pack] renomeado: {anterior.name!r} -> {dest.name!r}", flush=True)
         except OSError as e:
             print(f"[warn] pack rename: {e}", flush=True)
     dest.mkdir(parents=True, exist_ok=True)
     _copy_if_needed(video, dest / f"{stem}.mp4")
-    # Dentro do pacote so pode haver UM video. O que sobrou da manchete velha
-    # e uma copia do mesmo corte, com o nome errado.
-    for antigo in dest.glob("*.mp4"):
-        if antigo.name != f"{stem}.mp4":
+    # Sobrou dentro do pacote a copia com o nome da manchete velha. Removo SO
+    # ela — o nome exato do pacote que acabei de renomear.
+    #
+    # Nao um `glob("*.mp4")`: `publicar/<nome>/` e uma pasta que o usuario
+    # ABRE, e ele pode ter posto video dele ali. Apagar por padrao de nome
+    # apagaria junto.
+    if movido and anterior is not None:
+        obsoleto = dest / f"{anterior.name}.mp4"
+        if obsoleto.is_file() and obsoleto.name != f"{stem}.mp4":
             try:
-                antigo.unlink()
-                print(f"[pack] removido video antigo: {antigo.name!r}", flush=True)
+                obsoleto.unlink()
+                print(f"[pack] removido video antigo: {obsoleto.name!r}", flush=True)
             except OSError:
                 pass
 

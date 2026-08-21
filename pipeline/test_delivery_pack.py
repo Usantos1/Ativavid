@@ -139,6 +139,23 @@ def test_o_ponteiro_do_state_sempre_aponta_para_pasta_que_existe(tmp_path):
         assert (edit / rel).resolve().is_dir(), rel
 
 
+def test_video_que_o_usuario_pos_na_pasta_nao_e_apagado(tmp_path):
+    """`publicar/<nome>/` e uma pasta que o usuario ABRE. Limpar por padrao
+    de nome (`*.mp4`) apagaria junto o que ele tivesse posto ali — a limpeza
+    tira SO a copia com o nome da manchete velha."""
+    edit = _projeto(tmp_path)
+    _entrega(edit, "Titulo A")
+    pack = edit.parent / "publicar" / "Titulo A"
+    (pack / "meu corte alternativo.mp4").write_bytes(b"do usuario")
+
+    _entrega(edit, "Titulo B")
+
+    novo_pack = edit.parent / "publicar" / "Titulo B"
+    assert (novo_pack / "meu corte alternativo.mp4").read_bytes() == b"do usuario"
+    assert (novo_pack / "Titulo B.mp4").is_file()
+    assert not (novo_pack / "Titulo A.mp4").exists()
+
+
 if __name__ == "__main__":
     import tempfile
     with tempfile.TemporaryDirectory() as raw:
