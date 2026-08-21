@@ -2584,12 +2584,31 @@ def render_final_uma_passada(
     duration_sec = frames / fps
     fade_out_at = max(0.0, duration_sec - 1.5)
 
+    # `fps=` na frente: o cut pode chegar com BURACO no proprio relogio.
+    # Medido nos 8 ultimos cuts do usuario, 2 deles pulam 3 quadros de uma
+    # vez no fim — 2424 quadros ocupando 2426 posicoes. A timeline conta as
+    # posicoes (ela deriva de `durationSec`), entao pedia 2426 e o arquivo
+    # saia com 2424: `FRAMES 2424!=2426`, e o job inteiro voltava para o
+    # Remotion completo.
+    #
+    # O `tpad` sozinho nao resolve: ele acrescenta DEPOIS do ultimo quadro,
+    # que ja esta na posicao 2425, entao os clones caem em 2426 e 2427 — e o
+    # `-t duration_sec` corta exatamente ali. Medido no arquivo real:
+    #   so tpad, como era  ->  2424 quadros / 80,866667s / buraco de 2
+    #   tpad + fps=        ->  2426 quadros / 80,866667s / sem buraco
+    #
+    # `fps` PREENCHE o buraco duplicando quadro, sem mexer no tempo do que ja
+    # estava no lugar. Renumerar o PTS tambem daria a contagem certa, mas
+    # FECHANDO o buraco: tudo depois dele adiantaria, saindo de sincronia com
+    # o audio. Nestes arquivos o buraco e sempre no ultimo quadro, mas nao ha
+    # garantia disso.
+    _sp = f"fps={fps:g},setpts=PTS-STARTPTS"
     cut_frames = count_frames(cut)
     if cut_frames and cut_frames < frames:
         cut_v = (f"[0:v]tpad=stop_mode=clone:stop={frames - cut_frames},"
-                 "setpts=PTS-STARTPTS[cutv]")
+                 f"{_sp}[cutv]")
     else:
-        cut_v = f"[0:v]trim=end_frame={frames},setpts=PTS-STARTPTS[cutv]"
+        cut_v = f"[0:v]trim=end_frame={frames},{_sp}[cutv]"
 
     inputs = ["-i", str(cut)]
     idx_sfx = idx_trilha = None
