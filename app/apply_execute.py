@@ -326,6 +326,13 @@ def tolerancia_de_quadros(n_ranges: int) -> int:
     corte, que difere pelo tamanho de um range inteiro, tipicamente segundos.
     E ela e a rede SECUNDARIA: quem detecta corte refeito e o fingerprint das
     corrections (`_clear_dirty`), nao a contagem de quadros.
+
+    Uma coisa que esta folga NAO faz e piorar o sincronismo. O remap e por
+    span (`output_to_source` acha o span que contem o instante e mapeia
+    dentro dele), entao a deriva ja existe no mapa desde o render original —
+    recusar a correcao nunca consertou isso, so impediu o conserto do texto.
+    A deriva em si e divida separada: [[extract_segment perde quadro de
+    cabeca no `-ss`]].
     """
     return 2 + round(0.8 * max(0, int(n_ranges)))
 

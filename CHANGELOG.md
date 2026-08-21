@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.35
+
+Duas coisas que atrapalhavam justamente o seu jeito de trabalhar: corrigir a
+legenda e abrir a pasta para postar.
+
+- **Corrigir legenda voltou a funcionar.** Ele recusava a correção dizendo que
+  o mapa não batia com o corte — por diferença de 2 a 7 quadros, que é o
+  normal de como o corte é montado. Olhando os seus 39 projetos, **25 deles
+  (64%) seriam recusados assim**, e foi o que aconteceu em 9 das 10 correções
+  que falharam no seu histórico. A conferência continua existindo, agora com a
+  folga do tamanho certo
+- **A pasta para postar acompanha a manchete em vez de duplicar.** Quando você
+  corrigia o texto da manchete, o app criava uma pasta nova em `publicar/` e
+  deixava a antiga lá, com uma cópia inteira do vídeo. Você tinha 11 projetos
+  assim, somando **1,19 GB** — um deles com quatro pastas do mesmo vídeo, sem
+  como saber qual era a boa. Agora ele renomeia a pasta e mantém um vídeo só
+- **"Abrir pasta" parou de cair no vazio.** Em 5 dos 43 projetos o app apontava
+  para uma pasta que não existia mais, pelo mesmo motivo
+
+As 11 pastas duplicadas que já estão no disco continuam onde estão — são seus
+arquivos, você decide se apaga.
+
 ## 2.34
 
 Achei isto lendo as suas próprias estatísticas de render, não o código: na
