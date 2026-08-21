@@ -219,6 +219,24 @@ def main() -> int:
             code, data = http("GET", f"{url}/rest/v1/{tabela}?select=*", {**srv_h, "Prefer": "count=exact"})
             n = len(data) if isinstance(data, list) else "?"
             diz(OK, f"{tabela}: {n} linha(s)")
+        # Acesso liberado que ainda não vale: o rpc_license casa por user_id, e
+        # esses registros não têm nenhum. O cliente paga e fica bloqueado.
+        code, data = http(
+            "GET",
+            f"{url}/rest/v1/account_access?select=email,valid_until"
+            f"&user_id=is.null&status=eq.active",
+            srv_h,
+        )
+        if isinstance(data, list) and data:
+            for row in data:
+                diz(FALTA, f"acesso sem conta vinculada: {row.get('email')}")
+            problemas.append(
+                f"{len(data)} acesso(s) liberado(s) sem conta vinculada — o cliente fica "
+                "bloqueado. Crie a conta dele e clique em Liberar de novo."
+            )
+        else:
+            diz(OK, "todo acesso liberado está vinculado a uma conta")
+
         code, data = http(
             "GET",
             f"{url}/rest/v1/licenses?select=provider,provider_ref&provider_ref=not.is.null",

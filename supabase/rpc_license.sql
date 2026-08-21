@@ -183,6 +183,7 @@ declare
   v_jwt_uid uuid;
   v_bound boolean;
   v_email_ok boolean := false;
+  v_pending boolean := false;
 begin
   if p_device_id is null or length(trim(p_device_id)) = 0 then
     return public.ativavid_with_update(
@@ -205,10 +206,7 @@ begin
       v_jwt_uid := null;
     end;
 
-    -- O e-mail do JWT só vale como identidade se o Auth o confirmou. Sem esta
-    -- checagem, qualquer um registrava o e-mail de um cliente já liberado pelo
-    -- admin (grant pendente) e herdava o acesso pago — e o auto-bind abaixo
-    -- gravava o user_id do invasor de forma irreversível.
+    -- Informativo só para a mensagem de bloqueio; NÃO decide acesso.
     if v_jwt_uid is not null then
       begin
         select true into v_email_ok
@@ -222,28 +220,27 @@ begin
     end if;
     v_email_ok := coalesce(v_email_ok, false);
 
+    -- IDENTIDADE É O user_id DO JWT, NUNCA O E-MAIL.
+    --
+    -- Casar por e-mail deixava qualquer um registrar o endereço de um cliente
+    -- já liberado e herdar o acesso pago. Exigir e-mail confirmado não resolve
+    -- sozinho: com "Confirm email" desligado o Auth marca email_confirmed_at
+    -- na hora do cadastro, e a checagem passa para o invasor também.
+    --
+    -- Quem vincula o e-mail a uma conta é o ADMIN, no grant_access, que resolve
+    -- o user_id em auth.users. Grant para e-mail sem conta fica pendente até o
+    -- admin liberar de novo depois que o cliente se cadastrar (rpc_admin.sql
+    -- devolve pendingSignup: true justamente para avisar).
     if v_jwt_uid is not null then
       select * into v_acc
       from account_access a
       where a.status = 'active'
         and a.valid_until > now()
-        and (
-          a.user_id = v_jwt_uid
-          or (v_email_ok and a.user_id is null and a.email = v_jwt_email)
-        )
+        and a.user_id = v_jwt_uid
       order by a.valid_until desc
       limit 1;
 
       if found then
-        -- Vincula o grant pendente ao dono, uma vez, e só com e-mail confirmado.
-        if v_acc.user_id is null and v_jwt_uid is not null and v_email_ok then
-          update account_access
-            set user_id = v_jwt_uid, updated_at = now()
-            where id = v_acc.id and user_id is null;
-          -- Reler em vez de RETURNING: se outra sessão vinculou primeiro, o
-          -- RETURNING não devolveria linha e zerava v_acc.
-          select * into v_acc from account_access where id = v_acc.id;
-        end if;
 
         select exists (
           select 1 from devices d
@@ -350,20 +347,36 @@ begin
           'trialDaysTotal', v_days
         );
       else
+        -- Existe liberação para este e-mail esperando vínculo? Sem isto, quem
+        -- o admin liberou ANTES de criar a conta lia "sem acesso" e abria
+        -- chamado, com o acesso já pago no painel logo atrás.
+        v_pending := false;
+        if v_jwt_email is not null then
+          select exists (
+            select 1 from account_access a
+            where a.email = v_jwt_email
+              and a.user_id is null
+              and a.status = 'active'
+              and a.valid_until > now()
+          ) into v_pending;
+        end if;
+
         v_base := json_build_object(
           'entitled', false,
           'mode', 'blocked',
           'trialDaysLeft', 0,
           'trialDaysTotal', v_days,
           'message', case
-            when v_jwt_email is not null and not v_email_ok then
-              'Confirme seu e-mail para liberar o acesso — veja a mensagem que enviamos para ' || v_jwt_email || '.'
+            when v_pending then
+              'Seu acesso está liberado, mas ainda não vinculado a esta conta. '
+              || 'Peça ao admin para clicar em Liberar de novo para ' || v_jwt_email || '.'
             when v_jwt_email is not null then
               'Conta sem acesso liberado. Peça ao admin para liberar dias neste e-mail, ou ative uma chave.'
             else
               'Trial encerrado. Crie uma conta e peça acesso, ou ative uma chave.'
           end,
-          'emailVerified', v_email_ok
+          'emailVerified', v_email_ok,
+          'pendingLink', v_pending
         );
       end if;
     end if;

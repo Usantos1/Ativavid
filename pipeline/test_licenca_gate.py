@@ -257,6 +257,44 @@ def test_cifrar_duas_vezes_nao_corrompe():
     assert secret_store.unprotect(uma) == "abc"
 
 
+# --- identidade no SQL ----------------------------------------------------
+
+
+def _rpc_license_sql() -> str:
+    return (REPO / "supabase" / "rpc_license.sql").read_text(encoding="utf-8")
+
+
+def test_acesso_por_conta_casa_por_user_id_e_nunca_por_email():
+    """Casar por e-mail deixava qualquer um registrar o endereço de um cliente
+    liberado e herdar o acesso pago. Exigir e-mail confirmado não resolve: com
+    'Confirm email' desligado o Auth marca email_confirmed_at no cadastro."""
+    sql = _rpc_license_sql()
+    i = sql.index("IDENTIDADE É O user_id")
+    trecho = sql[i:sql.index("if found then", i)]
+    assert "a.user_id = v_jwt_uid" in trecho
+    assert "a.email" not in trecho, "voltou a conceder acesso casando por e-mail"
+
+
+def test_nao_existe_auto_bind_de_user_id_no_caminho_do_cliente():
+    """O vínculo é ato do ADMIN (grant_access). Gravar o user_id de quem chegar
+    primeiro tornava o sequestro irreversível."""
+    sql = _rpc_license_sql()
+    corpo = sql[sql.index("function public.ativavid_license"):]
+    assert "set user_id = v_jwt_uid" not in corpo
+
+
+def test_grant_do_admin_reatribui_o_vinculo():
+    """Com o coalesce invertido, um vínculo errado virava permanente."""
+    sql = (REPO / "supabase" / "rpc_admin.sql").read_text(encoding="utf-8")
+    assert "coalesce(excluded.user_id, account_access.user_id)" in sql
+
+
+def test_admin_e_reconhecido_por_usuario_confirmado():
+    sql = (REPO / "supabase" / "rpc_admin.sql").read_text(encoding="utf-8")
+    trecho = sql[sql.index("function public.ativavid_is_admin"):sql.index("revoke all on function public.ativavid_is_admin")]
+    assert "auth.users" in trecho and "email_confirmed_at is not null" in trecho
+
+
 # --- cache assinado -------------------------------------------------------
 
 

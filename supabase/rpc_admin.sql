@@ -148,6 +148,10 @@ begin
           updated_at = now()
     returning * into v_acc;
 
+    -- O acesso só vale quando está preso a um user_id: o rpc_license casa por
+    -- identidade, nunca por e-mail (senão qualquer um registra o endereço de um
+    -- cliente liberado e herda o acesso pago). Por isso "liberado sem conta"
+    -- NÃO é sucesso silencioso — o admin precisa saber que falta um passo.
     return json_build_object(
       'ok', true,
       'access', row_to_json(v_acc),
@@ -157,7 +161,9 @@ begin
       'pendingSignup', (v_acc.user_id is null),
       'message', case
         when v_acc.user_id is null then
-          'Acesso liberado. Cliente ainda precisa criar conta com este e-mail.'
+          'Dias reservados, mas o acesso ainda NÃO vale: não existe conta com '
+          || v_email || '. Crie a conta do cliente (ou peça que ele se cadastre) '
+          || 'e clique em Liberar de novo — aí o acesso é vinculado.'
         else
           'Acesso liberado na conta do cliente.'
       end

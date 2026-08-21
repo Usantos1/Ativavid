@@ -10,24 +10,35 @@ Os dois RPCs terminam com `notify pgrst, 'reload schema'`, então o PostgREST
 enxerga a assinatura nova na hora. Sem isso o app reclamava de "função ausente"
 logo depois de você rodar o SQL.
 
-## Authentication → obrigatório
+## Identidade: user_id, nunca e-mail
 
-**Confirm email LIGADO.** O acesso por conta casa `account_access` pelo e-mail
-do usuário, e o RPC agora exige `email_confirmed_at`. Com a confirmação
-desligada, qualquer um cria conta com o e-mail de um cliente já liberado e herda
-o acesso pago — e o vínculo é permanente.
+O acesso por conta casa **só pelo `user_id`** do JWT. Casar por e-mail deixava
+qualquer um registrar o endereço de um cliente já liberado e herdar o acesso
+pago, com o vínculo virando permanente.
 
-Pelo mesmo motivo, `ativavid_is_admin` só reconhece admin com e-mail confirmado.
+Exigir e-mail confirmado **não resolve sozinho**: com "Confirm email"
+desligado, o Auth preenche `email_confirmed_at` no próprio cadastro, então a
+checagem passa para o invasor também. Ligar o Confirm email continua sendo
+recomendado (e exige SMTP próprio — o mailer embutido do Supabase tem limite
+baixo demais para venda), mas a proteção não depende disso.
+
+Quem vincula e-mail a conta é o **admin**, no `grant_access`.
 
 ## Acesso por conta (recomendado)
 
-1. Cliente: **Criar conta** (e-mail/senha) → confirma o e-mail → Entrar
-2. Admin: painel **Liberar acesso** com o e-mail + dias (7/14/30/365)
+1. Admin: **Criar conta + liberar** com o e-mail do cliente (um passo — já
+   resolve o `user_id`)
+2. Cliente: **Entrar** com esse e-mail e senha
 3. Cliente clica **Atualizar** em Licença → edita
 
-O admin pode liberar **antes** de o cliente criar a conta: fica pendente no
-e-mail e vincula sozinho no primeiro login confirmado. Um novo `grant_access`
-reatribui o vínculo, caso ele tenha ido para a conta errada.
+Se você liberar um e-mail que **ainda não tem conta**, os dias ficam
+reservados mas o acesso **não vale** — o RPC responde `pendingSignup: true` e
+o painel avisa. Depois que o cliente se cadastrar, clique em **Liberar** de
+novo: aí o `user_id` é resolvido e o acesso passa a valer. `py
+tools/checar_licenca.py` lista os que estão nesse estado.
+
+Um novo `grant_access` também reatribui o vínculo, caso ele tenha ido para a
+conta errada.
 
 ## Chave ATIV- (legado)
 
