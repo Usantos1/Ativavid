@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.42
+
+Duas coisas que você apontou olhando o card.
+
+- **"Estilo" mostrava a mesma coisa em todos os vídeos.** Eu tinha pego
+  justamente os dois campos que nunca mudam nos seus projetos (manchete e
+  legenda são `realce` e `stacked` nos 128, sem exceção). Agora ele mostra o
+  **tipo de conteúdo** — Viral, Humor, Informativo, Educativo —, que é o que
+  varia de verdade e o que você quis dizer. Nos projetos antigos, que não têm
+  esse campo, a linha simplesmente não aparece
+- **"Copiar legenda do post" não funcionava.** O botão existia no card desde
+  sempre, mas nunca teve resposta ao clique: ele não fazia nada, em silêncio.
+  Agora copia — e se o sistema recusar a cópia, o texto aparece na tela já
+  selecionado, para o Ctrl+C. O botão de copiar o log técnico ganhou o mesmo
+  reforço
+
 ## 2.41
 
 Corrigir uma palavra da legenda deixou de refazer o vídeo inteiro, e o card de
