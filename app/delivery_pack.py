@@ -110,8 +110,32 @@ def ensure_delivery_pack(
         return None
     stem = safe_pack_stem(video.stem)
     dest = pack_dir_for(edit, stem).resolve()
+    # O pacote se chama pela MANCHETE, e a manchete muda quando o usuario
+    # corrige o texto. Sem mover o pacote anterior, cada correcao deixava uma
+    # pasta inteira para tras com uma copia do video: medido na maquina do
+    # usuario, 11 projetos com pasta duplicada e 1,19 GB de sobra — um deles
+    # com QUATRO pastas do mesmo video. E, ao abrir `publicar/`, ele nao tinha
+    # como saber qual era a boa.
+    #
+    # Mover, nao apagar: o conteudo e o mesmo pacote, so mudou de nome.
+    anterior = read_pack_dir(edit)
+    if anterior is not None and anterior != dest and not dest.exists():
+        try:
+            anterior.rename(dest)
+            print(f"[pack] renomeado: {anterior.name!r} -> {dest.name!r}", flush=True)
+        except OSError as e:
+            print(f"[warn] pack rename: {e}", flush=True)
     dest.mkdir(parents=True, exist_ok=True)
     _copy_if_needed(video, dest / f"{stem}.mp4")
+    # Dentro do pacote so pode haver UM video. O que sobrou da manchete velha
+    # e uma copia do mesmo corte, com o nome errado.
+    for antigo in dest.glob("*.mp4"):
+        if antigo.name != f"{stem}.mp4":
+            try:
+                antigo.unlink()
+                print(f"[pack] removido video antigo: {antigo.name!r}", flush=True)
+            except OSError:
+                pass
 
     cover = edit / "cover.jpg"
     if not cover.is_file() and edit.parent.joinpath("cover.jpg").is_file():
