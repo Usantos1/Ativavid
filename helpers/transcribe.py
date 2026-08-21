@@ -716,6 +716,98 @@ def transcript_cache_hit(out_path: Path, video: Path) -> bool:
     return True
 
 
+# --- Cache de transcrição ENTRE projetos -----------------------------------
+#
+# O cache acima (`transcript_cache_hit`) vive dentro de `transcripts/` do
+# projeto. Uma importação nova nasce com essa pasta vazia, então reimportar a
+# MESMA fonte transcrevia tudo de novo — tempo e cota de API.
+#
+# Medido nos 129 projetos do usuário: 112 fontes distintas, **14 importadas
+# mais de uma vez** (uma delas 5 vezes), somando 22 minutos de ANALYZE pagos
+# em repetição.
+CACHE_ENTRE_PROJETOS = Path(
+    os.environ.get("ATIVAVID_TRANSCRIPT_CACHE")
+    or (Path.home() / "ATIVAVID" / "transcript-cache")
+)
+_PONTA = 4 << 20          # 4 MB de cada ponta
+_TETO_DO_CACHE = 400      # transcrições guardadas; a mais antiga sai primeiro
+
+
+def chave_da_fonte(video: Path) -> str:
+    """Identidade do ARQUIVO, independente de onde ele foi importado.
+
+    Tamanho mais as duas pontas do conteúdo — não o arquivo inteiro: uma fonte
+    de 500 MB sairia cara para uma consulta de cache, e as fontes do usuário
+    passam disso. Nome não entra: a mesma gravação importada com outro nome é
+    a mesma gravação, e dois arquivos diferentes com o mesmo tamanho E as
+    mesmas duas pontas não acontecem por acidente.
+    """
+    import hashlib
+
+    st = Path(video).stat()
+    h = hashlib.sha256(str(st.st_size).encode())
+    with Path(video).open("rb") as f:
+        h.update(f.read(_PONTA))
+        if st.st_size > 2 * _PONTA:
+            f.seek(-_PONTA, os.SEEK_END)
+            h.update(f.read(_PONTA))
+    return h.hexdigest()[:32]
+
+
+def _cacheavel(video: Path) -> bool:
+    """O `cut.mp4` fica de fora.
+
+    A chave é por CONTEÚDO, então um cut regravado diferente já daria outra
+    chave — seria seguro. Mas o cut é o único arquivo que muda debaixo do
+    mesmo nome, e confiar num transcript dele foi a origem do bug da legenda
+    velha (ver `transcript_cache_hit`). O ganho medido está todo nas FONTES;
+    não vale chegar perto dessa área para não ganhar nada.
+    """
+    return Path(video).stem != "cut"
+
+
+def _caminho_no_cache(video: Path, backend: str, modelo: str) -> Path:
+    # backend e modelo entram na chave: um transcript do Groq não serve quando
+    # o pedido é ElevenLabs. O usuário paga pelo Scribe justamente pela
+    # qualidade — reaproveitar o outro seria degradar calado.
+    marca = f"{backend}-{modelo}".replace("/", "_").replace(":", "_")[:48]
+    return CACHE_ENTRE_PROJETOS / f"{chave_da_fonte(video)}.{marca}.json"
+
+
+def buscar_no_cache(video: Path, backend: str, modelo: str) -> dict | None:
+    if not _cacheavel(video):
+        return None
+    try:
+        p = _caminho_no_cache(video, backend, modelo)
+        if not p.is_file():
+            return None
+        dados = json.loads(p.read_text(encoding="utf-8"))
+        if not isinstance(dados, dict) or not dados.get("words"):
+            return None
+        os.utime(p, None)      # marca uso, para a poda tirar o mais parado
+        return dados
+    except (OSError, ValueError):
+        return None
+
+
+def guardar_no_cache(video: Path, backend: str, modelo: str, payload: dict) -> None:
+    """Nunca derruba a transcrição: o cache é conveniência, não resultado."""
+    try:
+        if not (_cacheavel(video) and isinstance(payload, dict) and payload.get("words")):
+            return
+        CACHE_ENTRE_PROJETOS.mkdir(parents=True, exist_ok=True)
+        destino = _caminho_no_cache(video, backend, modelo)
+        tmp = destino.with_suffix(f".tmp{os.getpid()}")
+        tmp.write_text(json.dumps(payload), encoding="utf-8")
+        os.replace(tmp, destino)
+        guardados = sorted(CACHE_ENTRE_PROJETOS.glob("*.json"),
+                           key=lambda p: p.stat().st_mtime)
+        for velho in guardados[:-_TETO_DO_CACHE]:
+            velho.unlink(missing_ok=True)
+    except (OSError, ValueError):
+        pass
+
+
 def transcribe_one(
     video: Path,
     edit_dir: Path,
@@ -779,6 +871,21 @@ def transcribe_one(
         active_chunk = chunk_seconds
         backend_label = "Groq"
 
+    # Já transcrevemos ESTE arquivo, em outro projeto, com este mesmo backend?
+    # Consultado aqui e não antes de propósito: a resposta depende do backend
+    # resolvido, e resolver custa um ffprobe que já aconteceu acima.
+    guardado = buscar_no_cache(video, resolved, active_model)
+    if guardado is not None:
+        out_path.write_text(json.dumps(guardado, indent=2), encoding="utf-8")
+        try:
+            write_source_signature(transcripts_dir, video)
+        except OSError:
+            pass
+        if verbose:
+            print(f"  reaproveitado de outra importação: {video.name} "
+                  f"({backend_label}) — sem chamar a API", flush=True)
+        return out_path
+
     if verbose:
         mins = duration / 60.0
         print(f"  extracting audio from {video.name} ({mins:.1f} min → {backend_label})", flush=True)
@@ -806,6 +913,10 @@ def transcribe_one(
         write_source_signature(transcripts_dir, video)
     except OSError:
         pass
+    # Guarda para a PRÓXIMA importação desta mesma fonte. Depois de gravar o
+    # resultado no projeto: o cache nunca pode ser motivo de perder uma
+    # transcrição que já custou a chamada de API.
+    guardar_no_cache(video, resolved, active_model, payload)
     # only THIS video's chunk dir — siblings may belong to parallel batch workers
     shutil.rmtree(chunk_cache, ignore_errors=True)
     dt = time.time() - t0
