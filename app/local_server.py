@@ -580,7 +580,13 @@ def _rotulo_do_estilo(edit_dir: Path) -> str:
 
 
 def _ler_rotulo_do_estilo(sp: Path) -> str:
-    from app.content_type import LABELS
+    # Import protegido de proposito: isto roda dentro do `enrich_job_display`,
+    # que serve TODO job de /api/jobs. Um rotulo decorativo nao pode derrubar a
+    # lista de videos inteira se o modulo faltar num empacotamento.
+    try:
+        from app.content_type import LABELS
+    except Exception:  # noqa: BLE001
+        LABELS = {}
 
     # `preset-used.json` e quem guarda o tipo escolhido para ESTE video.
     tipo = ""
@@ -600,7 +606,7 @@ def _ler_rotulo_do_estilo(sp: Path) -> str:
             break
     if not tipo:
         return ""
-    return LABELS.get(tipo, tipo[:1].upper() + tipo[1:])
+    return LABELS.get(tipo) or (tipo[:1].upper() + tipo[1:])
 
 
 _DUR_FILA: "queue.Queue[tuple]" = None  # type: ignore[assignment]
