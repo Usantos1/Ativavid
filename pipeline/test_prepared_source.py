@@ -286,6 +286,57 @@ def test_interruptor_do_fps_do_prep(tmp_path, monkeypatch):
     monkeypatch.setattr(render, "source_fps", lambda _p: 60.0)
     monkeypatch.setattr(render, "shortform_target_fps", lambda _p: "30")
     monkeypatch.delenv("ATIVAVID_PREP_FPS", raising=False)
-    assert render._prep_fps(src) == "30"
+    assert render._fps_cedo(src) == "30"
     monkeypatch.setenv("ATIVAVID_PREP_FPS", "0")
-    assert render._prep_fps(src) == ""
+    assert render._fps_cedo(src) == ""
+
+
+def _cmd_do_extract(monkeypatch, fonte_fps: float = 60.0, **kw) -> list[str]:
+    """Roda extract_segment só até montar a linha de comando."""
+    visto: list[list[str]] = []
+    monkeypatch.setattr(render, "_run_ffmpeg", lambda cmd, **_k: visto.append(cmd))
+    monkeypatch.setattr(render, "is_hdr_source", lambda _p: False)
+    monkeypatch.setattr(render, "wide_gamut_chain", lambda _p: "")
+    monkeypatch.setattr(render, "is_portrait_source", lambda _p: True)
+    monkeypatch.setattr(render, "source_fps", lambda _p: fonte_fps)
+    monkeypatch.setattr(render, "shortform_target_fps", lambda _p: "30")
+    kw.setdefault("streams", "v")
+    render.extract_segment(Path("x.mov"), 0.0, 1.0, "", Path("o.mp4"), **kw)
+    return visto[0]
+
+
+def _vf(cmd: list[str]) -> str:
+    return cmd[cmd.index("-vf") + 1] if "-vf" in cmd else ""
+
+
+def test_segmento_descarta_quadro_antes_de_escalar(tmp_path, monkeypatch):
+    """Fonte SDR 50/60fps não passa pelo prep, então pagava o dobro: o `-r`
+    da saída joga metade dos quadros fora, mas só DEPOIS de escalar, graduar
+    e dar zoom em cada um. Com `fps=` na frente da cadeia o quadro descartado
+    não custa nada.
+
+    Medido no caminho real (fonte sintética 60fps, índice do quadro na
+    geometria): as duas rotas entregam 30 quadros, mas a de hoje escolhe
+    0,1,2,3,5,7,9... (passo 1 e 2 — meia velocidade no começo de cada
+    segmento) e a nova escolhe 0,2,4,6,8... (passo 2, regular)."""
+    monkeypatch.delenv("ATIVAVID_PREP_FPS", raising=False)
+    monkeypatch.delenv("ATIVAVID_FPS_CEDO", raising=False)
+    vf = _vf(_cmd_do_extract(monkeypatch))
+    assert vf.startswith("fps=30,"), vf
+    assert vf.index("fps=30") < vf.index("scale=")
+
+
+def test_longform_e_audio_nao_mexem_no_fps(tmp_path, monkeypatch):
+    """`keep_resolution` mantém o fps da fonte de propósito (longform), e um
+    segmento só de áudio não pode ganhar filtro de vídeo nenhum."""
+    monkeypatch.delenv("ATIVAVID_FPS_CEDO", raising=False)
+    assert "fps=" not in _vf(_cmd_do_extract(monkeypatch, keep_resolution=True))
+    cmd = _cmd_do_extract(monkeypatch, streams="a")
+    assert "-vf" not in cmd and "-vn" in cmd
+
+
+def test_fonte_ja_no_alvo_nao_ganha_filtro(tmp_path, monkeypatch):
+    """Fonte a 30fps (ou o `.prep.mp4`, que já sai a 30) não tem quadro a
+    descartar — `fps=30` ali seria só um filtro a mais na cadeia."""
+    monkeypatch.delenv("ATIVAVID_FPS_CEDO", raising=False)
+    assert "fps=" not in _vf(_cmd_do_extract(monkeypatch, fonte_fps=30.0))

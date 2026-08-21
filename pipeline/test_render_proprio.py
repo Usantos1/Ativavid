@@ -532,3 +532,42 @@ def test_tabela_do_dim_e_reusada(tmp_path):
     p1 = r._tabelas_dim(0.82)
     p2 = r._tabelas_dim(0.82)
     assert p1[0] is p2[0] and p1[1] is p2[1]
+
+
+def _hl_extremos(tmp_path, hook: dict):
+    ed = _ed(hook=dict({"enabled": True, "lines": ["ola", "mundo"],
+                        "endSec": 2.0}, **hook), endCard={"enabled": False})
+    r = Renderizador(_public(tmp_path, []), ed, frames=30, fps=30.0)
+    c = r._montar_headline(ed["hook"])
+    return (min(p.y0 for p in c.palavras),
+            max(p.y0 + p.alpha.shape[0] for p in c.palavras))
+
+
+def test_arrastar_ate_a_borda_nao_volta_para_o_padrao(tmp_path):
+    """Zero é posição, não "vazio".
+
+    O template usa `??`; o motor próprio usava `or`, então arrastar a manchete
+    até o topo (paddingTop=0, o limite do clamp em quick_corrections) caía no
+    padrão do estilo — 299px mais abaixo, calado. O sinal do defeito é a
+    descontinuidade: 0 e 1 têm de ficar a 1px um do outro."""
+    t0, _ = _hl_extremos(tmp_path, {"style": "realce", "paddingTop": 0})
+    t1, _ = _hl_extremos(tmp_path, {"style": "realce", "paddingTop": 1})
+    assert abs(t1 - t0) == 1, f"0 -> {t0}, 1 -> {t1}"
+    # e ausente continua sendo o padrão do estilo, não zero
+    tn, _ = _hl_extremos(tmp_path, {"style": "realce"})
+    assert tn - t0 == 300
+
+    # a manchete ancora pela BASE — mesmo teste do outro lado
+    _, b0 = _hl_extremos(tmp_path, {"style": "manchete", "paddingBottom": 0})
+    _, b1 = _hl_extremos(tmp_path, {"style": "manchete", "paddingBottom": 1})
+    assert abs(b0 - b1) == 1, f"0 -> {b0}, 1 -> {b1}"
+
+
+def test_legenda_no_alto_da_tela_nao_volta_para_o_padrao(tmp_path):
+    """Mesma classe do anterior, do lado das legendas: offsetY=0 é o topo."""
+    def base_y(caps):
+        ed = _ed(captions=caps, hook={"enabled": False}, endCard={"enabled": False})
+        return Renderizador(_public(tmp_path, []), ed, frames=30, fps=30.0).base_y
+
+    assert base_y({"style": "stacked", "stackedOffsetY": 0}) == 0
+    assert base_y({"style": "stacked"}) == round(1920 * 0.156)

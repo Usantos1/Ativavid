@@ -148,6 +148,19 @@ SCRATCH_VOL = 0.28
 WHOOSH_VOL = 0.1
 
 
+def _pos(d: dict, chave: str, padrao: float) -> float:
+    """`??` do template, nao `or`.
+
+    Toda ancora de posicao tem 0 como valor LEGITIMO: manchete colada no topo
+    (paddingTop=0), legenda colada na base (paddingBottom=0), bloco no alto da
+    tela (offsetY=0). Com `or` o motor proprio trocava esse 0 pelo padrao do
+    estilo — arrastar ate a borda devolvia a manchete 299px mais para baixo,
+    calado (medido). O template usa `??` justamente por isso.
+    """
+    v = d.get(chave)
+    return float(padrao) if v is None else float(v)
+
+
 # ---------------------------------------------------------------- suporte ----
 # Como cada estilo de legenda guarda a altura. `base` diz o que o numero
 # significa; `chave` e o campo em edit-data["captions"]. Os dois motores leem
@@ -325,7 +338,7 @@ class Renderizador:
         caps = edit_data.get("captions") or {}
         self.scale = (self.w / 1080) * float(caps.get("fontScale") or 1.0)
         self.avail = self.w - 180
-        self.base_y = round(self.h * float(caps.get("stackedOffsetY") or 0.156))
+        self.base_y = round(self.h * _pos(caps, "stackedOffsetY", 0.156))
         accent = caps.get("emphasisAccent") or "#ff5200"
         self.font_file = dict(FONT_FILE)
         self.font_file[2] = (FONT_FILE[2][0], accent)
@@ -1006,7 +1019,7 @@ class Renderizador:
         safe_w = float(hook.get("safeWidth") or safe_w0)
         linhas, tam = self._hl_linhas(texto, pesos, cap, safe_w)
         lh = float(hook.get("lineHeight") or lh)
-        top = float(hook.get("paddingTop") or top0)
+        top = _pos(hook, "paddingTop", top0)
 
         leg = Camada(0, fim)
         leg.dur_f = fim
@@ -1185,7 +1198,7 @@ class Renderizador:
             # barra de acento colada a esquerda dela. Aplicar o fundo por
             # linha deixava a faixa 20% mais baixa que a do Remotion
             # (182px contra 230px, medido).
-            bottom = float(hook.get("paddingBottom") or 140)
+            bottom = _pos(hook, "paddingBottom", 140)
             pad = (44, 26, 26)
             larg_max = max((self._larg_hl(l, tam, 800) for l in linhas),
                            default=0)
@@ -1351,7 +1364,7 @@ class Renderizador:
 
         caps_cfg = self.ed.get("captions") or {}
         tam = round(72 * float(caps_cfg.get("sizeScale") or 1.0))
-        bottom = float(caps_cfg.get("paddingBottom") or 430)
+        bottom = _pos(caps_cfg, "paddingBottom", 430)
         cor_caixa = caps_cfg.get("emphasisAccent") or "#ffd400"
         cor_tinta = self._tinta_na_caixa(cor_caixa)
         f = self.fonte(4, tam)
@@ -1487,7 +1500,7 @@ class Renderizador:
         caps_cfg = self.ed.get("captions") or {}
         SAFE_W = float(caps_cfg.get("scatterSafeWidth") or 820)
         BASE = int(caps_cfg.get("scatterFontSize") or 72)
-        OFFSET_Y = float(caps_cfg.get("scatterOffsetY") or 0.72)
+        OFFSET_Y = _pos(caps_cfg, "scatterOffsetY", 0.72)
         HI_COLOR = caps_cfg.get("emphasisAccent")
         HI_SCALE, SPREAD, GAP = 1.62, 0.45, 12
         ENTER, HI_ENTER, EXIT = 7, 10, 8

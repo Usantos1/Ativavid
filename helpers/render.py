@@ -639,17 +639,25 @@ def _auto_extract_jobs() -> int:
 _PREP_VER = "2"   # v2: o prep passou a descartar quadro antes do tonemap
 
 
-def _prep_fps(source: Path) -> str:
-    """fps a embutir no prep, ou "" quando nao ha quadro a descartar.
+def _fps_cedo(source: Path) -> str:
+    """fps a por na FRENTE da cadeia, ou "" quando nao ha quadro a descartar.
 
-    O prep so existe para o caminho short-form (os dois chamadores pulam
-    quando `keep_resolution`), e ali o alvo e sempre 30 ou 24 — nunca os 60
-    da fonte. Descartar antes do tonemap evita processar quadro que o
-    `-r` do segmento joga fora no fim.
+    Vale para os dois lugares que montam uma cadeia short-form: o prep e o
+    extract de cada segmento. Nos dois o alvo e sempre 30 ou 24 — nunca os 60
+    da fonte — e nos dois o `-r` da saida so joga o quadro fora DEPOIS de
+    escalar, tonemapar, graduar e (no extract) aplicar o zoom nele. Posto na
+    frente, o quadro descartado nao custa nada.
+
+    De quebra a escolha do quadro fica REGULAR: o `-r` da saida pega os
+    primeiros quadros em sequencia e os exibe espacados, o que da meia
+    velocidade no comeco de cada segmento (medido: 0,1,2,3,5,7,9... contra
+    0,2,4,6,8...).
     """
     # Interruptor, no mesmo estilo do ATIVAVID_PREP_SOURCE=0: serve para o
-    # A/B da medicao e como escape se a maquina de alguem reagir mal.
-    if os.environ.get("ATIVAVID_PREP_FPS", "").strip() == "0":
+    # A/B da medicao e como escape se a maquina de alguem reagir mal. O nome
+    # antigo continua valendo — foi publicado no CHANGELOG da v2.32.
+    if (os.environ.get("ATIVAVID_FPS_CEDO", "").strip() == "0"
+            or os.environ.get("ATIVAVID_PREP_FPS", "").strip() == "0"):
         return ""
     alvo = shortform_target_fps(source)
     try:
@@ -664,7 +672,7 @@ def _prep_key(source: Path, scale: str, grade_filter: str) -> str:
     st = source.stat()
     blob = "|".join([
         _PREP_VER, str(st.st_size), str(int(st.st_mtime)),
-        scale, TONEMAP_CHAIN, grade_filter or "", _prep_fps(source),
+        scale, TONEMAP_CHAIN, grade_filter or "", _fps_cedo(source),
     ])
     return hashlib.sha1(blob.encode("utf-8")).hexdigest()[:16]
 
@@ -807,7 +815,7 @@ def prepared_source(
     # `fps` na FRENTE: descartado antes de escalar e tonemapar, o quadro nao
     # custa nada. Depois do tonemap o trabalho caro ja foi feito.
     vf = ",".join([x for x in (
-        (f"fps={_prep_fps(source)}" if _prep_fps(source) else ""),
+        (f"fps={_fps_cedo(source)}" if _fps_cedo(source) else ""),
         scale, TONEMAP_CHAIN, grade_filter) if x])
     # Qualidade alta de propósito: este arquivo é um INTERMEDIÁRIO e o corte
     # ainda será reencodado depois. A cq 19 a perda de geração medida foi
@@ -930,6 +938,14 @@ def extract_segment(
         scale = ""
 
     vf_parts: list[str] = []
+    # Quadro fora ANTES de tudo. `-r` la embaixo tambem entrega 30fps, mas so
+    # depois de escalar, graduar e dar zoom em cada um dos 60 quadros da fonte
+    # — metade desse trabalho ia direto para o lixo. Numa fonte HDR o prep ja
+    # resolveu isto (o arquivo preparado chega a 30fps e `_fps_cedo` devolve
+    # ""), mas a fonte SDR 50/60fps nao passa pelo prep e pagava tudo.
+    cedo = "" if keep_resolution or streams == "a" else _fps_cedo(source)
+    if cedo:
+        vf_parts.append(f"fps={cedo}")
     # Downscale FIRST, before any HDR tonemap / wide-gamut colour conversion.
     # TONEMAP_CHAIN runs a full-precision float pipeline (zscale linear-light +
     # gbrpf32le, i.e. 32-bit float, full chroma resolution, no subsampling) —
@@ -959,7 +975,8 @@ def extract_segment(
         vf_parts.append("format=yuv420p")
         vf_parts.append(grade_filter)
     # Zoom no mesmo encode do extract — nunca cut.mp4 → zoomed.mp4.
-    # fps= antes do crop para `n` ser o frame de saída (não o da fonte 60fps).
+    # `zoom_vf` anda por `t`, não por `n`, então o descarte de quadro acima
+    # não mexe na geometria do push-in — só faz ele rodar 30x em vez de 60x.
     if zoom and streams != "a" and not keep_resolution:
         fps_s = shortform_target_fps(source)
         n_frames = max(1, int(round(float(duration) * float(fps_s))))
