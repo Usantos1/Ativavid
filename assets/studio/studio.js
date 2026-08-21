@@ -1113,7 +1113,12 @@ function maybeToastApply(prevJobs, nextJobs) {
 async function refreshJobs() {
   const data = await api("/api/jobs");
   const incoming = data.jobs || [];
-  const locals = state.jobs.filter((j) => j.status === "importing" && String(j.id).startsWith("tmp-"));
+  // "error" fica: o card de importacao que falhou era apagado pelo poll de 2s
+  // — o erro piscava e sumia, e o lote parecia nunca ter existido. Ele so sai
+  // quando o usuario age (Tentar novamente / Apagar), como qualquer erro.
+  const locals = state.jobs.filter(
+    (j) => (j.status === "importing" || j.status === "error") && String(j.id).startsWith("tmp-")
+  );
   const incomingIds = new Set(incoming.map((j) => j.id));
   const next = [...locals.filter((j) => !incomingIds.has(j.id)), ...incoming];
   maybeToastApply(state.jobs, next);
@@ -2225,6 +2230,27 @@ function wireList() {
     }
     closeCardMenus();
     try {
+      // Job LOCAL (tmp-): o servidor nunca soube dele, entao as acoes nao
+      // podem bater na API — dariam 404. "Tentar novamente" re-sobe os
+      // arquivos, que continuam no objeto (job._files); "Apagar" remove da
+      // tela. O "cancel" ja tinha o proprio caminho local, mais abaixo.
+      if (String(id).startsWith("tmp-") && act !== "cancel") {
+        const job = state.jobs.find((x) => x.id === id);
+        if (act === "retry" && job && job._files && job._files.length) {
+          const files = job._files;
+          removeLocalJob(id);
+          renderJobs();
+          await uploadFiles(files, null);
+          return;
+        }
+        if (act === "delete" || act === "retry") {
+          removeLocalJob(id);
+          renderJobs();
+          if (act === "delete") toast("Importação descartada");
+          else toast("Não tenho mais os arquivos — importe de novo");
+          return;
+        }
+      }
       if (act === "folder") {
         await api("/api/jobs/open-folder", {
           method: "POST",

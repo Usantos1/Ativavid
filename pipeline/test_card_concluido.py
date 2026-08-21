@@ -318,3 +318,29 @@ def test_projeto_sem_tipo_nao_inventa_rotulo(tmp_path):
     edit.mkdir()
     (edit / "state.json").write_text(json.dumps({"style": {}}), encoding="utf-8")
     assert _rotulo_do_estilo(edit) == ""
+
+
+def test_o_card_de_importacao_com_erro_sobrevive_ao_poll():
+    """O erro de importação piscava e sumia: o refreshJobs só preservava jobs
+    locais em "importing", e o card que a falha marcava como "error" era
+    descartado pelo poll de 2 segundos — o lote parecia nunca ter existido.
+    Isso minava o conserto da v2.40, que fez o erro aparecer no card."""
+    js = (REPO / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
+    i = js.index("async function refreshJobs(")
+    corpo = js[i:i + 900]
+    assert 'j.status === "importing" || j.status === "error"' in corpo, (
+        "o poll voltou a descartar o card de erro"
+    )
+
+
+def test_acoes_de_job_local_nao_batem_na_api():
+    """O servidor nunca soube de um job tmp-: retry/delete na API dariam 404.
+    Tentar novamente re-sobe os arquivos guardados; Apagar remove da tela."""
+    js = (REPO / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
+    i = js.index('String(id).startsWith("tmp-") && act !== "cancel"')
+    trecho = js[i:i + 900]
+    assert "job._files && job._files.length" in trecho, (
+        "o Tentar novamente local não re-sobe os arquivos"
+    )
+    assert "uploadFiles(files, null)" in trecho
+    assert "removeLocalJob(id)" in trecho, "o Apagar local não remove o card"
