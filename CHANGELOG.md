@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.53
+
+- **O logo agora é vermelho.** Mesma fonte, mesmo desenho, mesma qualidade — só
+  a cor mudou. O ícone do app, o da barra de tarefas e o favicon foram junto, e
+  a faixa fininha embaixo da barra do editor deixou de ser roxa para acompanhar
+
 ## 2.52
 
 - **A tela de Presets mexia na marca errada.** Se você abrisse Presets sem
