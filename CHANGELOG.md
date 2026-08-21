@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.46
+
+- **Palavras trocadas na legenda.** A transcrição às vezes marca uma palavra
+  como começando um pouco *antes* da anterior — jitter de milésimos, mas quem
+  monta a legenda ordena pelo tempo, então o texto saía embaralhado: `Olha
+  jeito!` onde a fala diz `jeito! Olha`. Estava em **133 dos seus 178
+  transcripts** (746 pares, com voltas de até 1 segundo). Agora a ordem da fala
+  manda. Vale para vídeos novos **e** para os já transcritos, porque o conserto
+  também acontece na hora de montar a legenda
+- **O card de importação que falha não some mais.** Ele aparecia com o erro e
+  era apagado pela atualização de tela dois segundos depois — o lote parecia
+  nunca ter existido. Agora fica até você resolver, e os botões dele funcionam:
+  "Tentar novamente" re-envia os arquivos, "Apagar" descarta
+
 ## 2.45
 
 Três coisas que aplicar uma correção estragava — no arquivo entregue e na tela.
