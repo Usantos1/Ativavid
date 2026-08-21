@@ -380,6 +380,32 @@ function duracoesLabel(j) {
   return fim || orig || "";
 }
 
+/** A ficha do video pronto, em linhas rotuladas.
+ *  Desenho pedido pelo usuario: o NOME manda no card, e o resto e conferencia
+ *  — original, editado, formato, estilo, inicio e fim, cada um com o seu
+ *  rotulo. Antes tudo isso era uma linha so ("1:07 → 52s · 9:16") mais um
+ *  "Video concluido" que nao dizia nada que o selo ja nao dissesse. */
+function fichaHtml(j) {
+  const linhas = [];
+  const orig = fmtDuracao(j.sourceDurationSec);
+  const fim = fmtDuracao(j.durationSec);
+  if (orig) linhas.push(["Vídeo original", orig]);
+  if (fim) linhas.push(["Vídeo editado", fim]);
+  const fmt = j.formatLabel || ((j.hasFinal || j.status === "done" || j.hasCut) ? "9:16" : "");
+  const est = String(j.styleLabel || "").trim();
+  if (fmt || est) {
+    linhas.push(["Formato", fmt || "—"]);
+    if (est) linhas.push(["Estilo", est]);
+  }
+  const ini = String(j.startedAtLabel || j.createdAtLabel || "");
+  const fin = String(j.finishedAtLabel || "");
+  if (ini) linhas.push(["Início", ini]);
+  if (fin) linhas.push(["Final", fin]);
+  if (!linhas.length) return "";
+  return `<dl class="pc-ficha">${linhas.map(([k, v]) =>
+    `<div><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd></div>`).join("")}</dl>`;
+}
+
 /** "21/08 08:22 → 08:33". So repete a data quando o dia virou. */
 function periodoLabel(j) {
   const ini = String(j.startedAtLabel || j.createdAtLabel || "");
@@ -399,6 +425,7 @@ function cardSig(j, opts) {
   return [
     j.id, j.status, j.title || j.name, Math.round(Number(j.progress) || 0), j.hasFinal, j.hasThumb, j.finishedAt, j.finishedAtLabel,
     j.startedAtLabel || "", j.durationSec || "", j.sourceDurationSec || "", j.legenda ? "L" : "",
+    j.styleLabel || "",
     j.stage, j.message, j.reason || "", j.localPoster || j.thumbUrl, links.editor, links.estilo, links.final,
     opts && opts.compact ? "1" : "0",
     qa.status || "", qa.stage || "", qa.elapsedLabel || "", qa.etaLabel || "", qa.stageLabel || "",
@@ -557,7 +584,8 @@ function cardHtml(j, opts) {
   // sobre o trabalho do corte, que e o que o app faz.
   const dur = j.durationLabel || duracoesLabel(j);
   const metaBits = [dur, fmt].filter(Boolean);
-  const periodo = j.status === "done" ? periodoLabel(j) : "";
+  // No card PRONTO a ficha substitui a linha de meta, a mensagem e o periodo.
+  const pronto = j.status === "done" && !applyBusy(j);
   const copy = queueCopy(j, view);
   const chipLabel = copy.badge;
   const tone = chipTone(j, view);
@@ -587,16 +615,16 @@ function cardHtml(j, opts) {
       ${thumbImg}
     </div>
     <div class="pc-body">
-      <div class="pc-top">
+      <div class="pc-top${pronto ? " empilhado" : ""}">
         <div class="pc-title-block">
           <button type="button" class="pc-name pc-name-btn" data-act="rename" data-id="${safeId}"
             data-title="${escapeHtml(title)}" title="Clique para renomear">${escapeHtml(title)}</button>
-          ${metaBits.length ? `<div class="pc-when">${escapeHtml(metaBits.join(" · "))}</div>` : ""}
+          ${pronto ? "" : (metaBits.length ? `<div class="pc-when">${escapeHtml(metaBits.join(" · "))}</div>` : "")}
         </div>
         <span class="chip ${escapeHtml(tone)}">${escapeHtml(chipLabel)}</span>
       </div>
-      ${headline ? `<div class="pc-msg">${escapeHtml(headline)}</div>` : ""}
-      ${periodo ? `<div class="pc-periodo">${escapeHtml(periodo)}</div>` : ""}
+      ${pronto ? "" : (headline ? `<div class="pc-msg">${escapeHtml(headline)}</div>` : "")}
+      ${pronto ? fichaHtml(j) : ""}
       ${progress}
       <div class="pc-actions">
         ${primary}
@@ -715,6 +743,10 @@ function patchCard(el, j, opts) {
   const view = opts && opts.view;
   const copy = queueCopy(j, view);
   const compact = !!(opts && opts.compact);
+  // No card PRONTO quem manda e a ficha: a linha de meta, a mensagem e o
+  // periodo somem. Declarado AQUI porque o bloco da mensagem, mais abaixo, ja
+  // consulta — `const` no meio da funcao dava ReferenceError.
+  const pronto = j.status === "done" && !applyBusy(j);
   el.classList.remove("pc-enter");
   el.className = `project-card ${j.status}${compact ? " compact" : ""}`;
   el.dataset.cardId = String(j.id);
@@ -732,7 +764,7 @@ function patchCard(el, j, opts) {
     name.dataset.id = j.id;
   }
   let msg = el.querySelector(".pc-msg");
-  if (copy.text) {
+  if (copy.text && !pronto) {
     if (!msg) {
       msg = document.createElement("div");
       msg.className = "pc-msg";
@@ -744,8 +776,33 @@ function patchCard(el, j, opts) {
   } else if (msg) {
     msg.remove();
   }
+  let ficha = el.querySelector(".pc-ficha");
+  if (pronto) {
+    const html = fichaHtml(j);
+    if (html) {
+      const wrap = document.createElement("div");
+      wrap.innerHTML = html;
+      const nova = wrap.firstElementChild;
+      if (ficha) ficha.replaceWith(nova);
+      else {
+        const anchor = el.querySelector(".pc-progress") || el.querySelector(".pc-actions");
+        if (anchor) anchor.insertAdjacentElement("beforebegin", nova);
+        else el.querySelector(".pc-body")?.appendChild(nova);
+      }
+    } else if (ficha) {
+      ficha.remove();
+    }
+    el.querySelector(".pc-msg")?.remove();
+    el.querySelector(".pc-periodo")?.remove();
+    el.querySelector(".pc-when")?.remove();
+    el.querySelector(".pc-top")?.classList.add("empilhado");
+  } else {
+    if (ficha) ficha.remove();
+    el.querySelector(".pc-top")?.classList.remove("empilhado");
+  }
+
   // Duracoes (origem -> entregue) e formato.
-  const metaTxt = [
+  const metaTxt = pronto ? "" : [
     j.durationLabel || duracoesLabel(j),
     j.formatLabel || ((j.hasFinal || j.status === "done" || j.hasCut) ? "9:16" : ""),
   ].filter(Boolean).join(" · ");
@@ -761,8 +818,8 @@ function patchCard(el, j, opts) {
     meta.remove();
   }
 
-  // Inicio -> fim.
-  const perTxt = j.status === "done" ? periodoLabel(j) : "";
+  // Inicio -> fim (so fora do card pronto — la a ficha ja diz).
+  const perTxt = "";
   let per = el.querySelector(".pc-periodo");
   if (perTxt) {
     if (!per) {

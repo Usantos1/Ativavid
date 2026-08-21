@@ -533,6 +533,39 @@ def _duracao_das_fontes(sources: list) -> float:
     return round(total, 3) if total > 0 else 0.0
 
 
+# Nome amigavel do estilo, para o card. O projeto guarda os ids
+# (`captions: "stacked"`), e a tela do editor tem o catalogo — mas o studio e
+# outro arquivo, e duplicar catalogo e como as duas telas passam a discordar.
+# Quem resolve e o servidor, que ja le o state.json.
+_NOME_LEGENDA = {
+    "karaoke": "Karaokê", "stacked": "Empilhado", "impacto": "Impacto",
+    "scatter": "Disperso", "recorte": "Recorte", "simples": "Simples",
+    "bloco": "Bloco", "classica": "Clássica", "serifada": "Serifada",
+}
+_NOME_HEADLINE = {
+    "outline": "Contorno", "realce": "Realce", "card": "Cartão",
+    "misto": "Misto", "manchete": "Manchete", "carimbo": "Carimbo",
+    "pergunta": "Pergunta", "sombra": "Sombra", "sublinhado": "Sublinhado",
+    "pilula": "Pílula", "nenhuma": "Sem manchete",
+}
+
+
+def _rotulo_do_estilo(edit_dir: Path) -> str:
+    """"Realce · Empilhado" — manchete e legenda, que e o que se ve."""
+    try:
+        st = json.loads((edit_dir / "state.json").read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError):
+        return ""
+    estilo = st.get("style") if isinstance(st, dict) else None
+    if not isinstance(estilo, dict):
+        return ""
+    partes = [
+        _NOME_HEADLINE.get(str(estilo.get("headline") or ""), ""),
+        _NOME_LEGENDA.get(str(estilo.get("captions") or ""), ""),
+    ]
+    return " · ".join([p for p in partes if p])
+
+
 _DUR_FILA: "queue.Queue[tuple]" = None  # type: ignore[assignment]
 _DUR_THREAD_LOCK = threading.Lock()
 _DUR_PEDIDOS: set[str] = set()
@@ -593,6 +626,8 @@ def enrich_job_display(job: dict, edit_dir: Path | None = None) -> dict:
     # congelada no primeiro poll, e pior com render rodando. Quem mede e o
     # `medir_duracao_em_fundo`, uma vez por job, gravando no store.
     job["title"] = _resolve_job_title(job, edit)
+    if not job.get("styleLabel"):
+        job["styleLabel"] = _rotulo_do_estilo(edit)
     return job
 
 

@@ -113,14 +113,42 @@ def test_a_duracao_ja_medida_atravessa_o_enrich_intacta(tmp_path, fontes):
     assert job["sourceDurationSec"] == pytest.approx(5.0, abs=0.01)
 
 
-def test_a_tela_mostra_as_duas_duracoes_e_o_periodo():
+def test_a_ficha_do_card_tem_as_seis_linhas():
+    """O desenho que o usuário pediu: o NOME manda no card, o selo vem abaixo
+    dele, e o resto vira ficha com rótulo — original, editado, formato, estilo,
+    início e final."""
     js = (REPO / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
-    assert "function duracoesLabel" in js, "não há duração de origem → final"
-    assert "function periodoLabel" in js, "não há início → fim"
-    assert "sourceDurationSec" in js
-    i = js.index("function cardSig(")
-    assert "j.startedAtLabel" in js[i:i + 900], (
+    i = js.index("function fichaHtml(")
+    ficha = js[i:i + 1600]
+    for rotulo in ("Vídeo original", "Vídeo editado", "Formato", "Estilo",
+                   "Início", "Final"):
+        assert rotulo in ficha, f"faltou a linha {rotulo!r}"
+    assert "sourceDurationSec" in ficha and "styleLabel" in ficha
+    k = js.index("function cardSig(")
+    assert "j.startedAtLabel" in js[k:k + 1000], (
         "a assinatura do card ignora os campos novos — o card não repinta"
+    )
+    assert "j.styleLabel" in js[k:k + 1000], "o estilo não entra na assinatura"
+
+
+def test_o_selo_desce_para_baixo_do_nome_no_card_pronto():
+    js = (REPO / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
+    assert 'pc-top${pronto ? " empilhado" : ""}' in js, (
+        "o selo continua ao lado do nome no card pronto"
+    )
+    css = (REPO / "assets" / "studio" / "studio.css").read_text(encoding="utf-8")
+    assert ".pc-top.empilhado" in css, "falta o estilo do topo empilhado"
+    assert ".pc-ficha" in css, "falta o estilo da ficha"
+
+
+def test_o_card_pronto_nao_repete_video_concluido():
+    """A mensagem "Vídeo concluído" não dizia nada que o selo CONCLUÍDO já não
+    dissesse, e roubava a ênfase do nome."""
+    js = (REPO / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
+    i = js.index("function cardHtml(")
+    corpo = js[i:js.index("function ", i + 20)]
+    assert 'pronto ? "" : (headline ?' in corpo, (
+        "o card pronto ainda desenha a mensagem"
     )
 
 
@@ -145,8 +173,7 @@ def test_o_menu_do_card_e_refeito_no_patch():
     assert ".pc-menu:not(.hidden)" in corpo, (
         "o menu seria trocado mesmo aberto, sumindo debaixo do clique"
     )
-    assert "periodoLabel(j)" in corpo, "o patch não atualiza início → fim"
-    assert "duracoesLabel(j)" in corpo, "o patch não atualiza as durações"
+    assert "fichaHtml(j)" in corpo, "o patch não atualiza a ficha do vídeo"
 
 
 def test_o_enrich_nunca_mede_dentro_da_requisicao(tmp_path, fontes):

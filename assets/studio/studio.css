@@ -1161,9 +1161,42 @@ body.view-estilo-on .ws-head {
   letter-spacing: 0.01em;
   line-height: 1.35;
 }
-/* Inicio -> fim do processamento. Um degrau abaixo da mensagem: e informacao
-   de conferencia, nao o que se le primeiro no card. Tabular porque sao horas
-   em coluna — sem isso os digitos dancam de um card para o outro. */
+/* A ficha do video pronto. O NOME manda no card; isto e conferencia, entao
+   vem menor e com o rotulo apagado. Grade de duas colunas com o valor
+   alinhado a direita: os numeros ficam numa coluna so, de card para card. */
+.pc-top.empilhado {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+.pc-top.empilhado .chip {
+  align-self: flex-start;
+}
+.pc-ficha {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  margin: 2px 0 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+.pc-ficha > div {
+  display: contents;
+}
+.pc-ficha dt {
+  color: var(--dim);
+  opacity: 0.8;
+  white-space: nowrap;
+}
+.pc-ficha dd {
+  margin: 0;
+  color: var(--txt, #e8e8ea);
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Inicio -> fim do processamento, nos cards que nao sao o "pronto". */
 .pc-periodo {
   font-size: 11px;
   color: var(--dim);
