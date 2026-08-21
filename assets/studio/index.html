@@ -665,6 +665,19 @@
                 </div>
               </div>
 
+              <!-- Diagnóstico saiu de dentro do "Avançado": é a primeira coisa
+                   que o suporte pede, e escondida ela deixava metade da tela
+                   vazia enquanto o usuário não achava onde clicar. -->
+              <div class="sys-card">
+                <h4>Diagnóstico</h4>
+                <p class="hint">Checagem rápida da instalação — use quando algo não funcionar.</p>
+                <div class="panel-actions">
+                  <button type="button" class="ghost-btn" id="btnDoutorRun">Rodar checagem</button>
+                  <button type="button" class="ghost-btn" id="btnDoutorCopy">Copiar relatório</button>
+                </div>
+                <div id="doutorOut" class="doutor"></div>
+              </div>
+
             </div>
 
             <details class="sys-support" id="sysSupport">
@@ -695,13 +708,6 @@
                     <div class="panel-actions">
                       <button type="button" class="ghost-btn" id="btnHwBench">Refazer teste de desempenho</button>
                     </div>
-                    <h4>Diagnóstico</h4>
-                    <p class="hint">Checagem rápida para suporte.</p>
-                    <div class="panel-actions">
-                      <button type="button" class="ghost-btn" id="btnDoutorRun">Rodar checagem</button>
-                      <button type="button" class="ghost-btn" id="btnDoutorCopy">Copiar relatório</button>
-                    </div>
-                    <div id="doutorOut" class="doutor"></div>
                   </div>
                 </div>
               </div>

@@ -888,9 +888,7 @@ html:not([data-theme="light"]) .theme-ico-sun { display: block; }
 #view-licenca .lic-shell {
   flex: 1;
   min-height: 0;
-  /* Mesmo teto de largura das outras telas: sem ele as tabelas esticavam de
-     ponta a ponta e as colunas ficavam a meia tela de distância uma da outra. */
-  max-width: 1180px;
+
 }
 
 /* Estilos embutido no shell do hub — iframe preenche o restante (sem corte) */
@@ -1824,10 +1822,9 @@ body.view-estilo-on .ws-head {
   flex-direction: column;
   gap: clamp(14px, 1.6vw, 20px);
   width: 100%;
-  /* Sem teto, numa tela larga os 4 cards esticavam para 400px cada com uma
-     frase dentro — pouca informação espalhada por muita área, que é o que
-     faz a tela parecer vazia e inacabada. */
-  max-width: 1180px;
+  /* A tela é para ser usada inteira: o conteúdo ocupa a largura toda. Cards
+     grandes demais se resolvem com mais colunas, não estreitando a página. */
+  max-width: none;
   min-width: 0;
 }
 
