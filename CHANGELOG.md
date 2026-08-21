@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.51
+
+- **O botão "Baixar atualização" mandava para a versão errada.** O aviso dizia
+  "Nova versão 2.50" e o botão abria o instalador da **0.1.24** — cada metade
+  lia uma fonte diferente. Agora o botão baixa exatamente a versão que o aviso
+  anunciou
+
 ## 2.50
 
 - **A ficha do card estava invisível no modo claro.** Duração, formato, estilo
