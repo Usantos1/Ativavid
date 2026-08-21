@@ -393,7 +393,49 @@ def _drop_cues_vazias(cues: Any) -> Any:
     return cues
 
 
+# Arranjos que andam LADO A LADO com `lines` numa cue: o motor le
+# `lineStyles[li]`, `lineEmph[li]` e `lineBoost[li]` pelo INDICE da linha
+# (render_proprio.py:822-833). Tirar uma linha sem tirar a entrada
+# correspondente desloca o estilo de todas as linhas de baixo — a legenda
+# continua aparecendo, com o desenho errado, e nada acusa.
+_ARRANJOS_DA_LINHA = ("lineStyles", "lineBoost", "lineEmph")
+
+
+def _podar_cue(cue: dict) -> None:
+    """Tira palavra vazia e linha vazia de UMA cue, sem desalinhar o estilo."""
+    linhas = cue.get("lines")
+    if not isinstance(linhas, list):
+        return
+    mantidas: list[int] = []
+    novas: list[Any] = []
+    for li, linha in enumerate(linhas):
+        if _e_lista_de_palavras(linha):
+            linha = [x for x in linha if str(x.get("text") or "").strip()]
+            if not linha:
+                continue
+        elif isinstance(linha, list) and not linha:
+            continue
+        mantidas.append(li)
+        novas.append(linha)
+    if len(novas) == len(linhas):
+        cue["lines"] = novas
+        return
+    cue["lines"] = novas
+    for chave in _ARRANJOS_DA_LINHA:
+        arr = cue.get(chave)
+        if isinstance(arr, list):
+            cue[chave] = [arr[i] for i in mantidas if i < len(arr)]
+
+
+def _e_cue(node: Any) -> bool:
+    return (isinstance(node, dict) and isinstance(node.get("lines"), list)
+            and ("startMs" in node or "endMs" in node))
+
+
 def _prune_empty_cue_words(node: Any) -> None:
+    if _e_cue(node):
+        _podar_cue(node)
+        return
     if isinstance(node, dict):
         for v in node.values():
             _prune_empty_cue_words(v)
@@ -401,11 +443,8 @@ def _prune_empty_cue_words(node: Any) -> None:
             if _e_lista_de_palavras(v):
                 node[key] = [x for x in v if str(x.get("text") or "").strip()]
             elif isinstance(v, list) and v and isinstance(v[0], list):
-                # `lines` da cue e uma lista de LINHAS, cada uma com as
-                # palavras. So o ramo acima existia, e ele exige que a lista
-                # seja valor direto de uma chave — as linhas nao sao, entao a
-                # palavra apagada ficava com texto vazio dentro da linha para
-                # sempre. Linha que fica sem palavra tambem sai.
+                # lista de LINHAS fora de uma cue: poda as palavras e as linhas
+                # vazias, sem arranjo paralelo para acertar
                 linhas = []
                 for linha in v:
                     if _e_lista_de_palavras(linha):
@@ -445,7 +484,15 @@ def apply_caption_fixes(edit_dir: Path, fixes: list[dict] | None) -> dict:
             words = [w for w in words if isinstance(w, dict) and str(w.get("text") or "").strip()]
             caps_p.write_text(json.dumps(words, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
-    ja_estava = _destino_ja_no_lugar(words if caps_p.exists() else None, fixes)
+    # Quem ja foi apagado ANTES. Para um apagar, "a palavra sumiu" nao prova
+    # que fui eu: um alvo que nunca existiu tambem esta ausente, e ai dizer
+    # "ja aplicado" e o mesmo silencio que este commit veio tirar. O que
+    # distingue e o registro: se este apagar ja esta no caption_fixes.json, a
+    # ausencia e obra dele.
+    ja_apagados = {str(f.get("from") or "") for f in _fixes_guardados(edit)
+                   if f.get("delete")}
+    ja_estava = _destino_ja_no_lugar(
+        words if caps_p.exists() else None, fixes, ja_apagados=ja_apagados)
     applied += patch_edit_data_text(edit, fixes)
 
     if cues_p.exists():
@@ -476,7 +523,14 @@ def apply_caption_fixes(edit_dir: Path, fixes: list[dict] | None) -> dict:
             if not isinstance(fix, dict) or not fix.get("from"):
                 continue
             merged = [x for x in merged if str(x.get("from") or "") != str(fix.get("from"))]
-            merged.append({"from": fix["from"], "to": fix.get("to") or ""})
+            guardado = {"from": fix["from"], "to": fix.get("to") or ""}
+            # A marca `delete` TEM de ser guardada. Sem ela o reprocesso relia
+            # um fix com `to` vazio, que o proprio apply ignora — e a legenda
+            # apagada voltava ao video. Apagar que volta sozinho e pior do que
+            # apagar que nao funciona: o usuario ja conferiu e seguiu.
+            if fix.get("delete"):
+                guardado["delete"] = True
+            merged.append(guardado)
         store.write_text(json.dumps(merged, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     except (OSError, json.JSONDecodeError, TypeError):
         pass
@@ -490,15 +544,31 @@ def apply_caption_fixes(edit_dir: Path, fixes: list[dict] | None) -> dict:
     # do usuario e cantar "Legenda corrigida" com a palavra errada na tela.
     if ja_estava:
         return {"ok": True, "changed": 0, "alreadyApplied": True}
+    apagar = any(isinstance(f, dict) and f.get("delete") for f in fixes)
     return {
         "ok": False,
         "changed": 0,
         "notFound": True,
-        "error": "não achei esse texto na legenda para corrigir",
+        "error": ("não achei essa legenda para apagar" if apagar
+                  else "não achei esse texto na legenda para corrigir"),
     }
 
 
-def _destino_ja_no_lugar(words: list[dict] | None, fixes: list[dict]) -> bool:
+def _fixes_guardados(edit_dir: Path) -> list[dict]:
+    p = Path(edit_dir) / "caption_fixes.json"
+    if not p.exists():
+        return []
+    try:
+        d = json.loads(p.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    return [x for x in d if isinstance(x, dict)]
+
+
+def _destino_ja_no_lugar(
+    words: list[dict] | None, fixes: list[dict],
+    *, ja_apagados: set[str] | None = None,
+) -> bool:
     """True se o texto de DESTINO de todo fix ja esta nas palavras.
 
     E o que separa "ja foi aplicado antes" de "nao pegou". Usa o mesmo
@@ -511,10 +581,12 @@ def _destino_ja_no_lugar(words: list[dict] | None, fixes: list[dict]) -> bool:
         if not isinstance(fix, dict):
             continue
         if fix.get("delete"):
-            # apagar ja aplicado = a ORIGEM sumiu
-            src = _split_tokens(str(fix.get("from") or ""))
+            alvo = str(fix.get("from") or "")
+            if alvo not in (ja_apagados or set()):
+                return False       # nunca apaguei isto: sumido = nao achei
+            src = _split_tokens(alvo)
             if src and resolve_replacement_index(words, src, fix)[0] != "none":
-                return False
+                return False       # continua la: o apagar nao pegou
             continue
         dst = _split_tokens(str(fix.get("to") or ""))
         if not dst:
@@ -533,4 +605,7 @@ def load_stored_fixes(edit_dir: Path) -> list[dict]:
         data = json.loads(path.read_text(encoding="utf-8-sig"))
     except (OSError, json.JSONDecodeError):
         return []
-    return [x for x in data if isinstance(x, dict) and x.get("from") and x.get("to")]
+    # `x.get("to")` sozinho descartava todo APAGAR, que por definicao tem
+    # destino vazio — era o segundo jeito de a legenda apagada voltar.
+    return [x for x in data if isinstance(x, dict) and x.get("from")
+            and (x.get("to") or x.get("delete"))]

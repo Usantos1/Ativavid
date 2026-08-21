@@ -1696,6 +1696,10 @@ async function persistCaptionFix(from, to, extra) {
     S.captions = groupCaptions(data.captionWords);
     S.captionFixes = {};
     S.capApagadas = [];
+    // A lista veio outra: os indices marcados apontam para legendas
+    // diferentes agora, e um Delete apagaria a errada.
+    S.capSel = [];
+    S.capSelAncora = -1;
   }
   return data;
 }
@@ -1945,15 +1949,12 @@ function apagarLegendas(indices) {
   toast(alvos.length === 1
     ? 'Legenda apagada — Ctrl+Z desfaz'
     : `${alvos.length} legendas apagadas — Ctrl+Z desfaz`, 3000);
-  for (const p of pedidos) {
-    persistCaptionFix(p.from, '', {
-      delete: true,
-      start: p.start, end: p.end,
-      startMs: Math.round((p.start || 0) * 1000),
-      endMs: Math.round((p.end || 0) * 1000),
-      index: p.index, tokenId: p.tokenId, cueId: p.cueId,
-    });
-  }
+  // NAO grava no servidor agora, de proposito. Uma correcao de TEXTO gravada
+  // na hora ainda da para reescrever; uma palavra APAGADA no arquivo nao volta
+  // pelo Ctrl+Z, que so restaura a tela — o usuario desfaria, veria a legenda
+  // de volta na linha do tempo e ela ja estaria fora do captions.json. O
+  // apagar fica pendente e vai junto no salvar, como qualquer outra edicao da
+  // linha do tempo.
 }
 
 function currentCaptionIndex(t) {
@@ -2362,9 +2363,16 @@ function openCaptionEditor(i, anchorEl) {
     const v = input.value.trim();
     closeCaptionEditor();
     if (!v) {
-      // Antes isto apenas descartava a correcao, sem dizer nada — o usuario
-      // esvaziava o campo esperando apagar a legenda e nao acontecia NADA.
-      toast('Para tirar a legenda do vídeo, use o botão "apagar"', 3200);
+      // Esvaziar continua DESCARTANDO a correcao pendente, que e o que sempre
+      // significou. O que faltava era dizer isso: quem esvaziava esperando
+      // apagar a legenda nao via nada acontecer.
+      if (S.captionFixes[i]) {
+        pushHistory();
+        delete S.captionFixes[i];
+        toast('Correção descartada — para tirar a legenda, use "apagar"', 3200);
+      } else {
+        toast('Para tirar a legenda do vídeo, use o botão "apagar"', 3200);
+      }
     } else if (v === c.text) {
       if (S.captionFixes[i]) { pushHistory(); delete S.captionFixes[i]; }
     } else if (!S.captionFixes[i] || S.captionFixes[i].to !== v) {
@@ -4187,15 +4195,21 @@ panel.addEventListener('pointerdown', (e) => {
     // abrindo o editor, que e o uso de longe mais comum — a selecao multipla
     // existe para apagar varias de uma vez, nao para atrapalhar o resto.
     if (e.ctrlKey || e.metaKey) {
+      S.selected = -1;                 // ver a nota na selecao de take
       const k = S.capSel.indexOf(ci);
       if (k >= 0) S.capSel.splice(k, 1); else S.capSel.push(ci);
       S.capSelAncora = ci;
     } else if (e.shiftKey && S.capSelAncora >= 0) {
+      S.selected = -1;
       const a = Math.min(S.capSelAncora, ci), b = Math.max(S.capSelAncora, ci);
       for (let n = a; n <= b; n++) if (!S.capSel.includes(n)) S.capSel.push(n);
     } else {
+      // repinta ANTES de abrir: sem isto os chips marcados continuavam
+      // brancos na faixa enquanto o editor de outra legenda estava aberto
+      const tinhaSel = S.capSel.length > 0;
       S.capSel = [];
       S.capSelAncora = ci;
+      if (tinhaSel) renderAll();
       openCaptionEditor(ci, cap);
       e.preventDefault();
       return;
@@ -4242,6 +4256,9 @@ panel.addEventListener('pointerdown', (e) => {
   }
   if (clip) {
     S.selected = +clip.dataset.i;
+    // Uma selecao por vez: com legendas marcadas e um take selecionado, o
+    // Delete ia para as legendas e o take nunca era excluido.
+    S.capSel = [];
     renderClips();
     return;
   }
@@ -4388,6 +4405,11 @@ document.addEventListener('keydown', (e) => {
   } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
     const step = e.shiftKey ? 1 : 1 / S.fps;
     seekDraft(renderedToDraft(video.currentTime) + (e.key === 'ArrowRight' ? step : -step));
+  } else if (e.key === 'Escape' && S.capSel.length) {
+    e.preventDefault();
+    S.capSel = [];
+    S.capSelAncora = -1;
+    renderAll();
   } else if ((e.key === 'Delete' || e.key === 'Backspace') && S.capSel.length) {
     e.preventDefault();
     apagarLegendas(S.capSel);

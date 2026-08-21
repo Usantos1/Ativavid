@@ -247,3 +247,139 @@ def test_apagar_desloca_as_correcoes_de_texto_de_baixo():
     assert "sort((a, b) => b - a)" in trecho, "apaga de frente para trás e desloca errado"
     assert "desloc[n > i ? n - 1 : n]" in trecho, "as correções de baixo não descem"
     assert "S.capApagadas.push" in trecho, "o apagar não fica pendente para o salvar"
+
+
+def test_o_apagar_sobrevive_ao_reprocesso(tmp_path):
+    """Legenda apagada não pode VOLTAR quando o vídeo é refeito.
+
+    `run_fast` reaplica `load_stored_fixes(edit)` a cada rodada. O apagar se
+    perdia por dois caminhos ao mesmo tempo: o arquivo guardava só
+    `{from, to: ""}` (sem a marca `delete`, que o apply exige) e o leitor ainda
+    filtrava por `x.get("to")`, que é vazio num apagar. Apagar que volta
+    sozinho é pior do que apagar que não funciona — o usuário já conferiu e
+    seguiu para o próximo vídeo.
+    """
+    from app.caption_fixes import apply_caption_fixes, load_stored_fixes
+
+    edit = _projeto(tmp_path, [
+        ("moço", 0, 500), ("nossa", 500, 1000), ("capinha", 1000, 1600),
+    ])
+    apply_caption_fixes(edit, [{"from": "nossa", "to": "", "delete": True,
+                                "startMs": 500, "endMs": 1000}])
+
+    guardado = json.loads((edit / "caption_fixes.json").read_text(encoding="utf-8"))
+    assert any(f.get("from") == "nossa" and f.get("delete") for f in guardado), (
+        "o arquivo guardou o apagar sem a marca `delete`"
+    )
+
+    relidos = load_stored_fixes(edit)
+    assert any(f.get("from") == "nossa" for f in relidos), (
+        "o leitor descartou o apagar por ele não ter destino"
+    )
+
+    # a reaplicação, como no reprocesso: a palavra continua fora
+    edit2 = _projeto(tmp_path / "outro", [
+        ("moço", 0, 500), ("nossa", 500, 1000), ("capinha", 1000, 1600),
+    ])
+    apply_caption_fixes(edit2, relidos)
+    caps = json.loads((edit2 / "remotion/public/captions.json").read_text(encoding="utf-8"))
+    assert [w["text"] for w in caps] == ["moço", "capinha"], (
+        "a legenda apagada voltou no reprocesso"
+    )
+
+
+def test_apagar_nao_grava_no_servidor_antes_do_salvar():
+    """Ctrl+Z só restaura a TELA. Uma correção de texto gravada na hora ainda
+    dá para reescrever; uma palavra apagada do captions.json não volta — o
+    usuário desfaria, veria a legenda de volta na linha do tempo, e ela já
+    estaria fora do arquivo."""
+    js = (REPO / "assets" / "preview" / "app.js").read_text(encoding="utf-8")
+    i = js.index("function apagarLegendas(")
+    corpo = js[i:js.index("\nfunction ", i + 10)]
+    assert "persistCaptionFix" not in corpo, (
+        "o apagar volta a gravar no servidor antes do salvar — Ctrl+Z mente"
+    )
+    assert "S.capApagadas.push" in corpo, "o apagar não fica pendente"
+
+
+def test_a_selecao_de_legenda_e_a_de_take_sao_exclusivas():
+    """Com legendas marcadas E um take selecionado, o Delete ia para as
+    legendas e o take nunca era excluído."""
+    js = (REPO / "assets" / "preview" / "app.js").read_text(encoding="utf-8")
+    i = js.index("S.selected = +clip.dataset.i;")
+    assert "S.capSel = [];" in js[i:i + 300], (
+        "selecionar um take não limpa a seleção de legendas"
+    )
+    j = js.index("if (e.ctrlKey || e.metaKey) {", js.index("const ci = +cap.dataset.ci;"))
+    assert "S.selected = -1;" in js[j:j + 200], (
+        "marcar legenda não limpa a seleção de take"
+    )
+    assert "e.key === 'Escape' && S.capSel.length" in js, (
+        "não há como largar a seleção de legendas sem apagar"
+    )
+
+
+def test_apagar_uma_linha_nao_desloca_o_estilo_das_outras(tmp_path):
+    """`lineStyles`, `lineBoost` e `lineEmph` andam LADO A LADO com `lines`: o
+    motor lê `lineStyles[li]` pelo índice da linha (render_proprio.py:822).
+
+    Tirar a linha 0 sem tirar a entrada 0 desses arranjos empurra o estilo de
+    cada linha uma casa para cima. A legenda continua aparecendo — com o
+    desenho errado, e nada acusa.
+    """
+    from app.caption_fixes import apply_caption_fixes
+
+    edit = _projeto(tmp_path, [
+        ("apaga", 0, 400), ("isto", 400, 800),
+        ("fica", 800, 1200), ("aqui", 1200, 1600),
+    ])
+    pub = edit / "remotion" / "public"
+    (pub / "caption-cues.json").write_text(json.dumps([{
+        "i": 0, "startMs": 0, "endMs": 1600, "preset": "STACK_MIXED",
+        "lineStyles": [3, 1], "lineBoost": [True, False], "lineEmph": [False, True],
+        "lines": [
+            [{"text": "apaga", "fromMs": 0, "toMs": 400},
+             {"text": "isto", "fromMs": 400, "toMs": 800}],
+            [{"text": "fica", "fromMs": 800, "toMs": 1200},
+             {"text": "aqui", "fromMs": 1200, "toMs": 1600}],
+        ],
+    }]), encoding="utf-8")
+
+    apply_caption_fixes(edit, [{"from": "apaga isto", "to": "", "delete": True,
+                                "startMs": 0, "endMs": 800}])
+
+    cue = json.loads((pub / "caption-cues.json").read_text(encoding="utf-8"))[0]
+    assert [w["text"] for ln in cue["lines"] for w in ln] == ["fica", "aqui"]
+    assert cue["lineStyles"] == [1], f"estilo desalinhado: {cue['lineStyles']}"
+    assert cue["lineBoost"] == [False], f"boost desalinhado: {cue['lineBoost']}"
+    assert cue["lineEmph"] == [True], f"enfase desalinhada: {cue['lineEmph']}"
+
+
+def test_apagar_o_que_nao_existe_e_reprovado(tmp_path):
+    """Para um apagar, "a palavra sumiu" não prova que fui eu.
+
+    Um alvo que nunca existiu também está ausente. Se isso passar como
+    "já aplicado", volta o mesmo silêncio que este arquivo inteiro veio tirar:
+    a tela apaga o pedido do usuário e canta sucesso.
+    """
+    from app.caption_fixes import apply_caption_fixes
+
+    edit = _projeto(tmp_path, [("moço", 0, 500), ("nossa", 500, 1000)])
+    out = apply_caption_fixes(edit, [{"from": "guarda-chuva", "to": "",
+                                      "delete": True, "startMs": 500, "endMs": 1000}])
+    assert out["ok"] is False, "apagar que não achou o alvo passou como ok"
+    assert out.get("notFound") is True
+    assert "apagar" in out.get("error", "")
+
+
+def test_reapagar_o_que_ja_apaguei_nao_e_falha(tmp_path):
+    """O caso normal do app: o pedido vai de novo no salvar."""
+    from app.caption_fixes import apply_caption_fixes
+
+    edit = _projeto(tmp_path, [("moço", 0, 500), ("nossa", 500, 1000)])
+    fix = {"from": "nossa", "to": "", "delete": True, "startMs": 500, "endMs": 1000}
+    primeiro = apply_caption_fixes(edit, [fix])
+    assert primeiro["ok"] is True and primeiro["changed"] >= 1
+    segundo = apply_caption_fixes(edit, [fix])
+    assert segundo["ok"] is True, "reapagar virou erro"
+    assert segundo.get("alreadyApplied") is True
