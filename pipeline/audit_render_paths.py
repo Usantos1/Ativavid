@@ -14,21 +14,38 @@ from app.render_path import analyze_zoom, classify_render_path
 
 
 def _roots() -> list[Path]:
+    """As raízes de projeto, sem repetir a mesma pasta duas vezes.
+
+    Na máquina do usuário `~/ATIVAVID/Projetos` é uma JUNCTION para
+    `E:\\ATIVAVID\\Projetos` — a mesma pasta com dois nomes. Comparar os
+    caminhos como texto não via isso, então esta auditoria contava cada
+    projeto DUAS vezes: relatava 254 jobs onde existem 127, e 28 no caminho
+    lento onde são 14. Um número dobrado num relatório de auditoria é pior
+    que nenhum, porque parece medição.
+    """
     out: list[Path] = []
-    for p in (
-        Path(r"E:\ATIVAVID\Projetos"),
-        Path.home() / "ATIVAVID" / "Projetos",
-    ):
-        if p.is_dir() and p not in out:
-            out.append(p)
+    vistos: set[Path] = set()
+
+    def somar(p: Path) -> None:
+        if not p.is_dir():
+            return
+        try:
+            chave = p.resolve()          # segue junction/symlink
+        except OSError:
+            chave = p
+        if chave in vistos:
+            return
+        vistos.add(chave)
+        out.append(p)
+
+    somar(Path(r"E:\ATIVAVID\Projetos"))
+    somar(Path.home() / "ATIVAVID" / "Projetos")
     try:
         from app.settings_store import load_settings
 
         extra = load_settings().get("projectsRoot")
         if extra:
-            ep = Path(str(extra)).expanduser()
-            if ep.is_dir() and ep not in out:
-                out.append(ep)
+            somar(Path(str(extra)).expanduser())
     except Exception:
         pass
     return out
@@ -36,21 +53,43 @@ def _roots() -> list[Path]:
 
 def main() -> int:
     rows: list[dict] = []
+    # A garantia de "cada projeto UMA vez" mora aqui, e não só em `_roots()`:
+    # assim ela vale mesmo se as raízes vierem de outro lugar, ou se duas
+    # raízes se sobrepuserem em parte (uma dentro da outra).
+    vistos: set[Path] = set()
     for root in _roots():
         try:
             kids = list(root.iterdir())
         except OSError:
             continue
         for proj in kids:
+            try:
+                chave = proj.resolve()
+            except OSError:
+                chave = proj
+            if chave in vistos:
+                continue
             edp = proj / "edit" / "remotion" / "public" / "edit-data.json"
             if not edp.exists():
                 continue
+            vistos.add(chave)
             try:
                 ed = json.loads(edp.read_text(encoding="utf-8-sig"))
             except (OSError, json.JSONDecodeError):
                 continue
             public = edp.parent
-            cls = classify_render_path(ed, public=public)
+            # COM o edl, como o job classifica. Sem ele, `ffmpeg_zoom_active`
+            # não enxerga `ffmpegZoom.enabled` — que 113 dos 127 projetos têm
+            # gravado — e a auditoria acusaria caminho lento onde o job real
+            # pega o rápido.
+            edl = None
+            edl_p = proj / "edit" / "edl.json"
+            if edl_p.is_file():
+                try:
+                    edl = json.loads(edl_p.read_text(encoding="utf-8-sig"))
+                except (OSError, json.JSONDecodeError):
+                    edl = None
+            cls = classify_render_path(ed, public=public, edl=edl)
             zoom = analyze_zoom(ed)
             rows.append({
                 "project": proj.name,
