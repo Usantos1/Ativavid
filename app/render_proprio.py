@@ -1250,15 +1250,23 @@ class Renderizador:
                 borda=(accent, bw), rot=-6.0, sobe=0.0)
             return leg
 
-        # outline (padrao): branco com contorno preto grosso
-        stroke = int(hook.get("strokePx") or 12)
+        # outline (padrao): branco com contorno preto grosso.
+        # `-webkit-text-stroke` do template e CENTRADO — metade do traco cai
+        # dentro do glifo e o `paint-order: stroke fill` cobre essa metade com
+        # o branco. So a metade de FORA aparece. Medido no proprio Chrome
+        # (traco 40): o glifo branco fica igual, 44px, e o preto sai 20px para
+        # fora. Dilatar `strokePx` inteiro pintava o contorno em DOBRO.
+        # `is None`, nao `or`: strokePx=0 e "sem contorno", um valor de fato.
+        _st = hook.get("strokePx")
+        stroke = max(0, round((12.0 if _st is None else float(_st)) / 2.0))
         y = top
         for l in linhas:
             larg = self._larg_hl(l, tam, 800)
             alt = self._hl_bloco_texto(
                 leg, l, tam, 800, (self.w - larg) / 2, y, alt_cx, "#ffffff",
                 [(0, 6, 14, 0.45)], k_sombra=BLUR_K,
-                contorno=("#000000", stroke), sobe=sobe)
+                contorno=(("#000000", stroke) if stroke > 0 else None),
+                sobe=sobe)
             y += alt
         return leg
 

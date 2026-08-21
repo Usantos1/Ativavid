@@ -571,3 +571,41 @@ def test_legenda_no_alto_da_tela_nao_volta_para_o_padrao(tmp_path):
 
     assert base_y({"style": "stacked", "stackedOffsetY": 0}) == 0
     assert base_y({"style": "stacked"}) == round(1920 * 0.156)
+
+
+def _contorno_para_fora(tmp_path, stroke) -> tuple[int, int]:
+    """Quantos pixels de preto saem para FORA do glifo branco."""
+    hook = {"enabled": True, "style": "outline", "lines": ["III"], "endSec": 2.0}
+    if stroke is not None:
+        hook["strokePx"] = stroke
+    ed = _ed(hook=hook, endCard={"enabled": False})
+    r = Renderizador(_public(tmp_path, []), ed, frames=30, fps=30.0)
+    pl = r._montar_headline(ed["hook"]).palavras[0]
+    lin = pl.alpha.shape[0] // 2
+    op = pl.alpha[lin] > 0.6
+    branco = np.where(op & (pl.rgb[lin, :, 0] > 0.78))[0]
+    preto = np.where(op & (pl.rgb[lin, :, 0] < 0.16))[0]
+    if not preto.size:
+        return 0, 0
+    return int(branco.min() - preto.min()), int(preto.max() - branco.max())
+
+
+def test_contorno_da_headline_sai_metade_para_fora(tmp_path):
+    """`-webkit-text-stroke` é CENTRADO: metade do traço cai dentro do glifo e
+    o `paint-order: stroke fill` cobre essa metade com o preenchimento — só a
+    metade de fora aparece.
+
+    Medido no próprio Chrome (headless, traço 40 em HTML com paint-order): o
+    glifo branco fica idêntico, 44px, e o preto sai 20px para fora à esquerda
+    e 19 à direita (antialiasing). O motor dilatava `strokePx` inteiro, ou
+    seja, pintava o contorno em dobro."""
+    esq, dir_ = _contorno_para_fora(tmp_path, 40)
+    assert 19 <= esq <= 21 and 18 <= dir_ <= 21, (esq, dir_)
+    # o padrão do template é 12 → 6px para fora
+    esq12, _ = _contorno_para_fora(tmp_path, None)
+    assert 5 <= esq12 <= 7, esq12
+
+
+def test_contorno_zero_nao_desenha_contorno(tmp_path):
+    """strokePx=0 é "sem contorno", um valor de fato — com `or` virava 12."""
+    assert _contorno_para_fora(tmp_path, 0) == (0, 0)
