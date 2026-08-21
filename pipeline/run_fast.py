@@ -1755,7 +1755,12 @@ def encode_final(
         "[0:v]scale=in_range=full:out_range=limited,format=yuv420p,"
         "setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv[vid]"
     )
-    fc = f"{vid_chain};[0:a]loudnorm=I=-14:TP=-1:LRA=11[out]"
+    # TP=-1.5, nao -1.0: o limite de entrega E -1,0, e este loudnorm e de UMA
+    # passagem (modo dinamico, menos preciso que as duas do compose). Mirando
+    # no proprio limite, os finais do caminho completo sairam em -0,8 e -0,9 —
+    # os 2 unicos fora de especificacao entre os 40 finais medidos, os dois
+    # deste caminho. `I` segue -14 LUFS: o volume nao muda, so o teto de pico.
+    fc = f"{vid_chain};[0:a]loudnorm=I=-14:TP=-1.5:LRA=11[out]"
 
     def _cmd(enc: str, extra: list[str]) -> list[str]:
         return [
@@ -1794,7 +1799,7 @@ def encode_final(
                 [
                     _ffmpeg_exe(), "-y", "-hide_banner", "-nostats",
                     "-i", str(render),
-                    "-filter_complex", "[0:a]loudnorm=I=-14:TP=-1:LRA=11[out]",
+                    "-filter_complex", "[0:a]loudnorm=I=-14:TP=-1.5:LRA=11[out]",
                     "-map", "0:v", "-c:v", "copy",
                     "-map", "[out]", "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
                     "-t", f"{duration:.6f}", "-movflags", "+faststart",

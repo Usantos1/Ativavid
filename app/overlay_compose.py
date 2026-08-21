@@ -21,7 +21,17 @@ from app.ffmpeg_tools import first_record
 from typing import Any
 
 LOUDNORM_I = -14.0
-LOUDNORM_TP = -1.2
+# O limite de entrega e -1,0 dBTP. Mirar -1,2 dava 0,2 dB de margem — que e
+# exatamente o erro que o loudnorm comete (ele entrega 0,1 a 0,2 dB ACIMA do
+# pedido). Margem do tamanho do erro nao e margem: dos 26 finais OVERLAY do
+# usuario, 12 sairam entre -1,0 e -1,2, e um em -1,0 cravado, passando por
+# 0,01 dB. Quem passa disso paga ~720s refazendo o video inteiro.
+#
+# -1,5 medido em 4 finais reais: o alvo e seguido com precisao (-1,5, -1,5,
+# -1,6) e a LOUDNESS nao muda — o `I` continua em -14,0 LUFS nos quatro. TP so
+# limita pico; nao e volume. `render_proprio` importa esta constante, entao os
+# dois motores andam juntos.
+LOUDNORM_TP = -1.5
 LOUDNORM_LRA = 11.0
 
 
@@ -357,13 +367,23 @@ def garantir_true_peak(
         if r.returncode != 0 or not tmp.exists() or tmp.stat().st_size < 10_000:
             print(f"TRUE_PEAK_CONSERTO_FALHOU {(r.stderr or '')[-300:]}", flush=True)
             return au
+        # Medir ANTES de trocar. O loudnorm NAO garante melhora: medido no
+        # final de 20260820-214720, que estava em -0,8 dBTP, ele devolveu -0,6
+        # com alvo -1,5 e 0,0 (clipping) com alvo -1,2. A troca era
+        # incondicional, entao a piora ia para o arquivo entregue — e ainda
+        # saia impressa como "CORRIGIDO".
+        depois = ebur128_summary(tmp)
+        tp_novo = depois.get("truePeakDb")
+        if tp_novo is None or float(tp_novo) >= float(tp):
+            print(f"TRUE_PEAK_CONSERTO_NAO_MELHOROU {tp} -> {tp_novo} dBTP — "
+                  f"mantendo o original", flush=True)
+            return au
         os.replace(tmp, final)
     except OSError as e:
         print(f"TRUE_PEAK_CONSERTO_FALHOU {e}", flush=True)
         return au
     finally:
         tmp.unlink(missing_ok=True)
-    depois = ebur128_summary(final)
     print(f"TRUE_PEAK_CORRIGIDO {tp} -> {depois.get('truePeakDb')} dBTP "
           f"(LUFS {au.get('integratedLufs')} -> {depois.get('integratedLufs')})",
           flush=True)
