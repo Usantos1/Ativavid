@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import threading
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -88,20 +89,55 @@ class ApplyHooks:
 # desperdicio do RENDER (que grava `render-stats.json` e `canary-state.json`)
 # e nao o do APPLY. Medido no historico do usuario: o mesmo tipo de apply
 # variou de 1,2x a 31,3x o tempo real, e nao havia como saber qual foi qual.
-_ULTIMO_MOTOR: dict[str, str] = {}
-# Segundos por FASE do apply. Os cronometros ja existiam — mas so no stdout do
-# worker, que ninguem guarda. O historico registrava o total e mais nada, entao
+# As duas metricas do apply, POR PROJETO. `is_apply_running` e por projeto
+# (le o apply_status.json daquele edit), entao dois projetos diferentes rodam
+# apply ao MESMO tempo, cada um na sua thread "quick-apply", no mesmo processo.
+# Guardadas num dicionario unico elas se misturavam: o motor de um projeto ia
+# parar no historico do outro, e os tempos por fase viravam a soma de dois
+# applies. Como e justamente esta medicao que vai decidir o que otimizar, um
+# numero misturado e pior do que numero nenhum.
+_ULTIMO_MOTOR: dict[str, dict[str, str]] = {}
+# Segundos por FASE. Os cronometros ja existiam — mas so no stdout do worker,
+# que ninguem guarda. O historico registrava o total e mais nada, entao
 # "demorou 9 minutos" nao dizia se o custo estava no desenho, no encode ou na
-# validacao. Sem isto nao da para decidir o que otimizar; com isto e uma
-# consulta. Zerado no comeco de cada apply.
-_FASES: dict[str, float] = {}
+# validacao.
+_FASES: dict[str, dict[str, float]] = {}
+_METRICAS_LOCK = threading.Lock()
 
 
-def _fase(nome: str, t0: float) -> float:
+def _chave(edit_dir: Path) -> str:
+    try:
+        return str(Path(edit_dir).resolve()).lower()
+    except OSError:
+        return str(edit_dir).lower()
+
+
+def _motor(edit_dir: Path, engine: str, motivo: str | None = None) -> None:
+    with _METRICAS_LOCK:
+        d = {"engine": engine}
+        if motivo:
+            d["fallbackReason"] = motivo[:160]
+        _ULTIMO_MOTOR[_chave(edit_dir)] = d
+
+
+def _fase(edit_dir: Path, nome: str, t0: float) -> float:
     """Marca a fase e devolve o que ela levou, para o log continuar igual."""
     dt = time.time() - t0
-    _FASES[nome] = round(dt, 3)
+    with _METRICAS_LOCK:
+        _FASES.setdefault(_chave(edit_dir), {})[nome] = round(dt, 3)
     return dt
+
+
+def _colher(edit_dir: Path) -> dict[str, object]:
+    """Tira as metricas deste projeto do mapa e devolve o que gravar."""
+    k = _chave(edit_dir)
+    with _METRICAS_LOCK:
+        fases = _FASES.pop(k, {})
+        motor = _ULTIMO_MOTOR.pop(k, {})
+    saida: dict[str, object] = {k2: v for k2, v in motor.items() if v}
+    if fases:
+        saida["phases"] = fases
+    return saida
 
 
 def _print_log(line: str) -> None:
@@ -555,19 +591,14 @@ def _render_visual_real(
                     if bad:
                         raise RuntimeError(bad)
                     overlay_ok = True
-                    _ULTIMO_MOTOR.clear()
-                    _ULTIMO_MOTOR["engine"] = "overlay"
+                    _motor(edit, "overlay")
                 except Exception as e:
                     print(f"QUICK_APPLY_OVERLAY_FALLBACK {e}", flush=True)
                     overlay_ok = False
-                    _ULTIMO_MOTOR.clear()
-                    _ULTIMO_MOTOR["engine"] = "remotion"
-                    _ULTIMO_MOTOR["fallbackReason"] = str(e)[:160]
+                    _motor(edit, "remotion", str(e))
             else:
-                _ULTIMO_MOTOR.clear()
-                _ULTIMO_MOTOR["engine"] = "remotion"
-                _ULTIMO_MOTOR["fallbackReason"] = (
-                    f"classificado FULL: {cls.get('fullReasons')}")
+                _motor(edit, "remotion",
+                       f"classificado FULL: {cls.get('fullReasons')}")
 
         if not overlay_ok:
             from app.timeline import timeline_from_edit_data
@@ -711,7 +742,7 @@ def record_apply_metric(edit_dir: Path, rec: dict[str, Any]) -> None:
         "videoDuration": round(float(rec.get("videoDuration") or 0), 2),
         "applyDuration": round(float(rec.get("applyDuration") or 0), 1),
         "success": bool(rec.get("success")),
-        **{k: v for k, v in _ULTIMO_MOTOR.items() if v},
+        **_colher(edit_dir),
     }
     if rec.get("error"):
         row["error"] = str(rec["error"])[:160]
@@ -809,7 +840,8 @@ def execute_apply_plan(
     prepared_caps: list | None = None
     new_map: dict[str, Any] | None = None
     t_all = time.time()
-    _FASES.clear()
+    with _METRICAS_LOCK:
+        _FASES.pop(_chave(edit), None)
 
     try:
         if plan.get("rebuildCut") or plan.get("remapCaptions"):
@@ -824,7 +856,7 @@ def execute_apply_plan(
             log("MANUAL_EDL_REBUILD")
             t0 = time.time()
             hooks.rebuild_cut(edit, cut_tmp)
-            log(f"QUICK_APPLY_REBUILD_SEC {_fase('cut', t0):.3f}")
+            log(f"QUICK_APPLY_REBUILD_SEC {_fase(edit, 'cut', t0):.3f}")
             work_cut = cut_tmp
             predicted = int((new_map or {}).get("outputFrames") or 0)
             actual = read_mp4_video_frames(cut_tmp)
@@ -854,13 +886,13 @@ def execute_apply_plan(
                 caps_new = words if isinstance(words, list) else []
             _write_json(caps_tmp, caps_new)
             log("CAPTIONS_REMAP_APPLIED")
-            log(f"QUICK_APPLY_REMAP_SEC {_fase('remap', t0):.3f}")
+            log(f"QUICK_APPLY_REMAP_SEC {_fase(edit, 'remap', t0):.3f}")
 
         hooks.progress("visual", "Aplicando edição...")
         log("QUICK_APPLY_RENDER_VISUAL")
         t0 = time.time()
         hooks.render_visual(edit, cut=work_cut, captions=caps_new, dest=final_tmp)
-        log(f"QUICK_APPLY_RENDER_SEC {_fase('render', t0):.3f}")
+        log(f"QUICK_APPLY_RENDER_SEC {_fase(edit, 'render', t0):.3f}")
 
         hooks.progress("export", "Finalizando vídeo...")
         expected = None
@@ -871,7 +903,7 @@ def execute_apply_plan(
         if not ok:
             raise ApplyError(str((info or {}).get("error") or "validação falhou"))
         log("QUICK_APPLY_VALIDATE_OK")
-        log(f"QUICK_APPLY_VALIDATE_SEC {_fase('validate', t0):.3f}")
+        log(f"QUICK_APPLY_VALIDATE_SEC {_fase(edit, 'validate', t0):.3f}")
 
         t0 = time.time()
         if caps_new is not None:
@@ -912,7 +944,7 @@ def execute_apply_plan(
             error=None,
             at=time.strftime("%Y-%m-%dT%H:%M:%S"),
         )
-        log(f"QUICK_APPLY_PROMOTE_SEC {_fase('promote', t0):.3f}")
+        log(f"QUICK_APPLY_PROMOTE_SEC {_fase(edit, 'promote', t0):.3f}")
         log("QUICK_APPLY_SUCCESS")
         log(f"QUICK_APPLY_TOTAL_SEC {time.time() - t_all:.3f}")
         dur = float((info or {}).get("durationSec") or 0)
@@ -923,7 +955,6 @@ def execute_apply_plan(
             "videoDuration": dur,
             "applyDuration": time.time() - t_all,
             "success": True,
-            "phases": dict(_FASES),
         })
         return {
             "ok": True,
@@ -957,7 +988,6 @@ def execute_apply_plan(
                 "applyDuration": time.time() - t_all,
                 "success": False,
                 "error": str(e)[:160],
-                "phases": dict(_FASES),
             })
         except Exception:
             pass
