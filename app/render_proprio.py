@@ -614,8 +614,14 @@ class Renderizador:
                     self.eventos_sfx.append((
                         "caption-scratch.mp3", t0 + 2 / self.fps, self.scratch_vol))
         self.camadas.sort(key=lambda l: l.inicio_f)
-        if (self.ed.get("elements") or {}).get("listCounter"):
-            self.camadas.extend(self._montar_contador())
+        # Sem gate, como o ListCounter.tsx: ele so olha `listMarkers`. O gate
+        # que estava aqui lia `edit_data["elements"]["listCounter"]`, e
+        # edit-data NAO tem a chave `elements` — conferido nos 114 projetos do
+        # usuario, zero tem. Ela mora no PRESET, e o run_fast usa o preset para
+        # decidir se GRAVA `listMarkers`. Ou seja: o selo nunca desenhava neste
+        # motor, e desenhava no Remotion. `_montar_contador` ja devolve [] sem
+        # marcadores.
+        self.camadas.extend(self._montar_contador())
         self.camadas.extend(self._montar_inserts())
         ec = self.ed.get("endCard") or {}
         if ec.get("enabled"):
@@ -1968,6 +1974,25 @@ class Renderizador:
             camadas.append(leg)
         return camadas
 
+    @staticmethod
+    def _ordinal(f, n: int) -> str:
+        """`1º` como no template — mas so se a fonte tiver o glifo.
+
+        As oito fontes do catalogo tem U+00BA; a fonte PROPRIA do usuario
+        (fontFamily "arquivo") pode nao ter, e ai o PIL desenha o .notdef —
+        um quadradinho no video entregue. Nesse caso vale mais o numero seco.
+        """
+        import numpy as np
+
+        try:
+            m = np.asarray(f.getmask("\u00ba", mode="L"))
+            falta = np.asarray(f.getmask("\uffff", mode="L"))
+            ok = bool(m.size and m.any()) and not (
+                m.shape == falta.shape and bool((m == falta).all()))
+        except Exception:  # noqa: BLE001
+            ok = False
+        return f"{n}\u00ba" if ok else str(n)
+
     # ----- contador de lista (ListCounter.tsx) ------------------------------
     def _montar_contador(self):
         """Selo com o numero, canto superior direito, girado 4 graus, com pop.
@@ -1989,7 +2014,7 @@ class Renderizador:
             leg = Camada(ini, fim)
             leg.dur_f = fim - ini + 1
             leg.saida_f = 1e9
-            texto = str(mk["n"])
+            texto = self._ordinal(f, int(mk["n"]))
             asc, desc = f.getmetrics()
             for est in range(9):
                 t = min(1.0, est / 8)

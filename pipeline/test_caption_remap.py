@@ -490,3 +490,49 @@ if __name__ == "__main__":
     with __import__("tempfile").TemporaryDirectory() as d:
         test_prepare_fail_blocks_rebuild(Path(d))
     print("ok")
+
+
+def test_tail_gravado_zero_nao_vira_o_padrao():
+    """Zero é um tail GRAVADO, não "vazio".
+
+    `plan_jcut` devolve 0 sempre que o take termina em fala (o silêncio final
+    não cobre nem um quadro). Medido nos projetos do usuário em 21/08/2026:
+    **269 das 1047 entradas gravadas são 0 (26%)**, e **55 dos 111 projetos**
+    têm um 0 num take que NÃO é o último.
+
+    Com o `or`, esse 0 virava 2 e o take perdia 66,7 ms de áudio. Como
+    `a_off += a_dur - lead` acumula, todos os spans seguintes ficavam cedo
+    demais no mapa novo, e as legendas — carimbadas por `outputStart` —
+    apareciam antes da palavra ser dita. A função irmã `_lead_frames_of` já
+    fazia `is not None`."""
+    from app.timeline_map import infer_tail_frames
+
+    rs = [{"source": "A", "start": 0, "end": 1},
+          {"source": "A", "start": 2, "end": 3},
+          {"source": "A", "start": 4, "end": 5}]
+    jt = [{"source": "A", "tail_trim_frames": 0},
+          {"source": "A", "tail_trim_frames": 2},
+          {"source": "A", "tail_trim_frames": 0}]
+    assert infer_tail_frames(rs, prior_jcut=jt) == [0, 2, 0]
+    # sem nada gravado, o padrão continua valendo (último take sempre 0)
+    assert infer_tail_frames(rs, prior_jcut=None) == [2, 2, 0]
+
+
+def test_o_zero_gravado_nao_desloca_os_spans_seguintes():
+    """O sintoma que o usuário veria: legenda adiantada depois da emenda."""
+    from app.timeline_map import build_timeline_map
+
+    edl = {"fps": 30, "jcut": True,
+           "ranges": [{"source": "A", "start": 0.0, "end": 2.0},
+                      {"source": "A", "start": 5.0, "end": 7.0},
+                      {"source": "A", "start": 9.0, "end": 11.0}]}
+    jt = [{"source": "A", "tail_trim_frames": 0},
+          {"source": "A", "tail_trim_frames": 0},
+          {"source": "A", "tail_trim_frames": 0}]
+    com = build_timeline_map(edl, fps=30, prior_jcut=jt)
+    sem = build_timeline_map(edl, fps=30, prior_jcut=None)
+    inicio_com = [s["outputStart"] for s in com["spans"]]
+    inicio_sem = [s["outputStart"] for s in sem["spans"]]
+    # o terceiro span é onde os dois cortes de 2 quadros teriam somado
+    assert inicio_com[2] > inicio_sem[2], (inicio_com, inicio_sem)
+    assert abs((inicio_com[2] - inicio_sem[2]) - 4 / 30) < 1e-6

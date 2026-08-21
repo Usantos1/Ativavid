@@ -303,7 +303,19 @@ def infer_tail_frames(
             if str(jt.get("source") or "") != src:
                 continue
             used.add(j)
-            tails[i] = int(jt.get("tail_trim_frames") or default_tail)
+            # `is not None`, nao OR: zero e um tail GRAVADO, nao "vazio".
+            # `plan_jcut` devolve 0 sempre que o take termina em fala (o
+            # silencio final nao cobre nem um quadro). Medido nos projetos do
+            # usuario: 269 das 1047 entradas gravadas sao 0 (26%), e 55 dos
+            # 111 projetos tem um 0 num take que NAO e o ultimo.
+            #
+            # Com o OR, esse 0 virava 2 e o take perdia 66,7ms de audio. Como
+            # `a_off += a_dur - lead` acumula, TODOS os spans seguintes ficavam
+            # cedo demais no mapa novo, e as legendas — carimbadas por
+            # `outputStart` — apareciam antes da palavra. A funcao irma
+            # `_lead_frames_of`, logo abaixo, ja fazia `is not None`.
+            v = jt.get("tail_trim_frames")
+            tails[i] = max(0, int(v)) if v is not None else int(default_tail)
             break
     return tails
 

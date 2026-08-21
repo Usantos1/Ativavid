@@ -711,6 +711,16 @@ def _clear_dirty(edit_dir: Path) -> dict[str, Any]:
     data["dirty"] = empty_dirty()
     data["pending"] = {k: 0 for k in DIRTY_KEYS}
     data["finalStale"] = False
+    # O snapshot de "Antes das correcoes rapidas" vale para o LOTE que acabou
+    # de ser aplicado — daqui em diante ele e passado.
+    #
+    # `prepare_correction` so tira snapshot novo quando `revertVersionId` esta
+    # vazio. Mantendo o id antigo, a correcao SEGUINTE reaproveitava o
+    # snapshot de antes da anterior, e "Descartar" desfazia junto o trabalho
+    # ja aplicado — que o usuario ja tinha visto no video. O laco que dispara
+    # isso e o mais comum do editor: corrige, aplica, corrige de novo,
+    # desiste.
+    data["revertVersionId"] = None
     _stamp_captions_clock(edit_dir, data)
     data["appliedAt"] = time.strftime("%Y-%m-%dT%H:%M:%S")
     return save(edit_dir, data)

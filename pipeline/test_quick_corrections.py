@@ -649,3 +649,37 @@ def test_reset_no_impacto_tira_o_padding_bottom(tmp_path):
     assert json.loads(p.read_text(encoding="utf-8"))["captions"]["paddingBottom"] == 720
     limpar_caption_pos(edit)
     assert "paddingBottom" not in json.loads(p.read_text(encoding="utf-8"))["captions"]
+
+
+def test_aplicar_encerra_o_ponto_de_descarte(tmp_path: Path):
+    """"Descartar" tem de voltar para antes das correções PENDENTES — não para
+    antes das que já foram aplicadas.
+
+    `prepare_correction` só tira snapshot novo quando `revertVersionId` está
+    vazio. Como `_clear_dirty` mantinha o id antigo, a correção seguinte
+    reaproveitava o snapshot de antes da anterior, e "Descartar" desfazia
+    junto o trabalho já aplicado — que o usuário já tinha visto no vídeo.
+
+    O laço que dispara isso é o mais comum do editor: corrige, aplica,
+    corrige de novo, desiste."""
+    from app.apply_execute import _clear_dirty
+    from app.quick_corrections import load, mark_dirty, prepare_correction, save
+
+    edit = tmp_path / "edit"
+    edit.mkdir()
+
+    # 1ª correção: nasce o ponto de descarte. O sentinela NÃO pode ser "v1" —
+    # é exatamente o formato que `project_versions.snapshot` gera, e o teste
+    # passaria por coincidência.
+    ANTIGO = "SNAP-DO-LOTE-JA-APLICADO"
+    save(edit, {**load(edit), "revertVersionId": ANTIGO})
+    mark_dirty(edit, "captions")
+    assert load(edit)["revertVersionId"] == ANTIGO
+
+    # aplicou: o ponto de descarte daquele lote ficou para trás
+    _clear_dirty(edit)
+    assert load(edit)["revertVersionId"] is None, "o id do lote aplicado ficou"
+
+    # 2ª correção: `prepare_correction` volta a poder tirar snapshot novo
+    depois = prepare_correction(edit)
+    assert depois["revertVersionId"] != ANTIGO

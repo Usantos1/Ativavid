@@ -226,9 +226,20 @@ def _incremental_ranges(
         ranges.append((start_f, frames))
     if duracao_mudou:
         # O cartao final e posicionado a partir do FIM: se a duracao mudou,
-        # ele se move. O trecho novo sempre vai ate o fim, o que ja cobre —
-        # mas sem nenhum range nao ha o que emendar.
-        if not ranges:
+        # ele se move, e os quadros do fim TEM de ser redesenhados.
+        #
+        # O comentario antigo aqui dizia "o trecho novo sempre vai ate o fim,
+        # o que ja cobre" — e isso nao era conferido em lugar nenhum. Hoje o
+        # unico range que nao alcanca o fim e o da headline (0..endSec), e nao
+        # consegui construir pelo app um caso de duracao-mudou-sem-cue-mudar
+        # (mexer no corte muda os dois juntos). Mas invariante afirmada em
+        # comentario e invariante que ninguem cumpre: se nenhum range chega ao
+        # fim, o cache emendaria a cauda VELHA, com o cartao final no lugar
+        # errado. Custa um render completo no caso raro; entrega errado custa
+        # mais.
+        if not any(fim >= frames for _, fim in ranges):
+            print("OVERLAY_INCREMENTAL_RECUSA duracao mudou sem range ate o fim",
+                  flush=True)
             return None
         audio_do_cache = False
 
@@ -248,10 +259,11 @@ def _incremental_ranges(
     return _Plano(merged, audio_do_cache)
 
 
-def _cache_dir_for(edit_dir: Path) -> Path:
-    """Slot por PROJETO. `edit_dir.name` é sempre "edit" — usar só isso fazia
-    todos os projetos colidirem no mesmo slot (um sobrescrevia o cache do
-    outro e nenhum reusava). O hash do caminho absoluto separa de verdade.
+def etiqueta_do_projeto(edit_dir: Path) -> str:
+    """Nome de pasta unico por PROJETO.
+
+    `edit_dir.name` é sempre "edit": usar só isso faz todos os projetos
+    colidirem numa pasta só. O hash do caminho absoluto separa de verdade.
     """
     import hashlib
 
@@ -259,7 +271,12 @@ def _cache_dir_for(edit_dir: Path) -> Path:
     tag = hashlib.sha1(str(p).lower().encode("utf-8")).hexdigest()[:12]
     parent = p.parent.name or "proj"
     safe = "".join(c for c in parent if c.isalnum() or c in "-_")[:40]
-    return _OV_CACHE_ROOT / f"{safe}_{tag}"
+    return f"{safe}_{tag}"
+
+
+def _cache_dir_for(edit_dir: Path) -> Path:
+    """Slot de cache por projeto."""
+    return _OV_CACHE_ROOT / etiqueta_do_projeto(edit_dir)
 
 
 def load_overlay_cache(edit_dir: Path) -> tuple[Path, dict[str, Any]] | None:
@@ -727,7 +744,23 @@ def try_overlay_final(
         flush=True,
     )
 
-    work = Path(os.environ.get("TEMP", r"E:\Temp")) / "ativavid_overlay_work" / edit_dir.name
+    # POR PROJETO, nao `edit_dir.name` — que e sempre "edit". Com o nome fixo,
+    # TODO projeto usava `%TEMP%/ativavid_overlay_work/edit` (conferido no
+    # disco: existia uma pasta so). Os arquivos dentro tambem tem nome fixo
+    # (`overlay.mov`, `_incr_*`), e `prepare_overlay_remotion` faz `rmtree` na
+    # pasta antes de copiar o `public/` DO SEU projeto para la.
+    #
+    # O lock exclusivo (`try_acquire_overlay_slot`) serializa render x render,
+    # mas o quick apply chama `try_overlay_final` SEM pegar o slot. Entao um
+    # render na fila e uma correcao no editor, ao mesmo tempo, se atropelavam:
+    # a correcao apagava o scaffold do render em curso, ou um projeto
+    # renderizava o edit-data do outro. O usuario roda dois jobs em paralelo e
+    # corrige no editor enquanto a fila anda — o encontro acontece.
+    #
+    # Serializar o apply atras do render resolveria a colisao, mas faria a
+    # correcao esperar o render inteiro. Separar as pastas resolve sem isso.
+    work = (Path(os.environ.get("TEMP", r"E:\Temp")) / "ativavid_overlay_work"
+            / etiqueta_do_projeto(edit_dir))
     width = int(edit_data.get("width") or 1080)
     height = int(edit_data.get("height") or 1920)
     required = estimate_overlay_temp_bytes(width, height, frames)

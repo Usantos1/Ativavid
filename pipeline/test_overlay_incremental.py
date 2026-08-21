@@ -248,3 +248,51 @@ def test_medida_de_loudness_nao_abre_o_video():
     corpo = fonte[i:fonte.index("\ndef ", i + 10)]
     assert '"-vn"' in corpo
     assert corpo.index('"-vn"') < corpo.index("ebur128=peak")
+
+
+def test_duracao_mudou_com_range_so_no_comeco_recusa_o_incremental():
+    """Se a duração mudou, o cartão final se move — e ele é desenhado a partir
+    do FIM. Emendar uma cauda vinda do cache colocaria o cartão no lugar
+    errado.
+
+    O comentário no código afirmava que "o trecho novo sempre vai até o fim",
+    sem conferir. O único range que não alcança o fim é o da headline
+    (0..endSec); não consegui construir esse caso pelo app (mexer no corte
+    muda a duração E as cues juntas), mas invariante afirmada e não conferida
+    é o tipo de coisa que fura quando alguém mexe ao lado."""
+    import json
+
+    from app.overlay_path import _incremental_ranges
+
+    base = {
+        "_template": "t", "_engine": "proprio",
+        "captions.json": [{"text": "oi", "startMs": 0, "endMs": 500}],
+        "caption-cues.json": [{"i": 0, "startMs": 0, "endMs": 500}],
+        "edit-data.json": {"durationSec": 10.0, "hook": {"enabled": True, "endSec": 3.0}},
+    }
+    novo = json.loads(json.dumps(base))
+    novo["edit-data.json"]["durationSec"] = 9.0          # duração mudou
+    novo["edit-data.json"]["hook"]["endSec"] = 3.5       # e só a headline mudou
+    assert _incremental_ranges(base, novo, 30.0, 270) is None
+
+
+def test_duracao_mudou_com_range_ate_o_fim_segue_valendo():
+    """O outro lado da guarda: quando algum range ALCANÇA o fim, o
+    incremental continua valendo. Aqui é uma troca de palavra na legenda, que
+    propaga do ponto da mudança até o fim."""
+    import json
+
+    from app.overlay_path import _incremental_ranges
+
+    base = {
+        "_template": "t", "_engine": "proprio",
+        "captions.json": [{"text": "oi", "startMs": 0, "endMs": 500}],
+        "caption-cues.json": [{"i": 0, "startMs": 0, "endMs": 500}],
+        "edit-data.json": {"durationSec": 10.0, "hook": {"enabled": True, "endSec": 3.0}},
+    }
+    novo = json.loads(json.dumps(base))
+    novo["edit-data.json"]["durationSec"] = 9.0
+    novo["captions.json"] = [{"text": "olá", "startMs": 0, "endMs": 500}]
+    plano = _incremental_ranges(base, novo, 30.0, 270)
+    assert plano is not None, "troca de palavra tem de continuar incremental"
+    assert any(fim >= 270 for _, fim in plano.ranges), plano.ranges

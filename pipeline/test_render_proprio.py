@@ -638,3 +638,47 @@ def test_flash_respeita_o_desligar_efeitos(tmp_path):
              transitions=[{"type": "flash", "at": 1.0}])
     r = Renderizador(_public(tmp_path, []), ed, frames=60, fps=30.0)
     assert not r.eventos_sfx
+
+
+def test_contador_desenha_sem_gate_de_elements(tmp_path):
+    """O `ListCounter.tsx` só olha `listMarkers` — não tem gate nenhum. Aqui
+    havia `edit_data["elements"]["listCounter"]`, e edit-data NÃO tem a chave
+    `elements`: conferido nos 114 projetos do usuário, zero têm. Ela mora no
+    PRESET, que o run_fast usa para decidir se GRAVA `listMarkers`.
+
+    Ou seja: com o contador ligado no estilo, o selo desenhava no Remotion e
+    sumia no motor próprio."""
+    ed = _ed(hook={"enabled": False}, endCard={"enabled": False},
+             listMarkers=[{"n": 1, "atSec": 0.5}, {"n": 2, "atSec": 2.0}])
+    assert "elements" not in ed
+    r = Renderizador(_public(tmp_path, []), ed, frames=120, fps=30.0)
+    selos = [c for c in r.camadas if c.inicio_f in (15, 60)]
+    assert len(selos) == 2, "o selo tem de desenhar só com listMarkers"
+
+
+def test_sem_marcadores_o_contador_nao_desenha_nada(tmp_path):
+    ed = _ed(hook={"enabled": False}, endCard={"enabled": False})
+    r = Renderizador(_public(tmp_path, []), ed, frames=120, fps=30.0)
+    assert r.camadas == [] or all(c.inicio_f != 15 for c in r.camadas)
+
+
+def test_o_selo_traz_o_indicador_ordinal(tmp_path):
+    """O template escreve `{cur.n}º`. O motor escrevia só o número."""
+    from PIL import ImageFont
+
+    from app.render_proprio import FONTES
+
+    f = ImageFont.truetype(str(FONTES / "Poppins-Black.ttf"), 64)
+    assert Renderizador._ordinal(f, 1) == "1º"
+    assert Renderizador._ordinal(f, 12) == "12º"
+
+
+def test_fonte_sem_o_glifo_cai_para_o_numero_seco(tmp_path):
+    """As oito fontes do catálogo têm U+00BA, mas a fonte PRÓPRIA do usuário
+    pode não ter — e aí o PIL desenha o .notdef, um quadradinho no vídeo
+    entregue."""
+    class SemGlifo:
+        def getmask(self, ch, mode="L"):
+            return np.zeros((4, 4), dtype=np.uint8)
+
+    assert Renderizador._ordinal(SemGlifo(), 3) == "3"

@@ -652,6 +652,18 @@ def _fps_cedo(source: Path) -> str:
     primeiros quadros em sequencia e os exibe espacados, o que da meia
     velocidade no comeco de cada segmento (medido: 0,1,2,3,5,7,9... contra
     0,2,4,6,8...).
+
+    Ganho medido (21/08/2026, maquina livre, 4 voltas intercaladas com
+    aquecimento descartado, fonte SDR 4K60 real, 40s):
+
+      prep (HDR, com tonemap)      1,7x a 1,99x  fim a fim da fase CUT
+      extract (SDR, com zoom)      1,18x         amplitude 1,04x
+      extract (SDR, sem zoom)      1,16x         amplitude 1,04x
+
+    A diferenca entre os dois casos e o que se economiza: no prep some o
+    tonemap, que e caro; no extract sobram escala, graduacao e zoom, e o
+    DECODE dos 60 quadros continua acontecendo nos dois lados — e o decode e
+    que domina o que resta.
     """
     # Interruptor, no mesmo estilo do ATIVAVID_PREP_SOURCE=0: serve para o
     # A/B da medicao e como escape se a maquina de alguem reagir mal. O nome
