@@ -1,5 +1,39 @@
 # Changelog
 
+## 2.33
+
+Uma rodada de defeitos que ninguém tinha como perceber sozinho: eles não
+davam erro, só entregavam o vídeo um pouco diferente do que você aprovou.
+
+- **O corte marcado voltou a fazer barulho.** O clique de corte estava mudo em
+  todo vídeo desde que o motor novo virou o caminho principal — o clarão
+  aparecia, o som não vinha. Seus últimos vídeos tinham de 4 a 14 desses
+- **O contorno da headline estava pintado em dobro.** O preto ao redor do texto
+  saía com o dobro da grossura do que o preview mostrava
+- **Arrastar a headline até o topo funciona.** Ela voltava sozinha para o meio
+  da tela quando você soltava bem na borda. Vale também para a legenda colada
+  na base
+- **A headline no editor agora é a headline de verdade.** Ela aparece com a
+  caixa alta, o tamanho e a quebra de linha do estilo escolhido, em vez de um
+  texto genérico. Como você posiciona olhando para ela, a posição escolhida
+  passa a ser a que sai no vídeo
+- **A proteção da sua fala voltou a valer no vídeo inteiro.** Depois dos 16
+  minutos e 40 segundos ela simplesmente parava — a partir dali a IA podia
+  cortar frase no meio sem ninguém segurar. Só afeta fonte longa
+- **"Enviar à fila" parou de mentir.** Quando o envio era recusado (licença,
+  pasta ou projeto), ele dizia "enviado" mesmo assim e você ia esperar na Fila
+  um vídeo que nunca tinha começado
+- **A fonte da marca passou a vestir o que devia.** Ela estava trocando a
+  tipografia de estilos que têm família própria (e por isso ficavam
+  descaracterizados) e, ao mesmo tempo, sendo ignorada nos estilos que deviam
+  usá-la
+- **Vídeo SDR a 50/60 quadros parou de trabalhar à toa.** Ele ajustava cor e
+  tamanho dos 60 quadros por segundo para jogar metade fora no fim — o mesmo
+  desperdício que a versão 2.32 tirou do vídeo HDR. De quebra, o movimento fica
+  mais regular. (Aqui a máquina estava ocupada na hora de medir, então não
+  prometo um número de tempo: o que está conferido é que a metade descartada
+  deixou de ser processada, e que o vídeo sai com os mesmos quadros)
+
 ## 2.32
 
 Corte mais rápido em vídeo de celular 4K a 60 quadros.
