@@ -726,6 +726,9 @@ class Worker:
         self._proc: subprocess.Popen | None = None  # compat cancel legado
         self._proc_lock = threading.Lock()
         self._cancel_ids: set[str] = set()
+        # Pedidos de reedicao que chegaram enquanto o job ainda estava em voo.
+        # A thread que esta morrendo reenfileira ao soltar o `_busy`.
+        self._refazer_depois: set[str] = set()
         self._queued: set[str] = set()
         self.recovered_ids: list[str] = []
         self.parallel_jobs = 1
@@ -777,10 +780,34 @@ class Worker:
             self._threads.append(t)
 
     def enqueue(self, job_id: str) -> None:
-        self._cancel_ids.discard(job_id)
+        """Poe na fila. Se o job ainda esta em voo, agenda para quando sair.
+
+        Antes isto fazia duas coisas fatais quando vinha logo depois de um
+        `cancel()` — que e exatamente o que "Alterar estilo" num video em
+        andamento faz:
+
+        (a) `self._cancel_ids.discard(job_id)` apagava a marca de
+            cancelamento que a thread MORIBUNDA ainda ia consultar. Sem a
+            marca, ela tratava a saida vazia do processo morto como falha e
+            gravava o job como ERRO.
+        (b) `if job_id in self._busy: return` desistia em silencio, porque a
+            thread antiga ainda nao tinha soltado o `_busy`. A reedicao nunca
+            era enfileirada.
+
+        Resultado para o usuario: "Estilo salvo — reeditando" seguido de um
+        card com badge ERRO, e nada reeditado.
+        """
         # Evita 2+ run_fast no mesmo projeto (trava remotion no Windows).
         with self._proc_lock:
-            if job_id in self._busy or job_id in self._queued:
+            em_voo = job_id in self._busy
+            if not em_voo:
+                # Sem corrida: a marca so podia ser de um cancelamento na
+                # fila, e este pedido a substitui.
+                self._cancel_ids.discard(job_id)
+            if job_id in self._queued:
+                return
+            if em_voo:
+                self._refazer_depois.add(job_id)
                 return
             self._queued.add(job_id)
         self.q.put(job_id)
@@ -882,7 +909,16 @@ class Worker:
                     self._procs.pop(job_id, None)
                     self.busy_id = next(iter(self._busy), None)
                     self._proc = self._procs.get(self.busy_id) if self.busy_id else None
+                    refazer = job_id in self._refazer_depois
+                    self._refazer_depois.discard(job_id)
                 self.q.task_done()
+                if refazer:
+                    # Chegou pedido de reedicao enquanto este job rodava.
+                    # Agora que ele saiu do `_busy`, da para atender.
+                    self.store.update(job_id, status="queued",
+                                      message="Na fila — aplicando ajustes",
+                                      reason=None, detail=None)
+                    self.enqueue(job_id)
 
     def _run_one(self, job_id: str) -> None:
         job = self.store.get(job_id)
