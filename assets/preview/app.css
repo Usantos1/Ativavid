@@ -3303,3 +3303,29 @@ body.styles-wide .setup-actions .btn.primary {
   outline-offset: 6px;
   opacity: 0.92;
 }
+
+/* --- Realce de "cheguei aqui" ---------------------------------------------
+   Quando a tela de Marca manda abrir uma seção do editor (ver `irParaSecao`
+   no app.js), a rolagem sozinha não diz ONDE parou — num editor longo o
+   usuário chega e procura. Este pisca é o "é este aqui".
+   Usa --brand, que é o mesmo vermelho do resto do produto, e desenha só com
+   `box-shadow`, que não empurra layout. */
+.ir-piscou {
+  animation: ir-piscou 1.8s ease-out 1;
+  border-radius: 12px;
+}
+
+@keyframes ir-piscou {
+  0%   { box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 70%, transparent); }
+  70%  { box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 45%, transparent); }
+  100% { box-shadow: 0 0 0 3px transparent; }
+}
+
+/* Quem pediu menos movimento continua precisando saber onde parou: em vez do
+   pisca, uma borda estática que some junto com a classe. */
+@media (prefers-reduced-motion: reduce) {
+  .ir-piscou {
+    animation: none;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 55%, transparent);
+  }
+}

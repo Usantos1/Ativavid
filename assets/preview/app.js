@@ -6820,3 +6820,49 @@ rafLoop();
 if (document.fonts && document.fonts.ready) {
   document.fonts.ready.then(() => { if (S.style) renderSetup(); });
 }
+
+// --- "Identidade visual" do hub: parar na seção certa ---------------------
+//
+// Os quadros da tela de Marca prometiam "abrem já na seção certa" e não
+// cumpriam: eram `data-view="estilo"` sem destino nenhum, então os três caíam
+// no topo do editor. O hub agora manda o destino por `postMessage` (não pelo
+// `src`, que recarregaria o editor e perderia ajuste não salvo).
+const IR_ALVOS = {
+  accent: '#optAccent',
+  fontes: '#autoCapFont',
+  cartao: '#optElements',
+};
+
+function irParaSecao(alvo, tentativa = 0) {
+  const sel = IR_ALVOS[alvo];
+  if (!sel) return;
+  const el = document.querySelector(sel);
+  // O editor monta os controles depois de ler o estado; na primeira abertura
+  // a mensagem chega antes disso. Tenta de novo por até ~3s e então desiste.
+  if (!el || !el.offsetParent) {
+    if (tentativa < 12) setTimeout(() => irParaSecao(alvo, tentativa + 1), 250);
+    return;
+  }
+  // Os grupos vivem dentro de <details>; num fechado o alvo tem altura 0 e a
+  // rolagem para no lugar errado.
+  for (let d = el.closest('details'); d; d = d.parentElement && d.parentElement.closest('details')) {
+    d.open = true;
+  }
+  // O MAIS PRÓXIMO dos dois, não `.setup-group` primeiro: o seletor de fonte
+  // fica dentro do grupo "Tipo de conteúdo e formato", que ocupa vários
+  // milhares de pixels — realçá-lo não aponta nada, e centralizá-lo joga o
+  // campo para fora da tela. Foi o que aconteceu no primeiro teste.
+  const caixa = el.closest('.auto-field, .setup-group') || el;
+  // SEM `behavior: 'smooth'`: medido neste iframe, o suave nao rola nada —
+  // o instantaneo leva o `main` a 2142 e o suave o deixa em 0. O app roda em
+  // Edge WebView2, entao seria um botao que nao faz nada, calado. O realce
+  // abaixo e o que explica o salto.
+  caixa.scrollIntoView({ block: 'center' });
+  caixa.classList.add('ir-piscou');
+  setTimeout(() => caixa.classList.remove('ir-piscou'), 1800);
+}
+
+window.addEventListener('message', (e) => {
+  if (!e.data || e.data.type !== 'ativavid-ir-para') return;
+  irParaSecao(String(e.data.alvo || ''));
+});

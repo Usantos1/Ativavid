@@ -294,20 +294,23 @@
             <section class="pane-card pane-card--wide">
               <header class="pane-card-head">
                 <h4>Identidade visual</h4>
-                <p class="hint">Estes itens vivem no editor de estilo da marca — abrem já na seção certa.</p>
+                <p class="hint">Os três primeiros abrem já na seção certa do editor de estilo; o logo fica na Biblioteca.</p>
               </header>
+              <!-- `data-ident` diz ao editor ONDE parar. Sem isso os três caíam
+                   no topo do editor, embora o texto acima prometesse a seção
+                   certa. Ver `irParaNoEstilo` no studio.js. -->
               <div class="ident-grid" id="identGrid">
-                <button type="button" class="ident-tile" data-view="estilo">
+                <button type="button" class="ident-tile" data-view="estilo" data-ident="accent">
                   <span class="ident-swatch" id="identAccent" aria-hidden="true"></span>
                   <span class="ident-lab">Cor de destaque</span>
                   <span class="ident-val" id="identAccentVal">—</span>
                 </button>
-                <button type="button" class="ident-tile" data-view="estilo">
+                <button type="button" class="ident-tile" data-view="estilo" data-ident="fontes">
                   <span class="ident-ico" aria-hidden="true">Aa</span>
                   <span class="ident-lab">Fontes</span>
                   <span class="ident-val">Legenda e headline</span>
                 </button>
-                <button type="button" class="ident-tile" data-view="estilo">
+                <button type="button" class="ident-tile" data-view="estilo" data-ident="cartao">
                   <span class="ident-ico" aria-hidden="true">▣</span>
                   <span class="ident-lab">Cartão final</span>
                   <span class="ident-val" id="identEndCard">—</span>

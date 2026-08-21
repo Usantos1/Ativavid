@@ -310,6 +310,7 @@ function setView(name) {
         if (aviso) aviso.classList.add("hidden");
         const t = document.documentElement.getAttribute("data-theme") || "dark";
         applyThemeToIframes(t);
+        mandarAlvoAoEstilo();
       };
       fr.src = estiloFrameSrc();
       // O iframe não dispara erro quando o servidor recusa a conexão: ele
@@ -320,6 +321,9 @@ function setView(name) {
     } else {
       applyThemeToIframes(document.documentElement.getAttribute("data-theme") || "dark");
     }
+    // Se o editor ja estava carregado, o `onload` acima nao dispara de novo —
+    // por isso a entrega tambem acontece aqui.
+    mandarAlvoAoEstilo();
   }
   renderJobs();
   try {
@@ -329,6 +333,21 @@ function setView(name) {
     else url.searchParams.set("view", name);
     history.replaceState(null, "", url.pathname + (url.search || "") + url.hash);
   } catch { /* ignore */ }
+}
+
+// Seção do editor que os quadros de "Identidade visual" pediram. Fica guardada
+// porque o iframe só aceita a mensagem depois de carregar, e recarregar o
+// `src` para embutir o destino perderia ajuste ainda não salvo no editor.
+let alvoNoEstilo = "";
+
+function mandarAlvoAoEstilo() {
+  const fr = $("#estiloFrame");
+  if (!alvoNoEstilo || !fr || fr.dataset.ok !== "1" || !fr.contentWindow) return;
+  const alvo = alvoNoEstilo;
+  alvoNoEstilo = "";           // só uma vez: senão a próxima visita rola sozinha
+  try {
+    fr.contentWindow.postMessage({ type: "ativavid-ir-para", alvo }, "*");
+  } catch { /* iframe indisponível: o editor abre no topo, como antes */ }
 }
 
 function estiloFrameSrc() {
@@ -4260,6 +4279,19 @@ async function presetAction(action, body) {
   return res;
 }
 
+function wireIdentidade() {
+  const grid = $("#identGrid");
+  if (!grid || grid.dataset.wired) return;
+  grid.dataset.wired = "1";
+  // Só anota o destino. Quem troca de tela é o handler de `data-view` em
+  // `wireList`, que está no `document` e portanto roda DEPOIS deste — e o
+  // `setView("estilo")` dele entrega o destino ao editor.
+  grid.addEventListener("click", (e) => {
+    const tile = e.target.closest("[data-ident]");
+    if (tile) alvoNoEstilo = tile.dataset.ident;
+  });
+}
+
 function wirePresets() {
   const lista = $("#presetList");
   if (lista && !lista.dataset.wired) {
@@ -4507,6 +4539,7 @@ async function boot() {
   wireProjetos();
   wireGaveta();
   wirePresets();
+  wireIdentidade();
   wireBiblioteca();
   wireTheme();
   await wireTitlebar();
