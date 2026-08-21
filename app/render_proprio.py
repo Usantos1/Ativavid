@@ -672,6 +672,14 @@ class Renderizador:
                 "recorte_simple" if estilo == "recorte" else estilo))
             self.cues = []
         for cue in self.cues:
+            # Cue sem NENHUMA palavra nao desenha nada e derruba o montador:
+            # `_tempos_cue` faz `max()` sobre uma sequencia vazia e os presets
+            # SOLO indexam `lines[0][0]` direto. Quem escreve o arquivo ja tira
+            # a cue vazia (`_drop_cues_vazias`), mas um caption-cues.json de
+            # outra versao ou editado a mao nao pode derrubar o render inteiro
+            # — e o preco de pular e zero, porque nao havia o que desenhar.
+            if not any(ln for ln in (cue.get("lines") or [])):
+                continue
             preset = cue.get("preset") or "STACK_MIXED"
             if preset == "SOLO_OUTLINE":
                 leg = self._montar_recorte(cue)
@@ -1362,7 +1370,7 @@ class Renderizador:
                 for img, esp, k in imgs:          # centralizados na linha
                     h_i, w_i = img[1].shape
                     self._palavra_imagem(leg, img, x, y + (alt_l - h_i) / 2,
-                                         esp, k, 8, sobe)
+                                         esp, k, enter_hl, sobe)
                     x += w_i + gap_i
                 y += alt_l + 28
             # a caixa escura envolve o BLOCO. Aplicada por linha, a segunda

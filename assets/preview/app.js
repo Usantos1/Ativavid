@@ -961,6 +961,10 @@ let S = {
   // baixo — guardar o apagar no mesmo dicionario faria a correcao de texto de
   // uma legenda aparecer noutra. Aqui cada item se descreve sozinho.
   capApagadas: [],
+  // Assinatura das legendas COMO ESTAO NO ARQUIVO. Ver a nota em applyState:
+  // a comparacao tem de ser disco contra disco, nunca disco contra a lista
+  // local, que carrega as edicoes ainda nao salvas.
+  capsSigDisco: null,
   // Selecao multipla de legendas (indices em S.captions). Ctrl/Cmd+clique
   // marca uma, Shift+clique marca o intervalo, Delete apaga todas.
   capSel: [],
@@ -1384,7 +1388,16 @@ function restoreSnapshot(snap) {
   // Desfazer um apagar precisa devolver a legenda a lista, nao so tirar o
   // pedido: `S.captions` foi encurtado na hora para o usuario ver o efeito.
   if (snap.capApagadas) S.capApagadas = snap.capApagadas;
-  if (snap.captions) S.captions = snap.captions;
+  if (snap.captions) {
+    // Devolve SO o que o apagar tirou. Restaurar a lista inteira punha na tela
+    // o texto ANTIGO de uma correcao que ja esta gravada no servidor — a
+    // correcao de texto e persistida no clique, o apagar nao. Ai o Ctrl+Z
+    // mentia do outro lado: a tela voltava, o arquivo nao, e o `index` da
+    // proxima correcao passava a apontar para a palavra errada.
+    const chave = (c) => `${c.start}|${c.end}`;
+    const vivos = new Map(S.captions.map((c) => [chave(c), c]));
+    S.captions = snap.captions.map((c) => vivos.get(chave(c)) || c);
+  }
   S.capSel = [];
   S.capSelAncora = -1;
   if (snap.hookLines && S.editData) {
@@ -2113,7 +2126,14 @@ async function applyState(data) {
   // render's mtime, a duration re-probe) — dropping the fixes then would throw
   // away typing the user had not saved yet, and close the box mid-edit.
   // The actual comparison happens after S.captions is rebuilt, below.
-  S.captionsSigBefore = JSON.stringify((S.captions || []).map((c) => c.text));
+  //
+  // A comparacao e DISCO contra DISCO. Comparar com `S.captions` funcionava
+  // enquanto toda edicao de legenda ia para o servidor na hora — a lista local
+  // e a do arquivo andavam juntas. O APAGAR fica pendente ate salvar, entao a
+  // lista local passa a ser legitimamente menor que a do arquivo, e o poll
+  // seguinte lia isso como "mudou embaixo de mim" e jogava fora a exclusao que
+  // o usuario tinha acabado de fazer. Na pratica a selecao sumia sozinha.
+  S.captionsSigBefore = S.capsSigDisco;
 
   // style picks: the skill's copy wins, so applying a change (or reopening the
   // session) shows what is actually rendered — not a stale local selection
@@ -2194,6 +2214,7 @@ async function applyState(data) {
       try {
         const caps = await (await fetch(`${mediaHref(S.state.captions)}?v=${Date.now()}`)).json();
         S.captions = groupCaptions(caps);
+        S.capsSigDisco = JSON.stringify(S.captions.map((c) => c.text));
       } catch (e) { /* absent yet */ }
     }
     if (S.state.editData) {
@@ -2206,11 +2227,18 @@ async function applyState(data) {
 
   // see S.captionsSigBefore above: only discard pending caption fixes when the
   // caption lines themselves actually changed under us
-  if (JSON.stringify(S.captions.map((c) => c.text)) !== S.captionsSigBefore) {
+  const sigAgora = JSON.stringify(S.captions.map((c) => c.text));
+  if (S.captionsSigBefore != null && sigAgora !== S.captionsSigBefore) {
     S.captionFixes = {};
     S.capApagadas = [];
     S.capSel = [];
+    S.capSelAncora = -1;
     closeCaptionEditor();
+  } else {
+    // O arquivo nao mudou: reaplica as edicoes pendentes por cima da lista
+    // recem-lida, senao o proximo poll desfaz o apagar na tela.
+    const apagar = new Set((S.capApagadas || []).map((f) => f.from));
+    if (apagar.size) S.captions = S.captions.filter((c) => !apagar.has(c.text));
   }
 
   fitZoom();

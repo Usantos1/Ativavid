@@ -219,22 +219,32 @@ def test_apagar_a_cue_inteira_tira_a_cue_e_nao_derruba_o_render(tmp_path):
                 r.desenhar(leg, f - leg.inicio_f, buf, sujo, False)
 
 
-def test_o_motor_aguenta_uma_cue_vazia_vinda_de_fora(tmp_path):
-    """Cinto de seguranca: um caption-cues.json produzido por outra versao (ou
-    editado a mao) nao pode derrubar o render."""
+@pytest.mark.parametrize("preset", ["STACK_MIXED", "SOLO_BIG", "SOLO_OUTLINE"])
+def test_o_motor_aguenta_uma_cue_vazia_vinda_de_fora(tmp_path, preset):
+    """Cinto de segurança: um caption-cues.json produzido por outra versão (ou
+    editado à mão) não pode derrubar o render.
+
+    Os TRÊS presets, porque a primeira proteção que escrevi cobria só o
+    `_tempos_cue` — e os presets SOLO indexam `lines[0][0]` direto, então
+    continuavam levantando `IndexError`. A cue vazia é pulada antes de chegar
+    ao montador, e a cue boa ao lado dela tem de continuar desenhando.
+    """
     from app.render_proprio import Renderizador
 
-    edit = _projeto(tmp_path, [("moço", 0, 500)])
+    edit = _projeto(tmp_path / preset, [("moço", 0, 500)])
     pub = edit / "remotion" / "public"
     (pub / "caption-cues.json").write_text(json.dumps([
-        {"i": 0, "startMs": 0, "endMs": 500, "preset": "STACK_MIXED", "lines": []},
+        {"i": 0, "startMs": 0, "endMs": 500, "preset": preset, "lines": []},
+        {"i": 1, "startMs": 600, "endMs": 1200, "preset": preset,
+         "lines": [[{"text": "ok", "fromMs": 600, "toMs": 1200}]]},
     ]), encoding="utf-8")
     (pub / "edit-data.json").write_text(json.dumps({
         "durationSec": 2, "fps": 30, "width": 1080, "height": 1920,
         "captions": {"enabled": True, "style": "stacked"},
     }), encoding="utf-8")
-    Renderizador(pub, json.loads((pub / "edit-data.json").read_text(encoding="utf-8")),
-                 frames=60, fps=30.0)
+    r = Renderizador(pub, json.loads((pub / "edit-data.json").read_text(encoding="utf-8")),
+                     frames=60, fps=30.0)
+    assert len(r.camadas) == 1, "a cue boa ao lado da vazia deixou de desenhar"
 
 
 def test_apagar_desloca_as_correcoes_de_texto_de_baixo():
