@@ -344,6 +344,60 @@ class Camada:
         return 1.0 - p, -55.0 * p, 14.0 * p
 
 
+def _tabela_ease_out(n: int = 512) -> list[float]:
+    """`Easing.bezier(0.16, 1, 0.3, 1)` do template, amostrada.
+
+    O motor usava `1-(1-t)^3` (que e `Easing.out(Easing.cubic)`), uma curva
+    PARECIDA mas nao a mesma: a diferenca de opacidade chega a **0,264** no
+    primeiro terco da entrada — em t=0,2 o template ja esta em 0,75 e a
+    cubica em 0,49. Como a subida de 46px sai da mesma opacidade, a palavra
+    tambem deslizava mais devagar.
+
+    Isso valia para TODA palavra de TODA legenda, e a validacao por razao de
+    tinta que aprovou o motor nao pegaria: ela mede AREA sobre a cue inteira,
+    e a entrada e uma fracao dela.
+
+    A curva e parametrica (dado x, achar s com Bx(s)=x e devolver By(s));
+    resolver isso por chamada seria caro num laco por palavra por quadro,
+    entao vira tabela uma vez.
+    """
+    x1, y1, x2, y2 = 0.16, 1.0, 0.3, 1.0
+    amostras = []
+    passos = n * 8
+    for k in range(passos + 1):
+        sv = k / passos
+        u = 1.0 - sv
+        bx = 3 * u * u * sv * x1 + 3 * u * sv * sv * x2 + sv ** 3
+        by = 3 * u * u * sv * y1 + 3 * u * sv * sv * y2 + sv ** 3
+        amostras.append((bx, by))
+    tab, j = [], 0
+    for i in range(n + 1):
+        x = i / n
+        while j + 1 < len(amostras) and amostras[j + 1][0] < x:
+            j += 1
+        x0, v0 = amostras[j]
+        x2_, v2_ = amostras[min(j + 1, len(amostras) - 1)]
+        f = 0.0 if x2_ <= x0 else (x - x0) / (x2_ - x0)
+        tab.append(min(1.0, max(0.0, v0 + (v2_ - v0) * f)))
+    tab[0], tab[-1] = 0.0, 1.0
+    return tab
+
+
+_EASE_OUT = _tabela_ease_out()
+
+
+def _ease_out(t: float) -> float:
+    """A curva do template, por tabela + interpolacao linear."""
+    if t <= 0.0:
+        return 0.0
+    if t >= 1.0:
+        return 1.0
+    x = t * (len(_EASE_OUT) - 1)
+    i = int(x)
+    f = x - i
+    return _EASE_OUT[i] + (_EASE_OUT[i + 1] - _EASE_OUT[i]) * f
+
+
 def _opacidade(p: Palavra, fl: float) -> float:
     if p.janela is not None:
         ini, fim = p.janela
@@ -351,7 +405,7 @@ def _opacidade(p: Palavra, fl: float) -> float:
     if fl <= p.inicio_f:
         return 0.0
     t = min(1.0, (fl - p.inicio_f) / max(1, p.enter))
-    return 1 - (1 - t) ** 3
+    return _ease_out(t)
 
 
 class Renderizador:
@@ -670,6 +724,27 @@ class Renderizador:
         leg.saida_f = saida_f
         return leg, enter, dur
 
+    @staticmethod
+    def _enter_da_palavra(enter: int, saida_f: float, local: float) -> int:
+        """Encurta a entrada de quem comeca perto da SAIDA da cue.
+
+        `wordAnim` em StackedCaptions.tsx faz
+        `max(2, min(ENTER, floor(exitStart - localStart - 1)))`: a palavra que
+        entra tarde tem menos quadros para aparecer, senao ela e cortada no
+        meio do fade.
+
+        O motor passava o `enter` da CUE para toda palavra. A que entrava
+        tarde ficava com uma janela longa demais e a cue acabava antes de ela
+        assentar: mais clara e ainda deslocada para baixo (a subida de 46px
+        anda junto com a opacidade). Com `exit: abrupt` — que e o caso da
+        maioria — ela pisca e some sem nunca chegar ao lugar.
+
+        Medido nos 114 projetos do usuario: 6.292 de 23.166 palavras (27%)
+        deviam ter a entrada encurtada; em 5.580 delas a diferenca de
+        opacidade no ultimo quadro visivel passa de 0,15, chegando a 0,67.
+        """
+        return max(2, min(int(enter), math.floor(saida_f - local - 1)))
+
     def _palavra_texto(self, leg: Camada, f, texto: str, ls: float, x0: int,
                        topo_caixa: float, alt_caixa: float, y_base: int,
                        cor_fixa: str | None, inicio_f: float, enter: int,
@@ -730,11 +805,13 @@ class Renderizador:
             base = y + (alturas[li] - (asc + desc)) / 2
             especs = SHADOW_STRONG if ln["idx"] == 1 else SHADOW
             for w, wl in zip(ln["words"], largs):
+                local_w = (w["fromMs"] - cue["startMs"]) / 1000 * self.fps
                 self._palavra_texto(
                     leg, f, w["text"], LETTER_SPACING, int(round(x + pad)),
                     y, alturas[li], int(round(base)),
                     self.font_file[ln["idx"]][1],
-                    (w["fromMs"] - cue["startMs"]) / 1000 * self.fps, enter, especs)
+                    local_w,
+                    self._enter_da_palavra(enter, leg.saida_f, local_w), especs)
                 x += wl
             y += alturas[li]
         return leg
@@ -770,7 +847,7 @@ class Renderizador:
 
         for est in range(n + 1):
             t = min(1.0, est / n)
-            op = 1 - (1 - t) ** 3            # a mesma curva de `_opacidade`
+            op = _ease_out(t)                # a mesma curva de `_opacidade`
             esc = 0.88 + 0.12 * op
             tam_e = max(8, int(round(tam * esc)))
             f = self.fonte(0, tam_e, marca=None)
@@ -783,7 +860,8 @@ class Renderizador:
             antes = len(leg.palavras)
             self._palavra_texto(
                 leg, f, w["text"], ls, int(round(x_c + pad)), y_c, alt,
-                int(round(y_c + (alt - (asc + desc)) / 2)), None, ini_f, enter)
+                int(round(y_c + (alt - (asc + desc)) / 2)), None, ini_f,
+                self._enter_da_palavra(enter, leg.saida_f, ini_f))
             for pal in leg.palavras[antes:]:
                 # um quadro por estagio durante a entrada; o ultimo fica
                 pal.janela = ((ini_f + est, ini_f + est + 1) if est < n
@@ -821,7 +899,8 @@ class Renderizador:
         local = (w["fromMs"] - cue["startMs"]) / 1000 * self.fps
         self._palavra_texto(
             leg, f, w["text"], ls, int(round(x_c + pad)), y_c, alt_c,
-            int(round(y_c + (alt_c - (asc + desc)) / 2)), None, local, enter)
+            int(round(y_c + (alt_c - (asc + desc)) / 2)), None, local,
+            self._enter_da_palavra(enter, leg.saida_f, local))
 
         esq, topo, larg_f, alt_f = TRACO_CAIXA
         bx, by = x_c + esq * larg_c, y_c + topo * alt_c
@@ -2245,7 +2324,13 @@ class Renderizador:
     @staticmethod
     def _blend(tela: np.ndarray, p: Palavra, op: float, x0: int, y0: int) -> None:
         h, w = p.alpha.shape
-        desloc = int(round(p.sobe * (1.0 - op))) if p.janela is None else 0
+        # Sem o `if p.janela is None` que estava aqui: a subida sai da
+        # OPACIDADE, e quem usa janela com opacidade 1,0 (traco do Recorte,
+        # estagios do contador, do impacto e da pergunta) ja da `sobe*(1-1)`
+        # = 0 sozinho. A condicao so servia enquanto nenhum estagio tinha
+        # opacidade propria — e passou a apagar a subida de 46px do SOLO_BIG
+        # quando ele ganhou estagios de escala.
+        desloc = int(round(p.sobe * (1.0 - op)))
         py, px = p.y0 - y0 + desloc, p.x0 - x0
         ys0, xs0 = max(0, py), max(0, px)
         ys1 = min(tela.shape[0], py + h)
@@ -2362,7 +2447,13 @@ class Renderizador:
 
     def _blend_em(self, sub, p, op, abs_x0, abs_y0):
         h, w = p.alpha.shape
-        desloc = int(round(p.sobe * (1.0 - op))) if p.janela is None else 0
+        # Sem o `if p.janela is None` que estava aqui: a subida sai da
+        # OPACIDADE, e quem usa janela com opacidade 1,0 (traco do Recorte,
+        # estagios do contador, do impacto e da pergunta) ja da `sobe*(1-1)`
+        # = 0 sozinho. A condicao so servia enquanto nenhum estagio tinha
+        # opacidade propria — e passou a apagar a subida de 46px do SOLO_BIG
+        # quando ele ganhou estagios de escala.
+        desloc = int(round(p.sobe * (1.0 - op)))
         py, px = p.y0 - abs_y0 + desloc, p.x0 - abs_x0
         ys0, xs0 = max(0, py), max(0, px)
         ys1, xs1 = min(sub.shape[0], py + h), min(sub.shape[1], px + w)
@@ -2403,6 +2494,9 @@ class Renderizador:
 
     def _aplicar_dim(self, buf, sujo, dim, fl, fade):
         t = min(1.0, max(0.0, fl / max(1, fade)))
+        # Aqui a cubica esta CERTA: o end card do template usa
+        # `Easing.out(Easing.cubic)` (Main.tsx:506), nao o bezier da entrada
+        # de palavra. Conferido antes de trocar.
         a = dim * (1 - (1 - t) ** 3)
         if a <= 0.004:
             return

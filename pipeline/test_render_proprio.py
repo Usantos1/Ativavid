@@ -735,3 +735,141 @@ def test_solo_big_acompanha_a_duracao_da_cue(tmp_path):
     longa = len(_solo_big(tmp_path, 1200).palavras)
     curta = len(_solo_big(tmp_path, 300).palavras)
     assert curta < longa, (curta, longa)
+
+
+def test_solo_big_sobe_46px_enquanto_cresce(tmp_path):
+    """No template a palavra do SOLO_BIG faz TRÊS coisas ao mesmo tempo:
+    opacidade, `translate: 0px {46→0}px` e `scale: 0.88→1`.
+
+    Ao dar estágios de escala à palavra (para o `scale`), ela ganhou `janela`
+    — e `_blend` zerava o deslocamento vertical justamente quando havia
+    janela. A palavra passou a crescer sem subir. Regressão introduzida no
+    mesmo commit que trouxe a escala."""
+    from app.render_proprio import _opacidade
+
+    leg = _solo_big(tmp_path)
+    vistos = []
+    for f in range(0, 12):
+        for p in leg.palavras:
+            op = _opacidade(p, f)
+            if op > 0:
+                vistos.append((f, int(round(p.sobe * (1.0 - op)))))
+                break
+    deslocs = [d for _, d in vistos]
+    # O valor do primeiro quadro sai da CURVA, não de um número escolhido a
+    # dedo: `translate: interpolate(p, [0,1], [46,0])` com o mesmo ease do
+    # template. Calibrar isso na mão amarraria o teste à curva antiga.
+    from app.render_proprio import _ease_out
+
+    enter = leg.palavras[0].enter
+    esperado_1 = int(round(46 * (1 - _ease_out(1 / max(1, enter)))))
+    assert deslocs[0] == esperado_1, (deslocs, esperado_1)
+    assert deslocs[0] > 10, f"tem de nascer abaixo: {vistos}"
+    assert deslocs == sorted(deslocs, reverse=True), vistos
+    assert deslocs[-1] == 0, vistos
+
+
+def test_quem_usa_janela_com_opacidade_cheia_continua_sem_subir(tmp_path):
+    """A condição removida (`if p.janela is None`) não era o que segurava os
+    outros: eles têm opacidade 1,0 dentro da janela, então `sobe*(1-1)` já dá
+    zero sozinho. Este teste é a prova de que a remoção não os mexeu."""
+    from app.render_proprio import _opacidade
+
+    # contador: estágios com sobe=0.0
+    ed = _ed(hook={"enabled": False}, endCard={"enabled": False},
+             listMarkers=[{"n": 1, "atSec": 0.5}])
+    r = Renderizador(_public(tmp_path, []), ed, frames=120, fps=30.0)
+    selos = [c for c in r.camadas if c.inicio_f == 15]
+    assert selos, "o contador tem de estar desenhando"
+    for p in selos[0].palavras:
+        for f in range(15, 30):
+            op = _opacidade(p, f)
+            if op > 0:
+                assert int(round(p.sobe * (1.0 - op))) == 0, (p.sobe, op)
+
+    # recorte (SOLO_OUTLINE): o traço usa janela com o `sobe` padrão
+    cues = [{"i": 0, "preset": "SOLO_OUTLINE", "startMs": 0, "endMs": 900,
+             "lines": [[{"text": "Não", "fromMs": 0, "toMs": 400}]]}]
+    r2 = Renderizador(_public(tmp_path, cues),
+                      _ed(hook={"enabled": False}, endCard={"enabled": False}),
+                      frames=60, fps=30.0)
+    com_janela = [p for p in r2.camadas[0].palavras if p.janela is not None]
+    assert com_janela, "o traço do Recorte usa janela"
+    for p in com_janela:
+        for f in range(0, 30):
+            op = _opacidade(p, f)
+            if op > 0:
+                assert int(round(p.sobe * (1.0 - op))) == 0, (p.sobe, op, f)
+
+
+def test_a_curva_de_entrada_e_a_do_template():
+    """`StackedCaptions.tsx:77` usa `Easing.bezier(0.16, 1, 0.3, 1)`. O motor
+    usava `1-(1-t)^3` (`Easing.out(Easing.cubic)`) — parecida, mas a diferença
+    de opacidade chega a **0,264** no primeiro terço da entrada: em t=0,2 o
+    template já está em 0,75 e a cúbica em 0,49.
+
+    Valia para TODA palavra de TODA legenda. A validação por razão de tinta
+    que aprovou o motor não pegaria: ela mede ÁREA sobre a cue inteira, e a
+    entrada é uma fração dela."""
+    from app.render_proprio import _ease_out
+
+    def bezier(x, it=60):
+        x1, y1, x2, y2 = 0.16, 1.0, 0.3, 1.0
+        lo, hi = 0.0, 1.0
+        for _ in range(it):
+            t = (lo + hi) / 2
+            u = 1 - t
+            if 3 * u * u * t * x1 + 3 * u * t * t * x2 + t ** 3 < x:
+                lo = t
+            else:
+                hi = t
+        t = (lo + hi) / 2
+        u = 1 - t
+        return 3 * u * u * t * y1 + 3 * u * t * t * y2 + t ** 3
+
+    pior = max(abs(_ease_out(i / 200) - bezier(i / 200)) for i in range(201))
+    assert pior < 1e-3, pior
+    assert _ease_out(0.0) == 0.0 and _ease_out(1.0) == 1.0
+    # e é mesmo diferente da cúbica que estava aí
+    assert abs(_ease_out(0.2) - (1 - 0.8 ** 3)) > 0.2
+
+
+def test_o_escurecimento_do_end_card_continua_cubico():
+    """Nem tudo usa a curva da palavra: `Main.tsx:506` usa
+    `Easing.out(Easing.cubic)` para o dim do cartão final. Conferido antes de
+    trocar, para não sair aplicando a curva nova em tudo."""
+    s = (REPO := Path(__file__).resolve().parent.parent)
+    src = (s / "app" / "render_proprio.py").read_text(encoding="utf-8")
+    i = src.index("def _aplicar_dim")
+    assert "(1 - (1 - t) ** 3)" in src[i:i + 700]
+
+
+def test_o_enter_encurta_para_quem_entra_perto_da_saida(tmp_path):
+    """`wordAnim` no template: `max(2, min(ENTER, floor(exitStart - localStart
+    - 1)))`. O motor passava o `enter` da CUE para toda palavra, então quem
+    entrava tarde ficava com uma janela longa demais e a cue acabava antes de
+    ela assentar — mais clara e ainda deslocada para baixo. Com `exit:
+    abrupt`, que é o caso da maioria, ela pisca e some.
+
+    Medido nos 114 projetos do usuário: 6.292 de 23.166 palavras (27%)
+    deviam ter a entrada encurtada."""
+    import math
+
+    from app.render_proprio import _opacidade
+
+    cue = {"i": 0, "preset": "STACK_MIXED", "startMs": 0, "endMs": 1000,
+           "exit": "abrupt", "lines": [[
+               {"text": "voce", "fromMs": 0, "toMs": 300},
+               {"text": "vai", "fromMs": 860, "toMs": 960}]]}
+    r = Renderizador(_public(tmp_path, [cue]),
+                     _ed(hook={"enabled": False}, endCard={"enabled": False}),
+                     frames=120, fps=30.0)
+    leg = r.camadas[0]
+    cedo = min(leg.palavras, key=lambda p: p.inicio_f)
+    tarde = max(leg.palavras, key=lambda p: p.inicio_f)
+    assert cedo.enter > tarde.enter, (cedo.enter, tarde.enter)
+    assert tarde.enter == max(2, min(cedo.enter,
+                                     math.floor(leg.saida_f - tarde.inicio_f - 1)))
+    # e no último quadro visível ela já está praticamente opaca
+    ultimo = int(leg.dur_f) - 3
+    assert _opacidade(tarde, ultimo) > 0.85, _opacidade(tarde, ultimo)
