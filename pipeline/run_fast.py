@@ -210,7 +210,9 @@ def _canary_validate_overlay(
     final: Path, edit_data: dict, ov_result: dict | None,
 ) -> str | None:
     """None se o OVERLAY passou; senão o motivo para pausar o canary."""
-    from app.overlay_compose import count_frames, ebur128_summary, video_info
+    from app.overlay_compose import (
+        count_frames, garantir_true_peak, video_info,
+    )
     from app.timeline import timeline_from_edit_data
 
     if not final.exists() or final.stat().st_size < 10_000:
@@ -225,7 +227,12 @@ def _canary_validate_overlay(
     got_sec = float(info.get("duration") or 0)
     if abs(got_sec - exp_sec) > 0.08:
         return f"DURATION {got_sec}!={exp_sec}"
-    au = ebur128_summary(final)
+    # Conserta o pico ANTES de julgar por ele. Pico alto e defeito de AUDIO;
+    # devolver o video inteiro para o Remotion por causa dele custava, no
+    # projeto do usuario, 1657s para entregar -0,9 dBTP no fim — a queda nem
+    # consertava o que a motivou. Dos 23 jobs que cairam na semana, 8
+    # seguiram fora do limite depois de refeitos (12,6h de maquina).
+    au = garantir_true_peak(final)
     _RENDER_META["LUFS"] = au.get("integratedLufs")
     _RENDER_META["truePeak"] = au.get("truePeakDb")
     tp = au.get("truePeakDb")
@@ -3282,6 +3289,17 @@ def run(
             duration_in_frames=_enc_tl["durationInFrames"],
         )
         _timing_mark("FINAL_ENCODE", _t_enc)
+        # O caminho completo pede `loudnorm ... TP=-1` numa passagem so, e o
+        # loudnorm entrega uns 0,1 a 0,2 dB ACIMA do que se pede: 18 dos 61
+        # jobs completos da semana sairam acima de -1,0 dBTP (o pior, -0,3) e
+        # foram publicados assim. Aqui ele passa pela mesma conferencia que o
+        # caminho rapido — que ja usa duas passagens com folga.
+        try:
+            from app.overlay_compose import garantir_true_peak
+
+            garantir_true_peak(final)
+        except Exception as e:  # noqa: BLE001
+            print(f"[warn] true peak: {e}", flush=True)
     other = time.perf_counter() - _t_job - sum(_TIMING.values())
     if other > 0.05:
         _TIMING["OTHER"] = round(other, 3)

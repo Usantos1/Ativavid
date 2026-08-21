@@ -12,6 +12,7 @@ Não altera o caminho FULL. Usado só com experimentalOverlay.
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -296,6 +297,77 @@ def _loudnorm_filter(
         f":offset={measured['target_offset']}"
         f":linear=true"
     )
+
+
+def garantir_true_peak(
+    final: Path, *, limite: float = -1.0, alvo: float = -1.5,
+    medido: dict[str, float | None] | None = None,
+) -> dict[str, float | None]:
+    """Traz o pico do FINAL para dentro do limite mexendo so no audio.
+
+    O pico acima de -1,0 dBTP era tratado como "o caminho rapido errou" e o
+    video inteiro voltava para o Remotion. Medido no projeto do usuario:
+    1657s de re-render para entregar -0,9 dBTP no fim — ou seja, a queda
+    custou meia hora e NAO consertou o defeito que a motivou. Dos 23 jobs que
+    cairam na semana, 8 seguiram acima de -1,0 depois de refeitos, somando
+    12,6h de maquina.
+
+    O pico e um defeito de AUDIO; a resposta certa e o audio. Aqui o video e
+    COPIADO (nada de reencode) e so a faixa de som passa por um loudnorm de
+    duas passagens com folga. Medido no mesmo arquivo: -0,9 -> -1,1 dBTP,
+    LUFS parado em -14,0, em 26s — 64x mais barato que refazer tudo.
+
+    O alvo e -1,5 e nao -1,2 de proposito: o loudnorm entrega uns 0,1 a 0,2 dB
+    ACIMA do que se pede (foi assim que o caminho completo, que pede -1,0,
+    passou a entregar -0,9, -0,8 e ate -0,3).
+
+    Devolve a medicao final. Se nada precisava mudar, ou se o conserto nao
+    deu conta, devolve o que mediu — quem chamou decide o que fazer.
+    """
+    au = medido if medido is not None else ebur128_summary(final)
+    tp = au.get("truePeakDb")
+    if tp is None or float(tp) <= limite:
+        return au
+
+    # O final tem TRES fluxos, nao dois: video, audio e a CAPA embutida
+    # (`attached_pic`), que tambem e um stream de video. Descobri isso
+    # testando com o arquivo de verdade — uma guarda de "1 video + 1 audio"
+    # teria pulado o conserto em todo projeto real, calada.
+    #
+    # `-map 0:v` leva os dois (video e capa) e `-c:v copy` copia os dois. So
+    # nao mexe se houver legenda ou dado embutido, que este comando perderia.
+    fluxos = (probe_json(final).get("streams") or [])
+    tipos = [f.get("codec_type") for f in fluxos]
+    if tipos.count("audio") != 1 or any(t not in ("video", "audio") for t in tipos):
+        print(f"TRUE_PEAK_SEM_CONSERTO fluxos={tipos}", flush=True)
+        return au
+
+    print(f"TRUE_PEAK_ALTO {tp} dBTP — renormalizando so o audio", flush=True)
+    tmp = final.with_suffix(f".tp{os.getpid()}.mp4")
+    try:
+        med = measure_loudnorm(final, TP=alvo)
+        r = _run([
+            _ffmpeg(), "-y", "-hide_banner", "-loglevel", "error",
+            "-i", str(final),
+            "-map", "0:v", "-map", "0:a:0", "-c:v", "copy",
+            "-af", _loudnorm_filter(med, TP=alvo),
+            "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
+            "-movflags", "+faststart", str(tmp),
+        ])
+        if r.returncode != 0 or not tmp.exists() or tmp.stat().st_size < 10_000:
+            print(f"TRUE_PEAK_CONSERTO_FALHOU {(r.stderr or '')[-300:]}", flush=True)
+            return au
+        os.replace(tmp, final)
+    except OSError as e:
+        print(f"TRUE_PEAK_CONSERTO_FALHOU {e}", flush=True)
+        return au
+    finally:
+        tmp.unlink(missing_ok=True)
+    depois = ebur128_summary(final)
+    print(f"TRUE_PEAK_CORRIGIDO {tp} -> {depois.get('truePeakDb')} dBTP "
+          f"(LUFS {au.get('integratedLufs')} -> {depois.get('integratedLufs')})",
+          flush=True)
+    return depois
 
 
 def _mix_audio_graph(
