@@ -2225,7 +2225,18 @@ function wireList() {
         // `copylegenda` caia fora dela. O botao existia no card desde sempre e
         // o clique nao fazia nada.
         const job = state.jobs.find((x) => x.id === id);
-        const texto = String((job && job.legenda) || "").trim();
+        // O arquivo FRESCO primeiro: `job.legenda` e um retrato tirado quando o
+        // pipeline terminou, e uma correcao de palavra aplicada depois tambem
+        // conserta a legenda.txt — copiar o retrato entregava o texto com o
+        // erro que o usuario acabou de corrigir.
+        let texto = String((job && job.legenda) || "").trim();
+        try {
+          const r = await fetch(`/api/jobs/${id}/legenda`);
+          if (r.ok) {
+            const fresco = (await r.text()).trim();
+            if (fresco) texto = fresco;
+          }
+        } catch { /* sem servidor, fica o retrato */ }
         if (!texto) {
           toast("Este vídeo ainda não tem legenda de post");
         } else if (await copiarTexto(texto)) {

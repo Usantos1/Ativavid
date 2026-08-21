@@ -393,3 +393,21 @@ def test_reapagar_o_que_ja_apaguei_nao_e_falha(tmp_path):
     segundo = apply_caption_fixes(edit, [fix])
     assert segundo["ok"] is True, "reapagar virou erro"
     assert segundo.get("alreadyApplied") is True
+
+
+def test_a_correcao_tambem_conserta_a_legenda_do_post(tmp_path):
+    """A legenda do post cita a fala, então a palavra errada corrigida na tela
+    pode estar lá — e é esse texto que o usuário copia para o Instagram.
+    Ficava congelada com o erro."""
+    from app.caption_fixes import apply_caption_fixes
+
+    edit = _projeto(tmp_path, [("Prime", 0, 400), ("Camps", 400, 900)])
+    (edit / "legenda.txt").write_text(
+        'Quando falam "Prime Camps" e descobre o resto...\n\nSegue Prime Camps\n',
+        encoding="utf-8")
+    out = apply_caption_fixes(edit, [{"from": "Prime Camps", "to": "@lojaprimecamp",
+                                      "startMs": 0, "endMs": 900}])
+    assert out["ok"] is True and out["changed"] >= 1
+    txt = (edit / "legenda.txt").read_text(encoding="utf-8")
+    assert "Prime Camps" not in txt, "a legenda do post ficou com o erro"
+    assert "@lojaprimecamp" in txt

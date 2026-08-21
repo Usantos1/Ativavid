@@ -246,8 +246,11 @@ def test_copiar_legenda_do_post_tem_handler():
     js = (REPO / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
     assert 'act === "copylegenda"' in js, "o copiar legenda continua sem handler"
     i = js.index('act === "copylegenda"')
-    trecho = js[i:i + 900]
+    trecho = js[i:i + 1800]
     assert "copiarTexto(texto)" in trecho
+    assert "/api/jobs/${id}/legenda" in trecho, (
+        "o copiar usa o retrato do store — texto velho depois de uma correção"
+    )
     assert "mostrarTextoParaCopiar" in trecho, (
         "sem saída quando a cópia falha — o usuário queria o texto, não o aviso"
     )

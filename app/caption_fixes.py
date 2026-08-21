@@ -511,6 +511,22 @@ def apply_caption_fixes(edit_dir: Path, fixes: list[dict] | None) -> dict:
         if nxt != txt:
             packed.write_text(nxt, encoding="utf-8")
 
+    # A LEGENDA DO POST tambem. Ela cita a fala ("marca ai, chefe..."), entao a
+    # palavra errada que o usuario corrigiu na tela pode estar la — e e esse
+    # texto que ele copia para o Instagram pelo botao do card. Ficava congelada
+    # com o erro; correcoes reais dele ("Prime Camps" -> "@lojaprimecamp")
+    # eram exatamente desse tipo. O pack em publicar/ se atualiza sozinho no
+    # proximo sync (copy-if-newer).
+    for leg_p in (edit / "legenda.txt", edit / "post" / "legenda.txt"):
+        if leg_p.is_file():
+            try:
+                txt = leg_p.read_text(encoding="utf-8-sig")
+                nxt = apply_replacements_to_text(txt, fixes)
+                if nxt != txt:
+                    leg_p.write_text(nxt, encoding="utf-8")
+            except OSError:
+                pass
+
     store = edit / "caption_fixes.json"
     try:
         prev = []
