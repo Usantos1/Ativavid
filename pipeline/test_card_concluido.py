@@ -344,3 +344,16 @@ def test_acoes_de_job_local_nao_batem_na_api():
     )
     assert "uploadFiles(files, null)" in trecho
     assert "removeLocalJob(id)" in trecho, "o Apagar local não remove o card"
+
+
+def test_a_lixeira_nao_promete_o_que_nao_fez():
+    """O servidor distingue três desfechos do apagar: foi para a Lixeira, ou
+    saiu da lista com os arquivos AINDA no disco (reciclagem falhou, ou a pasta
+    não passou na guarda de segurança). A tela dizia "foi para a Lixeira" nos
+    três — e o usuário ia procurar lá para restaurar e não achava."""
+    js = (REPO / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
+    i = js.index("async function confirmDelete(")
+    corpo = js[i:i + 1400]
+    assert "r.recycled" in corpo, "o toast ignora se a reciclagem aconteceu"
+    assert "ficaram no disco" in corpo, "não avisa quando os arquivos ficaram"
+    assert "r.warning" in corpo, "engole o motivo que o servidor mandou"

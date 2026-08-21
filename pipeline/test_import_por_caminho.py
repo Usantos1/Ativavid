@@ -148,3 +148,38 @@ def test_importar_por_caminho_nao_sobe_bytes():
     corpo = js[i:i + 1600]
     assert "FormData" not in corpo, "voltou a subir os arquivos"
     assert '"/api/jobs"' in corpo and "paths: lista" in corpo
+
+
+def test_nome_de_pasta_com_acento_atravessa_inteiro(tmp_path):
+    """As pastas do usuário são todas assim — "Eu sei que você quer capinha
+    rosa", "Quando o chefe chega sempre tá errado".
+
+    O acento importa: o caminho de UPLOAD passa o nome por um cabeçalho
+    multipart, onde não-ASCII é justamente onde parsers quebram, e um lote que
+    falha ali some sem erro. Importar por CAMINHO não tem esse pedaço, mas o
+    nome ainda vira título de job e nome de pasta de projeto — vale provar que
+    chega inteiro, com o acento, até o outro lado.
+    """
+    import subprocess
+
+    from app.local_server import agrupar_import
+    from app.overlay_compose import _ffmpeg
+
+    raiz = tmp_path / "SSD"
+    nomes = ["Eu sei que você quer capinha rosa",
+             "Quando o chefe chega sempre tá errado",
+             "Fone ideial para academia"]
+    for n in nomes:
+        (raiz / n).mkdir(parents=True)
+        subprocess.run([
+            _ffmpeg(), "-y", "-hide_banner", "-loglevel", "error",
+            "-f", "lavfi", "-i", "testsrc=size=160x120:rate=15:duration=1",
+            "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+            str(raiz / n / "take.mp4"),
+        ], check=True, capture_output=True)
+
+    grupos = dict((t, len(a)) for t, a in agrupar_import([str(raiz)]))
+    assert set(grupos) == set(nomes), (
+        f"o acento se perdeu no caminho: {sorted(grupos)}"
+    )
+    assert all(v == 1 for v in grupos.values())

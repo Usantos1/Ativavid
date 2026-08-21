@@ -3424,7 +3424,20 @@ def _write_preview_state(
             state["editData"] = "remotion/public/edit-data.json"
     if style:
         state["style"] = style
-    (edit_dir / "state.json").write_text(json.dumps(state, indent=2), encoding="utf-8")
+    # `deliveryPack` NAO e desta funcao: quem grava e o `ensure_delivery_pack`,
+    # que roda logo antes. Montar o state do zero apagava o ponteiro para a
+    # pasta de entrega, e o "Abrir pasta" perdia o caminho — medido: 13
+    # projetos do usuario com `publicar/` criada e sem ponteiro. Ele so
+    # sobrevivia quando um apply posterior o regravava.
+    anterior = edit_dir / "state.json"
+    if anterior.exists():
+        try:
+            velho = json.loads(anterior.read_text(encoding="utf-8-sig"))
+            if isinstance(velho, dict) and velho.get("deliveryPack"):
+                state["deliveryPack"] = velho["deliveryPack"]
+        except (OSError, json.JSONDecodeError):
+            pass
+    anterior.write_text(json.dumps(state, indent=2), encoding="utf-8")
 
 
 def main() -> None:

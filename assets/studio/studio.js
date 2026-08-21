@@ -2196,12 +2196,28 @@ async function confirmDelete() {
   if (!id) return;
   $("#dlgDelete").close();
   state.pendingDeleteId = null;
-  await api("/api/jobs/delete", {
+  // O servidor distingue TRES desfechos: foi para a Lixeira; saiu da lista mas
+  // os arquivos FICARAM no disco (a reciclagem falhou, ou a pasta nao passou na
+  // guarda de seguranca). A tela dizia "foi para a Lixeira" nos tres — e ai o
+  // usuario ia procurar na Lixeira para restaurar e nao achava, ou contava com
+  // um espaco em disco que nunca foi liberado.
+  const r = await api("/api/jobs/delete", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ id }),
   });
-  toast("Projeto foi para a Lixeira");
+  if (r && r.recycled) {
+    toast("Projeto foi para a Lixeira");
+  } else if (r && r.removedFromList) {
+    toast(
+      (r.warning
+        ? `Tirei da lista, mas os arquivos ficaram no disco: ${r.warning}`
+        : "Tirei da lista, mas os arquivos ficaram no disco"),
+      6000
+    );
+  } else {
+    toast("Projeto removido");
+  }
   await refreshJobs();
 }
 
