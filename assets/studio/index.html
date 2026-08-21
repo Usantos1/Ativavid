@@ -595,13 +595,16 @@
         <!-- SISTEMA -->
         <section class="view hidden" id="view-sistema" data-view-panel="sistema">
           <div class="sys-shell">
+            <!-- A faixa de métricas repetia o que os cards logo abaixo já dizem
+                 (PERFIL Desempenho x o select "Desempenho"; CACHE 0 GB x "Cache
+                 temporário: 0 GB") em dois retângulos enormes e quase vazios.
+                 Os elementos continuam aqui, ocultos, porque o JS escreve neles. -->
             <header class="sys-top">
               <div class="sys-top-copy">
-                <h3 class="sys-status-title">Status do ATIVAVID</h3>
                 <p class="hint" id="sysStatusLine">Tudo funcionando corretamente</p>
                 <p class="hint hidden" id="sysMachineHint">Detectando…</p>
               </div>
-              <div class="sys-metrics" id="sysMetrics" aria-label="Resumo">
+              <div class="sys-metrics hidden" id="sysMetrics" aria-label="Resumo" hidden>
                 <div class="sys-metric"><span class="sys-m-lab">Perfil</span><strong id="sysMetricProfile">—</strong></div>
                 <div class="sys-metric"><span class="sys-m-lab">Cache</span><strong id="sysMetricCache">—</strong></div>
                 <div class="sys-metric hidden" id="sysMetricJobsWrap"><span class="sys-m-lab">Leve</span><strong id="sysMetricJobs">—</strong></div>
@@ -610,19 +613,18 @@
             </header>
 
             <div class="sys-grid">
+              <!-- "Aceleração" e "Perfil" eram dois cards sobre a mesma coisa —
+                   e o primeiro tinha uma frase só, virando um retângulo vazio
+                   ao lado de um card cheio. Viraram um. -->
               <div class="sys-card">
-                <h4>Aceleração</h4>
+                <h4>Desempenho</h4>
                 <p class="hint" id="hwAccelHint">Detectando GPU…</p>
-              </div>
-
-              <div class="sys-card">
-                <h4>Perfil</h4>
-                <!-- O rótulo "Perfil" saiu do campo: o card já se chama Perfil,
-                     e a palavra aparecia três vezes na mesma tela. -->
-                <p class="hint" id="sysPerfHint">Quanto da máquina o ATIVAVID pode usar.</p>
+                <p class="hint" id="sysPerfHint">Motor de render: Automático.</p>
                 <p class="hint hidden" id="sysLaneHint">Acompanhe o processamento dos seus vídeos.</p>
+                <!-- Sem rótulo visível: o card já se chama Desempenho, e
+                     "Perfil" aparecia três vezes na mesma tela. -->
                 <label class="ia-form sr-label">
-                  <span class="sr-only">Perfil</span>
+                  <span class="sr-only">Perfil de desempenho</span>
                   <select id="perfProfile">
                     <option value="auto">Automático</option>
                     <option value="eco">Econômico</option>
@@ -641,10 +643,10 @@
                 <label class="ia-form">Pasta de projetos
                   <input type="text" id="projectsRootInput" placeholder="C:\Users\…\ATIVAVID\Projetos" spellcheck="false">
                 </label>
-                <!-- Caminho em uso vai ABAIXO do campo e numa linha só: em cima
-                     dele, quebrado em três linhas, competia com o valor editável
-                     e dava a impressão de dois caminhos diferentes. -->
-                <p class="hint mono ellipsis" id="projectsRootHint"></p>
+                <!-- O caminho em uso já é o valor do campo acima. Mostrá-lo de
+                     novo, cru e cortado, só dava a impressão de dois caminhos
+                     diferentes. Fica como title do campo. -->
+                <p class="hint mono ellipsis hidden" id="projectsRootHint" hidden></p>
                 <div class="panel-actions">
                   <button type="button" class="export-btn" id="btnSaveRoot">Salvar pasta</button>
                   <button type="button" class="ghost-btn" id="btnClearCache">Limpar cache</button>

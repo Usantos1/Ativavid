@@ -2982,14 +2982,19 @@ function renderAccessList(data) {
       <tbody>
         ${rows.map((r) => {
           const email = escapeHtml(r.email || "—");
-          const st = escapeHtml(r.status || "—");
+          // "active"/"revoked" vem cru do banco: a tela é em português.
+          const stRaw = String(r.status || "");
+          const st = escapeHtml(stRaw);
+          const stLabel = escapeHtml(
+            stRaw === "active" ? "Ativo" : stRaw === "revoked" ? "Revogado" : (stRaw || "—")
+          );
           const until = escapeHtml(fmtAccessUntil(r.valid_until));
           const pcs = escapeHtml(String(r.max_devices ?? "—"));
           const rawEmail = String(r.email || "").replace(/"/g, "&quot;");
           const pending = r.user_id ? "" : " <span class=\"hint\">(sem login ainda)</span>";
           return `<tr class="access-row" data-email="${rawEmail}" title="Abrir para editar">
             <td title="${email}">${email}${pending}</td>
-            <td><span class="access-st ${st}">${st}</span></td>
+            <td><span class="access-st ${st}">${stLabel}</span></td>
             <td>${until}</td>
             <td>${pcs}</td>
             <td><button type="button" class="ghost-btn access-revoke" data-email="${rawEmail}">Revogar</button></td>

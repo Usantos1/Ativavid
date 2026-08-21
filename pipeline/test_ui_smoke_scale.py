@@ -64,8 +64,11 @@ def test_studio_has_content_type_and_simple_system():
     assert 'id="importContentType"' in html
     assert "Tipo de conteúdo" in html
     assert 'id="importPresetHint"' in html
-    assert "Status do ATIVAVID" in html
-    assert "Tudo funcionando corretamente" in html or 'id="sysStatusLine"' in html
+    # O título "Status do ATIVAVID" saiu: era uma linha inteira dizendo nada,
+    # acima de dois cartões que repetiam o que os cards já mostram. A linha de
+    # status em si continua — é ela que precisa existir.
+    assert 'id="sysStatusLine"' in html
+    assert "Tudo funcionando corretamente" in html
     assert "Avançado" in html
     assert 'id="hwAccelDetail"' in html
     assert 'id="btnHwBench"' in html

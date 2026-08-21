@@ -888,6 +888,9 @@ html:not([data-theme="light"]) .theme-ico-sun { display: block; }
 #view-licenca .lic-shell {
   flex: 1;
   min-height: 0;
+  /* Mesmo teto de largura das outras telas: sem ele as tabelas esticavam de
+     ponta a ponta e as colunas ficavam a meia tela de distância uma da outra. */
+  max-width: 1180px;
 }
 
 /* Estilos embutido no shell do hub — iframe preenche o restante (sem corte) */
@@ -1320,8 +1323,9 @@ body.view-estilo-on .ws-head {
   white-space: nowrap;
   max-width: 100%;
 }
-/* Campo cujo rótulo visível seria redundante com o título do card. */
-.ia-form.sr-label { margin-top: 4px; }
+/* Campo cujo rótulo visível seria redundante com o título do card. Sem margem
+   própria: quem dá o ritmo é o `gap` do card. */
+.ia-form.sr-label { margin-top: 0; }
 
 .ia-grid {
   display: grid;
@@ -1820,7 +1824,10 @@ body.view-estilo-on .ws-head {
   flex-direction: column;
   gap: clamp(14px, 1.6vw, 20px);
   width: 100%;
-  max-width: none;
+  /* Sem teto, numa tela larga os 4 cards esticavam para 400px cada com uma
+     frase dentro — pouca informação espalhada por muita área, que é o que
+     faz a tela parecer vazia e inacabada. */
+  max-width: 1180px;
   min-width: 0;
 }
 
@@ -1904,6 +1911,23 @@ body.view-estilo-on .ws-head {
   min-height: 0;
   height: auto;
 }
+/* O card já controla o ritmo vertical pelo `gap`. As margens próprias dos
+   filhos (p.hint 13px, .ia-form 14px, .panel-actions 14px) SOMAVAM ao gap e o
+   mesmo card acabava com espaços de 23, 35, 19 e 19px entre uma linha e outra
+   — é isso que faz a tela parecer desalinhada mesmo sem nada quebrado. */
+.sys-card > *,
+.sys-block > *,
+.lic-block > * {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+/* Só os botões ganham um respiro maior, separando ação de conteúdo. */
+.sys-card > .panel-actions,
+.sys-block > .panel-actions,
+.lic-block > .panel-actions {
+  margin-top: 6px;
+}
+
 .sys-card h4,
 .sys-block h4,
 .lic-block .keys-block-head h4 {
