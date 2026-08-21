@@ -1,5 +1,29 @@
 # Changelog
 
+## 2.40
+
+O card de Concluídos passou a mostrar o que você pediu, e o arrastar pasta
+parou de perder as subpastas.
+
+- **Duração original e duração final, lado a lado** — o card diz `42s → 26s`.
+  A duração de origem nunca tinha sido medida: só existia a entregue, então o
+  quanto o corte apertou o vídeo era invisível
+- **Início e conclusão, com data e hora** — `21/08/2026 · 08:22 → 08:33`, e a
+  data só se repete quando o dia virou. O "início" mostrava a hora da
+  **importação**, não a do processamento: num vídeo que esperou meia hora na
+  fila, os dois números não tinham nada a ver
+- **"Pasta" e "Legenda" foram para dentro do menu ⋯**, junto com "Tentar
+  novamente". Na linha fica só "Visualizar"
+- **Arrastar uma pasta com subpastas agora leva as subpastas.** Eram dois
+  defeitos somados: soltar em cima do card disparava a importação **duas
+  vezes**, e a segunda passada só enxergava os arquivos soltos e sobrescrevia
+  a primeira; e ao arrastar várias pastas de uma vez, só a primeira era lida
+- **Um lote que não importa agora diz o motivo.** Antes o card simplesmente
+  sumia da tela, sem uma palavra
+- **O menu ⋯ deixou de ficar congelado.** Ele era montado uma vez: "Copiar
+  legenda do post" nunca aparecia depois que a legenda ficava pronta, e "Ver
+  vídeo final" ficava desabilitado para sempre
+
 ## 2.39
 
 Você me mostrou três coisas do editor nesta manhã e as três estão resolvidas.
