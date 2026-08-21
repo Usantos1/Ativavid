@@ -140,7 +140,11 @@ def main() -> None:
     summary = {"path": str(video), **probe(video), **info,
                "section": args.section}
     print(json.dumps(summary, ensure_ascii=False, indent=2))
-    print(f"\nnext: python helpers/transcribe.py '{video}' --edit-dir '{dest / 'edit'}'",
+    # Com `--backend elevenlabs`, como o pipeline faz. Sem ele o comando cai no
+    # `auto`, que só escolhe o Scribe acima de 5 min — ou seja, quem seguisse a
+    # sugestão iria para o Groq em quase toda fonte.
+    print(f"\nnext: python helpers/transcribe.py '{video}' "
+          f"--edit-dir '{dest / 'edit'}' --backend elevenlabs",
           file=sys.stderr)
 
 
