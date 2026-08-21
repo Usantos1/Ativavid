@@ -12,7 +12,14 @@
   --olive: #738b03;
   --brand: #fe2c55;
   --brand2: #ff4d6d;
-  --brand-purple: #a855f7;
+  /* A ponta ESCURA do logo (#93080a, amostrada do proprio arquivo). Este
+     token existia como `--brand-purple` e so servia para ecoar o roxo do logo,
+     nos dois lugares abaixo. Com o logo vermelho, ele era o unico roxo que
+     sobrava — e o nome passou a mentir, por isso mudou junto.
+     O roxo de `.pn-tag.live` (painel.css) NAO e este: la ele e a cor de
+     "acontecendo agora", escolhida justamente por nao ser nenhuma severidade,
+     e continua roxo. */
+  --brand-deep: #93080a;
   --interact: var(--brand);
   /* Accent painted by the headline styles that carry one (realce/misto). NOT
      --orange: that is app chrome, and the two drifting apart is the point — the
@@ -186,7 +193,7 @@ header.glass::after {
   right: 0;
   bottom: 0;
   height: 2px;
-  background: linear-gradient(90deg, var(--brand-purple), var(--brand), var(--brand2));
+  background: linear-gradient(90deg, var(--brand-deep), var(--brand), var(--brand2));
 }
 
 .glass {
@@ -3075,7 +3082,7 @@ body.editor-shell .editor-pane > main {
   margin: 0 12px 12px 0;
   border-radius: 0 0 0 14px;
   background:
-    radial-gradient(1200px 600px at 80% -10%, color-mix(in srgb, var(--brand-purple) 14%, transparent), transparent 60%),
+    radial-gradient(1200px 600px at 80% -10%, color-mix(in srgb, var(--brand-deep) 14%, transparent), transparent 60%),
     radial-gradient(1000px 500px at -10% 110%, color-mix(in srgb, var(--interact) 12%, transparent), transparent 60%),
     linear-gradient(160deg, var(--bg1), var(--bg0));
 }
