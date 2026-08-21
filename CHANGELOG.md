@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.50
+
+- **A ficha do card estava invisível no modo claro.** Duração, formato, estilo
+  e horários saíam em cinza quase branco sobre o card branco — dava para ver
+  que tinha texto ali e não dava para ler. Era uma cor fixa onde deveria ser a
+  cor do tema; agora ela acompanha claro e escuro
+
 ## 2.49
 
 - **A tela de Estilo mostrava o estilo de fábrica, não o seu.** Ela carregava o
