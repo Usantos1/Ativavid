@@ -1184,15 +1184,18 @@ body.view-estilo-on .ws-head {
 .pc-ficha > div {
   display: contents;
 }
+/* `--text` e `--dim` sao os tokens do tema — os dois temas os redefinem. A
+   primeira versao daqui usava `var(--txt, #e8e8ea)`: token que NAO EXISTE, e o
+   fallback quase branco valia nos DOIS temas. No escuro passava despercebido;
+   no claro a ficha ficava ilegivel, branco sobre branco. */
 .pc-ficha dt {
   color: var(--dim);
-  opacity: 0.8;
   white-space: nowrap;
 }
 .pc-ficha dd {
   margin: 0;
-  color: var(--txt, #e8e8ea);
-  font-weight: 550;
+  color: var(--text);
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1200,7 +1203,6 @@ body.view-estilo-on .ws-head {
 .pc-periodo {
   font-size: 11px;
   color: var(--dim);
-  opacity: 0.85;
   line-height: 1.35;
   font-variant-numeric: tabular-nums;
 }
