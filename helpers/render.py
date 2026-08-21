@@ -1258,7 +1258,22 @@ def extract_all_segments(
 
 
 def concat_segments(segment_paths: list[Path], out_path: Path, edit_dir: Path) -> None:
-    """Lossless concat via the concat demuxer. No re-encode."""
+    """Lossless concat via the concat demuxer. No re-encode.
+
+    Known artefact, measured 2026-08-20 on a real cut: the demuxer offsets each
+    segment by the PREVIOUS segment's *container* duration, which is the max of
+    its streams. `snap_ranges_to_frames` rounds the video up to whole frames but
+    `extract_segment` keeps the audio at the exact requested length, so a segment
+    whose audio runs longer than its video pushes the next one late — leaving a
+    hole in the video timeline. On that cut: 2422 steps of exactly 1 frame and a
+    single step of 3, right before a 1-frame trailing segment. Result: 2424
+    frames occupying 2426 slots.
+
+    Downstream both compose paths normalise with `fps=` before padding, so the
+    hole no longer costs a full Remotion re-render (it used to: `FRAMES a!=b`).
+    Fixing it HERE would mean trimming each segment's audio to its video length,
+    which changes what the J-cut assembly gets — not done, not measured.
+    """
     out_path.parent.mkdir(parents=True, exist_ok=True)
     concat_list = edit_dir / "_concat.txt"
     concat_list.write_text("".join(f"file '{p.resolve()}'\n" for p in segment_paths), encoding="utf-8")

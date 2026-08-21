@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.34
+
+Achei isto lendo as suas próprias estatísticas de render, não o código: na
+semana de 14 a 20/08, **23 vídeos foram renderizados duas vezes** — 12,6 h de
+máquina. O app descartava um vídeo pronto e refazia tudo do zero por duas
+razões, e nenhuma das duas se sustentava.
+
+- **Vídeo que ficava um pouco alto no som era refeito inteiro — e saía alto do
+  mesmo jeito.** Em 8 dos 23 casos o vídeo refeito continuou fora do limite: a
+  meia hora extra não consertava nada. Agora o app ajusta só a faixa de som, com
+  a imagem intacta. O último caso levou 27 minutos para refazer; o ajuste leva
+  menos de um minuto
+- **E o vídeo passa a sair dentro do limite de verdade.** 18 dos seus vídeos da
+  semana foram publicados com o som acima do teto que as plataformas pedem,
+  porque o ajuste antigo mirava exatamente no teto e sempre passava um pouco. A
+  mira agora tem folga
+- **Vídeo era refeito por "faltam 2 quadros".** O corte às vezes chega com um
+  pulo de dois quadros no fim, e a conta de duração contava esses dois. Agora a
+  composição preenche o pulo e a contagem bate
+- Efeito colateral bom dos dois: **menos vídeo entrando na fila lenta.** Quando
+  o app precisava refazer, o vídeo levava em média 28 minutos em vez de 12
+
 ## 2.33
 
 Uma rodada de defeitos que ninguém tinha como perceber sozinho: eles não
