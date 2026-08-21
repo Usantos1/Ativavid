@@ -1,5 +1,41 @@
 # Changelog
 
+## 2.54
+
+- **Corrigir uma legenda podia ser recusado sem motivo.** A conferência que o
+  app faz antes de aplicar comparava a contagem de quadros com uma folga
+  calibrada em 39 projetos. Com os 128 que você tem hoje essa conta ficou
+  apertada demais: um projeto era recusado por 3 quadros — 0,1 segundo — e a
+  correção simplesmente não acontecia. A folga agora acompanha o tamanho da
+  edição do jeito certo, e os 128 passam. Continua pegando o caso que ela
+  existe para pegar
+
+- **O volume dos vídeos estava passando raspando no limite das plataformas.**
+  Instagram, TikTok e YouTube pedem pico de no máximo −1,0 dBTP; o app mirava
+  −1,2, que é exatamente o tamanho do erro que a normalização comete. Metade
+  dos seus vídeos saía entre −1,0 e −1,2, e um saiu no limite exato. Quando
+  passava disso, o vídeo inteiro era refeito do zero — 12 minutos a mais, sem
+  você pedir nada. Agora sobra margem de verdade, e **o volume não muda**: a
+  loudness continua em −14 LUFS
+
+- **O ajuste de áudio podia piorar o som e ficava assim mesmo.** Em material
+  difícil ele deixava o pico pior do que encontrou — e como trocava o arquivo
+  antes de conferir, o resultado pior era o entregue, ainda por cima anunciado
+  como corrigido. Agora ele só troca quando melhora de fato
+
+- **Corrigir legenda ou mudar o corte agora passa pela mesma conferência de
+  áudio** que um vídeo novo. Antes só o render inicial conferia; um vídeo que
+  você corrigia saía sem essa checagem
+
+- **Os atalhos de "Identidade visual" agora abrem na seção certa.** A tela de
+  Marca prometia isso e não cumpria: Cor de destaque, Fontes e Cartão final
+  caíam todos no topo do editor. Agora cada um para no ajuste que anuncia e
+  pisca para você achar
+
+- **Liberação de acesso pelo ID do aparelho.** Dá para liberar direto pelo
+  código que aparece na tela de Licença, sem criar conta e sem digitar chave —
+  o cliente clica em Atualizar e entra. Renovar soma sobre o que ainda resta
+
 ## 2.53
 
 - **O logo agora é vermelho.** Mesma fonte, mesmo desenho, mesma qualidade — só
