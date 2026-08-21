@@ -682,3 +682,56 @@ def test_fonte_sem_o_glifo_cai_para_o_numero_seco(tmp_path):
             return np.zeros((4, 4), dtype=np.uint8)
 
     assert Renderizador._ordinal(SemGlifo(), 3) == "3"
+
+
+def _solo_big(tmp_path, dur_ms=1200):
+    cues = [{"i": 0, "preset": "SOLO_BIG", "startMs": 0, "endMs": dur_ms,
+             "lines": [[{"text": "AGORA", "fromMs": 0, "toMs": int(dur_ms * 0.6)}]]}]
+    ed = _ed(hook={"enabled": False}, endCard={"enabled": False})
+    r = Renderizador(_public(tmp_path, cues), ed, frames=60, fps=30.0)
+    return r.camadas[0]
+
+
+def test_solo_big_cresce_de_88_a_100(tmp_path):
+    """`StackedCaptions.tsx` faz `scale: interpolate(a.opacity, [0,1], [0.88,1])`
+    no preset SOLO_BIG — a palavra cresce enquanto aparece. O motor
+    rasterizava uma vez, em tamanho final, e só a opacidade animava."""
+    leg = _solo_big(tmp_path)
+    larguras = [p.alpha.shape[1] for p in leg.palavras]
+    assert len(larguras) > 1, "precisa de mais de um estágio"
+    assert larguras == sorted(larguras), larguras
+    razao = larguras[-1] / larguras[0]
+    assert 1.10 < razao < 1.16, f"cresceu {razao:.3f}, esperado ~1/0.88"
+
+
+def test_solo_big_mostra_um_estagio_por_quadro(tmp_path):
+    """Os estágios são exclusivos: dois visíveis ao mesmo tempo desenhariam a
+    palavra duas vezes, sobrepostas."""
+    from app.render_proprio import _opacidade
+
+    leg = _solo_big(tmp_path)
+    for f in range(0, 30):
+        vis = [p for p in leg.palavras if _opacidade(p, f) > 0]
+        assert len(vis) <= 1, f"quadro {f}: {len(vis)} estágios visíveis"
+
+
+def test_solo_big_ainda_faz_o_fade(tmp_path):
+    """A janela do estágio forçava opacidade 1,0 — a palavra apareceria de uma
+    vez. Cada estágio carrega a sua opacidade (`Palavra.opac`)."""
+    from app.render_proprio import _opacidade
+
+    leg = _solo_big(tmp_path)
+    ops = [max((_opacidade(p, f) for p in leg.palavras), default=0.0)
+           for f in range(0, 12)]
+    assert ops[0] == 0.0
+    assert 0.0 < ops[1] < 1.0, ops
+    assert ops == sorted(ops), ops
+    assert ops[-1] == 1.0
+
+
+def test_solo_big_acompanha_a_duracao_da_cue(tmp_path):
+    """`enter` vai de 3 a 8 quadros conforme a duração. Com passo fixo, cue
+    curta chegava ao tamanho cheio depois de a palavra já estar opaca."""
+    longa = len(_solo_big(tmp_path, 1200).palavras)
+    curta = len(_solo_big(tmp_path, 300).palavras)
+    assert curta < longa, (curta, longa)

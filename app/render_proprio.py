@@ -309,6 +309,11 @@ class Palavra:
     enter: int
     janela: tuple[float, float] | None = None
     sobe: float = 46.0
+    # Opacidade do estagio, quando ele e um quadro de uma animacao de
+    # TAMANHO. Animar tamanho aqui e rasterizar em estagios e dar a cada um
+    # a sua `janela`; sem este campo a janela forcaria opacidade 1,0 e a
+    # palavra apareceria de uma vez, sem o fade.
+    opac: float = 1.0
 
 
 @dataclass
@@ -342,7 +347,7 @@ class Camada:
 def _opacidade(p: Palavra, fl: float) -> float:
     if p.janela is not None:
         ini, fim = p.janela
-        return 1.0 if ini <= fl < fim else 0.0
+        return p.opac if ini <= fl < fim else 0.0
     if fl <= p.inicio_f:
         return 0.0
     t = min(1.0, (fl - p.inicio_f) / max(1, p.enter))
@@ -735,21 +740,55 @@ class Renderizador:
         return leg
 
     def _montar_solo_big(self, cue: dict) -> Camada:
+        """A palavra cresce de 88% a 100% enquanto aparece.
+
+        `StackedCaptions.tsx` (preset SOLO_BIG) faz
+        `scale: interpolate(a.opacity, [0, 1], [0.88, 1])` — a escala anda
+        junto com a OPACIDADE, nao com o tempo. Aqui a palavra era
+        rasterizada uma vez, em tamanho final, e so a opacidade animava: ela
+        aparecia sem o "pop". Sao 3% das legendas do usuario (245 de 7256
+        cues), mas o motor proprio existe para desenhar o mesmo.
+
+        Animar tamanho neste motor e rasterizar em estagios e dar a cada um a
+        sua janela de quadros — o mesmo que `_montar_contador` e o POP do
+        `_montar_impacto` ja fazem. A diferenca e que aqui a opacidade tambem
+        anda, entao cada estagio carrega a sua (`Palavra.opac`).
+
+        O `scale` do CSS cresce a partir do CENTRO da caixa, entao o centro
+        fica fixo e cada estagio se posiciona por ele.
+        """
         leg, enter, dur = self._nova_camada(cue)
         w = cue["lines"][0][0]
         tam = self.fit_font(w["text"], 150, self.avail / self.scale, 0.6)
-        f = self.fonte(0, tam, marca=None)
-        ls = -3.0
-        pad = 0.14 * tam
-        larg = f.getlength(w["text"]) + ls * len(w["text"]) + 2 * pad
-        alt = tam * LINE_HEIGHT
-        x_c = (self.w - larg) / 2
-        y_c = (self.h / 2 + self.base_y) - alt / 2
-        asc, desc = f.getmetrics()
-        self._palavra_texto(
-            leg, f, w["text"], ls, int(round(x_c + pad)), y_c, alt,
-            int(round(y_c + (alt - (asc + desc)) / 2)), None,
-            (w["fromMs"] - cue["startMs"]) / 1000 * self.fps, enter)
+        cx, cy = self.w / 2.0, (self.h / 2 + self.base_y)
+        ini_f = (w["fromMs"] - cue["startMs"]) / 1000 * self.fps
+        # Um estagio por quadro da ENTRADA, nao um numero fixo: a escala anda
+        # junto com a opacidade, e `enter` (3 a 8 quadros, pela duracao da
+        # cue) e quem manda na opacidade. Com passo fixo, cue curta chegava ao
+        # tamanho cheio depois de a palavra ja estar opaca.
+        n = max(1, int(enter))
+
+        for est in range(n + 1):
+            t = min(1.0, est / n)
+            op = 1 - (1 - t) ** 3            # a mesma curva de `_opacidade`
+            esc = 0.88 + 0.12 * op
+            tam_e = max(8, int(round(tam * esc)))
+            f = self.fonte(0, tam_e, marca=None)
+            ls = -3.0 * esc
+            pad = 0.14 * tam_e
+            larg = f.getlength(w["text"]) + ls * len(w["text"]) + 2 * pad
+            alt = tam_e * LINE_HEIGHT
+            x_c, y_c = cx - larg / 2, cy - alt / 2
+            asc, desc = f.getmetrics()
+            antes = len(leg.palavras)
+            self._palavra_texto(
+                leg, f, w["text"], ls, int(round(x_c + pad)), y_c, alt,
+                int(round(y_c + (alt - (asc + desc)) / 2)), None, ini_f, enter)
+            for pal in leg.palavras[antes:]:
+                # um quadro por estagio durante a entrada; o ultimo fica
+                pal.janela = ((ini_f + est, ini_f + est + 1) if est < n
+                              else (ini_f + n, 1e9))
+                pal.opac = op
         return leg
 
     # ----- Recorte (SOLO_OUTLINE): traço que se desenha por comprimento -----
