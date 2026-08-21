@@ -7,6 +7,8 @@ o app. Só some com Sair explícito ou refresh_token inválido de verdade
 from __future__ import annotations
 
 import json
+import os
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -16,6 +18,11 @@ from urllib.parse import urlencode
 from app import settings_store as ss
 
 AUTH_PATH = Path.home() / "ATIVAVID" / "auth.json"
+
+# Os servidores são ThreadingHTTPServer: duas rotas podem renovar ao mesmo
+# tempo. O Supabase trata reuso de refresh_token como ataque e revoga a família
+# inteira, então o refresh é serializado.
+_REFRESH_LOCK = threading.RLock()
 
 # Access JWT do Supabase costuma durar ~1h; refresh cobre semanas/meses.
 # Margem para renovar antes de expirar.
@@ -49,9 +56,14 @@ def _save(data: dict[str, Any]) -> None:
     data = dict(data)
     data["remember"] = True
     data["saved_at"] = int(time.time())
-    tmp = AUTH_PATH.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-    tmp.replace(AUTH_PATH)
+    # Nome único: com duas threads o .tmp fixo virava escrita entrelaçada.
+    tmp = AUTH_PATH.with_suffix(f".{os.getpid()}.{threading.get_ident()}.tmp")
+    try:
+        tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(AUTH_PATH)
+    finally:
+        if tmp.exists():
+            tmp.unlink(missing_ok=True)
 
 
 def clear_session() -> None:
@@ -97,6 +109,45 @@ def _apply_token_response(blob: dict[str, Any], data: dict[str, Any], *, email_f
     return blob
 
 
+_ASK_ADMIN = "Conta criada. Peça ao admin para liberar os dias de acesso."
+
+
+def _signup_message() -> str:
+    """O admin pode ter liberado o e-mail ANTES do cadastro (pendingSignup).
+
+    Mandar 'peça ao admin' para quem já está liberado gerava chamado de suporte
+    com o acesso funcionando atrás do aviso.
+    """
+    try:
+        from app import license as lic
+
+        st = lic.entitlement(refresh=True)
+    except Exception:  # noqa: BLE001
+        return _ASK_ADMIN
+    if not st.get("entitled"):
+        return _ASK_ADMIN
+    if st.get("mode") == "trial":
+        left = st.get("trialDaysLeft")
+        return f"Conta criada. Teste liberado — {left} dia(s)." if left else "Conta criada."
+    until = str(st.get("validUntil") or "")[:10]
+    return "Conta criada — acesso já liberado" + (f" até {until}." if until else ".")
+
+
+def _mark_admin(is_admin: bool) -> dict[str, Any]:
+    """Grava só o is_admin, relendo o disco.
+
+    Regravar o blob que estava em memória desfazia a renovação que o
+    check_admin acabou de salvar, ressuscitando um refresh_token já rotacionado.
+    """
+    with _REFRESH_LOCK:
+        blob = _load()
+        if not blob.get("access_token"):
+            return blob
+        blob["is_admin"] = bool(is_admin)
+        _save(blob)
+        return blob
+
+
 def _session_from_password_grant(data: dict[str, Any], email: str) -> dict[str, Any]:
     session: dict[str, Any] = {
         "remember": True,
@@ -140,14 +191,16 @@ def login(email: str, password: str) -> dict[str, Any]:
     session = _session_from_password_grant(data, email)
     admin = check_admin(force=True)
     is_admin = bool(admin.get("admin"))
-    session["is_admin"] = is_admin
-    _save(session)
+    session = _mark_admin(is_admin) or session
+    msg = "Login OK" + (" · admin" if is_admin else "") + " · sessão salva neste PC"
+    if admin.get("error") == "unknown_action" and admin.get("message"):
+        msg = f"{msg} · {admin['message']}"
     return {
         "ok": True,
         "email": session.get("email") or email,
         "isAdmin": is_admin,
         "loggedIn": True,
-        "message": "Login OK" + (" · admin" if is_admin else "") + " · sessão salva neste PC",
+        "message": msg,
     }
 
 
@@ -197,19 +250,18 @@ def signup(email: str, password: str) -> dict[str, Any]:
         session = _session_from_password_grant(data, email)
         admin = check_admin(force=True)
         is_admin = bool(admin.get("admin"))
-        session["is_admin"] = is_admin
-        _save(session)
+        session = _mark_admin(is_admin) or session
         return {
             "ok": True,
             "email": session.get("email") or email,
             "isAdmin": is_admin,
             "loggedIn": True,
-            "message": "Conta criada. Peça ao admin para liberar os dias de acesso.",
+            "message": _signup_message(),
         }
 
     logged = login(email, password)
     if logged.get("ok"):
-        logged["message"] = "Conta criada e logada. Peça ao admin para liberar os dias de acesso."
+        logged["message"] = _signup_message()
         logged["loggedIn"] = True
         return logged
 
@@ -223,29 +275,55 @@ def signup(email: str, password: str) -> dict[str, Any]:
 
 
 def logout() -> dict[str, Any]:
+    # Revogar no servidor também: só apagar o arquivo deixava o refresh_token
+    # (semanas de validade) utilizável por qualquer cópia do auth.json feita
+    # antes do "Sair" — inclusive de uma sessão de admin.
+    c = _cfg()
+    blob = _load()
+    tok = str(blob.get("access_token") or "").strip()
+    if c["url"] and c["anon"] and tok:
+        try:
+            _http(
+                "POST",
+                f"{c['url']}/auth/v1/logout?scope=global",
+                {
+                    "apikey": c["anon"],
+                    "Authorization": f"Bearer {tok}",
+                    "Content-Type": "application/json",
+                },
+                {},
+            )
+        except Exception:  # noqa: BLE001
+            pass  # sem rede: ainda assim limpa localmente
     clear_session()
     return {"ok": True, "message": "Saiu da conta."}
 
 
 def _is_fatal_refresh_error(code: int, data: Any) -> bool:
     """Só apaga sessão em rejeição definitiva do refresh_token."""
-    if code in (401, 403):
-        return True
-    if code == 400 and isinstance(data, dict):
+    blob = ""
+    if isinstance(data, dict):
         blob = " ".join(
             str(data.get(k) or "")
             for k in ("error", "error_description", "msg", "message")
         ).lower()
+    # 401 também é a resposta para anon key errada/rotacionada — problema de
+    # config, não de sessão. Apagar aqui deslogava todo mundo por engano.
+    if "api key" in blob or "apikey" in blob:
+        return False
+    if code in (401, 403):
+        return True
+    if code == 400:
         fatal_hints = (
             "invalid_grant",
             "invalid refresh",
-            "refresh_token",
+            "refresh token not found",
             "already used",
-            "not found",
-            "expired",
             "revoked",
         )
-        # "expired" sozinho em access token às vezes aparece; se for refresh inválido, limpa.
+        # Marcadores específicos do GoTrue. Substrings soltas como "expired" ou
+        # "not found" também casam com erro transitório; na dúvida, conservar a
+        # sessão (o pior caso é pedir login no próximo 401 de verdade).
         if any(h in blob for h in fatal_hints):
             return True
     return False
@@ -259,6 +337,22 @@ def _refresh_if_needed(*, force: bool = False) -> dict[str, Any]:
     exp = int(blob.get("expires_at") or 0)
     now = int(time.time())
     if not force and exp > now + _REFRESH_SKEW_S:
+        return blob
+
+    with _REFRESH_LOCK:
+        return _refresh_locked()
+
+
+def _refresh_locked() -> dict[str, Any]:
+    # Reler: outra thread pode ter renovado enquanto esperávamos o lock. Se já
+    # está fresco, reaproveitar — refazer aqui é justamente o reuso que o
+    # GoTrue pune revogando a sessão.
+    blob = _load()
+    if not blob.get("access_token"):
+        return {}
+    exp = int(blob.get("expires_at") or 0)
+    now = int(time.time())
+    if exp > now + _REFRESH_SKEW_S:
         return blob
 
     refresh = str(blob.get("refresh_token") or "")
@@ -381,12 +475,23 @@ def check_admin(*, force: bool = False) -> dict[str, Any]:
         }
 
     if isinstance(data, dict):
-        return {
+        # `ok` NÃO é sinônimo de admin: qualquer RPC que responda ok:true sem o
+        # campo admin promoveria um não-admin.
+        is_adm = bool(data.get("admin")) if data.get("ok") else False
+        out = {
             "ok": True,
             "loggedIn": True,
-            "admin": bool(data.get("admin") or data.get("ok")),
+            "admin": is_adm,
             "email": data.get("email") or email,
         }
+        # RPC antigo sem o branch 'whoami' devolve unknown_action com HTTP 200:
+        # o admin de verdade virava não-admin sem nenhuma pista do porquê.
+        if data.get("error") == "unknown_action":
+            out["message"] = data.get("message") or (
+                "RPC admin desatualizado — rode supabase/rpc_admin.sql de novo no SQL Editor."
+            )
+            out["error"] = "unknown_action"
+        return out
     return {"ok": True, "loggedIn": True, "admin": False, "email": email}
 
 
@@ -401,12 +506,13 @@ def require_admin() -> dict[str, Any]:
     if not adm.get("loggedIn"):
         return {"ok": False, "loggedIn": False, "isAdmin": False, "email": None}
     is_admin = bool(adm.get("admin"))
-    blob = _load()
-    if blob.get("access_token"):
-        blob["is_admin"] = is_admin
-        if adm.get("email"):
-            blob["email"] = adm.get("email") or blob.get("email")
-        _save(blob)
+    with _REFRESH_LOCK:
+        blob = _load()
+        if blob.get("access_token"):
+            blob["is_admin"] = is_admin
+            if adm.get("email"):
+                blob["email"] = adm.get("email") or blob.get("email")
+            _save(blob)
     return {
         "ok": True,
         "loggedIn": True,

@@ -93,6 +93,25 @@ def configured() -> bool:
     return bool(c["url"] and c["anon"])
 
 
+def _unconfigured_status() -> dict[str, Any]:
+    """Sem config de licença: aberto só em dev; build de cliente falha fechada.
+
+    Antes, qualquer instalação sem supabaseUrl liberava tudo — e o instalador
+    não embutia config nenhuma, então todo cliente rodava sem gate.
+    """
+    if ss.is_dev_install():
+        return {"entitled": True, "mode": "open", "reason": "not_configured"}
+    return {
+        "entitled": False,
+        "mode": "blocked",
+        "error": "license_not_provisioned",
+        "message": (
+            "Esta instalação está sem a configuração de licença. "
+            "Reinstale o ATIVAVID pelo instalador oficial."
+        ),
+    }
+
+
 def _normalize_update(raw: Any) -> dict[str, Any] | None:
     if not isinstance(raw, dict):
         return None
@@ -165,7 +184,7 @@ def _http_rpc(payload: dict[str, Any]) -> tuple[int, Any]:
 def _call(action: str, extra: dict[str, Any] | None = None) -> dict[str, Any]:
     c = _cfg()
     if not c["url"] or not c["anon"]:
-        return {"entitled": True, "mode": "open", "reason": "not_configured"}
+        return _unconfigured_status()
 
     payload: dict[str, Any] = {
         "p_action": action,
@@ -211,6 +230,11 @@ def _call(action: str, extra: dict[str, Any] | None = None) -> dict[str, Any]:
     if code == 502 and isinstance(data, dict) and data.get("error") == "offline":
         return _offline_fallback(str(data.get("message") or "offline"))
 
+    # Servidor fora do ar / rate limit é falha transitória, não "sem licença":
+    # bloquear na hora derrubava cliente pagante numa manutenção do Supabase.
+    if code >= 500 or code == 429:
+        return _offline_fallback(f"http_{code}")
+
     if code >= 400:
         if isinstance(data, dict):
             body = dict(data)
@@ -235,6 +259,19 @@ def _call(action: str, extra: dict[str, Any] | None = None) -> dict[str, Any]:
     return _apply_update_gate(data)
 
 
+def _expired(valid_until: Any) -> bool:
+    """True se validUntil já passou. Desconhecido/ausente não expira."""
+    if not valid_until:
+        return False
+    try:
+        ts = datetime.fromisoformat(str(valid_until).replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    return ts <= datetime.now(timezone.utc)
+
+
 def _offline_fallback(err: str) -> dict[str, Any]:
     """Cache 72h para licença; force-update permanece bloqueado."""
     blob = _load_blob()
@@ -252,11 +289,13 @@ def _offline_fallback(err: str) -> dict[str, Any]:
                 "Atualize o ATIVAVID para continuar."
             )
             return _apply_update_gate(out)
-        if cached.get("entitled"):
+        if cached.get("entitled") and not _expired(cached.get("validUntil")):
             try:
                 ts = datetime.fromisoformat(str(cached_at).replace("Z", "+00:00"))
                 age_h = (datetime.now(timezone.utc) - ts).total_seconds() / 3600
-                if age_h <= 72:
+                # Idade negativa = cachedAt adulterado para o futuro. Antes isso
+                # passava no <= 72 e valia para sempre.
+                if 0 <= age_h <= 72:
                     out = dict(cached)
                     out["offline"] = True
                     out["cacheAgeHours"] = round(age_h, 1)
@@ -276,6 +315,14 @@ def _offline_fallback(err: str) -> dict[str, Any]:
 
 def _cache(status: dict[str, Any]) -> dict[str, Any]:
     status = _apply_update_gate(status)
+    # Resposta que saiu do próprio cache offline não pode regravar cachedAt:
+    # isso renovava a janela de 72h a cada checagem sem rede, para sempre.
+    if status.get("offline"):
+        return status
+    # Erro transitório não substitui um snapshot bom — senão um 5xx do servidor
+    # apagava a licença guardada e o fallback offline achava entitled=false.
+    if status.get("mode") == "error" and not status.get("entitled"):
+        return status
     blob = _load_blob()
     blob["deviceId"] = device_id()
     blob["cached"] = {
@@ -296,16 +343,13 @@ def _cache(status: dict[str, Any]) -> dict[str, Any]:
 
 def entitlement(*, refresh: bool = False) -> dict[str, Any]:
     if not configured():
-        return {
-            "ok": True,
-            "entitled": True,
-            "mode": "open",
-            "reason": "not_configured",
-            "deviceId": device_id(),
-            "checkoutUrl": _cfg()["checkout"] or None,
-            "configured": False,
-            "appVersion": _app_version(),
-        }
+        out = _unconfigured_status()
+        out["ok"] = True
+        out["deviceId"] = device_id()
+        out["checkoutUrl"] = _cfg()["checkout"] or None
+        out["configured"] = False
+        out["appVersion"] = _app_version()
+        return out
 
     blob = _load_blob()
     if not refresh and isinstance(blob.get("cached"), dict) and blob.get("cachedAt"):
@@ -314,9 +358,14 @@ def entitlement(*, refresh: bool = False) -> dict[str, Any]:
             age_min = (datetime.now(timezone.utc) - ts).total_seconds() / 60
             cached = dict(blob["cached"])
             cached = _apply_update_gate(cached)
+            # Idade negativa = cachedAt no futuro (adulterado): cache inválido.
+            fresh = 0 <= age_min <= 30
             # Force-update: respeita cache sem liberar edição
             if cached.get("mode") == "update_required" or (cached.get("update") or {}).get("force"):
-                if age_min <= 30:
+                # ...mas não depois de o usuário atualizar: o veredito era sobre
+                # a build antiga e travava por 30min quem já instalou a nova.
+                judged = str((cached.get("update") or {}).get("appVersion") or "")
+                if fresh and judged == _app_version():
                     out = cached
                     out["ok"] = True
                     out["entitled"] = False
@@ -326,7 +375,7 @@ def entitlement(*, refresh: bool = False) -> dict[str, Any]:
                     out["fromCache"] = True
                     out["appVersion"] = _app_version()
                     return out
-            elif age_min <= 30 and cached.get("entitled"):
+            elif fresh and cached.get("entitled") and not _expired(cached.get("validUntil")):
                 out = cached
                 out["ok"] = True
                 out["deviceId"] = device_id()
@@ -338,7 +387,13 @@ def entitlement(*, refresh: bool = False) -> dict[str, Any]:
         except ValueError:
             pass
 
-    remote = _call("trial")
+    # 'trial' CRIA trial no servidor. Como ação de rotina, dava 7 dias novos a
+    # quem tinha assinatura vencida; agora só no primeiro contato deste device.
+    remote = _call("trial" if not blob.get("trialAskedAt") else "status")
+    if not blob.get("trialAskedAt") and not remote.get("error"):
+        blob = _load_blob()
+        blob["trialAskedAt"] = _utc()
+        _save_blob(blob)
     if remote.get("error") and remote.get("mode") not in ("blocked", "update_required"):
         remote = _call("status")
     status = _cache(remote)
@@ -361,6 +416,59 @@ def activate(key: str) -> dict[str, Any]:
     status["configured"] = True
     status["appVersion"] = _app_version()
     return status
+
+
+# Rotas POST que seguem valendo sem licença: as que permitem SAIR do bloqueio
+# (entrar, ativar, configurar) e as que só mexem no que já existe (abrir pasta,
+# renomear, apagar). Todo o resto é gateado por exclusão — a lista de rotas que
+# produzem vídeo cresce a cada release, e gate por inclusão deixava passar
+# /api/ai-edit e /api/corrections.
+_GATE_FREE_EXACT = frozenset({
+    "/api/settings",
+    "/api/preset",
+    "/api/default-style",
+    "/api/keys",
+    "/api/keys/test",
+    "/api/cache/clear",
+    "/api/open-path",
+    "/api/apply-ack",
+    "/api/brands",
+    "/api/brand-presets",
+    "/api/hardware/bench",
+    "/api/llm-gateway",
+    "/v1/chat/completions",
+    "/api/jobs/open-folder",
+    "/api/jobs/open-final",
+    "/api/jobs/rename",
+    "/api/jobs/cancel",
+    "/api/jobs/delete",
+})
+_GATE_FREE_PREFIX = (
+    "/api/auth/",
+    "/api/license/",
+    "/api/admin/",
+    "/api/update/",
+    "/api/llm-proxy",
+    "/api/library/",
+    "/api/doutor",
+)
+
+
+def gate_free(path: str) -> bool:
+    p = (path or "").split("?", 1)[0].rstrip("/") or "/"
+    if p in _GATE_FREE_EXACT:
+        return True
+    return any(p.startswith(x) for x in _GATE_FREE_PREFIX)
+
+
+def gate(path: str) -> dict[str, Any] | None:
+    """None = pode seguir. dict = corpo do 403 que o handler deve devolver."""
+    if gate_free(path):
+        return None
+    st = entitlement()
+    if st.get("entitled"):
+        return None
+    return {"error": deny_reason(st), "license": public_status()}
 
 
 def deny_reason(st: dict[str, Any] | None = None) -> str:

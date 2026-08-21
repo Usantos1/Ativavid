@@ -1,0 +1,13 @@
+{
+  "_comment": [
+    "Copie para license_config.json (mesma pasta) e preencha com os valores do SEU projeto.",
+    "Este arquivo é empacotado pelo instalador e vence o settings.json do cliente:",
+    "é ele que liga o gate de licença na build que sai para venda.",
+    "Sem ele, uma build de cliente sobe BLOQUEADA (fail-closed) — de propósito.",
+    "No checkout de desenvolvimento (tem .git), a ausência dele mantém o modo aberto.",
+    "NUNCA coloque aqui a service role key: só a anon (public)."
+  ],
+  "supabaseUrl": "https://SEU-PROJETO.supabase.co",
+  "supabaseAnonKey": "eyJhbGciOi...anon(public)...",
+  "checkoutUrl": "https://link-do-seu-checkout"
+}

@@ -182,6 +182,7 @@ declare
   v_jwt_email text;
   v_jwt_uid uuid;
   v_bound boolean;
+  v_email_ok boolean := false;
 begin
   if p_device_id is null or length(trim(p_device_id)) = 0 then
     return public.ativavid_with_update(
@@ -204,30 +205,60 @@ begin
       v_jwt_uid := null;
     end;
 
-    if v_jwt_email is not null or v_jwt_uid is not null then
+    -- O e-mail do JWT só vale como identidade se o Auth o confirmou. Sem esta
+    -- checagem, qualquer um registrava o e-mail de um cliente já liberado pelo
+    -- admin (grant pendente) e herdava o acesso pago — e o auto-bind abaixo
+    -- gravava o user_id do invasor de forma irreversível.
+    if v_jwt_uid is not null then
+      begin
+        select true into v_email_ok
+        from auth.users u
+        where u.id = v_jwt_uid
+          and u.email_confirmed_at is not null
+          and lower(u.email) = v_jwt_email;
+      exception when others then
+        v_email_ok := false;
+      end;
+    end if;
+    v_email_ok := coalesce(v_email_ok, false);
+
+    if v_jwt_uid is not null then
       select * into v_acc
       from account_access a
       where a.status = 'active'
         and a.valid_until > now()
         and (
-          (v_jwt_uid is not null and a.user_id = v_jwt_uid)
-          or (v_jwt_email is not null and a.email = v_jwt_email)
+          a.user_id = v_jwt_uid
+          or (v_email_ok and a.user_id is null and a.email = v_jwt_email)
         )
       order by a.valid_until desc
       limit 1;
 
       if found then
-        if v_acc.user_id is null and v_jwt_uid is not null then
+        -- Vincula o grant pendente ao dono, uma vez, e só com e-mail confirmado.
+        if v_acc.user_id is null and v_jwt_uid is not null and v_email_ok then
           update account_access
             set user_id = v_jwt_uid, updated_at = now()
-            where id = v_acc.id
-          returning * into v_acc;
+            where id = v_acc.id and user_id is null;
+          -- Reler em vez de RETURNING: se outra sessão vinculou primeiro, o
+          -- RETURNING não devolveria linha e zerava v_acc.
+          select * into v_acc from account_access where id = v_acc.id;
         end if;
 
         select exists (
           select 1 from devices d
           where d.device_id = p_device_id and d.account_access_id = v_acc.id
         ) into v_bound;
+
+        if not v_bound then
+          -- Serializa contagem+insert: sem isto, duas máquinas simultâneas
+          -- passavam as duas pelo limite de max_devices.
+          perform pg_advisory_xact_lock(hashtextextended(v_acc.id::text, 0));
+          select exists (
+            select 1 from devices d
+            where d.device_id = p_device_id and d.account_access_id = v_acc.id
+          ) into v_bound;
+        end if;
 
         if not v_bound then
           select count(*)::int into v_count
@@ -325,11 +356,14 @@ begin
           'trialDaysLeft', 0,
           'trialDaysTotal', v_days,
           'message', case
+            when v_jwt_email is not null and not v_email_ok then
+              'Confirme seu e-mail para liberar o acesso — veja a mensagem que enviamos para ' || v_jwt_email || '.'
             when v_jwt_email is not null then
               'Conta sem acesso liberado. Peça ao admin para liberar dias neste e-mail, ou ative uma chave.'
             else
               'Trial encerrado. Crie uma conta e peça acesso, ou ative uma chave.'
-          end
+          end,
+          'emailVerified', v_email_ok
         );
       end if;
     end if;
@@ -391,6 +425,8 @@ begin
       );
     end if;
 
+    -- Serializa contagem+insert por licença (mesma corrida do caminho de conta).
+    perform pg_advisory_xact_lock(hashtextextended(v_lic.id::text, 0));
     select count(*)::int into v_count from devices where license_id = v_lic.id;
     if not exists (
          select 1 from devices where device_id = p_device_id and license_id = v_lic.id
@@ -452,6 +488,11 @@ grant execute on function public.ativavid_with_update(json, text) to anon, authe
 
 revoke all on function public.ativavid_version_lt(text, text) from public;
 grant execute on function public.ativavid_version_lt(text, text) to anon, authenticated, service_role;
+
+-- Sem isto o PostgREST fica com o schema cache velho depois do DROP acima: a
+-- assinatura nova dá PGRST202, o retry legado bate na função recém-removida, e
+-- o app manda rodar o SQL que você acabou de rodar.
+notify pgrst, 'reload schema';
 
 -- Exemplo para FORÇAR update (descomente quando publicar a release):
 -- update public.app_config set

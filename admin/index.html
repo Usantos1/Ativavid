@@ -59,9 +59,11 @@ function licenseKey() {
   return `ATIV-${chunk()}-${chunk()}-${chunk()}`;
 }
 
+// A service role NAO fica no localStorage: qualquer extensao do navegador le
+// de la, e essa chave ignora RLS (banco inteiro + Auth admin). So a URL fica.
 $("btnSave").onclick = () => {
-  localStorage.setItem("ativavid-admin", JSON.stringify({ url: $("url").value, key: $("key").value }));
-  out("Salvo neste navegador.");
+  localStorage.setItem("ativavid-admin", JSON.stringify({ url: $("url").value }));
+  out("URL salva neste navegador. A service role você cola a cada uso — de propósito.");
 };
 
 $("btnCreate").onclick = async () => {
@@ -104,7 +106,11 @@ $("btnList").onclick = async () => {
 try {
   const saved = JSON.parse(localStorage.getItem("ativavid-admin") || "{}");
   if (saved.url) $("url").value = saved.url;
-  if (saved.key) $("key").value = saved.key;
+  // Versão anterior guardava a chave aqui — limpa o que ficou para trás.
+  if (saved.key) {
+    localStorage.setItem("ativavid-admin", JSON.stringify({ url: saved.url || "" }));
+    out("Service role antiga removida deste navegador. Rotacione a chave no Supabase.");
+  }
 } catch {}
 </script>
 </body>

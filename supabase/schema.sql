@@ -61,6 +61,11 @@ alter table public.devices
   add column if not exists account_access_id uuid references public.account_access(id) on delete set null;
 
 create index if not exists licenses_key_idx on public.licenses (license_key);
+-- Idempotência do webhook: o Stripe/MP reentrega o mesmo evento em timeout e
+-- permite reenvio manual. Sem isto, um pagamento virava N licenças.
+create unique index if not exists licenses_provider_ref_uq
+  on public.licenses (provider, provider_ref)
+  where provider_ref is not null;
 create index if not exists devices_license_idx on public.devices (license_id);
 create index if not exists devices_account_idx on public.devices (account_access_id);
 create index if not exists account_access_user_idx on public.account_access (user_id);

@@ -195,8 +195,28 @@ function jobDetail() {
 async function api(path, opts) {
   const res = await fetch(path, opts);
   const data = await res.json().catch(() => ({}));
+  if (res.status === 403 && (data.error === "license_required" || data.error === "update_required")) {
+    // Antes, so o upload por arrastar tratava isto. Pelo seletor de pasta — que
+    // e o caminho padrao — o cliente via um toast escrito "license_required" e
+    // nenhum caminho para assinar.
+    renderLicense(data.license || {});
+    if (data.error === "update_required" || data.license?.update?.force) openUpdateDialog(data.license);
+    else openLicenseDialog(data.license);
+    throw new Error(mensagemDeBloqueio(data));
+  }
   if (!res.ok) throw new Error(data.error || res.statusText);
   return data;
+}
+
+/** Texto em portugues para o 403 do gate — nunca o codigo de erro cru. */
+function mensagemDeBloqueio(data) {
+  const L = (data && data.license) || {};
+  if (data?.error === "update_required" || L.update?.force) {
+    return L.update?.message || "Atualize o ATIVAVID para continuar.";
+  }
+  if (L.message) return L.message;
+  if (L.mode === "trial") return "Seu período de teste acabou — assine para continuar.";
+  return "Precisa de assinatura ativa para editar.";
 }
 
 
@@ -1287,6 +1307,15 @@ function openUpdateDialog(lic) {
   }
   const later = $("#btnUpdLater");
   if (later) later.hidden = !!upd.force;
+  // Esconder o "Agora não" nao bastava: o Esc fecha showModal() do mesmo jeito,
+  // e ai nao sobrava nenhum caminho visivel para baixar a atualizacao.
+  if (!dlg.dataset.escWired) {
+    dlg.dataset.escWired = "1";
+    dlg.addEventListener("cancel", (e) => {
+      if (dlg.dataset.forced === "1") e.preventDefault();
+    });
+  }
+  dlg.dataset.forced = upd.force ? "1" : "0";
   if (!dlg.open) dlg.showModal();
 }
 
@@ -1344,7 +1373,9 @@ async function activateLicenseKey(key) {
 function openCheckout(url) {
   const u = url || state.license?.checkoutUrl;
   if (!u) {
-    toast("Configure o Checkout URL em Sistema → Licença");
+    // "Configure o Checkout URL em Sistema → Licença" era instrução de
+    // desenvolvedor aparecendo para o cliente que clicou em Assinar.
+    toast("Assinatura indisponível agora. Fale com o suporte para liberar o acesso.");
     return;
   }
   window.open(u, "_blank", "noopener");

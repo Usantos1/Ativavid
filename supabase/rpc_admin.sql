@@ -42,10 +42,15 @@ stable
 security definer
 set search_path = public
 as $$
+  -- Casa pelo usuário do Auth com e-mail CONFIRMADO, não pelo e-mail cru do
+  -- JWT: sem isso, quem conseguisse um token com o e-mail do admin (signup sem
+  -- confirmação, troca de e-mail) virava admin.
   select exists (
     select 1
-    from public.admins a
-    where lower(a.email) = lower(coalesce(auth.jwt() ->> 'email', ''))
+    from auth.users u
+    join public.admins a on lower(a.email) = lower(u.email)
+    where u.id = nullif(auth.jwt() ->> 'sub', '')::uuid
+      and u.email_confirmed_at is not null
   );
 $$;
 
@@ -136,7 +141,9 @@ begin
       set status = 'active',
           valid_until = excluded.valid_until,
           max_devices = excluded.max_devices,
-          user_id = coalesce(account_access.user_id, excluded.user_id),
+          -- O dono do e-mail no Auth vence o vínculo já gravado: com o coalesce
+          -- invertido, um bind errado virava permanente e nem o admin desfazia.
+          user_id = coalesce(excluded.user_id, account_access.user_id),
           notes = coalesce(excluded.notes, account_access.notes),
           updated_at = now()
     returning * into v_acc;
@@ -278,3 +285,6 @@ $$;
 
 revoke all on function public.ativavid_admin_license(text, text, int, int, text, text, text) from public;
 grant execute on function public.ativavid_admin_license(text, text, int, int, text, text, text) to authenticated, service_role;
+
+-- Recarrega o schema cache do PostgREST depois dos DROP/CREATE acima.
+notify pgrst, 'reload schema';

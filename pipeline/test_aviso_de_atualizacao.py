@@ -56,7 +56,13 @@ def _upd(monkeypatch, política: dict | None, tag_github: str | None):
         def public_status():
             return {"update": política}
 
+    # `from app import license` resolve pelo ATRIBUTO do pacote assim que o
+    # submódulo é importado por qualquer outro teste — trocar só o sys.modules
+    # deixava passar o módulo real e o stub era ignorado.
+    import app as _app
+
     monkeypatch.setitem(sys.modules, "app.license", _Lic)
+    monkeypatch.setattr(_app, "license", _Lic, raising=False)
     monkeypatch.setattr(uc, "configured_repo", lambda: "dono/repo")
 
     chamou = {"github": False}

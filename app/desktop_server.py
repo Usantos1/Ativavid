@@ -30,6 +30,7 @@ sys.path.insert(0, str(HELPERS))
 sys.path.insert(0, str(REPO))
 
 import preview_server as ps  # noqa: E402
+from app import http_guard as guard  # noqa: E402
 from app import local_server as ls  # noqa: E402
 
 # Cliente (WebView) cancela request — comum ao trocar de página / scrub de vídeo.
@@ -72,7 +73,8 @@ class DesktopHandler(ps.Handler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(raw)))
         self.send_header("Cache-Control", "no-store")
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Origin", guard.cors_origin(self.headers))
+        self.send_header("Vary", "Origin")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
@@ -114,7 +116,8 @@ class DesktopHandler(ps.Handler):
 
     def do_OPTIONS(self) -> None:  # noqa: N802
         self.send_response(204)
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Origin", guard.cors_origin(self.headers))
+        self.send_header("Vary", "Origin")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
@@ -197,7 +200,8 @@ class DesktopHandler(ps.Handler):
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
             self.send_header("Cache-Control", "no-store")
-            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Origin", guard.cors_origin(self.headers))
+            self.send_header("Vary", "Origin")
             self.end_headers()
             try:
                 self.wfile.write(b"retry: 3000\n\n")
@@ -368,6 +372,21 @@ class DesktopHandler(ps.Handler):
 
     def do_POST(self) -> None:  # noqa: N802
         raw = self.path.split("?", 1)[0]
+
+        # CSRF: um site aberto no navegador não pode mandar POST para o app.
+        if not guard.origin_allowed(self.headers):
+            self._json({"error": "forbidden_origin"}, 403)
+            return
+
+        # Gate por exclusão. Sem ele, tudo que cai no ps.Handler.do_POST lá
+        # embaixo (o editor inteiro, incluindo /api/corrections op=apply, que
+        # re-renderiza o final) rodava sem licença.
+        from app import license as lic
+
+        denied = lic.gate(raw)
+        if denied is not None:
+            self._json(denied, 403)
+            return
 
         if raw in ("/v1/chat/completions", "/v1/chat/completions/"):
             from app import llm_gateway as gw

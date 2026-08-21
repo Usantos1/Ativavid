@@ -31,6 +31,7 @@ from urllib.parse import parse_qs, urlparse
 # `app/` entra no sys.path — sem a raiz, `import app.*` no topo quebra.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from app import http_guard as guard  # noqa: E402
 from app.job_store import SqliteJobStore  # noqa: E402
 
 # UTF-8 stdout on Windows consoles (same idea as helpers/_utf8.py)
@@ -1503,7 +1504,8 @@ class StudioHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
-            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Origin", guard.cors_origin(self.headers))
+            self.send_header("Vary", "Origin")
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
             self.send_header("Access-Control-Allow-Headers", "Content-Type")
             self.end_headers()
@@ -1516,7 +1518,6 @@ class StudioHandler(BaseHTTPRequestHandler):
                 f"Content-Type: {ctype}\r\n"
                 f"Content-Length: {len(body)}\r\n"
                 "Cache-Control: no-store\r\n"
-                "Access-Control-Allow-Origin: *\r\n"
                 "Connection: close\r\n"
                 "\r\n"
             ).encode("ascii", "ignore")
@@ -1544,7 +1545,8 @@ class StudioHandler(BaseHTTPRequestHandler):
 
     def do_OPTIONS(self) -> None:  # noqa: N802
         self.send_response(204)
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Origin", guard.cors_origin(self.headers))
+        self.send_header("Vary", "Origin")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
@@ -1836,6 +1838,20 @@ class StudioHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
         path = parsed.path
+
+        # CSRF: um site aberto no navegador não pode mandar POST para o app.
+        if not guard.origin_allowed(self.headers):
+            self._json({"error": "forbidden_origin"}, 403)
+            return
+
+        # Gate de licença por exclusão: tudo que não está na allowlist de
+        # license.gate_free precisa de entitlement.
+        from app import license as lic
+
+        denied = lic.gate(path)
+        if denied is not None:
+            self._json(denied, 403)
+            return
 
         if path == "/api/preset":
             body = self._read_json()

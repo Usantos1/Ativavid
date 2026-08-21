@@ -46,6 +46,35 @@ if (-not $iscc) {
   exit 2
 }
 
+# A build de venda precisa da config de licenca embutida. Sem ela o app sobe
+# BLOQUEADO no cliente (fail-closed) — melhor barrar aqui do que descobrir
+# depois que o instalador saiu sem gate nenhum.
+$licCfg = Join-Path (Split-Path $Root -Parent) "license_config.json"
+if (-not (Test-Path $licCfg)) {
+  Write-Host "Falta license_config.json na raiz do repo." -ForegroundColor Red
+  Write-Host "Copie license_config.example.json e preencha supabaseUrl + anon key (nunca a service role)."
+  exit 3
+}
+try {
+  $cfg = Get-Content $licCfg -Raw | ConvertFrom-Json
+} catch {
+  Write-Host "license_config.json nao e JSON valido." -ForegroundColor Red
+  exit 3
+}
+foreach ($campo in @("supabaseUrl", "supabaseAnonKey")) {
+  if (-not $cfg.$campo) {
+    Write-Host "license_config.json sem '$campo'." -ForegroundColor Red
+    exit 3
+  }
+}
+if ($cfg.PSObject.Properties.Name -contains "supabaseServiceRoleKey") {
+  Write-Host "license_config.json contem service role — NUNCA embutir no cliente." -ForegroundColor Red
+  exit 3
+}
+if (-not $cfg.checkoutUrl) {
+  Write-Host "Aviso: checkoutUrl vazio — o botao Assinar nao leva a lugar nenhum." -ForegroundColor Yellow
+}
+
 $ver = Read-AppVersion
 $expectedName = "Instalar ATIVAVID $ver.exe"
 

@@ -14,6 +14,12 @@ _LEGACY_SETTINGS = REPO / ".ativavid-settings.json"
 # Produção: pasta do usuário (gravável sem admin)
 USER_DIR = Path.home() / "ATIVAVID"
 SETTINGS_PATH = USER_DIR / "settings.json"
+# Config de licença embutida na build do cliente (somente leitura, ao lado do app).
+# O instalador grava este arquivo; ele vence o settings.json do usuário para que
+# apagar a URL do Supabase não vire "modo aberto".
+BUNDLED_LICENSE_PATH = REPO / "license_config.json"
+# Campos que a build embutida trava contra edição do cliente.
+_MANAGED_KEYS = ("supabaseUrl", "supabaseAnonKey", "checkoutUrl")
 
 DEFAULTS: dict[str, Any] = {
     "performanceProfile": "auto",
@@ -48,6 +54,24 @@ def _read_json(path: Path) -> dict[str, Any]:
         return {}
 
 
+def bundled_license_config() -> dict[str, Any]:
+    """Config de licença embutida pelo instalador (vazio em dev/checkout do repo)."""
+    if not BUNDLED_LICENSE_PATH.exists():
+        return {}
+    raw = _read_json(BUNDLED_LICENSE_PATH)
+    return {k: raw[k] for k in _MANAGED_KEYS if str(raw.get(k) or "").strip()}
+
+
+def license_managed() -> bool:
+    """True quando a build traz a config de licença — cliente não pode alterá-la."""
+    return bool(bundled_license_config())
+
+
+def is_dev_install() -> bool:
+    """Checkout de desenvolvimento (tem .git) — o instalador não empacota .git."""
+    return (REPO / ".git").exists()
+
+
 def load_settings() -> dict[str, Any]:
     data = dict(DEFAULTS)
     # Preferência: settings do usuário; senão legado no repo/install
@@ -58,16 +82,24 @@ def load_settings() -> dict[str, Any]:
     else:
         raw = {}
     data.update({k: raw[k] for k in DEFAULTS if k in raw})
+    # A config embutida vence a do usuário: apagar supabaseUrl no settings.json
+    # não pode destravar o app.
+    data.update(bundled_license_config())
     return data
 
 
 def save_settings(patch: dict[str, Any]) -> dict[str, Any]:
     data = load_settings()
+    managed = bundled_license_config()
     for k, v in patch.items():
         if k not in DEFAULTS:
             continue
-        # Campos secretos: string vazia no form = manter o valor já salvo
-        if k in ("supabaseAnonKey", "supabaseServiceRoleKey") and not str(v or "").strip():
+        # Build com config embutida: a origem da licença não se edita pelo app.
+        if k in managed:
+            continue
+        # Campos secretos: string vazia no form = manter o valor já salvo.
+        # supabaseUrl entra aqui porque esvaziá-la desligava o gate de licença.
+        if k in ("supabaseUrl", "supabaseAnonKey", "supabaseServiceRoleKey") and not str(v or "").strip():
             continue
         data[k] = v
     USER_DIR.mkdir(parents=True, exist_ok=True)
@@ -87,6 +119,7 @@ def public_settings() -> dict[str, Any]:
     srv = str(out.get("supabaseServiceRoleKey") or "").strip()
     out["supabaseServiceRoleKey"] = ""
     out["hasServiceRole"] = bool(srv)
+    out["licenseManaged"] = license_managed()
     return out
 
 
