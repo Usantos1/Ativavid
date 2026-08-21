@@ -272,17 +272,28 @@ begin
       end if;
       select coalesce(json_agg(row_to_json(d)), '[]'::json) into v_list
       from (
-        select device_id, license_id, account_access_id, label, last_seen, created_at
-        from devices where license_id = v_lid
-        order by last_seen desc nulls last
+        select d.device_id, d.label, d.last_seen, d.created_at,
+               l.valid_until, l.status, a.email as account_email
+        from devices d
+        left join licenses l on l.id = d.license_id
+        left join account_access a on a.id = d.account_access_id
+        where d.license_id = v_lid
+        order by d.last_seen desc nulls last
         limit 100
       ) d;
     else
+      -- Traz validade e dono junto: sem isso o painel listava IDs de aparelho
+      -- sem dizer até quando cada um vale, que é a única coisa que importa.
       select coalesce(json_agg(row_to_json(d)), '[]'::json) into v_list
       from (
-        select device_id, license_id, account_access_id, label, last_seen, created_at
-        from devices
-        order by last_seen desc nulls last
+        select d.device_id, d.label, d.last_seen, d.created_at,
+               coalesce(l.valid_until, a.valid_until) as valid_until,
+               coalesce(l.status, a.status) as status,
+               a.email as account_email
+        from devices d
+        left join licenses l on l.id = d.license_id
+        left join account_access a on a.id = d.account_access_id
+        order by d.last_seen desc nulls last
         limit 100
       ) d;
     end if;

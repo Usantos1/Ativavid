@@ -1313,6 +1313,15 @@ body.view-estilo-on .ws-head {
 }
 .hint { color: var(--dim); font-size: 13px; line-height: 1.5; }
 .panel-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+/* Caminho longo numa linha só, com reticências — em vez de quebrar em três. */
+.ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+/* Campo cujo rótulo visível seria redundante com o título do card. */
+.ia-form.sr-label { margin-top: 4px; }
 
 .ia-grid {
   display: grid;
@@ -1870,9 +1879,14 @@ body.view-estilo-on .ws-head {
 .sys-grid,
 .lic-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  /* 250px em vez de 280: por 2px os 4 cards não cabiam numa linha e o último
+     caía sozinho, deixando dois terços da linha vazios. */
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
   gap: 12px;
-  align-items: stretch;
+  /* `stretch` dava a todo card a altura do mais alto da linha: um card de uma
+     linha ("Detectando GPU…") virava um retângulo vazio do tamanho do card de
+     Projetos, com o botão solto lá no fundo. Cada card tem a sua altura. */
+  align-items: start;
   width: 100%;
 }
 
@@ -2211,14 +2225,17 @@ body.view-estilo-on .ws-head {
   border-top: 1px solid color-mix(in srgb, var(--text) 7%, transparent);
 }
 .lic-admin-list {
-  flex: 1;
-  min-height: 280px;
+  /* Sem min-height fixo: eram 280px por lista, e com duas listas na tela
+     isso virava meia tela de buraco embaixo de uma linha só. */
   border: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
   border-radius: 12px;
   background: color-mix(in srgb, var(--panel) 70%, transparent);
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+.lic-admin-list:empty {
+  display: none;
 }
 .dlg-lic-account {
   width: min(440px, calc(100vw - 32px));
@@ -2545,16 +2562,24 @@ body.view-estilo-on .ws-head {
   height: 100%;
 }
 .admin-access-empty {
-  padding: 48px 20px;
+  padding: 32px 20px;
   margin: 0;
   text-align: center;
   color: var(--dim);
-  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 14px;
+}
+/* `display:flex` tem a mesma especificidade de `[hidden]` e vinha depois, então
+   VENCIA: o estado vazio aparecia junto com a tabela cheia — "Nenhum
+   dispositivo liberado" logo acima da lista de dispositivos. */
+.admin-access-empty[hidden],
+.admin-access-table[hidden],
+.lic-admin-list[hidden],
+.lic-admin-sub[hidden] {
+  display: none;
 }
 .admin-access-table.wrap {
   overflow: auto;
@@ -2608,6 +2633,20 @@ body.view-estilo-on .ws-head {
 .access-st.revoked {
   color: #ff8f9f;
   background: color-mix(in srgb, #ff8f9f 12%, transparent);
+}
+/* Vencendo: precisa saltar antes de virar problema do cliente. */
+.access-st.warn {
+  color: #f5b942;
+  background: color-mix(in srgb, #f5b942 14%, transparent);
+}
+/* Legenda da lista secundária (contas), abaixo dos dispositivos. */
+.lic-admin-sub {
+  margin: 18px 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: color-mix(in srgb, var(--text) 55%, transparent);
 }
 .access-table .ghost-btn {
   height: 28px;

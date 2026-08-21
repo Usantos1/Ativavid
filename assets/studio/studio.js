@@ -1210,7 +1210,10 @@ function syncLicenseChrome() {
   if (panel) {
     const justOpened = isAdmin && panel.hidden;
     panel.hidden = !isAdmin;
-    if (justOpened) loadAccessList().catch(() => {});
+    if (justOpened) {
+      loadAccessList().catch(() => {});
+      loadDeviceList().catch(() => {});
+    }
   }
   const pay = $("#licAccountStrip");
   if (pay) pay.hidden = !needsPay;
@@ -2948,20 +2951,27 @@ function renderAccessList(data) {
   const table = $("#adminAccessTable");
   if (!empty || !table) return;
   if (!data || data.ok === false) {
+    if ($("#adminAccessList")) $("#adminAccessList").hidden = false;
+    if ($("#adminAccessCaption")) $("#adminAccessCaption").hidden = false;
     empty.hidden = false;
     table.hidden = true;
     empty.textContent = (data && (data.message || data.error)) || "Falha ao listar. Rode supabase/rpc_admin.sql se ainda não rodou.";
     return;
   }
   const rows = Array.isArray(data.access) ? data.access : [];
+  const caption = $("#adminAccessCaption");
+  const box = $("#adminAccessList");
+  // Contas viraram caminho secundário: a venda é por dispositivo. Sem nenhuma
+  // conta, a seção inteira some em vez de ocupar espaço com um vazio.
   if (!rows.length) {
-    empty.hidden = false;
+    empty.hidden = true;
     table.hidden = true;
-    empty.innerHTML = `Nenhuma conta ainda. <button type="button" class="export-btn export-btn--sm" id="btnLicAccountEmpty">Nova conta</button>`;
-    const b = $("#btnLicAccountEmpty");
-    if (b) b.onclick = () => openLicAccountDialog("");
+    if (caption) caption.hidden = true;
+    if (box) box.hidden = true;
     return;
   }
+  if (caption) caption.hidden = false;
+  if (box) box.hidden = false;
   empty.hidden = true;
   table.hidden = false;
   table.innerHTML = `
@@ -3015,15 +3025,119 @@ function renderAccessList(data) {
   });
 }
 
+function devMsg(txt) {
+  const el = $("#adminDevMsg");
+  if (!el) return;
+  el.textContent = txt || "";
+  el.hidden = !txt;
+}
+
+function abrirDlgDispositivo(open) {
+  const dlg = $("#dlgLicDevice");
+  if (!dlg) return;
+  if (open) {
+    devMsg("");
+    if (!dlg.open) dlg.showModal();
+    $("#adminDevId")?.focus();
+  } else if (dlg.open) {
+    dlg.close();
+  }
+}
+
+/** Dias que faltam — o que decide se você renova hoje ou daqui a um mês. */
+function diasRestantes(until) {
+  if (!until) return null;
+  const d = new Date(until);
+  if (Number.isNaN(d.getTime())) return null;
+  return Math.ceil((d.getTime() - Date.now()) / 86400000);
+}
+
+function renderDeviceList(data) {
+  const empty = $("#adminDevEmpty");
+  const table = $("#adminDevTable");
+  if (!empty || !table) return;
+  if (!data || data.ok === false) {
+    empty.hidden = false;
+    table.hidden = true;
+    empty.textContent = (data && (data.message || data.error)) || "Falha ao listar dispositivos.";
+    return;
+  }
+  const rows = Array.isArray(data.devices) ? data.devices : [];
+  if (!rows.length) {
+    empty.hidden = false;
+    table.hidden = true;
+    empty.innerHTML = `Nenhum dispositivo liberado ainda. `
+      + `<button type="button" class="export-btn export-btn--sm" id="btnDevEmptyOpen">Liberar dispositivo</button>`;
+    $("#btnDevEmptyOpen")?.addEventListener("click", () => abrirDlgDispositivo(true));
+    return;
+  }
+  empty.hidden = true;
+  table.hidden = false;
+  table.innerHTML = `
+    <table class="access-table">
+      <thead>
+        <tr><th>Dispositivo</th><th>Dono</th><th>Vale até</th><th>Último uso</th><th></th></tr>
+      </thead>
+      <tbody>
+        ${rows.map((r) => {
+          const id = String(r.device_id || "");
+          const idCurto = id.length > 22 ? id.slice(0, 10) + "…" + id.slice(-6) : id;
+          const dias = diasRestantes(r.valid_until);
+          // O estado que importa: vencido, vencendo, ou tranquilo.
+          let tom = "active";
+          let quando = fmtAccessUntil(r.valid_until);
+          if (!r.valid_until) { tom = "revoked"; quando = "sem acesso"; }
+          else if (dias !== null && dias <= 0) { tom = "revoked"; quando = `venceu ${quando}`; }
+          else if (dias !== null && dias <= 15) { tom = "warn"; quando = `${quando} (${dias}d)`; }
+          const dono = escapeHtml(r.account_email || r.label || "—");
+          const seg = id.replace(/"/g, "&quot;");
+          return `<tr class="access-row">
+            <td class="mono" title="${escapeHtml(id)}">${escapeHtml(idCurto)}</td>
+            <td>${dono}</td>
+            <td><span class="access-st ${tom}">${escapeHtml(quando)}</span></td>
+            <td>${escapeHtml(fmtAccessUntil(r.last_seen))}</td>
+            <td><button type="button" class="ghost-btn dev-renew" data-dev="${seg}">Renovar</button></td>
+          </tr>`;
+        }).join("")}
+      </tbody>
+    </table>`;
+  table.querySelectorAll(".dev-renew").forEach((b) => {
+    b.addEventListener("click", () => {
+      abrirDlgDispositivo(true);
+      const inp = $("#adminDevId");
+      if (inp) inp.value = b.dataset.dev || "";
+    });
+  });
+}
+
+async function loadDeviceList() {
+  try {
+    const data = await api("/api/admin/devices");
+    renderDeviceList(data);
+    return data;
+  } catch (e) {
+    renderDeviceList({ ok: false, message: e.message || "Falha ao listar" });
+    return null;
+  }
+}
+
+/** Baixar só vira ação principal quando existe atualização de verdade. */
+function marcarBotaoDeUpdate(up) {
+  const btn = document.getElementById("btnUpdateOpen");
+  if (!btn) return;
+  const tem = !!(up && (up.updateAvailable || up.force));
+  btn.classList.toggle("export-btn", tem);
+  btn.classList.toggle("ghost-btn", !tem);
+  btn.textContent = tem ? "Baixar atualização" : "Baixar última versão";
+}
+
 async function loadAccessList() {
   const empty = $("#adminAccessEmpty");
   const table = $("#adminAccessTable");
-  const hasTable = !!(table && !table.hidden && table.querySelector("table"));
-  // Evita piscar: só mostra "Carregando…" na 1ª carga (sem tabela ainda).
-  if (empty && !hasTable) {
-    empty.hidden = false;
-    empty.textContent = "Carregando acessos…";
-  }
+  // Sem "Carregando…": a lista de contas é secundária e só aparece quando tem
+  // conteúdo. O aviso ficava visível junto com a tabela já preenchida.
+  void empty;
+  void table;
   try {
     const data = await api("/api/admin/access");
     renderAccessList(data);
@@ -3554,25 +3668,8 @@ function wireForms() {
   }
   // Liberar pelo ID do dispositivo: o cliente le o ID na tela de Licenca e
   // manda. Nao precisa criar conta nem digitar chave.
-  const devMsg = (txt) => {
-    const el = $("#adminDevMsg");
-    if (!el) return;
-    el.textContent = txt || "";
-    el.hidden = !txt;
-  };
-  const abreDevDlg = (open) => {
-    const dlg = $("#dlgLicDevice");
-    if (!dlg) return;
-    if (open) {
-      devMsg("");
-      if (!dlg.open) dlg.showModal();
-      $("#adminDevId")?.focus();
-    } else if (dlg.open) {
-      dlg.close();
-    }
-  };
-  $("#btnLicDeviceOpen")?.addEventListener("click", () => abreDevDlg(true));
-  $("#btnLicDeviceClose")?.addEventListener("click", () => abreDevDlg(false));
+  $("#btnLicDeviceOpen")?.addEventListener("click", () => abrirDlgDispositivo(true));
+  $("#btnLicDeviceClose")?.addEventListener("click", () => abrirDlgDispositivo(false));
   $("#adminDevDayPresets")?.addEventListener("click", (e) => {
     const d = e.target?.dataset?.days;
     if (d && $("#adminDevDays")) $("#adminDevDays").value = d;
@@ -3599,7 +3696,10 @@ function wireForms() {
       adminOut(data);
       devMsg(data.message || "");
       toast(data.ok ? (data.message || "Pronto") : (data.message || falhaMsg));
-      if (data.ok && action === "grant") $("#adminDevId").value = "";
+      if (data.ok) {
+        await loadDeviceList();
+        if (action === "grant") $("#adminDevId").value = "";
+      }
     } catch (e) {
       adminOut(String(e.message || e));
       devMsg(String(e.message || e));
@@ -3772,6 +3872,7 @@ function wireForms() {
       } catch { /* ignore */ }
       const res = await api("/api/update/check");
       $("#updateHint").textContent = res.message || "Não foi possível verificar.";
+      marcarBotaoDeUpdate(res);
       if (res.force) {
         openUpdateDialog({ update: res, mode: "update_required", message: res.message });
         toast("Atualização obrigatória");
@@ -3938,6 +4039,7 @@ async function loadLicenca() {
   } catch { /* ignore */ }
   if (state.auth && state.auth.isAdmin) {
     await loadAccessList().catch(() => {});
+    await loadDeviceList().catch(() => {});
   }
 }
 
@@ -4104,6 +4206,7 @@ async function loadSistema() {
   try {
     const up = await api("/api/update/check");
     if ($("#updateHint") && up.message) $("#updateHint").textContent = up.message;
+    marcarBotaoDeUpdate(up);
   } catch { /* ignore */ }
   try {
     const cache = await api("/api/cache");

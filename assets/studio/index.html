@@ -568,19 +568,24 @@
             <section class="lic-admin" id="licenseAdminPanel" hidden>
               <header class="lic-admin-head">
                 <div>
-                  <h4>Contas</h4>
-                  <p class="hint">Acesso de clientes — validade e PCs.</p>
+                  <h4>Quem está liberado</h4>
+                  <p class="hint">Dispositivos e contas com acesso ativo.</p>
                 </div>
                 <div class="lic-admin-head-actions">
                   <button type="button" class="export-btn export-btn--sm" id="btnLicDeviceOpen">Liberar dispositivo</button>
-                  <button type="button" class="ghost-btn" id="btnLicAccountOpen">Nova conta</button>
                   <button type="button" class="ghost-btn" id="btnAdminListAccess">Atualizar</button>
-                  <button type="button" class="lic-adv-link" id="btnLicAdvOpen" title="Service role, ATIV- e devices">Avançado</button>
+                  <button type="button" class="lic-adv-link" id="btnLicAdvOpen" title="Contas, service role e chaves ATIV-">Mais opções</button>
                 </div>
               </header>
 
-              <div class="lic-admin-list" id="adminAccessList">
-                <div class="admin-access-empty hint" id="adminAccessEmpty">Nenhuma conta ainda.</div>
+              <div class="lic-admin-list">
+                <div class="admin-access-empty hint" id="adminDevEmpty">Nenhum dispositivo liberado ainda.</div>
+                <div class="admin-access-table wrap" id="adminDevTable" hidden></div>
+              </div>
+
+              <p class="lic-admin-sub" id="adminAccessCaption" hidden>Contas (login por e-mail)</p>
+              <div class="lic-admin-list" id="adminAccessList" hidden>
+                <div class="admin-access-empty hint" id="adminAccessEmpty" hidden>Nenhuma conta ainda.</div>
                 <div class="admin-access-table wrap" id="adminAccessTable" hidden></div>
               </div>
             </section>
@@ -612,9 +617,12 @@
 
               <div class="sys-card">
                 <h4>Perfil</h4>
-                <p class="hint" id="sysPerfHint">Desempenho da máquina neste computador.</p>
+                <!-- O rótulo "Perfil" saiu do campo: o card já se chama Perfil,
+                     e a palavra aparecia três vezes na mesma tela. -->
+                <p class="hint" id="sysPerfHint">Quanto da máquina o ATIVAVID pode usar.</p>
                 <p class="hint hidden" id="sysLaneHint">Acompanhe o processamento dos seus vídeos.</p>
-                <label class="ia-form">Perfil
+                <label class="ia-form sr-label">
+                  <span class="sr-only">Perfil</span>
                   <select id="perfProfile">
                     <option value="auto">Automático</option>
                     <option value="eco">Econômico</option>
@@ -630,10 +638,13 @@
               <div class="sys-card">
                 <h4>Projetos e cache</h4>
                 <p class="hint" id="cacheHint">Cache: —</p>
-                <p class="hint mono" id="projectsRootHint"></p>
                 <label class="ia-form">Pasta de projetos
                   <input type="text" id="projectsRootInput" placeholder="C:\Users\…\ATIVAVID\Projetos" spellcheck="false">
                 </label>
+                <!-- Caminho em uso vai ABAIXO do campo e numa linha só: em cima
+                     dele, quebrado em três linhas, competia com o valor editável
+                     e dava a impressão de dois caminhos diferentes. -->
+                <p class="hint mono ellipsis" id="projectsRootHint"></p>
                 <div class="panel-actions">
                   <button type="button" class="export-btn" id="btnSaveRoot">Salvar pasta</button>
                   <button type="button" class="ghost-btn" id="btnClearCache">Limpar cache</button>
@@ -645,7 +656,9 @@
                 <p class="hint" id="updateHint">Baixe a última versão no GitHub.</p>
                 <p class="hint" id="updateSoftHint" hidden></p>
                 <div class="panel-actions">
-                  <button type="button" class="export-btn" id="btnUpdateOpen">Baixar última versão</button>
+                  <!-- Sem atualização pendente, baixar não é a ação principal:
+                       o JS promove este botão a primário só quando há uma. -->
+                  <button type="button" class="ghost-btn" id="btnUpdateOpen">Baixar última versão</button>
                   <button type="button" class="ghost-btn" id="btnUpdateCheck">Verificar</button>
                 </div>
               </div>
@@ -967,13 +980,26 @@
     </div>
 
     <div class="dlg-lic-adv-section">
-      <h4>Devices</h4>
+      <h4>Contas (login por e-mail)</h4>
+      <p class="hint">Só para quem entra com e-mail e senha em vez do aparelho.</p>
+      <div class="panel-actions">
+        <button type="button" class="ghost-btn" id="btnLicAccountOpen">Nova conta</button>
+      </div>
+    </div>
+
+    <div class="dlg-lic-adv-section">
+      <h4>Desvincular dispositivo</h4>
+      <!-- Este botão chamava "Liberar PC", mas o efeito é o OPOSTO de liberar:
+           ele APAGA o vínculo e o aparelho perde o acesso. Com o "Liberar
+           dispositivo" novo, dois botões diziam "liberar" fazendo coisas
+           contrárias. -->
+      <p class="hint">Solta a vaga do aparelho — ele PERDE o acesso e a vaga fica livre para outro PC.</p>
       <p class="hint mono" id="licAdvDeviceHint" hidden></p>
-      <label class="ia-form">Device ID
+      <label class="ia-form">ID do dispositivo
         <input type="text" id="adminDeviceId" placeholder="win-…" autocomplete="off" spellcheck="false">
       </label>
       <div class="panel-actions">
-        <button type="button" class="ghost-btn" id="btnAdminDeviceRelease">Liberar PC</button>
+        <button type="button" class="ghost-btn" id="btnAdminDeviceRelease">Desvincular</button>
       </div>
     </div>
 
