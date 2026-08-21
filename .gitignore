@@ -11,6 +11,10 @@ license_config.json
 # Cache da CLI do Supabase
 supabase/.temp/
 
+# Preferências desta máquina (o app grava supabaseUrl/anon aqui no caminho
+# legado). É estado local, e commitar acabaria vazando chave um dia.
+.ativavid-settings.json
+
 # Runtime state, not source: the preview server rewrites this on every
 # "Salvar como padrão" click in the Estilo tab, so tracking it would turn one
 # machine's house style into a diff on every other machine.
