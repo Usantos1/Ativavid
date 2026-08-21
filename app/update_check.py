@@ -79,6 +79,26 @@ def configured_repo() -> str:
     return "Usantos1/Ativavid"
 
 
+def _versao_tupla(v: Any) -> tuple[int, ...]:
+    """"2.47" -> (2, 47). Pedaco nao numerico vale 0, para nunca levantar."""
+    partes = []
+    for pedaco in str(v or "").lstrip("vV").split("."):
+        digitos = "".join(c for c in pedaco if c.isdigit())
+        partes.append(int(digitos) if digitos else 0)
+    return tuple(partes) or (0,)
+
+
+def _e_mais_nova(candidata: Any, atual: Any) -> bool:
+    """Compara NUMERO, nao texto.
+
+    O ramo do GitHub usava `tag != cur`: qualquer tag diferente virava
+    "atualizacao", inclusive uma mais VELHA — o app ofereceria um downgrade.
+    """
+    a, b = _versao_tupla(candidata), _versao_tupla(atual)
+    n = max(len(a), len(b))
+    return a + (0,) * (n - len(a)) > b + (0,) * (n - len(b))
+
+
 def check_update(*, channel: str = "stable") -> dict[str, Any]:
     cur = current_version()
     gh = configured_repo()
@@ -105,8 +125,18 @@ def check_update(*, channel: str = "stable") -> dict[str, Any]:
         if lic.configured():
             st = lic.public_status()
             upd = st.get("update") if isinstance(st.get("update"), dict) else None
-            if upd and (upd.get("latestVersion") or upd.get("downloadUrl") or upd.get("force")):
-                latest = str(upd.get("latestVersion") or "").lstrip("v") or None
+            latest_sb = str((upd or {}).get("latestVersion") or "").lstrip("v")
+            # A politica do Supabase so manda quando tem NOVIDADE de verdade,
+            # ou quando e update obrigatorio. Ela estava parada numa versao
+            # antiga (0.1.24 contra 2.47 instalada) e, como este ramo retornava
+            # aqui, o GitHub nunca era consultado: TODA release publicada ficou
+            # invisivel para o app, que dizia "sem atualizacao" para sempre.
+            manda_supabase = bool(upd) and (
+                bool(upd.get("force"))
+                or (bool(latest_sb) and _e_mais_nova(latest_sb, cur))
+            )
+            if manda_supabase:
+                latest = latest_sb or None
                 result["latestVersion"] = latest
                 result["force"] = bool(upd.get("force"))
                 result["updateAvailable"] = bool(upd.get("updateAvailable") or upd.get("force"))
@@ -161,7 +191,7 @@ def check_update(*, channel: str = "stable") -> dict[str, Any]:
             result["downloadUrl"] = f"https://github.com/{gh}/releases/latest"
         if not result.get("releaseUrl"):
             result["releaseUrl"] = f"https://github.com/{gh}/releases/latest"
-        if tag and tag != cur:
+        if tag and _e_mais_nova(tag, cur):
             result["updateAvailable"] = True
             result["message"] = f"Nova versão {tag} disponível"
             result["tooltip"] = f"Atualizar para v{tag} · clique"
