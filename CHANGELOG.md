@@ -1,5 +1,45 @@
 # Changelog
 
+## 2.39
+
+Você me mostrou três coisas do editor nesta manhã e as três estão resolvidas.
+Junto vieram dois defeitos que apagavam trabalho seu em silêncio.
+
+- **A manchete existe desde o primeiro quadro.** Ela nascia invisível e só
+  ficava legível 8 quadros depois, ainda subindo — o vídeo abria sem manchete
+  nenhuma. Como ela é a primeira coisa que o espectador lê, era justamente o
+  momento em que ela não estava lá. Conferido contra o renderizador de
+  referência: no quadro 0 os dois desenham a mesma coisa
+- **Clicar no meio da manchete agora põe o cursor onde você clicou.** Antes
+  ele selecionava o texto inteiro, então apagar uma palavra do meio só dava
+  para fazer andando com as setas
+- **Dá para apagar legenda — uma ou várias.** Havia como trocar o texto, mas
+  não como tirar a legenda: salvar com o campo vazio não fazia nada e também
+  não avisava. Agora tem o botão **apagar**, e na linha do tempo `Ctrl+clique`
+  marca uma legenda, `Shift+clique` marca o intervalo e `Delete` apaga todas.
+  `Esc` larga a seleção e `Ctrl+Z` desfaz. O apagar fica pendente como
+  qualquer outra edição da linha do tempo e vai junto no salvar — é isso que
+  faz o `Ctrl+Z` valer de verdade e não só na tela
+- **"Criar marca nova" estava apagando a marca que estava ativa.** O nome
+  digitado apenas renomeava a marca em uso: a antiga sumia e nenhuma nova
+  aparecia, com a mensagem dizendo "Marca salva e ativada". Isso já aconteceu
+  duas vezes na sua máquina — as duas marcas que você tem hoje têm o nome de
+  exibição discordando do arquivo, que é a marca do problema. As duas
+  continuam lá; o que se perdeu foram as que foram substituídas
+- **Corrigir uma legenda podia não pegar, e mesmo assim dizer que pegou.** O
+  app respondia "Legenda corrigida" sem olhar se a troca tinha acontecido, e
+  ainda apagava o seu pedido da tela. Quando não pega agora ele diz o motivo e
+  guarda a correção
+- **A correção aparecia no vídeo mas não no preview.** As palavras da legenda
+  usam um nome de campo que o filtro de tempo não conhecia, então a correção
+  nunca entrava na cue — e é a cue que o preview desenha. Você só via o
+  resultado depois de refazer o vídeo inteiro
+- **Arrastar a manchete ou a legenda avisa quando não consegue salvar.** Antes
+  ela ficava parada no lugar novo como se tivesse sido salva
+- **O histórico do apply passa a registrar onde foram os minutos** (corte,
+  desenho, encode, validação), e não só o total. É o que falta para atacar a
+  demora de aplicar uma correção, que hoje tem mediana de 6 minutos e meio
+
 ## 2.38
 
 Comparei o desenho das legendas quadro a quadro com o renderizador de
