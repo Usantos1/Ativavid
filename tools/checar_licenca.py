@@ -92,23 +92,6 @@ def main() -> int:
 
     anon_h = {"apikey": anon, "Authorization": f"Bearer {anon}", "Content-Type": "application/json"}
 
-    print("\n== Auth ==")
-    code, data = http("GET", f"{url}/auth/v1/settings", {"apikey": anon})
-    if code == 200 and isinstance(data, dict):
-        autoconfirm = bool(data.get("mailer_autoconfirm"))
-        if autoconfirm:
-            diz(FALTA, "Confirm email DESLIGADO (mailer_autoconfirm=true)")
-            problemas.append(
-                "Ligue Confirm email: sem isso, alguém registra o e-mail de um "
-                "cliente liberado e herda o acesso pago."
-            )
-        else:
-            diz(OK, "Confirm email ligado")
-        if data.get("disable_signup"):
-            avisos.append("signup desabilitado — o cliente não consegue criar conta")
-    else:
-        avisos.append(f"não deu para ler /auth/v1/settings (HTTP {code})")
-
     print("\n== RPC de licença ==")
     code, data = http("POST", f"{url}/rest/v1/rpc/ativavid_license", anon_h, {
         "p_action": "status",
@@ -127,18 +110,46 @@ def main() -> int:
             problemas.append("device desconhecido veio entitled — confira o rpc_license.sql")
         else:
             diz(OK, "device desconhecido vem bloqueado (status não cria trial)")
-        # A versão que exige e-mail confirmado marca emailVerified no bloqueio.
-        if "emailVerified" in json.dumps(data):
-            diz(OK, "rpc_license.sql ATUAL (exige e-mail confirmado)")
+        # A versão que casa só por user_id marca pendingLink no bloqueio.
+        corpo = json.dumps(data)
+        identidade_por_uid = "pendingLink" in corpo
+        if identidade_por_uid:
+            diz(OK, "rpc_license.sql ATUAL (identidade por user_id)")
         else:
-            diz(FALTA, "rpc_license.sql desatualizado (casa conta por e-mail não confirmado)")
+            diz(FALTA, "rpc_license.sql desatualizado (concede acesso casando por e-mail)")
             problemas.append(
                 "Rode supabase/rpc_license.sql de novo: a versão no ar ainda deixa "
                 "alguém herdar o acesso de um cliente registrando o e-mail dele."
             )
     else:
+        identidade_por_uid = False
         diz(FALTA, f"ativavid_license falhou (HTTP {code})")
         problemas.append("Rode supabase/rpc_license.sql no SQL Editor.")
+
+    print("\n== Auth ==")
+    code, data = http("GET", f"{url}/auth/v1/settings", {"apikey": anon})
+    if code == 200 and isinstance(data, dict):
+        autoconfirm = bool(data.get("mailer_autoconfirm"))
+        if not autoconfirm:
+            diz(OK, "Confirm email ligado")
+        elif identidade_por_uid:
+            # Com identidade por user_id o acesso não depende do e-mail, então
+            # isto deixa de ser porta de entrada: vira higiene (endereço válido).
+            diz(AVISO, "Confirm email desligado — aceita e-mail que não existe")
+            avisos.append(
+                "Confirm email desligado: não abre acesso indevido (a identidade é o "
+                "user_id), mas deixa cadastrar endereço inválido. Ligar exige SMTP próprio."
+            )
+        else:
+            diz(FALTA, "Confirm email DESLIGADO com o RPC antigo no ar")
+            problemas.append(
+                "Enquanto o RPC antigo estiver no ar, o Confirm email desligado permite "
+                "herdar o acesso de um cliente registrando o e-mail dele."
+            )
+        if data.get("disable_signup"):
+            avisos.append("signup desabilitado — o cliente não consegue criar conta")
+    else:
+        avisos.append(f"não deu para ler /auth/v1/settings (HTTP {code})")
 
     print("\n== RPC de admin ==")
     code, data = http("POST", f"{url}/rest/v1/rpc/ativavid_admin_license", anon_h, {
