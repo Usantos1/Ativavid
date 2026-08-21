@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.43
+
+Escolher uma pasta com subpastas passou a funcionar pelo botão, e a importação
+deixou de copiar os arquivos por dentro do app.
+
+- **"Escolher vídeos" e "Escolher pasta" agora abrem o seletor do Windows.** O
+  seletor do navegador não aceita pasta — era por isso que, no botão, só dava
+  para marcar os vídeos soltos
+- **Importar ficou muito mais rápido, principalmente com arquivo grande.** O
+  app é um programa de computador e os seus vídeos já estão no disco, mas a
+  tela mandava os arquivos inteiros para dentro dele antes de começar. Agora
+  ela manda só o caminho
+- **"Cada subpasta vira um vídeo" passou a valer de verdade.** Os vídeos
+  soltos dentro da pasta que você escolhe agora são um vídeo cada, com o nome
+  deles. Antes eram colados num vídeo só, batizado com o nome da pasta.
+  Testado na sua pasta: 12 vídeos viram 11 projetos, que é exatamente o que
+  você montou à mão
+
 ## 2.42
 
 Duas coisas que você apontou olhando o card.
