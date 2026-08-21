@@ -1,5 +1,29 @@
 # Changelog
 
+## 2.56
+
+- **As legendas agora saem do ElevenLabs, o serviço que você assina.** O app
+  escolhia o serviço de transcrição pelo tamanho do vídeo e só usava o
+  ElevenLabs em fontes acima de 5 minutos — nenhum vídeo seu chega perto disso
+  (o mais longo tem 2,8 min), então **149 de 149 foram para o serviço gratuito**
+  e o seu plano pago nunca foi usado. Comparado no mesmo vídeo, o ElevenLabs
+  achou **54 palavras contra 51**, sem nenhuma fora de ordem (o outro tinha
+  uma), e marca o tempo de cada palavra com mais precisão — que é o que a
+  legenda karaokê usa. Também transcreve mais fiel à fala: onde o outro
+  escreveu "Você jura?", ele escreveu "Cê jura?"
+
+- **A espera para analisar o vídeo ficou muito mais previsível.** O serviço
+  gratuito recusava pedidos quando você mandava vários vídeos de uma vez, e o
+  app ficava esperando de 5 a 60 segundos por tentativa. Num lote da manhã de
+  20/08 isso custou **19 vezes mais** que no lote da tarde do mesmo dia. Com o
+  serviço pago isso deixa de acontecer
+
+- **Se o ElevenLabs estiver fora do ar, o vídeo não trava.** O app volta
+  sozinho para o serviço gratuito e termina o trabalho
+
+- **Telas de Configurações e Licença mais compactas**, e os cards da lista não
+  esticam mais para acompanhar a altura do vizinho
+
 ## 2.55
 
 - **Importar de novo um vídeo que você já usou não transcreve tudo outra vez.**
