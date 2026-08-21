@@ -116,9 +116,16 @@ def test_fps_diferente_muda_o_relogio(tmp_path):
                        frames=30, fps=30.0)
     r24 = Renderizador(pub, _ed(hook={"enabled": False}, endCard={"enabled": False}),
                        frames=24, fps=24.0)
-    # a mesma cue de 900 ms termina em quadros diferentes
-    assert r30.camadas[0].fim_f == int(0.9 * 30)
-    assert r24.camadas[0].fim_f == int(0.9 * 24)
+    # a mesma cue de 900 ms termina em quadros diferentes.
+    # `Math.round` como o template (`StackedCaptions.tsx:281`), não `int()`:
+    # este teste fixava a truncagem, que era justamente o defeito — 0,9*24 dá
+    # 21,6, que o template arredonda para 22.
+    import math
+
+    arredonda = lambda x: math.floor(x + 0.5)   # noqa: E731
+    assert r30.camadas[0].fim_f == arredonda(0.9 * 30)
+    assert r24.camadas[0].fim_f == arredonda(0.9 * 24)
+    assert r24.camadas[0].fim_f == 22
 
 
 def test_sfx_eventos_seguem_o_template(tmp_path):
@@ -905,3 +912,87 @@ def test_o_fundo_da_headline_segue_o_texto_e_nao_a_mascara(tmp_path):
         # avanço + paddings + as duas folgas por uma margem grande
         assert p.alpha.shape[1] < larg_txt + 2 * 40 + 2 * 56 + 4, (
             p.alpha.shape[1], larg_txt)
+
+
+def test_o_relogio_da_cue_arredonda_como_o_template(tmp_path):
+    """`StackedCaptions.tsx:280-282` monta cada cue com
+
+        from = Math.round(startMs / 1000 * fps)
+        end  = Math.round(endMs   / 1000 * fps)
+        dur  = Math.max(2, Math.min(end, durationInFrames) - from)
+
+    e passa esse `dur` INTEIRO como `cueDurationFrames` — é ele que manda no
+    ENTER, no EXIT e no corte do `exit: abrupt`.
+
+    Aqui era `int()`, que TRUNCA. Medido num projeto real: **57 das 112 cues
+    (51%)** caíam num quadro diferente do template; a legenda aparecia um
+    quadro antes e todo o relógio interno dela ia junto."""
+    import math
+
+    # 64757 ms a 30 fps = 1942,71 → trunca em 1942, arredonda em 1943
+    cue = {"i": 0, "preset": "STACK_MIXED", "startMs": 64757, "endMs": 65217,
+           "exit": "abrupt", "lines": [[{"text": "oi", "fromMs": 64757}]]}
+    r = Renderizador(_public(tmp_path, [cue]),
+                     _ed(hook={"enabled": False}, endCard={"enabled": False}),
+                     frames=2528, fps=30.0)
+    leg = r.camadas[0]
+    assert leg.inicio_f == 1943, leg.inicio_f
+    assert leg.fim_f == 1957, leg.fim_f
+    # e a duração é INTEIRA, como o `dur` do template
+    assert leg.dur_f == float(1957 - 1943)
+    assert leg.dur_f == int(leg.dur_f)
+
+
+def test_o_arredondamento_e_o_do_javascript():
+    """O `round` do Python é bancário: `round(0.5)` dá 0 e `round(2.5)` dá 2.
+    O `Math.round` do JavaScript sempre sobe no meio."""
+    a = Renderizador._arredonda_js
+    assert [a(x) for x in (0.5, 1.5, 2.5, 3.5)] == [1, 2, 3, 4]
+    assert [round(x) for x in (0.5, 2.5)] == [0, 2], "o do Python difere mesmo"
+
+
+def test_a_duracao_da_cue_nao_passa_do_video(tmp_path):
+    """`Math.min(end, durationInFrames)` no template: uma cue que termina
+    depois do fim da composição é cortada ali."""
+    cue = {"i": 0, "preset": "STACK_MIXED", "startMs": 0, "endMs": 100000,
+           "lines": [[{"text": "oi", "fromMs": 0}]]}
+    r = Renderizador(_public(tmp_path, [cue]),
+                     _ed(hook={"enabled": False}, endCard={"enabled": False}),
+                     frames=90, fps=30.0)
+    assert r.camadas[0].dur_f == 90.0
+
+
+def test_so_a_legenda_stacked_usa_a_curva_bezier(tmp_path):
+    """Só o `StackedCaptions.tsx` usa `Easing.bezier(0.16, 1, 0.3, 1)`
+    (linha 77). A headline, o cartão final, o scatter e o impacto usam
+    `Easing.out(Easing.cubic)`.
+
+    Trocar a curva no motor INTEIRO deixou a headline errada — e ela fica na
+    tela nos primeiros 4 s de todo vídeo. Pego pela varredura contra o
+    Remotion: no quadro 2 a razão de tinta era 1,537 e o centro vertical
+    ficava 11,8 px fora; com a curva por palavra, 1,177 e 1,4 px."""
+    cues = [{"i": 0, "preset": "STACK_MIXED", "startMs": 0, "endMs": 1200,
+             "lines": [[{"text": "oi", "fromMs": 0}]]}]
+    ed = _ed(hook={"enabled": True, "style": "realce", "lines": ["ola", "mundo"],
+                   "endSec": 2.0},
+             endCard={"enabled": True, "lines": ["a", "b"], "lastSec": 1.0,
+                      "dim": 0.82})
+    r = Renderizador(_public(tmp_path, cues), ed, frames=120, fps=30.0)
+    por_curva = {}
+    for leg in r.camadas:
+        for p in leg.palavras:
+            por_curva.setdefault(p.ease, 0)
+            por_curva[p.ease] += 1
+    assert por_curva.get("bezier", 0) >= 1, por_curva
+    assert por_curva.get("cubic", 0) >= 1, por_curva
+
+
+def test_a_headline_nao_usa_a_curva_da_legenda(tmp_path):
+    ed = _ed(hook={"enabled": True, "style": "realce", "lines": ["ola", "mundo"],
+                   "endSec": 2.0},
+             endCard={"enabled": False})
+    r = Renderizador(_public(tmp_path, []), ed, frames=120, fps=30.0)
+    leg = r._montar_headline(ed["hook"])
+    assert leg.palavras, "a headline tem de desenhar"
+    assert all(p.ease == "cubic" for p in leg.palavras), \
+        [p.ease for p in leg.palavras]

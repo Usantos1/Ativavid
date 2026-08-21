@@ -318,6 +318,12 @@ class Palavra:
     # a sua `janela`; sem este campo a janela forcaria opacidade 1,0 e a
     # palavra apareceria de uma vez, sem o fade.
     opac: float = 1.0
+    # Curva de entrada. So o `StackedCaptions.tsx` usa a bezier
+    # (`Easing.bezier(0.16, 1, 0.3, 1)`, linha 77); a headline, o cartao
+    # final, o scatter e o impacto usam `Easing.out(Easing.cubic)`, que e o
+    # padrao aqui. Trocar isso no motor INTEIRO deixava a headline — que fica
+    # na tela nos primeiros 4s de todo video — com a curva errada.
+    ease: str = "cubic"
 
 
 @dataclass
@@ -409,7 +415,7 @@ def _opacidade(p: Palavra, fl: float) -> float:
     if fl <= p.inicio_f:
         return 0.0
     t = min(1.0, (fl - p.inicio_f) / max(1, p.enter))
-    return _ease_out(t)
+    return _ease_out(t) if p.ease == "bezier" else 1 - (1 - t) ** 3
 
 
 class Renderizador:
@@ -709,12 +715,38 @@ class Renderizador:
                     c / self.fps,
                     float(t["volume"]) if t.get("volume") is not None else 0.9))
 
+    @staticmethod
+    def _arredonda_js(x: float) -> int:
+        """`Math.round` do JavaScript, nao o `round` do Python.
+
+        O `round` do Python e bancario: `round(0.5)` da 0 e `round(1.5)` da 2.
+        O do JavaScript sempre sobe no meio. Numa contagem de quadros isso e a
+        diferenca entre casar com o template e ficar um quadro fora.
+        """
+        return math.floor(float(x) + 0.5)
+
     def _tempos_cue(self, cue: dict) -> tuple[int, int, float, int, float]:
-        ini_f = int(cue["startMs"] / 1000 * self.fps)
-        fim_f = int(cue["endMs"] / 1000 * self.fps)
-        dur = (cue["endMs"] - cue["startMs"]) / 1000 * self.fps
-        enter = max(3, min(8, int(dur * 0.45)))
-        exit_ = max(2, min(7, int(dur * 0.35)))
+        """Relogio da cue, igual ao `StackedCaptions.tsx`.
+
+        Ele monta cada cue assim (linhas 280-282):
+
+            from = Math.round(startMs / 1000 * fps)
+            end  = Math.round(endMs   / 1000 * fps)
+            dur  = Math.max(2, Math.min(end, durationInFrames) - from)
+
+        e passa esse `dur` INTEIRO como `cueDurationFrames`, que e quem manda
+        no ENTER, no EXIT e no corte do `exit: abrupt`.
+
+        Aqui era `int()` (que TRUNCA) e uma duracao em float. Medido num
+        projeto real: **57 das 112 cues (51%)** caiam num quadro diferente do
+        template — a legenda aparecia um quadro antes e todo o relogio interno
+        dela (entrada, saida) ia junto.
+        """
+        ini_f = self._arredonda_js(cue["startMs"] / 1000 * self.fps)
+        fim_f = self._arredonda_js(cue["endMs"] / 1000 * self.fps)
+        dur = float(max(2, min(fim_f, self.frames) - ini_f))
+        enter = max(3, min(8, math.floor(dur * 0.45)))
+        exit_ = max(2, min(7, math.floor(dur * 0.35)))
         ultima = max((w["fromMs"] - cue["startMs"]) / 1000 * self.fps
                      for ln in cue["lines"] for w in ln)
         saida_f = max(dur - exit_, min(ultima + enter, dur - 2))
@@ -752,7 +784,7 @@ class Renderizador:
     def _palavra_texto(self, leg: Camada, f, texto: str, ls: float, x0: int,
                        topo_caixa: float, alt_caixa: float, y_base: int,
                        cor_fixa: str | None, inicio_f: float, enter: int,
-                       especs=SHADOW) -> None:
+                       especs=SHADOW, ease: str = "cubic") -> None:
         m, cor_e = self._mascara_cor(f, texto, ls)
         h_m, w_m = m.shape
         folga = 24
@@ -769,7 +801,8 @@ class Renderizador:
                 (1, pad_m.shape[1], 1), dtype=np.float32)
         self._pintar_emoji(rgb, cor_e, folga)
         leg.palavras.append(Palavra(x0 - folga, y_base - folga, rgb, pad_m,
-                                    sombra, inicio_f=inicio_f, enter=enter))
+                                    sombra, inicio_f=inicio_f, enter=enter,
+                                    ease=ease))
 
     def _montar_stacked(self, cue: dict) -> Camada:
         leg, enter, dur = self._nova_camada(cue)
@@ -815,7 +848,8 @@ class Renderizador:
                     y, alturas[li], int(round(base)),
                     self.font_file[ln["idx"]][1],
                     local_w,
-                    self._enter_da_palavra(enter, leg.saida_f, local_w), especs)
+                    self._enter_da_palavra(enter, leg.saida_f, local_w), especs,
+                    ease="bezier")
                 x += wl
             y += alturas[li]
         return leg
@@ -851,7 +885,7 @@ class Renderizador:
 
         for est in range(n + 1):
             t = min(1.0, est / n)
-            op = _ease_out(t)                # a mesma curva de `_opacidade`
+            op = _ease_out(t)                # bezier, como o StackedCaptions
             esc = 0.88 + 0.12 * op
             tam_e = max(8, int(round(tam * esc)))
             f = self.fonte(0, tam_e, marca=None)
@@ -865,7 +899,8 @@ class Renderizador:
             self._palavra_texto(
                 leg, f, w["text"], ls, int(round(x_c + pad)), y_c, alt,
                 int(round(y_c + (alt - (asc + desc)) / 2)), None, ini_f,
-                self._enter_da_palavra(enter, leg.saida_f, ini_f))
+                self._enter_da_palavra(enter, leg.saida_f, ini_f),
+                ease="bezier")
             for pal in leg.palavras[antes:]:
                 # um quadro por estagio durante a entrada; o ultimo fica
                 pal.janela = ((ini_f + est, ini_f + est + 1) if est < n
@@ -904,7 +939,8 @@ class Renderizador:
         self._palavra_texto(
             leg, f, w["text"], ls, int(round(x_c + pad)), y_c, alt_c,
             int(round(y_c + (alt_c - (asc + desc)) / 2)), None, local,
-            self._enter_da_palavra(enter, leg.saida_f, local))
+            self._enter_da_palavra(enter, leg.saida_f, local),
+            ease="bezier")
 
         esq, topo, larg_f, alt_f = TRACO_CAIXA
         bx, by = x_c + esq * larg_c, y_c + topo * alt_c
