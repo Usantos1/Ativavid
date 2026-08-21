@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.44
+
+Um defeito de legenda que estava em 73% dos seus vídeos.
+
+- **A mesma palavra não aparece mais duplicada na legenda.** Quando uma palavra
+  da fala atravessava dois trechos do corte, ela era escrita nos dois — e como
+  a transcrição às vezes junta uma frase inteira numa "palavra" só, isso era
+  comum: 93 dos seus 127 projetos tinham pelo menos uma, somando 298 cópias
+  extras, com casos de até 5x a mesma palavra. Num deles, a primeira legenda do
+  vídeo dizia `bora / bora / bora 32` onde a fala diz "bora" uma vez. Agora
+  cada palavra pertence a um trecho só — o que ela mais atravessa — e nada se
+  perde: conferido rodando os dois jeitos lado a lado nos 127 projetos, zero
+  palavras legítimas sumiram
+- Vale para vídeos novos e para correções aplicadas daqui em diante; os vídeos
+  já prontos não são reescritos
+
 ## 2.43
 
 Escolher uma pasta com subpastas passou a funcionar pelo botão, e a importação
