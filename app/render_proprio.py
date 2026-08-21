@@ -103,6 +103,10 @@ FONT_FILE = {
     4: ("Poppins-Black.ttf", None),
     5: ("Lora[wght].ttf", None),           # scatter: serifada
     6: ("Lora-Italic[wght].ttf", None),
+    # 600. O cartao final usa 900 na primeira linha e 600 nas demais
+    # (`fontWeight: i === 0 ? 900 : 600` no EndCardInner); sem este indice a
+    # segunda linha caia no 3 (ExtraBold, 800).
+    7: ("Poppins-SemiBold.ttf", None),
 }
 FONT_WGHT = {2: 900}
 
@@ -1029,7 +1033,13 @@ class Renderizador:
         h_m, w_m = m.shape
         pad_x, pad_t, pad_b = pad_xy
         folga = 56
-        larg_b = int(w_m + 2 * pad_x)
+        # A caixa segue o AVANCO do texto, nao a largura da mascara: o
+        # `_mascara` acrescenta 8px de folga a direita para o antialias nao
+        # ser cortado, e usar isso como largura punha esses 8px dentro do
+        # fundo — assimetrico, tudo de um lado. As outras caixas do arquivo
+        # (manchete, carimbo, pilula) ja derivam de `_larg_hl`.
+        larg_txt = self._larg_hl(texto, tam, peso)
+        larg_b = int(round(larg_txt + 2 * pad_x))
         alt_b = int(alt_cx + pad_t + pad_b)
         L = larg_b + 2 * folga
         A = alt_b + 2 * folga
@@ -1471,14 +1481,15 @@ class Renderizador:
         escala = [1.0, 0.62]
         ajuste = 1.0
         for i, t in enumerate(linhas):
-            f = self.fonte(4 if i == 0 else 3, int(base * escala[i]), marca=None)
+            f = self.fonte(4 if i == 0 else 7, int(base * escala[i]), marca=None)
             wl = f.getlength(t) - 1.0 * max(0, len(t) - 1)
             if wl > safe_w:
                 ajuste = min(ajuste, safe_w / wl)
         tam = max(28, round(base * ajuste))
         mascaras = []
         for i, t in enumerate(linhas):
-            f = self.fonte(4 if i == 0 else 3, int(tam * escala[i]), marca=None)
+            # 900 na primeira, 600 nas demais — `EndCardInner` em Main.tsx
+            f = self.fonte(4 if i == 0 else 7, int(tam * escala[i]), marca=None)
             mascaras.append((self._mascara(f, t, -1.0), i))
         gap = round(tam * 0.34)
         total = sum(m.shape[0] for m, _ in mascaras) + gap * max(0, len(mascaras) - 1)

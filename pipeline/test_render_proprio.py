@@ -873,3 +873,35 @@ def test_o_enter_encurta_para_quem_entra_perto_da_saida(tmp_path):
     # e no último quadro visível ela já está praticamente opaca
     ultimo = int(leg.dur_f) - 3
     assert _opacidade(tarde, ultimo) > 0.85, _opacidade(tarde, ultimo)
+
+
+def test_cartao_final_usa_600_na_segunda_linha(tmp_path):
+    """`EndCardInner` faz `fontWeight: i === 0 ? 900 : 600`. Sem um índice de
+    SemiBold na tabela, a segunda linha caía no ExtraBold (800)."""
+    ed = _ed(hook={"enabled": False},
+             endCard={"enabled": True, "lines": ["Segue @x", "manda um direct"],
+                      "lastSec": 1.0, "dim": 0.82})
+    r = Renderizador(_public(tmp_path, []), ed, frames=120, fps=30.0)
+    nomes = {Path(k[0]).name for k in r._fontes}
+    assert "Poppins-SemiBold.ttf" in nomes, nomes
+    assert "Poppins-ExtraBold.ttf" not in nomes, nomes
+
+
+def test_o_fundo_da_headline_segue_o_texto_e_nao_a_mascara(tmp_path):
+    """`_mascara` acrescenta 8px de folga à direita para o antialias não ser
+    cortado. Usar essa largura como a da CAIXA punha os 8px dentro do fundo —
+    assimétrico, tudo de um lado. As outras caixas do arquivo (manchete,
+    carimbo, pílula) já derivam de `_larg_hl`."""
+    ed = _ed(hook={"enabled": True, "style": "realce", "lines": ["ola", "mundo"],
+                   "endSec": 2.0, "accent": "#e30004"},
+             endCard={"enabled": False})
+    r = Renderizador(_public(tmp_path, []), ed, frames=60, fps=30.0)
+    leg = r._montar_headline(ed["hook"])
+    for p, texto in zip(leg.palavras, ["ola", "mundo"]):
+        # a caixa é o avanço do texto + 2*pad; a folga do rasterizador (56 de
+        # cada lado) é o que sobra
+        larg_txt = r._larg_hl(texto, 86, 900)
+        # sem o `+8` da máscara: a largura da camada não pode passar do
+        # avanço + paddings + as duas folgas por uma margem grande
+        assert p.alpha.shape[1] < larg_txt + 2 * 40 + 2 * 56 + 4, (
+            p.alpha.shape[1], larg_txt)
