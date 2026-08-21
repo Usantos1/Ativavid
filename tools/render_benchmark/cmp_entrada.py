@@ -33,6 +33,17 @@ DUAS ARMADILHAS deste harness, as duas ja custaram uma conclusao errada:
    hoje (falta `ImpactCaptions.tsx`) e o bundle quebra. Pegue o mais recente
    que tenha `node_modules`.
 
+DIFERENCAS CONHECIDAS E ACEITAS (nao sao defeito):
+
+- SOLO_OUTLINE, PRIMEIRO quadro da cue: o Chrome desenha um fragmento verde do
+  traco a lapis mesmo com `outlineProg` = 0 — artefato de `strokeDasharray`
+  com `pathLength=1` e `strokeDashoffset=1`. O motor nao desenha nada ali, o
+  que e ate mais fiel a intencao. E 1 quadro de 5, num preset que e 4% das
+  cues.
+- Quadros de ENTRADA em geral: o motor rasteriza a escala em estagios de um
+  quadro; o Remotion escala continuamente. Da 1,05 a 1,18 de tinta nos dois
+  primeiros quadros e converge para ~1,01 no terceiro.
+
 Uso:  python tools/render_benchmark/cmp_entrada.py
 """
 from __future__ import annotations
@@ -91,7 +102,9 @@ def main() -> None:
     TRAB.mkdir(parents=True)
 
     cue = max(cues, key=lambda c: sum(len(l) for l in c.get("lines") or []))
-    ini_f = int(cue["startMs"] / 1000 * 30)
+    # o MESMO arredondamento do template/motor, senao o harness mira um
+    # quadro ao lado e a comparacao vira ruido
+    ini_f = Renderizador._arredonda_js(cue["startMs"] / 1000 * 30)
     locais = sorted((w["fromMs"] - cue["startMs"]) / 1000 * 30
                     for ln in cue["lines"] for w in ln)
     quadros = [ini_f + int(locais[-1]) + k for k in (1, 2, 3, 4)]
