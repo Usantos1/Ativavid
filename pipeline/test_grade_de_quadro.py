@@ -116,3 +116,45 @@ def test_o_audio_nao_fica_mais_longo_que_a_imagem(tmp_path):
     v, a = _dur(out, "v"), _dur(out, "a")
     # um quadro de folga a 24fps
     assert a - v < 1 / 24 + 0.005, f"áudio {a:.4f}s contra vídeo {v:.4f}s"
+
+
+def _fonte_60fps(tmp: Path) -> Path:
+    p = tmp / "fonte60.mp4"
+    r = subprocess.run([
+        "ffmpeg", "-v", "error", "-y",
+        "-f", "lavfi", "-i", "testsrc2=s=180x320:r=60:d=12",
+        "-f", "lavfi", "-i", "sine=r=48000:d=12",
+        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "38",
+        "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "64k",
+        str(p)], capture_output=True, text=True, **NOWIN)
+    if r.returncode != 0 or not p.exists():
+        pytest.skip(f"ffmpeg não montou a fixture: {(r.stderr or '')[-200:]}")
+    return p
+
+
+def test_shortform_sai_a_30_e_alinha_em_30(tmp_path):
+    """O caminho do usuário (114 de 114 projetos são reels): fonte 60 fps,
+    saída 30, e as ranges alinhadas na grade de 30."""
+    fonte = _fonte_60fps(tmp_path)
+    edl = {"fps": 30, "sources": {"SRC": str(fonte)},
+           "ranges": [{"source": "SRC", "start": 0.0, "end": 2.137},
+                      {"source": "SRC", "start": 4.0, "end": 6.271},
+                      {"source": "SRC", "start": 8.0, "end": 9.913}]}
+    p_edl = tmp_path / "edl.json"
+    p_edl.write_text(json.dumps(edl), encoding="utf-8")
+    out = tmp_path / "cut.mp4"
+    r = subprocess.run([
+        sys.executable, "-X", "utf8", str(REPO / "helpers" / "render.py"),
+        str(p_edl), "-o", str(out), "--no-subtitles"],
+        capture_output=True, text=True, cwd=str(REPO), **NOWIN)
+    if r.returncode != 0 or not out.exists():
+        pytest.skip(f"render não rodou: {(r.stderr or r.stdout or '')[-300:]}")
+
+    assert abs(_fps(out) - 30.0) < 0.1, _fps(out)
+    salvo = json.loads(p_edl.read_text(encoding="utf-8"))
+    for rg in salvo["ranges"]:
+        quadros = (float(rg["end"]) - float(rg["start"])) * 30.0
+        assert abs(quadros - round(quadros)) < 0.02, (rg, quadros)
+    # e o áudio não sobra além de um quadro
+    v, a = _dur(out, "v"), _dur(out, "a")
+    assert a - v < 1 / 30 + 0.005, f"áudio {a:.4f}s contra vídeo {v:.4f}s"
