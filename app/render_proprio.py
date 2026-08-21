@@ -360,10 +360,13 @@ class Renderizador:
         self.cor_traco = caps.get("circleAccent") or TRACO_COR
         sfx = caps.get("sfx") or {}
         self.sfx_on = sfx.get("enabled") is not False
-        self.click_vol = float(sfx.get("clickVolume") or CLICK_VOL)
-        self.scratch_vol = float(sfx.get("scratchVolume") or SCRATCH_VOL)
-        self.stack_vol = float(sfx.get("stackClickVolume")
-                               or min(0.28, self.click_vol * 0.5))
+        # `_pos`, nao `or`: volume 0 e "silencia SO este som", um valor de
+        # fato — com `or` ele virava o padrao. Nada no app escreve estes
+        # knobs hoje (sao de edit-data na mao), mas o template le com `??`.
+        self.click_vol = _pos(sfx, "clickVolume", CLICK_VOL)
+        self.scratch_vol = _pos(sfx, "scratchVolume", SCRATCH_VOL)
+        self.stack_vol = _pos(sfx, "stackClickVolume",
+                              min(0.28, self.click_vol * 0.5))
         self._fontes: dict = {}
         self.marca_cap = self._resolver_marca(
             caps.get("fontFamily"), edit_data.get("brandFontFile"))
