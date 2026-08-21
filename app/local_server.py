@@ -1718,16 +1718,23 @@ class StudioHandler(BaseHTTPRequestHandler):
         if path == "/api/brand-presets":
             from app.brand_presets import get_active, load as load_presets
 
+            from app.brand_kits import list_brands
+
             q = parse_qs(urlparse(self.path).query)
             brand_id = (q.get("brandId") or [""])[0].strip()
+            brands = list_brands()
             if not brand_id:
-                from app.brand_kits import list_brands
-
-                brands = list_brands()
                 active = next((b for b in brands if b.get("active")), brands[0] if brands else None)
                 brand_id = str((active or {}).get("id") or "padrao")
             pack = load_presets(brand_id)
-            self._json({"ok": True, **pack, "active": get_active(brand_id)})
+            # O NOME da marca listada vai junto. A tela mostrava
+            # `state.brandActive.name`, que e nulo enquanto a tela de Marca nao
+            # for aberta — o rotulo dizia "Padrao" para os presets de outra
+            # marca.
+            nome = next((str(b.get("name") or "") for b in brands
+                         if str(b.get("id") or "") == brand_id), "")
+            self._json({"ok": True, **pack, "brandName": nome,
+                        "active": get_active(brand_id)})
             return
         if path == "/api/headline-anchors":
             from app.render_proprio import ancoras_de_headline, ancoras_de_legenda

@@ -4215,12 +4215,18 @@ async function loadPresetsUi() {
   }
   const presets = pack.presets || [];
   const activeId = pack.activeId || (pack.active && pack.active.id) || "";
-  state.presetBrandId = (state.brandActive && state.brandActive.id) || "padrao";
+  // A marca que o SERVIDOR listou, nao a que a tela acha que esta ativa.
+  // `state.brandActive` so e preenchido por `loadBrandsUi()`, entao abrir
+  // Presets direto (sem passar pela tela de Marca) deixava isto em "padrao":
+  // a tela mostrava os presets da marca ativa e gravava nos da "padrao" —
+  // criar, renomear e apagar iam para a marca errada, e a lista na frente do
+  // usuario nem se mexia.
+  state.presetBrandId = pack.brandId || (state.brandActive && state.brandActive.id) || "padrao";
   const empty = $("#presetsEmpty");
   if (empty) empty.classList.toggle("hidden", presets.length > 0);
   const hint = $("#presetsHint");
   if (hint) {
-    const marca = (state.brandActive && state.brandActive.name) || "Padrão";
+    const marca = pack.brandName || (state.brandActive && state.brandActive.name) || "Padrão";
     hint.textContent = presets.length
       ? `${presets.length} preset(s) da marca ${marca}. O marcado como padrão é o que a importação usa.`
       : `Nenhum preset salvo para a marca ${marca}. Crie um a partir de um estilo aberto.`;
