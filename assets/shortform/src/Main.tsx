@@ -674,7 +674,17 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
   const f = useCurrentFrame();
   const {fps} = useVideoConfig();
   const H = D.hook;
-  const enter = interpolate(f, [0, 8], [0, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic)});
+  // A headline EXISTE desde o quadro 0. Ela e a primeira coisa que o
+  // espectador le e no `padrao` ela nascia em opacidade 0: o video abria 8
+  // quadros (0,27s) sem manchete nenhuma, e ela ainda chegava subindo 24px.
+  // Num video de 60s isso e pouco tempo, mas e o tempo em que o espectador
+  // decide se fica — e e exatamente onde a manchete tem trabalho a fazer.
+  // `pop` e `deslizar` sao entradas ESCOLHIDAS pelo usuario e continuam
+  // entrando do zero; `padrao` (114 de 114 dos projetos) ja comeca pronta.
+  const anim = String(H.animation ?? 'padrao');
+  const enter = anim === 'padrao'
+    ? 1
+    : interpolate(f, [0, 8], [0, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic)});
   const exit = interpolate(f, [totalFrames - 9, totalFrames], [1, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
   const op = Math.min(enter, exit);
 
@@ -683,7 +693,6 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
   //   pop      = escala 0.68→1 com overshoot — entra com peso
   //   deslizar = vem da esquerda (-56px), sem subir
   // carimbo (slam) e pergunta (duas fases) têm entradas próprias e ignoram.
-  const anim = String(H.animation ?? 'padrao');
   const popEnter = interpolate(f, [0, 9], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',

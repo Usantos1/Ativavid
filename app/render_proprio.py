@@ -412,6 +412,13 @@ def _opacidade(p: Palavra, fl: float) -> float:
     if p.janela is not None:
         ini, fim = p.janela
         return p.opac if ini <= fl < fim else 0.0
+    # `enter <= 0` = SEM entrada: a palavra ja esta pronta no primeiro quadro
+    # dela. Sem isto o proprio `fl <= inicio_f` abaixo devolveria 0 no quadro 0
+    # e nao existiria jeito de desenhar algo ja presente na abertura. Nenhuma
+    # outra chamada do arquivo usa enter <= 0 (o minimo em uso e 1), entao isto
+    # so muda quem pedir explicitamente.
+    if p.enter <= 0:
+        return 0.0 if fl < p.inicio_f else 1.0
     if fl <= p.inicio_f:
         return 0.0
     t = min(1.0, (fl - p.inicio_f) / max(1, p.enter))
@@ -1163,7 +1170,7 @@ class Renderizador:
 
     def _hl_bloco_multi(self, leg, linhas, tam, peso, alt_cx, x0, y_topo,
                         cor, especs, raio=0, pad_xy=(0, 0, 0), borda=None,
-                        rot=0.0, sobe=24.0, fundo=None):
+                        rot=0.0, sobe=24.0, fundo=None, enter=8):
         """Bloco de VARIAS linhas numa peca so — para molduras/fundos que
         envolvem o conjunto (carimbo), nao cada linha."""
         f = self._hl_fonte(peso, tam)
@@ -1232,7 +1239,7 @@ class Renderizador:
                              dtype=np.float32)
         leg.palavras.append(Palavra(
             int(x0) - folga, int(y_topo) - folga, rgb, alpha, sombra,
-            inicio_f=0, enter=8, sobe=sobe))
+            inicio_f=0, enter=enter, sobe=sobe))
 
     def _montar_headline(self, hook: dict) -> Camada:
         """Os 9 estilos de headline. O layout (duas linhas, ajuste de tamanho,
@@ -1257,9 +1264,13 @@ class Renderizador:
         leg.exit_fade = True
         alt_cx = lh * tam
 
-        # entrada: padrao (sobe 24), pop (escala) ou deslizar — pop/deslizar
-        # caem no fade simples aqui; a escala por quadro fica para depois
-        sobe = 24.0 if str(hook.get("animation") or "padrao") == "padrao" else 0.0
+        # entrada: `padrao` NAO tem entrada — a headline existe desde o quadro
+        # 0 (Main.tsx, HookInner: `enter = anim === 'padrao' ? 1 : ...`). Ela e
+        # a primeira coisa que o espectador le e nascia invisivel. `pop` e
+        # `deslizar` sao entradas escolhidas e continuam entrando do zero.
+        anim = str(hook.get("animation") or "padrao")
+        enter_hl = 0 if anim == "padrao" else 8
+        sobe = 0.0
 
         if estilo == "pergunta":
             # Duas fases na MESMA headline: a pergunta abre em branco (como o
@@ -1289,7 +1300,7 @@ class Renderizador:
                 # o corpo estavel da pergunta: do inicio ate o comeco do fade
                 self._hl_bloco_texto(
                     leg, l, tam, 800, (self.w - larg) / 2, y, alt_cx,
-                    "#ffffff", [(0, 6, 14, 0.45)], k_sombra=BLUR_K, sobe=sobe)
+                    "#ffffff", [(0, 6, 14, 0.45)], k_sombra=BLUR_K, sobe=sobe, enter=enter_hl)
                 leg.palavras[-1].janela = (0, at - 6)
                 y += alt_cx
 
@@ -1322,7 +1333,7 @@ class Renderizador:
                 alt = self._hl_bloco_texto(
                     leg, l, tam, pesos[0], (self.w - larg_b) / 2, y, alt_cx,
                     "#ffffff", [(0, 10, 28, 0.45)], fundo=accent, raio=12,
-                    pad_xy=pad, sobe=sobe)
+                    pad_xy=pad, sobe=sobe, enter=enter_hl)
                 y += alt + 10
             return leg
 
@@ -1359,7 +1370,7 @@ class Renderizador:
                 leg, linhas, tam, 900, alt_cx,
                 (self.w - (larg_max + 92)) / 2, y, "#ffffff",
                 [(0, 18, 50, 0.45)], raio=24, pad_xy=(46, 28, 28),
-                fundo="#232326", sobe=sobe)
+                fundo="#232326", sobe=sobe, enter=enter_hl)
             return leg
 
         if estilo == "misto":
@@ -1370,7 +1381,7 @@ class Renderizador:
                 larg = self._larg_hl(l, tam, peso)
                 alt = self._hl_bloco_texto(
                     leg, l, tam, peso, (self.w - larg) / 2, y, alt_cx, cor,
-                    [(0, 6, 16, 0.55)], k_sombra=BLUR_K, sobe=sobe)
+                    [(0, 6, 16, 0.55)], k_sombra=BLUR_K, sobe=sobe, enter=enter_hl)
                 y += alt
             return leg
 
@@ -1381,7 +1392,7 @@ class Renderizador:
                 larg = self._larg_hl(l, tam, 900)
                 alt = self._hl_bloco_texto(
                     leg, l, tam, 900, (self.w - larg) / 2, y, alt_cx, "#ffffff",
-                    [(off, off, 0, 1.0), (0, 6, 18, 0.5)], sobe=sobe)
+                    [(off, off, 0, 1.0), (0, 6, 18, 0.5)], sobe=sobe, enter=enter_hl)
                 # textShadow `off off 0 accent`: copia DURA do glifo por
                 # baixo, deslocada — so aparece onde o texto nao cobre.
                 p = leg.palavras[-1]
@@ -1400,7 +1411,7 @@ class Renderizador:
                 larg = self._larg_hl(l, tam, 900)
                 alt = self._hl_bloco_texto(
                     leg, l, tam, 900, (self.w - larg) / 2, y, alt_cx, "#ffffff",
-                    [(0, 6, 18, 0.5)], sobe=sobe)
+                    [(0, 6, 18, 0.5)], sobe=sobe, enter=enter_hl)
                 # barra sob a linha, na cor da marca
                 img = Image.new("L", (int(larg) + 8, barra_h), 0)
                 ImageDraw.Draw(img).rounded_rectangle(
@@ -1409,7 +1420,7 @@ class Renderizador:
                 leg.palavras.append(Palavra(
                     int((self.w - larg) / 2), int(y + alt_cx + barra_h * 0.2),
                     np.broadcast_to(self._cor(accent), (*a_b.shape, 3)).copy(),
-                    a_b, np.zeros_like(a_b), inicio_f=0, enter=8, sobe=sobe))
+                    a_b, np.zeros_like(a_b), inicio_f=0, enter=enter_hl, sobe=sobe))
                 y += alt + round(tam * 0.16)
             return leg
 
@@ -1420,7 +1431,7 @@ class Renderizador:
             self._hl_bloco_texto(
                 leg, uma, tam, 700, (self.w - (larg + 2 * pad[0])) / 2, top,
                 alt_cx, "#ffffff", [(0, 10, 30, 0.35)],
-                fundo=("#111214", 0.78), raio=999, pad_xy=pad, sobe=sobe)
+                fundo=("#111214", 0.78), raio=999, pad_xy=pad, sobe=sobe, enter=enter_hl)
             return leg
 
         if estilo == "manchete":
@@ -1444,11 +1455,11 @@ class Renderizador:
             leg.palavras.append(Palavra(
                 int(x_faixa - 30), int(y0),
                 np.broadcast_to(self._cor(accent), (*a_b.shape, 3)).copy(),
-                a_b, np.zeros_like(a_b), inicio_f=0, enter=8, sobe=sobe))
+                a_b, np.zeros_like(a_b), inicio_f=0, enter=enter_hl, sobe=sobe))
             self._hl_bloco_multi(
                 leg, linhas, tam, 800, alt_cx, x_faixa, y0, "#ffffff",
                 [(0, 10, 26, 0.4)], raio=18, pad_xy=pad,
-                fundo=("#0c0d0f", 0.86), sobe=sobe)
+                fundo=("#0c0d0f", 0.86), sobe=sobe, enter=enter_hl)
             return leg
 
         if estilo == "carimbo":
@@ -1481,7 +1492,7 @@ class Renderizador:
                 leg, l, tam, 800, (self.w - larg) / 2, y, alt_cx, "#ffffff",
                 [(0, 6, 14, 0.45)], k_sombra=BLUR_K,
                 contorno=(("#000000", stroke) if stroke > 0 else None),
-                sobe=sobe)
+                sobe=sobe, enter=enter_hl)
             y += alt
         return leg
 
