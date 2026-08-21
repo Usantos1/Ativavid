@@ -189,7 +189,23 @@ def layout_jcut_spans(
             "v_off": v_off,
         })
         v_off += v_dur
-        a_off += a_dur - lead
+        # `max(0, ...)`: o passo nunca pode ser negativo. O J-cut adianta o
+        # audio do proximo take em `lead` (5 quadros); num take mais CURTO que
+        # isso, `a_dur - lead` fica negativo e o relogio de saida ANDA PARA
+        # TRAS — o take seguinte comeca antes do anterior.
+        #
+        # E alcancavel pela UI: `split_at_playhead` aceita segmento de 0,2s
+        # (MIN_SEG), e lead+tail consomem 0,2333s a 30fps. Reproduzido com
+        # ranges [0-5, 5-5.21, CTA 0-3]: o terceiro span comecava 23ms antes
+        # do segundo.
+        #
+        # Nao e so o mapa: `helpers/render.py` usa esta MESMA funcao e o
+        # `a_off` vira o `adelay` do audio daquele take — ou seja, no video
+        # entregue a fala de um take entrava por cima da do anterior.
+        #
+        # Com o clamp, o take curto adianta o quanto ele tem (todo o proprio
+        # comprimento) e para ai.
+        a_off += max(0.0, a_dur - lead)
     return out
 
 
@@ -386,6 +402,7 @@ def validate_timeline_map(timeline: dict[str, Any] | None) -> str | None:
     if not timeline or not isinstance(timeline.get("spans"), list):
         return "timeline map ausente"
     prev_v = -1.0
+    prev_o = -1.0
     for span in timeline["spans"]:
         if not isinstance(span, dict):
             return "span inválido"
@@ -400,4 +417,16 @@ def validate_timeline_map(timeline: dict[str, Any] | None) -> str | None:
         if vs + 1e-6 < prev_v:
             return "timeline não é monotônica"
         prev_v = vs
+        # O eixo de SAIDA tambem, nao so o de video. E nele que as legendas
+        # vivem (`outputStart`), e ele podia andar para tras sem que esta
+        # funcao percebesse: com o take mais curto que o `lead` do J-cut,
+        # `videoStart` ficava parado (v_dur=0) e a checagem passava enquanto
+        # dois spans de fontes diferentes cobriam o mesmo instante.
+        os_ = float(span.get("outputStart") or 0)
+        oe = float(span.get("outputEnd") or 0)
+        if oe + 1e-9 < os_:
+            return "segmento com duração negativa na saída"
+        if os_ + 1e-6 < prev_o:
+            return "relógio de saída não é monotônico"
+        prev_o = os_
     return None

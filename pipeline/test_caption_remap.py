@@ -536,3 +536,56 @@ def test_o_zero_gravado_nao_desloca_os_spans_seguintes():
     # o terceiro span é onde os dois cortes de 2 quadros teriam somado
     assert inicio_com[2] > inicio_sem[2], (inicio_com, inicio_sem)
     assert abs((inicio_com[2] - inicio_sem[2]) - 4 / 30) < 1e-6
+
+
+def test_take_curto_nao_faz_o_relogio_andar_para_tras():
+    """O J-cut adianta o áudio do próximo take em `lead` (5 quadros). Num take
+    mais CURTO que isso, `a_dur - lead` ficava negativo e o relógio de saída
+    andava para trás: o take seguinte começava ANTES do anterior.
+
+    É alcançável pela UI: `split_at_playhead` aceita segmento de 0,2 s
+    (MIN_SEG) e lead+tail consomem 0,2333 s a 30 fps.
+
+    E não era só o mapa: `helpers/render.py` usa a MESMA `layout_jcut_spans`,
+    e o `a_off` vira o `adelay` do áudio daquele take — no vídeo entregue a
+    fala de um take entrava por cima da do anterior."""
+    from app.timeline_map import build_timeline_map, validate_timeline_map
+
+    edl = {"fps": 30, "jcut": True, "ranges": [
+        {"source": "MAIN", "start": 0.0, "end": 5.0},
+        {"source": "MAIN", "start": 5.0, "end": 5.21},   # 0,21 s < lead+tail
+        {"source": "CTA", "start": 0.0, "end": 3.0}]}
+    m = build_timeline_map(edl, fps=30)
+    inis = [s["outputStart"] for s in m["spans"]]
+    assert inis == sorted(inis), inis
+    assert validate_timeline_map(m) is None
+
+
+def test_o_caso_normal_nao_muda_com_o_clamp():
+    from app.timeline_map import build_timeline_map
+
+    edl = {"fps": 30, "jcut": True, "ranges": [
+        {"source": "A", "start": 0, "end": 4},
+        {"source": "A", "start": 6, "end": 10},
+        {"source": "B", "start": 0, "end": 3}]}
+    inis = [s["outputStart"] for s in build_timeline_map(edl, fps=30)["spans"]]
+    # passo = duração - lead - tail = 4 - 5/30 - 2/30
+    assert abs(inis[1] - (4 - 7 / 30)) < 1e-6, inis
+    assert abs(inis[2] - 2 * (4 - 7 / 30)) < 1e-6, inis
+
+
+def test_o_validador_olha_o_eixo_de_saida_tambem():
+    """Antes ele só exigia monotonicidade de `videoStart` — e no caso do take
+    curto o `videoStart` ficava PARADO (v_dur=0), então a checagem passava
+    enquanto dois spans de fontes diferentes cobriam o mesmo instante."""
+    from app.timeline_map import validate_timeline_map
+
+    mapa = {"fps": 30.0, "spans": [
+        {"source": "A", "sourceStart": 0, "sourceEnd": 1,
+         "videoStart": 0.0, "videoEnd": 1.0, "outputStart": 1.0, "outputEnd": 2.0},
+        # `videoStart` parado (v_dur=0, como no take curto) e a saída ANDANDO
+        # PARA TRÁS: é exatamente a combinação que passava batido
+        {"source": "B", "sourceStart": 0, "sourceEnd": 1,
+         "videoStart": 1.0, "videoEnd": 1.0, "outputStart": 0.5, "outputEnd": 1.5},
+    ]}
+    assert validate_timeline_map(mapa) == "relógio de saída não é monotônico"
