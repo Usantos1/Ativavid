@@ -89,6 +89,19 @@ class ApplyHooks:
 # e nao o do APPLY. Medido no historico do usuario: o mesmo tipo de apply
 # variou de 1,2x a 31,3x o tempo real, e nao havia como saber qual foi qual.
 _ULTIMO_MOTOR: dict[str, str] = {}
+# Segundos por FASE do apply. Os cronometros ja existiam — mas so no stdout do
+# worker, que ninguem guarda. O historico registrava o total e mais nada, entao
+# "demorou 9 minutos" nao dizia se o custo estava no desenho, no encode ou na
+# validacao. Sem isto nao da para decidir o que otimizar; com isto e uma
+# consulta. Zerado no comeco de cada apply.
+_FASES: dict[str, float] = {}
+
+
+def _fase(nome: str, t0: float) -> float:
+    """Marca a fase e devolve o que ela levou, para o log continuar igual."""
+    dt = time.time() - t0
+    _FASES[nome] = round(dt, 3)
+    return dt
 
 
 def _print_log(line: str) -> None:
@@ -796,6 +809,7 @@ def execute_apply_plan(
     prepared_caps: list | None = None
     new_map: dict[str, Any] | None = None
     t_all = time.time()
+    _FASES.clear()
 
     try:
         if plan.get("rebuildCut") or plan.get("remapCaptions"):
@@ -810,7 +824,7 @@ def execute_apply_plan(
             log("MANUAL_EDL_REBUILD")
             t0 = time.time()
             hooks.rebuild_cut(edit, cut_tmp)
-            log(f"QUICK_APPLY_REBUILD_SEC {time.time() - t0:.3f}")
+            log(f"QUICK_APPLY_REBUILD_SEC {_fase('cut', t0):.3f}")
             work_cut = cut_tmp
             predicted = int((new_map or {}).get("outputFrames") or 0)
             actual = read_mp4_video_frames(cut_tmp)
@@ -840,13 +854,13 @@ def execute_apply_plan(
                 caps_new = words if isinstance(words, list) else []
             _write_json(caps_tmp, caps_new)
             log("CAPTIONS_REMAP_APPLIED")
-            log(f"QUICK_APPLY_REMAP_SEC {time.time() - t0:.3f}")
+            log(f"QUICK_APPLY_REMAP_SEC {_fase('remap', t0):.3f}")
 
         hooks.progress("visual", "Aplicando edição...")
         log("QUICK_APPLY_RENDER_VISUAL")
         t0 = time.time()
         hooks.render_visual(edit, cut=work_cut, captions=caps_new, dest=final_tmp)
-        log(f"QUICK_APPLY_RENDER_SEC {time.time() - t0:.3f}")
+        log(f"QUICK_APPLY_RENDER_SEC {_fase('render', t0):.3f}")
 
         hooks.progress("export", "Finalizando vídeo...")
         expected = None
@@ -857,7 +871,7 @@ def execute_apply_plan(
         if not ok:
             raise ApplyError(str((info or {}).get("error") or "validação falhou"))
         log("QUICK_APPLY_VALIDATE_OK")
-        log(f"QUICK_APPLY_VALIDATE_SEC {time.time() - t0:.3f}")
+        log(f"QUICK_APPLY_VALIDATE_SEC {_fase('validate', t0):.3f}")
 
         t0 = time.time()
         if caps_new is not None:
@@ -898,7 +912,7 @@ def execute_apply_plan(
             error=None,
             at=time.strftime("%Y-%m-%dT%H:%M:%S"),
         )
-        log(f"QUICK_APPLY_PROMOTE_SEC {time.time() - t0:.3f}")
+        log(f"QUICK_APPLY_PROMOTE_SEC {_fase('promote', t0):.3f}")
         log("QUICK_APPLY_SUCCESS")
         log(f"QUICK_APPLY_TOTAL_SEC {time.time() - t_all:.3f}")
         dur = float((info or {}).get("durationSec") or 0)
@@ -909,6 +923,7 @@ def execute_apply_plan(
             "videoDuration": dur,
             "applyDuration": time.time() - t_all,
             "success": True,
+            "phases": dict(_FASES),
         })
         return {
             "ok": True,
@@ -942,6 +957,7 @@ def execute_apply_plan(
                 "applyDuration": time.time() - t_all,
                 "success": False,
                 "error": str(e)[:160],
+                "phases": dict(_FASES),
             })
         except Exception:
             pass

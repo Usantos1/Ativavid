@@ -41,7 +41,8 @@ DIFERENCAS ACEITAS. Medido em 21/08/2026, 35 pontos: 30 dentro de 10%, e os
 O centro vertical, que e o que denuncia posicao errada, fica dentro de poucos
 pixels em TODOS os 35 pontos — inclusive nesses cinco.
 
-Uso:  python tools/render_benchmark/cmp_varredura.py
+Uso:  python tools/render_benchmark/cmp_varredura.py [indice]
+      indice 0 = projeto mais recente, 1 = o anterior, e assim por diante.
 """
 from __future__ import annotations
 
@@ -71,7 +72,8 @@ def main() -> None:
     from app.win_process import resolve_remotion_argv
     from tools.render_benchmark.cmp_entrada import escolher
 
-    edit, cues = escolher()
+    indice = int(sys.argv[1]) if len(sys.argv) > 1 else 0
+    edit, cues = escolher(indice)
     pub = edit / "remotion" / "public"
     ed = json.loads((pub / "edit-data.json").read_text(encoding="utf-8-sig"))
     total = int(timeline_from_edit_data(ed)["durationInFrames"])   # armadilha 1

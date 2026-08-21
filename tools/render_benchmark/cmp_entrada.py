@@ -67,8 +67,13 @@ RAIZ = Path(os.path.expanduser("~/ATIVAVID/Projetos"))
 TRAB = Path(os.environ.get("TEMP", r"E:\Temp")) / "ativavid_cmp_entrada"
 
 
-def escolher() -> tuple[Path, list]:
-    """O projeto RECENTE com node_modules e scaffold atual."""
+def escolher(indice: int = 0) -> tuple[Path, list]:
+    """O projeto RECENTE com node_modules e scaffold atual.
+
+    `indice` escolhe o n-esimo mais recente. Serve para conferir a fidelidade em
+    MAIS DE UM projeto: passar num so nao distingue "o motor esta certo" de "o
+    conteudo daquele video nao exercitou o defeito".
+    """
     cands = []
     for edit in RAIZ.glob("*/edit"):
         cues_p = edit / "remotion" / "public" / "caption-cues.json"
@@ -87,7 +92,8 @@ def escolher() -> tuple[Path, list]:
     if not cands:
         raise SystemExit("nenhum projeto com scaffold atual + node_modules")
     cands.sort(reverse=True)
-    return cands[0][1], cands[0][2]
+    i = max(0, min(int(indice), len(cands) - 1))
+    return cands[i][1], cands[i][2]
 
 
 def main() -> None:
