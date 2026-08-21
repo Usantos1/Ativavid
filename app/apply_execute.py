@@ -299,6 +299,37 @@ def expected_output_duration(edit_dir: Path) -> float:
     return float(map_output_duration(build_timeline_map(edl, fps=_edit_fps(edit_dir), prior_jcut=prior)))
 
 
+def tolerancia_de_quadros(n_ranges: int) -> int:
+    """Quantos quadros o mapa pode divergir do corte sem isso ser defeito.
+
+    O mapa soma `duracao * fps` por range; o corte e o que o ffmpeg entrega.
+    Os dois nunca bateram: cada segmento sai 2 a 7 quadros mais curto que a
+    duracao pedida (o `-ss` de entrada cai no keyframe anterior e descarta ate
+    ali), e a emenda com J-cut compensa parte disso. O que sobra e uma deriva
+    que ACOMPANHA o numero de emendas.
+
+    Medido nos 39 projetos do usuario em 21/08/2026: a deriva vai de 0 a 21
+    quadros e nunca passa de **0,75 quadro por emenda** — 21 quadros num
+    projeto de 38 ranges, 5 num de 12, 0 nos de 3 a 5.
+
+    Com a tolerancia de 1 quadro que estava aqui, **25 dos 39 projetos (64%)
+    eram recusados**: o usuario corrigia uma legenda e o apply respondia
+    "OLD map Nf vs cut.mp4 Mf" sem aplicar nada. Foi 9 das 10 falhas de apply
+    registradas no historico dele.
+
+    A folga aqui e 0,8 por emenda mais 2 fixos. So 0,8 por emenda deixava o
+    projeto de 5 ranges com 1 quadro de margem (deriva 3, folga 4) — apertado
+    demais para uma guarda; os 2 fixos dao a almofada. Nos 39 projetos as
+    margens ficam entre 3 e 11 quadros.
+
+    Continua pegando o caso que a guarda existe para pegar — mapa de OUTRO
+    corte, que difere pelo tamanho de um range inteiro, tipicamente segundos.
+    E ela e a rede SECUNDARIA: quem detecta corte refeito e o fingerprint das
+    corrections (`_clear_dirty`), nao a contagem de quadros.
+    """
+    return 2 + round(0.8 * max(0, int(n_ranges)))
+
+
 def prepare_edl_apply(edit_dir: Path) -> tuple[str | None, dict[str, Any] | None, list | None]:
     """Valida timeline + remap. Barato: sem FFmpeg, sem gravar captions.json."""
     from app.quick_corrections import _same_ranges
@@ -312,9 +343,10 @@ def prepare_edl_apply(edit_dir: Path) -> tuple[str | None, dict[str, Any] | None
     cut_path = Path(edit_dir) / "cut.mp4"
     cut_frames = read_mp4_video_frames(cut_path) if cut_path.is_file() else None
     predicted = int(old_map.get("outputFrames") or 0)
-    if cut_frames and predicted and abs(predicted - cut_frames) > 1:
+    folga = tolerancia_de_quadros(len(old_map.get("spans") or []))
+    if cut_frames and predicted and abs(predicted - cut_frames) > folga:
         return (
-            f"OLD map {predicted}f vs cut.mp4 {cut_frames}f",
+            f"OLD map {predicted}f vs cut.mp4 {cut_frames}f (folga {folga}f)",
             new_map,
             None,
         )
@@ -745,10 +777,14 @@ def execute_apply_plan(
             work_cut = cut_tmp
             predicted = int((new_map or {}).get("outputFrames") or 0)
             actual = read_mp4_video_frames(cut_tmp)
-            log(f"QUICK_APPLY_CUT_FRAMES predicted={predicted} actual={actual}")
-            if predicted and actual is not None and abs(int(actual) - predicted) > 1:
+            # o mapa expoe `spans` (um por range), nao `ranges`
+            folga = tolerancia_de_quadros(len((new_map or {}).get("spans") or []))
+            log(f"QUICK_APPLY_CUT_FRAMES predicted={predicted} actual={actual} "
+                f"folga={folga}")
+            if predicted and actual is not None and abs(int(actual) - predicted) > folga:
                 raise ApplyError(
-                    f"cut temporário tem {actual} frames, o mapa previa {predicted}"
+                    f"cut temporário tem {actual} frames, o mapa previa "
+                    f"{predicted} (folga {folga})"
                 )
         else:
             hooks.progress("prepare", "Preparando alterações...")
