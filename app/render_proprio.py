@@ -595,8 +595,25 @@ class Renderizador:
         ec = self.ed.get("endCard") or {}
         if ec.get("enabled"):
             self.camadas.append(self._montar_endcard(ec, hook.get("accent")))
-        self.flashes = [float(t["at"]) for t in (self.ed.get("transitions") or [])
-                        if t.get("type") == "flash"]
+        trs = [t for t in (self.ed.get("transitions") or [])
+               if t.get("type") == "flash"]
+        self.flashes = [float(t["at"]) for t in trs]
+        # O flash TEM som no template (`<Sfx src={active.sfx ?? 'cut-click.mp3'}
+        # volume={active.volume ?? 0.9}>` dentro de um Sequence que comeca no
+        # quadro do corte). O motor proprio desenhava o clarao e o feixe e nao
+        # tocava nada — o corte marcado ficava mudo em todo projeto.
+        #
+        # Fica atras de `sfx_on` como todos os outros deste motor: o template
+        # nao gera esse gate aqui, mas "desligar efeitos sonoros" ja desliga o
+        # whoosh da headline e os cliques da legenda, e um clique sobrando
+        # depois disso seria surpresa.
+        if self.sfx_on:
+            for t in trs:
+                c = round(float(t["at"]) * self.fps) + VIDEO_LAG
+                self.eventos_sfx.append((
+                    str(t.get("sfx") or "cut-click.mp3"),
+                    c / self.fps,
+                    float(t["volume"]) if t.get("volume") is not None else 0.9))
 
     def _tempos_cue(self, cue: dict) -> tuple[int, int, float, int, float]:
         ini_f = int(cue["startMs"] / 1000 * self.fps)

@@ -609,3 +609,32 @@ def test_contorno_da_headline_sai_metade_para_fora(tmp_path):
 def test_contorno_zero_nao_desenha_contorno(tmp_path):
     """strokePx=0 é "sem contorno", um valor de fato — com `or` virava 12."""
     assert _contorno_para_fora(tmp_path, 0) == (0, 0)
+
+
+def test_flash_tem_som(tmp_path):
+    """O corte marcado toca `cut-click.mp3` no template — um `<Sfx>` dentro de
+    um Sequence que começa no quadro do corte. O motor próprio desenhava o
+    clarão e o feixe e não tocava nada: o flash ficava mudo em todo projeto.
+
+    O instante segue a mesma conta do desenho (`round(at*fps) + VIDEO_LAG`),
+    senão o som chegaria antes ou depois do clarão."""
+    from app.render_proprio import VIDEO_LAG
+
+    ed = _ed(hook={"enabled": False}, endCard={"enabled": False},
+             transitions=[{"type": "flash", "at": 1.0},
+                          {"type": "flash", "at": 2.5, "volume": 0.4},
+                          {"type": "flash", "at": 3.0, "sfx": "pop.mp3"}])
+    r = Renderizador(_public(tmp_path, []), ed, frames=120, fps=30.0)
+    ev = [e for e in r.eventos_sfx if e[0] in ("cut-click.mp3", "pop.mp3")]
+    assert len(ev) == 3, r.eventos_sfx
+    assert ev[0] == ("cut-click.mp3", (round(1.0 * 30) + VIDEO_LAG) / 30.0, 0.9)
+    assert ev[1][2] == 0.4, "volume da transição vence o padrão"
+    assert ev[2][0] == "pop.mp3", "sfx da transição vence o padrão"
+
+
+def test_flash_respeita_o_desligar_efeitos(tmp_path):
+    ed = _ed(hook={"enabled": False}, endCard={"enabled": False},
+             captions={"style": "stacked", "sfx": {"enabled": False}},
+             transitions=[{"type": "flash", "at": 1.0}])
+    r = Renderizador(_public(tmp_path, []), ed, frames=60, fps=30.0)
+    assert not r.eventos_sfx
