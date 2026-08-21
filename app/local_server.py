@@ -498,6 +498,41 @@ def _fmt_job_when(iso: str | None) -> str:
         return str(iso)[:16]
 
 
+_DUR_FONTE_CACHE: dict[str, float] = {}
+
+
+def _duracao_das_fontes(sources: list) -> float:
+    """Soma a duracao dos arquivos de ORIGEM, em segundos.
+
+    E o "de quanto para quanto" do card: sem ela so da para ver a duracao
+    entregue, e o quanto o corte apertou o video — que e o trabalho do app —
+    fica invisivel. O ffprobe e caro para a lista inteira, entao o resultado
+    fica em cache por caminho+mtime e nao e refeito a cada refresh da tela.
+    """
+    total = 0.0
+    for raw in sources or []:
+        try:
+            src = Path(str(raw))
+            if not src.is_file():
+                continue
+            chave = f"{src}|{src.stat().st_mtime_ns}"
+        except OSError:
+            continue
+        if chave in _DUR_FONTE_CACHE:
+            total += _DUR_FONTE_CACHE[chave]
+            continue
+        try:
+            from app.media_probe import probe_video
+
+            info = probe_video(src) or {}
+            d = float(info.get("durationSec") or 0)
+        except Exception:  # noqa: BLE001
+            d = 0.0
+        _DUR_FONTE_CACHE[chave] = d
+        total += d
+    return round(total, 3) if total > 0 else 0.0
+
+
 def enrich_job_display(job: dict, edit_dir: Path | None = None) -> dict:
     """Campos de UI: título amigável + início/fim formatados."""
     edit = edit_dir or Path(job.get("editDir") or ".")
@@ -506,8 +541,16 @@ def enrich_job_display(job: dict, edit_dir: Path | None = None) -> dict:
     if not finished and job.get("status") == "done":
         finished = job.get("updatedAt")
     job["createdAtLabel"] = _fmt_job_when(created)
-    job["startedAtLabel"] = job["createdAtLabel"]
+    # `startedAt` e gravado quando o worker PEGA o job. Copiar o createdAt por
+    # cima dele fazia "inicio" dizer a hora da IMPORTACAO — num video que
+    # esperou meia hora na fila, os dois numeros nao tem nada a ver.
+    started = job.get("startedAt")
+    job["startedAtLabel"] = _fmt_job_when(started) if started else job["createdAtLabel"]
     job["finishedAtLabel"] = _fmt_job_when(finished) if finished else ""
+    if job.get("sourceDurationSec") in (None, "") and job.get("sources"):
+        d = _duracao_das_fontes(job.get("sources") or [])
+        if d:
+            job["sourceDurationSec"] = d
     job["title"] = _resolve_job_title(job, edit)
     return job
 
@@ -2630,6 +2673,17 @@ class StudioHandler(BaseHTTPRequestHandler):
                     intent=body.get("intent"),
                     title=(body.get("title") or "").strip() or None,
                 )
+            if not created:
+                # Nao criar NADA nao e sucesso. Antes isto saia como 200 com
+                # `jobs: []` e a tela apagava o card sem dizer nada — o lote
+                # sumia. Com nome de pasta acentuado, que e o caso do usuario,
+                # uma falha no multipart cai exatamente aqui.
+                self._json({
+                    "ok": False,
+                    "error": "nao consegui ler nenhum video desse envio",
+                    "jobs": [],
+                }, 422)
+                return
             self._json({"ok": True, "jobs": created, "merged": bool(merge and len(created) == 1)})
             return
 

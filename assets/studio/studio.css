@@ -1161,6 +1161,16 @@ body.view-estilo-on .ws-head {
   letter-spacing: 0.01em;
   line-height: 1.35;
 }
+/* Inicio -> fim do processamento. Um degrau abaixo da mensagem: e informacao
+   de conferencia, nao o que se le primeiro no card. Tabular porque sao horas
+   em coluna — sem isso os digitos dancam de um card para o outro. */
+.pc-periodo {
+  font-size: 11px;
+  color: var(--dim);
+  opacity: 0.85;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+}
 .chip {
   flex: 0 0 auto;
   font-size: 10px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase;

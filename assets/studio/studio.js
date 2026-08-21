@@ -165,6 +165,9 @@ function jobHeadline(j, view) {
   if (applyBusy(j) || (applyFailed(j) && view !== "done")) return text;
   const when = jobWhenLabel(j);
   if (when && (j.status === "done" || j.stage === "done")) {
+    // A hora de conclusao agora vive na linha de periodo (inicio -> fim), que
+    // diz mais. Repetir aqui deixava a mesma hora duas vezes no card.
+    if (periodoLabel(j)) return text;
     return `${text} · ${when}`;
   }
   return text;
@@ -360,11 +363,42 @@ function jobLinks(j) {
   };
 }
 
+/** Segundos -> "1:23" ou "26s". Vazio quando nao ha numero. */
+function fmtDuracao(seg) {
+  const n = Number(seg);
+  if (!Number.isFinite(n) || n <= 0) return "";
+  const t = Math.round(n);
+  if (t < 60) return `${t}s`;
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
+}
+
+/** "27s → 26s" quando as duas existem; so a que houver quando falta uma. */
+function duracoesLabel(j) {
+  const orig = fmtDuracao(j.sourceDurationSec);
+  const fim = fmtDuracao(j.durationSec);
+  if (orig && fim) return orig === fim ? fim : `${orig} → ${fim}`;
+  return fim || orig || "";
+}
+
+/** "21/08 08:22 → 08:33". So repete a data quando o dia virou. */
+function periodoLabel(j) {
+  const ini = String(j.startedAtLabel || j.createdAtLabel || "");
+  const fim = String(j.finishedAtLabel || "");
+  if (!ini && !fim) return "";
+  if (!fim) return `Início ${ini}`;
+  if (!ini) return `Fim ${fim}`;
+  const [dIni, hIni] = ini.split(" · ");
+  const [dFim, hFim] = fim.split(" · ");
+  if (dIni && dFim && dIni === dFim) return `${dIni} · ${hIni} → ${hFim}`;
+  return `${ini} → ${fim}`;
+}
+
 function cardSig(j, opts) {
   const links = jobLinks(j);
   const qa = j.quickApply || {};
   return [
     j.id, j.status, j.title || j.name, Math.round(Number(j.progress) || 0), j.hasFinal, j.hasThumb, j.finishedAt, j.finishedAtLabel,
+    j.startedAtLabel || "", j.durationSec || "", j.sourceDurationSec || "", j.legenda ? "L" : "",
     j.stage, j.message, j.reason || "", j.localPoster || j.thumbUrl, links.editor, links.estilo, links.final,
     opts && opts.compact ? "1" : "0",
     qa.status || "", qa.stage || "", qa.elapsedLabel || "", qa.etaLabel || "", qa.stageLabel || "",
@@ -477,6 +511,36 @@ function stuckActionsHtml(j, safeId) {
   return "";
 }
 
+/** O menu ⋯ do card. Funcao propria porque o `patchCard` precisa REFAZER ele:
+ *  montado uma vez e congelado, "Ver vídeo final" ficava desabilitado para
+ *  sempre e "Copiar legenda do post" nunca aparecia depois que a legenda
+ *  ficava pronta. */
+function cardMenuHtml(j, opts) {
+  const view = opts && opts.view;
+  const compact = !!(opts && opts.compact);
+  const links = jobLinks(j);
+  const canFinal = j.hasFinal || j.status === "done";
+  const copy = queueCopy(j, view);
+  const title = displayTitle(j);
+  const safeId = escapeHtml(j.id);
+  const menuKey = escapeHtml(`${j.id}:${compact ? "c" : "f"}`);
+  return `<div class="pc-more" data-menu-host="${menuKey}">
+      <button type="button" class="chip-btn ghostish pc-more-btn" data-act="menu" data-id="${safeId}" data-menu-key="${menuKey}" aria-label="Mais ações" aria-expanded="false" aria-haspopup="menu">⋯</button>
+      <div class="pc-menu hidden" data-menu="${menuKey}" role="menu">
+        <button type="button" role="menuitem" data-act="folder" data-id="${safeId}">Abrir pasta</button>
+        ${j.legenda ? `<button type="button" role="menuitem" data-act="copylegenda" data-id="${safeId}">Copiar legenda do post</button>` : ""}
+        <a role="menuitem" href="${escapeHtml(links.final)}" ${canFinal ? "" : "class=\"disabled\""}>Ver vídeo final</a>
+        <a role="menuitem" href="${escapeHtml(links.editor)}">Editar</a>
+        <a role="menuitem" href="${escapeHtml(links.estilo)}" data-id="${safeId}">Alterar estilo</a>
+        ${j.status === "done" ? `<button type="button" role="menuitem" data-act="retry" data-id="${safeId}">Tentar novamente</button>` : ""}
+        ${(copy.badge === "ERRO" || copy.badge === "REVISAR" || j.detail)
+          ? `<button type="button" role="menuitem" data-act="detail" data-id="${safeId}">Ver detalhe</button>`
+          : ""}
+        <button type="button" role="menuitem" class="danger" data-act="delete" data-id="${safeId}" data-name="${escapeHtml(title)}">Apagar</button>
+      </div>
+    </div>`;
+}
+
 function cardHtml(j, opts) {
   const compact = !!(opts && opts.compact);
   const enter = !!(opts && opts.enter);
@@ -489,8 +553,11 @@ function cardHtml(j, opts) {
   const headline = jobHeadline(j, view);
   const title = displayTitle(j);
   const fmt = j.formatLabel || (canFinal || j.hasCut ? "9:16" : "");
-  const dur = j.durationLabel || "";
+  // "27s → 26s": a duracao de ORIGEM e a entregue. So a final nao diz nada
+  // sobre o trabalho do corte, que e o que o app faz.
+  const dur = j.durationLabel || duracoesLabel(j);
   const metaBits = [dur, fmt].filter(Boolean);
+  const periodo = j.status === "done" ? periodoLabel(j) : "";
   const copy = queueCopy(j, view);
   const chipLabel = copy.badge;
   const tone = chipTone(j, view);
@@ -508,19 +575,7 @@ function cardHtml(j, opts) {
         // real é importar o arquivo bom de novo.
         ? `<button type="button" class="chip-btn primary" data-act="reimport" data-id="${safeId}">Importar de novo</button>`
         : `<button type="button" class="chip-btn" data-act="retry" data-id="${safeId}">Tentar novamente</button>`;
-  const menu = `<div class="pc-more" data-menu-host="${menuKey}">
-      <button type="button" class="chip-btn ghostish pc-more-btn" data-act="menu" data-id="${safeId}" data-menu-key="${menuKey}" aria-label="Mais ações" aria-expanded="false" aria-haspopup="menu">⋯</button>
-      <div class="pc-menu hidden" data-menu="${menuKey}" role="menu">
-        <button type="button" role="menuitem" data-act="folder" data-id="${safeId}">Abrir pasta</button>
-        <a role="menuitem" href="${escapeHtml(links.final)}" ${canFinal ? "" : "class=\"disabled\""}>Ver vídeo final</a>
-        <a role="menuitem" href="${escapeHtml(editor)}">Editar</a>
-        <a role="menuitem" href="${escapeHtml(estilo)}" data-id="${safeId}">Alterar estilo</a>
-        ${(copy.badge === "ERRO" || copy.badge === "REVISAR" || j.detail)
-          ? `<button type="button" role="menuitem" data-act="detail" data-id="${safeId}">Ver detalhe</button>`
-          : ""}
-        <button type="button" role="menuitem" class="danger" data-act="delete" data-id="${safeId}" data-name="${escapeHtml(title)}">Apagar</button>
-      </div>
-    </div>`;
+  const menu = cardMenuHtml(j, opts);
   const thumbImg = thumb
     ? `<img src="${thumb}" alt="" loading="lazy"
         onload="this.previousElementSibling.classList.add('hidden')"
@@ -541,11 +596,11 @@ function cardHtml(j, opts) {
         <span class="chip ${escapeHtml(tone)}">${escapeHtml(chipLabel)}</span>
       </div>
       ${headline ? `<div class="pc-msg">${escapeHtml(headline)}</div>` : ""}
+      ${periodo ? `<div class="pc-periodo">${escapeHtml(periodo)}</div>` : ""}
       ${progress}
       <div class="pc-actions">
         ${primary}
         ${(() => { const s = stuckActionsHtml(j, safeId); return s ? `<span class="pc-stuck" data-stuck-sig="${escapeHtml(s)}">${s}</span>` : ""; })()}
-        ${j.status === "done" ? `<button type="button" class="chip-btn ghostish" data-act="folder" data-id="${safeId}" title="Abrir a pasta publicar">Pasta</button>${j.legenda ? `<button type="button" class="chip-btn ghostish" data-act="copylegenda" data-id="${safeId}" title="Copiar a legenda do post">Legenda</button>` : ""}` : ""}
         ${menu}
       </div>
     </div>
@@ -689,6 +744,53 @@ function patchCard(el, j, opts) {
   } else if (msg) {
     msg.remove();
   }
+  // Duracoes (origem -> entregue) e formato.
+  const metaTxt = [
+    j.durationLabel || duracoesLabel(j),
+    j.formatLabel || ((j.hasFinal || j.status === "done" || j.hasCut) ? "9:16" : ""),
+  ].filter(Boolean).join(" · ");
+  let meta = el.querySelector(".pc-when");
+  if (metaTxt) {
+    if (!meta) {
+      meta = document.createElement("div");
+      meta.className = "pc-when";
+      el.querySelector(".pc-title-block")?.appendChild(meta);
+    }
+    meta.textContent = metaTxt;
+  } else if (meta) {
+    meta.remove();
+  }
+
+  // Inicio -> fim.
+  const perTxt = j.status === "done" ? periodoLabel(j) : "";
+  let per = el.querySelector(".pc-periodo");
+  if (perTxt) {
+    if (!per) {
+      per = document.createElement("div");
+      per.className = "pc-periodo";
+      const depoisDaMsg = el.querySelector(".pc-msg");
+      if (depoisDaMsg) depoisDaMsg.insertAdjacentElement("afterend", per);
+      else {
+        const anchor = el.querySelector(".pc-progress") || el.querySelector(".pc-actions");
+        if (anchor) anchor.insertAdjacentElement("beforebegin", per);
+        else el.querySelector(".pc-body")?.appendChild(per);
+      }
+    }
+    per.textContent = perTxt;
+  } else if (per) {
+    per.remove();
+  }
+
+  // O menu era congelado no estado em que o card nasceu. Refeito aqui — menos
+  // quando esta ABERTO, para nao sumir debaixo do clique do usuario.
+  const host = el.querySelector(".pc-more");
+  if (host && !host.querySelector(".pc-menu:not(.hidden)")) {
+    const wrap = document.createElement("div");
+    wrap.innerHTML = cardMenuHtml(j, opts);
+    const novoMenu = wrap.firstElementChild;
+    if (novoMenu) host.replaceWith(novoMenu);
+  }
+
   patchCardProgress(el, j);
   const actions = el.querySelector(".pc-actions");
   if (actions) {
@@ -1387,14 +1489,20 @@ async function collectDroppedFiles(dt) {
     if (listed.length && listed.some((f) => f.webkitRelativePath)) {
       return filterImportVideos(listed);
     }
+    // `webkitGetAsEntry()` e `getAsFile()` so valem ANTES do primeiro await: o
+    // DataTransfer e neutralizado assim que o handler do drop devolve o
+    // controle ao navegador, e dali em diante os dois devolvem null. Como a
+    // varredura de pasta e assincrona, a PRIMEIRA pasta consumia o unico
+    // momento valido e as demais sumiam sem aviso — arrastando 3 subpastas de
+    // uma vez, so uma entrava. Por isso tudo e colhido de uma vez, sincrono.
+    const entradas = items.map((it) => ({
+      entry: it.webkitGetAsEntry?.() || null,
+      file: it.getAsFile?.() || null,
+    }));
     const out = [];
-    for (const it of items) {
-      const entry = it.webkitGetAsEntry?.();
-      if (entry) await collectEntry(entry, "", out);
-      else {
-        const f = it.getAsFile?.();
-        if (f) out.push(f);
-      }
+    for (const e of entradas) {
+      if (e.entry) await collectEntry(e.entry, "", out);
+      else if (e.file) out.push(e.file);
     }
     return filterImportVideos(out);
   }
@@ -1607,6 +1715,14 @@ async function uploadFiles(fileList, intent) {
       }
       if (!ok) throw new Error(data.error || "falha no upload");
       const created = (data.jobs || [])[0];
+      if (!created) {
+        // O servidor respondeu sem criar nada. Antes o card era removido em
+        // silencio e o lote sumia da tela sem uma palavra — quem arrastou uma
+        // pasta so notava contando os videos depois.
+        throw new Error(
+          data.error || `Não consegui importar "${local.title || "esse lote"}"`
+        );
+      }
       if (created) {
         const prev = state.jobs.find((j) => j.id === local.id) || {};
         removeLocalJob(local.id);
@@ -1673,6 +1789,13 @@ function wireDrop() {
     })
   );
   zone.addEventListener("drop", (e) => {
+    // Sem isto o drop subia para o handler de `window` (o alvo gigante do
+    // #dropAnywhere) e a MESMA pasta era varrida duas vezes. A segunda
+    // varredura pega um DataTransfer ja neutralizado, entao ela devolve so o
+    // que sobrou — os videos soltos — e ainda sobrescreve `state.pendingFiles`
+    // com essa lista menor. Era o caminho para "arrastei a pasta e so vieram
+    // os videos soltos".
+    e.stopPropagation();
     collectDroppedFiles(e.dataTransfer)
       .then((files) => openImportDialog(files))
       .catch((err) => toast(err.message));
