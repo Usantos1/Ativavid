@@ -1586,6 +1586,20 @@ class StudioHandler(BaseHTTPRequestHandler):
         if path.startswith("/assets/"):
             # reuse preview brand assets (logo, app.css tokens)
             rel = path[len("/assets/"):]
+            # `default-style.json` e o "estilo da casa" que a tela de Estilo
+            # carrega como base. Servir o arquivo EMBARCADO mostrava o estilo de
+            # fabrica: "Salvar como padrao" grava em ~/ATIVAVID/default-style
+            # .json, que so o `load_preset()` le. Medido na maquina do usuario,
+            # 7 campos divergiam — a tela dizia marca "Padrao" e cartao final
+            # vazio enquanto o render usava "Prime Camp" e o CTA dele, e
+            # `rhythm`/`speechClean` (que decidem o CORTE) apareciam errados.
+            # Aqui vai o EFETIVO: embarcado + o que o usuario salvou.
+            if Path(rel).name == "default-style.json":
+                try:
+                    self._json(load_preset())
+                    return
+                except Exception as e:  # noqa: BLE001 — cai no arquivo de fabrica
+                    print(f"[warn] default-style efetivo: {e}", flush=True)
             for base in (PREVIEW, STUDIO):
                 cand = base / rel
                 if cand.exists():
