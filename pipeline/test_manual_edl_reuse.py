@@ -14,17 +14,28 @@ sys.path.insert(0, str(REPO / "pipeline"))
 from run_fast import load_manual_edl_ranges  # noqa: E402
 
 
-def _project(tmp_path: Path, *, applied: bool = True, preset_used: dict | None = None) -> Path:
+def _project(tmp_path: Path, *, applied: bool = True, preset_used: dict | None = None,
+             cut_style: dict | None = None) -> Path:
+    """`cut_style` = os knobs CONGELADOS no edl.json, que e o "antes" real.
+
+    `preset_used` continua aceito de proposito: os testes que o usam provam que
+    ele NAO decide mais nada. O worker reescreve o preset-used.json com o
+    preset atual antes de rodar, entao le-lo era comparar o preset com ele
+    mesmo — a guarda nunca disparava.
+    """
     edit = tmp_path / "edit"
     edit.mkdir()
     if applied:
         (edit / "preview_edits.applied.json").write_text("{}", encoding="utf-8")
-    (edit / "edl.json").write_text(json.dumps({
+    edl: dict = {
         "ranges": [
             {"source": "IMG", "start": 1.0, "end": 5.0, "beat": "HOOK"},
             {"source": "IMG", "start": 7.0, "end": 12.0, "beat": "B1", "gain_db": 3.0},
         ],
-    }), encoding="utf-8")
+    }
+    if cut_style is not None:
+        edl["cutStyle"] = cut_style
+    (edit / "edl.json").write_text(json.dumps(edl), encoding="utf-8")
     if preset_used is not None:
         (edit / "preset-used.json").write_text(json.dumps(preset_used), encoding="utf-8")
     return edit
@@ -35,7 +46,7 @@ PRESET = {"rhythm": "dinamico", "intensity": "medio", "editingIntent": "dynamic"
 
 
 def test_reuses_manual_edl_when_cut_knobs_unchanged(tmp_path):
-    edit = _project(tmp_path, preset_used=dict(PRESET))
+    edit = _project(tmp_path, cut_style=dict(PRESET))
     ranges = load_manual_edl_ranges(edit, "IMG", dict(PRESET))
     assert ranges is not None
     assert [(r["start"], r["end"]) for r in ranges] == [(1.0, 5.0), (7.0, 12.0)]
@@ -43,24 +54,51 @@ def test_reuses_manual_edl_when_cut_knobs_unchanged(tmp_path):
 
 
 def test_replans_when_rhythm_changed(tmp_path):
-    edit = _project(tmp_path, preset_used=dict(PRESET))
+    edit = _project(tmp_path, cut_style=dict(PRESET))
     changed = dict(PRESET, rhythm="muito_rapido")
     assert load_manual_edl_ranges(edit, "IMG", changed) is None
 
 
+def test_replaneja_com_qualquer_knob_de_corte(tmp_path):
+    for knob, novo_valor in (("intensity", "forte"), ("editingIntent", "complete"),
+                             ("contentType", "viral"), ("speechClean", "agressivo")):
+        base = tmp_path / knob
+        base.mkdir(parents=True, exist_ok=True)
+        edit = _project(base, cut_style=dict(PRESET))
+        assert load_manual_edl_ranges(edit, "IMG", dict(PRESET, **{knob: novo_valor})) is None, (
+            f"mudar {knob} nao replanejou o corte"
+        )
+
+
+def test_o_preset_used_nao_decide_mais_nada(tmp_path):
+    """Ele e escrito com o preset ATUAL antes de rodar: le-lo era comparar o
+    preset com ele mesmo, e a guarda nunca disparava. Aqui ele diz uma coisa e
+    o corte congelado diz outra — quem manda e o congelado."""
+    edit = _project(tmp_path, preset_used=dict(PRESET, rhythm="calmo"),
+                    cut_style=dict(PRESET))
+    assert load_manual_edl_ranges(edit, "IMG", dict(PRESET)) is not None
+
+
+def test_edl_antigo_sem_knobs_mantem_o_corte(tmp_path):
+    """Projeto de antes deste campo existir: recortar sozinho seria pior do que
+    nao replanejar."""
+    edit = _project(tmp_path, preset_used=dict(PRESET))
+    assert load_manual_edl_ranges(edit, "IMG", dict(PRESET, rhythm="calmo")) is not None
+
+
 def test_no_reuse_without_prior_manual_edit(tmp_path):
-    edit = _project(tmp_path, applied=False, preset_used=dict(PRESET))
+    edit = _project(tmp_path, applied=False, cut_style=dict(PRESET))
     assert load_manual_edl_ranges(edit, "IMG", dict(PRESET)) is None
 
 
 def test_no_reuse_for_other_source(tmp_path):
-    edit = _project(tmp_path, preset_used=dict(PRESET))
+    edit = _project(tmp_path, cut_style=dict(PRESET))
     assert load_manual_edl_ranges(edit, "OUTRO", dict(PRESET)) is None
 
 
 def test_headline_only_change_still_reuses(tmp_path):
     # headline/estilo visual não são knobs de corte
-    edit = _project(tmp_path, preset_used=dict(PRESET, headline="realce"))
+    edit = _project(tmp_path, cut_style=dict(PRESET))
     preset = dict(PRESET, headline="pilula", headlineText="Nova headline")
     assert load_manual_edl_ranges(edit, "IMG", preset) is not None
 

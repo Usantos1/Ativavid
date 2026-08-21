@@ -754,19 +754,29 @@ def load_manual_edl_ranges(edit_dir: Path, source_key: str, preset: dict) -> lis
     edl_p = edit_dir / "edl.json"
     if not edl_p.exists():
         return None
-    used_p = edit_dir / "preset-used.json"
-    try:
-        used = json.loads(used_p.read_text(encoding="utf-8-sig")) if used_p.exists() else {}
-    except (OSError, json.JSONDecodeError):
-        used = {}
-    if isinstance(used, dict) and used:
-        for key in _CUT_STYLE_KEYS:
-            if str(used.get(key) or "") != str(preset.get(key) or ""):
-                return None
     try:
         data = json.loads(edl_p.read_text(encoding="utf-8-sig"))
     except (OSError, json.JSONDecodeError):
         return None
+    # Os knobs que geraram ESTE corte moram no proprio edl.json. A versao
+    # anterior lia o `preset-used.json` como se fosse a rodada passada — mas o
+    # worker o reescreve com o preset ATUAL antes de lancar o run_fast
+    # (local_server.py), entao a comparacao era do preset com ele mesmo e a
+    # guarda nunca disparava: mudar ritmo/intensidade/tipo e reprocessar
+    # mantinha o corte velho calado.
+    #
+    # EDL sem `cutStyle` e de antes deste campo existir: mantem o corte, que e
+    # o comportamento que o usuario ja conhece. Recortar sozinho um projeto
+    # antigo seria pior do que nao replanejar.
+    congelado = data.get("cutStyle") if isinstance(data, dict) else None
+    if isinstance(congelado, dict) and congelado:
+        for key in _CUT_STYLE_KEYS:
+            if str(congelado.get(key) or "") != str(preset.get(key) or ""):
+                mudou = [k for k in _CUT_STYLE_KEYS
+                         if str(congelado.get(k) or "") != str(preset.get(k) or "")]
+                print(f"[edits] replanejando o corte — mudou: {', '.join(mudou)}",
+                      flush=True)
+                return None
     raw = data.get("ranges") if isinstance(data, dict) else None
     if not isinstance(raw, list) or not raw:
         return None
@@ -2626,6 +2636,12 @@ def run(
         "voice_master": True,
         "ranges": ranges,
         "llm": llm_meta,
+        # Os knobs que DECIDIRAM este corte, congelados junto com ele. Sem isto
+        # nao existe "antes" para comparar: a guarda de replanejamento lia o
+        # `preset-used.json`, que o worker reescreve com o preset ATUAL logo
+        # antes de rodar — ela comparava o preset com ele mesmo e nunca
+        # disparava.
+        "cutStyle": {k: str(preset.get(k) or "") for k in _CUT_STYLE_KEYS},
     }
     edl_path = edit_dir / "edl.json"
     edl_path.write_text(json.dumps(edl, indent=2, ensure_ascii=False), encoding="utf-8")
