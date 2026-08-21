@@ -2656,6 +2656,7 @@ class StudioHandler(BaseHTTPRequestHandler):
                     self.projects_root,
                     task_id=str(body.get("taskId") or ""),
                     project_id=str(body.get("projectId") or ""),
+                    dismiss=bool(body.get("dismiss")),
                 )
             except Exception as e:
                 self._json({"ok": False, "error": str(e)[:160]}, 500)

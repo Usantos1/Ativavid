@@ -64,9 +64,21 @@ function applyBusy(j) {
   return !!(qa && (qa.status === "queued" || qa.status === "running"));
 }
 
+function applyDismissed(qa) {
+  if (!qa) return false;
+  if (qa.dismissedAt) return true;
+  // reserva local: o POST pode nao ter chegado ainda quando o poll repinta
+  const key = applyAckKey(qa);
+  if (!key) return false;
+  try { return localStorage.getItem(key + ":dis") === "1"; } catch { return false; }
+}
+
 function applyFailed(j) {
   const qa = j && j.quickApply;
-  return !!(qa && qa.status === "failed");
+  // `acknowledgedAt` NAO decide isto: a tela marca ack sozinha ao mostrar o
+  // toast da falha. So o clique em Dispensar (dismissedAt) tira o cartaz —
+  // antes ele voltava no poll seguinte, para sempre.
+  return !!(qa && qa.status === "failed" && !applyDismissed(qa));
 }
 
 function applyCompleted(j) {
@@ -2270,7 +2282,18 @@ function wireList() {
         $("#fileInput")?.click();
       } else if (act === "ackapply") {
         const job = state.jobs.find((x) => x.id === id);
-        markApplyAck(job && job.quickApply);
+        const qa = job && job.quickApply;
+        if (qa) {
+          const key = applyAckKey(qa);
+          if (key) { try { localStorage.setItem(key + ":dis", "1"); } catch { /* ignore */ } }
+          try {
+            await fetch("/api/apply-ack", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ taskId: qa.taskId || "", projectId: qa.projectId || "", dismiss: true }),
+            });
+          } catch { /* a reserva local ja segura a tela */ }
+        }
         toast("Aviso dispensado — o vídeo continua como está");
         await refreshJobs();
       } else if (act === "cancel") {

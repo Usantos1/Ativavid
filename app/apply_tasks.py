@@ -256,6 +256,7 @@ def public_view(task: dict[str, Any] | None, edit_dir: Path | None = None) -> di
         "jobId": task.get("jobId") or "",
         "type": TYPE_QUICK_APPLY,
         "acknowledgedAt": task.get("acknowledgedAt"),
+        "dismissedAt": task.get("dismissedAt"),
         "status": status,
         "stage": stage,
         "stageLabel": friendly_stage_label(stage, str(task.get("stageLabel") or task.get("message") or "")),
@@ -315,6 +316,14 @@ def prune_index(projects_root: Path) -> int:
                 tasks.pop(key, None)
                 removed += 1
                 continue
+            # FAILED so sai do indice quando o usuario DISPENSOU de verdade.
+            # `acknowledgedAt` nao serve de criterio: a tela marca ack sozinha
+            # ao mostrar o toast da falha — por isso tarefa falhada nunca saia
+            # daqui, e o cartaz REVISAR voltava para sempre.
+            if task.get("dismissedAt") and status == STATUS_FAILED:
+                tasks.pop(key, None)
+                removed += 1
+                continue
             finished = _parse_ts(str(task.get("finishedAt") or task.get("updatedAt") or ""))
             if status == STATUS_COMPLETED and finished is not None and (now - finished) > COMPLETED_INDEX_TTL_SEC:
                 tasks.pop(key, None)
@@ -336,8 +345,15 @@ def acknowledge_task(
     *,
     task_id: str = "",
     project_id: str = "",
+    dismiss: bool = False,
 ) -> dict[str, Any] | None:
-    """Marca a conclusão como vista e tira completed do índice ativo."""
+    """Marca a conclusão como vista e tira completed do índice ativo.
+
+    `dismiss=True` e o clique EXPLICITO em Dispensar — grava `dismissedAt`,
+    que e um estado separado do ack de proposito: o ack tambem e escrito
+    automaticamente pela tela ao mostrar o toast, entao ele nao pode decidir
+    se o cartaz REVISAR some.
+    """
     root = Path(projects_root)
     want_task = str(task_id or "").strip()
     want_proj = str(project_id or "").strip()
@@ -361,6 +377,8 @@ def acknowledge_task(
         return None
     found = dict(found)
     found["acknowledgedAt"] = _utc()
+    if dismiss:
+        found["dismissedAt"] = _utc()
     edit = Path(found.get("editDir") or "")
     if edit:
         _persist(edit, found)
@@ -636,6 +654,7 @@ def sync_from_status(edit_dir: Path, status_row: dict[str, Any]) -> dict[str, An
         "jobId": job_id or prev.get("jobId") or "",
         "type": TYPE_QUICK_APPLY,
         "acknowledgedAt": prev.get("acknowledgedAt") if status == prev.get("status") else None,
+        "dismissedAt": prev.get("dismissedAt") if status == prev.get("status") else None,
         "status": status,
         "stage": stage,
         "stageLabel": label,
