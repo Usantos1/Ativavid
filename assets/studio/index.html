@@ -572,7 +572,8 @@
                   <p class="hint">Acesso de clientes — validade e PCs.</p>
                 </div>
                 <div class="lic-admin-head-actions">
-                  <button type="button" class="export-btn export-btn--sm" id="btnLicAccountOpen">Nova conta</button>
+                  <button type="button" class="export-btn export-btn--sm" id="btnLicDeviceOpen">Liberar dispositivo</button>
+                  <button type="button" class="ghost-btn" id="btnLicAccountOpen">Nova conta</button>
                   <button type="button" class="ghost-btn" id="btnAdminListAccess">Atualizar</button>
                   <button type="button" class="lic-adv-link" id="btnLicAdvOpen" title="Service role, ATIV- e devices">Avançado</button>
                 </div>
@@ -893,6 +894,44 @@
         <button type="button" class="export-btn" id="btnAdminCreateAccount">Criar e liberar</button>
         <button type="button" class="ghost-btn" id="btnAdminGrantAccess">Só liberar</button>
         <button type="button" class="ghost-btn" id="btnAdminRevokeAccess">Revogar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlgLicDevice" class="dlg dlg-lic-account">
+    <div class="dlg-lic-adv-head">
+      <div>
+        <div class="panel-kicker">Dispositivos</div>
+        <h3>Liberar dispositivo</h3>
+      </div>
+      <button type="button" class="ghost-btn" id="btnLicDeviceClose">Fechar</button>
+    </div>
+    <form class="lic-admin-form" id="adminDeviceForm" onsubmit="return false;">
+      <p class="hint">O cliente vê o ID na tela de Licença dele e te manda. Sem conta, sem chave.</p>
+      <label class="ia-form">ID do dispositivo
+        <input type="text" id="adminDevId" placeholder="win-xxxxxxxx-xxxx-..." autocomplete="off" spellcheck="false">
+      </label>
+      <div class="admin-lic-row">
+        <label class="ia-form">Validade (dias)
+          <input type="number" id="adminDevDays" value="365" min="1" max="3650">
+        </label>
+        <label class="ia-form">E-mail <span class="hint-inline">(só para você achar depois)</span>
+          <input type="email" id="adminDevEmail" placeholder="Opcional" autocomplete="off">
+        </label>
+      </div>
+      <div class="admin-day-presets" id="adminDevDayPresets" role="group" aria-label="Atalhos de dias">
+        <button type="button" class="ghost-btn" data-days="7">7d</button>
+        <button type="button" class="ghost-btn" data-days="14">14d</button>
+        <button type="button" class="ghost-btn" data-days="30">30d</button>
+        <button type="button" class="ghost-btn" data-days="365">1 ano</button>
+      </div>
+      <label class="ia-form">Observação
+        <input type="text" id="adminDevNotes" placeholder="Opcional" autocomplete="off">
+      </label>
+      <p class="hint" id="adminDevMsg" hidden></p>
+      <div class="lic-admin-form-actions">
+        <button type="button" class="export-btn" id="btnAdminGrantDevice">Liberar</button>
+        <button type="button" class="ghost-btn" id="btnAdminReleaseDevice">Desvincular</button>
       </div>
     </form>
   </dialog>

@@ -355,6 +355,34 @@ def revoke_access(*, email: str) -> dict[str, Any]:
     )
 
 
+def grant_device(
+    *,
+    device_id: str,
+    days: int = 365,
+    email: str | None = None,
+    notes: str | None = None,
+) -> dict[str, Any]:
+    """Libera pelo ID do dispositivo — sem conta e sem o cliente digitar chave.
+
+    O cliente lê o ID na tela de Licença e manda; depois de liberar, ele clica
+    em Atualizar e já entra.
+    """
+    did = (device_id or "").strip()
+    if not did:
+        return {
+            "ok": False,
+            "error": "device_id_required",
+            "message": "Informe o ID do dispositivo (o cliente vê em Licença).",
+        }
+    return _rpc_admin(
+        "grant_device",
+        device_id=did,
+        days=days,
+        email=(email or "").strip().lower() or None,
+        notes=notes,
+    )
+
+
 def release_device(device_id: str) -> dict[str, Any]:
     did = (device_id or "").strip()
     if not did:

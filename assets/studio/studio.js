@@ -3552,6 +3552,63 @@ function wireForms() {
       }
     };
   }
+  // Liberar pelo ID do dispositivo: o cliente le o ID na tela de Licenca e
+  // manda. Nao precisa criar conta nem digitar chave.
+  const devMsg = (txt) => {
+    const el = $("#adminDevMsg");
+    if (!el) return;
+    el.textContent = txt || "";
+    el.hidden = !txt;
+  };
+  const abreDevDlg = (open) => {
+    const dlg = $("#dlgLicDevice");
+    if (!dlg) return;
+    if (open) {
+      devMsg("");
+      if (!dlg.open) dlg.showModal();
+      $("#adminDevId")?.focus();
+    } else if (dlg.open) {
+      dlg.close();
+    }
+  };
+  $("#btnLicDeviceOpen")?.addEventListener("click", () => abreDevDlg(true));
+  $("#btnLicDeviceClose")?.addEventListener("click", () => abreDevDlg(false));
+  $("#adminDevDayPresets")?.addEventListener("click", (e) => {
+    const d = e.target?.dataset?.days;
+    if (d && $("#adminDevDays")) $("#adminDevDays").value = d;
+  });
+
+  const chamaDevice = async (action, falhaMsg) => {
+    const deviceId = ($("#adminDevId")?.value || "").trim();
+    if (!deviceId) {
+      devMsg("Informe o ID do dispositivo.");
+      return;
+    }
+    try {
+      const data = await api("/api/admin/devices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action,
+          deviceId,
+          days: Number($("#adminDevDays")?.value || 365),
+          email: ($("#adminDevEmail")?.value || "").trim(),
+          notes: ($("#adminDevNotes")?.value || "").trim(),
+        }),
+      });
+      adminOut(data);
+      devMsg(data.message || "");
+      toast(data.ok ? (data.message || "Pronto") : (data.message || falhaMsg));
+      if (data.ok && action === "grant") $("#adminDevId").value = "";
+    } catch (e) {
+      adminOut(String(e.message || e));
+      devMsg(String(e.message || e));
+      toast(e.message || falhaMsg);
+    }
+  };
+  $("#btnAdminGrantDevice")?.addEventListener("click", () => chamaDevice("grant", "Falha ao liberar"));
+  $("#btnAdminReleaseDevice")?.addEventListener("click", () => chamaDevice("release", "Falha ao desvincular"));
+
   const btnAdminListAccess = $("#btnAdminListAccess");
   if (btnAdminListAccess) {
     btnAdminListAccess.onclick = async () => {

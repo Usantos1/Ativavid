@@ -2078,8 +2078,19 @@ class StudioHandler(BaseHTTPRequestHandler):
                 return
             body = self._read_json() or {}
             action = str(body.get("action") or "release").strip().lower()
+            did = str(body.get("deviceId") or body.get("device_id") or "")
             if action == "release":
-                self._json(la.release_device(str(body.get("deviceId") or body.get("device_id") or "")))
+                self._json(la.release_device(did))
+                return
+            if action == "grant":
+                self._json(
+                    la.grant_device(
+                        device_id=did,
+                        days=int(body.get("days") or 365),
+                        email=str(body.get("email") or "") or None,
+                        notes=str(body.get("notes") or "") or None,
+                    )
+                )
                 return
             self._json({"ok": False, "error": "unknown_action"}, 400)
             return

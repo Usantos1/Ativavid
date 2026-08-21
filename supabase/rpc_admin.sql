@@ -62,6 +62,24 @@ drop function if exists public.ativavid_admin_license(text, text, int, int, text
 drop function if exists public.ativavid_admin_license(text, text, int, int, text);
 drop function if exists public.ativavid_admin_license(text);
 
+-- Gera a chave ATIV- sem depender de pgcrypto.
+--
+-- `gen_random_bytes` vive no schema `extensions` no Supabase, e estas funções
+-- rodam com `set search_path = public` — então a chamada falhava com
+-- "function gen_random_bytes(integer) does not exist" e a ação 'create' do
+-- painel nunca funcionou pelo RPC (só pelo fallback de service role, que monta
+-- a chave em Python). `gen_random_uuid` é do core do Postgres desde a 13.
+create or replace function public.ativavid_new_key()
+returns text
+language sql
+volatile
+as $$
+  select 'ATIV-'
+      || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 4))
+      || '-' || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 4))
+      || '-' || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 4));
+$$;
+
 create or replace function public.ativavid_admin_license(
   p_action text,
   p_email text default null,
@@ -223,9 +241,7 @@ begin
     v_days := greatest(1, least(coalesce(p_days, 365), 3650));
     v_max := greatest(1, least(coalesce(p_max_devices, 1), 10));
     v_until := now() + make_interval(days => v_days);
-    v_key := 'ATIV-' || upper(substr(encode(gen_random_bytes(2), 'hex'), 1, 4))
-          || '-' || upper(substr(encode(gen_random_bytes(2), 'hex'), 1, 4))
-          || '-' || upper(substr(encode(gen_random_bytes(2), 'hex'), 1, 4));
+    v_key := public.ativavid_new_key();
 
     insert into licenses (
       license_key, email, status, valid_until, max_devices, provider, notes
@@ -271,6 +287,71 @@ begin
       ) d;
     end if;
     return json_build_object('ok', true, 'devices', v_list);
+  end if;
+
+  -- Liberar direto pelo ID do dispositivo, sem conta e sem o cliente digitar
+  -- chave nenhuma: ele lê o ID na tela de Licença, manda para você, e depois
+  -- de liberar é só clicar em Atualizar.
+  --
+  -- Reaproveita o caminho `devices -> licenses` que o ativavid_license já
+  -- consulta; a chave gerada é só o registro interno, o cliente nunca a vê.
+  if p_action = 'grant_device' then
+    if p_device_id is null or length(trim(p_device_id)) = 0 then
+      return json_build_object(
+        'ok', false, 'error', 'device_id_required',
+        'message', 'Informe o ID do dispositivo (o cliente vê em Licença).'
+      );
+    end if;
+    v_days := greatest(1, least(coalesce(p_days, 365), 3650));
+
+    select l.* into v_row
+    from devices d
+    join licenses l on l.id = d.license_id
+    where d.device_id = trim(p_device_id)
+    limit 1;
+
+    if found then
+      -- SOMA sobre o que resta: renovar antes de vencer não pode encurtar.
+      update licenses
+        set valid_until = greatest(v_row.valid_until, now()) + make_interval(days => v_days),
+            status = 'active',
+            notes = coalesce(nullif(trim(coalesce(p_notes, '')), ''), v_row.notes),
+            email = coalesce(nullif(trim(coalesce(p_email, '')), ''), v_row.email),
+            updated_at = now()
+        where id = v_row.id
+      returning * into v_row;
+      update devices set last_seen = now() where device_id = trim(p_device_id);
+    else
+      v_key := public.ativavid_new_key();
+      insert into licenses (
+        license_key, email, status, valid_until, max_devices, provider, notes
+      ) values (
+        v_key,
+        nullif(trim(coalesce(p_email, '')), ''),
+        'active',
+        now() + make_interval(days => v_days),
+        1,
+        'device',
+        nullif(trim(coalesce(p_notes, '')), '')
+      )
+      returning * into v_row;
+
+      insert into devices (device_id, license_id, last_seen)
+      values (trim(p_device_id), v_row.id, now())
+      on conflict (device_id) do update
+        set license_id = excluded.license_id,
+            last_seen = excluded.last_seen;
+    end if;
+
+    return json_build_object(
+      'ok', true,
+      'deviceId', trim(p_device_id),
+      'validUntil', v_row.valid_until,
+      'days', v_days,
+      'message', 'Dispositivo liberado até ' ||
+                 to_char(v_row.valid_until, 'DD/MM/YYYY') ||
+                 '. Peça ao cliente para clicar em Atualizar na tela de Licença.'
+    );
   end if;
 
   if p_action = 'release_device' then
