@@ -493,6 +493,51 @@ grant execute on function public.ativavid_with_update(json, text) to anon, authe
 revoke all on function public.ativavid_version_lt(text, text) from public;
 grant execute on function public.ativavid_version_lt(text, text) to anon, authenticated, service_role;
 
+-- Concede/estende acesso por conta. Usada pelo webhook de pagamento.
+-- Precisa ser função porque o upsert do PostgREST não sabe fazer `greatest`:
+-- sobrescrever valid_until fazia quem renovava ANTES de vencer perder os dias
+-- que ainda tinha pagos.
+create or replace function public.grant_account_access(
+  p_email text,
+  p_days int,
+  p_notes text default null
+)
+returns json
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_email text;
+  v_days int;
+  v_acc account_access%rowtype;
+begin
+  v_email := lower(trim(coalesce(p_email, '')));
+  if length(v_email) = 0 or position('@' in v_email) = 0 then
+    return json_build_object('ok', false, 'error', 'email_required');
+  end if;
+  v_days := greatest(1, least(coalesce(p_days, 365), 3650));
+
+  insert into account_access (email, status, valid_until, max_devices, notes, updated_at)
+  values (v_email, 'active', now() + make_interval(days => v_days), 1, p_notes, now())
+  on conflict (email) do update
+    set status = 'active',
+        -- Soma sobre o que resta (nunca sobre um vencimento passado).
+        valid_until = greatest(account_access.valid_until, now())
+                      + make_interval(days => v_days),
+        notes = coalesce(excluded.notes, account_access.notes),
+        updated_at = now()
+  returning * into v_acc;
+
+  return json_build_object(
+    'ok', true, 'email', v_acc.email, 'validUntil', v_acc.valid_until
+  );
+end;
+$$;
+
+revoke all on function public.grant_account_access(text, int, text) from public;
+grant execute on function public.grant_account_access(text, int, text) to service_role;
+
 -- Sem isto o PostgREST fica com o schema cache velho depois do DROP acima: a
 -- assinatura nova dá PGRST202, o retry legado bate na função recém-removida, e
 -- o app manda rodar o SQL que você acabou de rodar.

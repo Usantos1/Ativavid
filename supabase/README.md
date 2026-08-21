@@ -48,10 +48,15 @@ Secrets:
 
 | Secret | Para quê |
 | --- | --- |
-| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | eventos Stripe |
+| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID` | eventos Stripe (os três) |
 | `MP_ACCESS_TOKEN`, `MP_WEBHOOK_SECRET` | eventos Mercado Pago |
-| `STRIPE_PRICE_ID` | opcional: só esse preço libera acesso |
 | `ACCESS_DAYS` | opcional, padrão 365 |
+
+`STRIPE_PRICE_ID` é obrigatório de propósito: sem conferir o preço, qualquer
+checkout da mesma conta Stripe (um produto de R$ 9,90) liberaria o ATIVAVID.
+
+O webhook depende da função `grant_account_access` — ela vem no
+`rpc_license.sql`, então rode o SQL antes de deployar.
 
 O webhook **libera `account_access` pelo e-mail do pagamento** — o cliente entra
 com o e-mail que usou para pagar e já está liberado, sem chave para digitar.
@@ -60,9 +65,13 @@ reentrega do mesmo evento não virar duas licenças). Reembolso e disputa
 revogam.
 
 Eventos tratados: `checkout.session.completed`,
-`checkout.session.async_payment_succeeded` (boleto/Pix), `charge.refunded`,
-`charge.dispute.created`; no MP, o status vem da API de pagamentos — o corpo do
-webhook só traz IDs.
+`checkout.session.async_payment_succeeded` (boleto/Pix),
+`invoice.payment_succeeded` (renovação, se a cobrança for assinatura
+recorrente), `charge.refunded` (só reembolso total) e
+`charge.dispute.created`. No MP, o status vem da API de pagamentos — o corpo
+do webhook só traz IDs, e tópicos que não são `payment` são ignorados.
+
+O acesso **soma** sobre o que resta: renovar faltando 200 dias dá 565, não 365.
 
 ## Função `license` (aposentada)
 
