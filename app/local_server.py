@@ -533,21 +533,18 @@ def _duracao_das_fontes(sources: list) -> float:
     return round(total, 3) if total > 0 else 0.0
 
 
-# Nome amigavel do estilo, para o card. O projeto guarda os ids
-# (`captions: "stacked"`), e a tela do editor tem o catalogo — mas o studio e
-# outro arquivo, e duplicar catalogo e como as duas telas passam a discordar.
-# Quem resolve e o servidor, que ja le o state.json.
-_NOME_LEGENDA = {
-    "karaoke": "Karaokê", "stacked": "Empilhado", "impacto": "Impacto",
-    "scatter": "Disperso", "recorte": "Recorte", "simples": "Simples",
-    "bloco": "Bloco", "classica": "Clássica", "serifada": "Serifada",
-}
-_NOME_HEADLINE = {
-    "outline": "Contorno", "realce": "Realce", "card": "Cartão",
-    "misto": "Misto", "manchete": "Manchete", "carimbo": "Carimbo",
-    "pergunta": "Pergunta", "sombra": "Sombra", "sublinhado": "Sublinhado",
-    "pilula": "Pílula", "nenhuma": "Sem manchete",
-}
+# O rotulo de "Estilo" do card. A primeira versao juntava manchete e legenda
+# ("Realce · Empilhado") e o usuario reparou na hora: TODOS os cards diziam a
+# mesma coisa. Ele estava certo — nos 128 projetos, `headline` e `captions` tem
+# UM valor cada (realce e stacked). Um campo que nunca muda ocupa uma linha e
+# nao informa nada.
+#
+# O que varia de verdade e o TIPO DE CONTEUDO: viral 69, humor 12,
+# informational 12, educational 3, e mais dois. E era isso que ele queria dizer
+# — o exemplo que ele deu foi literalmente "Estilo: Viral".
+#
+# Os nomes saem de `app/content_type.py`, que e de onde a tela de importacao ja
+# tira os dela; catalogo duplicado e como duas telas passam a discordar.
 
 
 _ESTILO_CACHE: dict[str, str] = {}
@@ -563,7 +560,14 @@ def _rotulo_do_estilo(edit_dir: Path) -> str:
     """
     sp = edit_dir / "state.json"
     try:
-        chave = f"{sp}|{sp.stat().st_mtime_ns}"
+        # o mtime dos DOIS: o tipo mora no preset-used, mas o state existe
+        # sempre e serve de ancora
+        usado = edit_dir / "preset-used.json"
+        mt = sp.stat().st_mtime_ns if sp.exists() else 0
+        mu = usado.stat().st_mtime_ns if usado.exists() else 0
+        if not (mt or mu):
+            return ""
+        chave = f"{edit_dir}|{mt}|{mu}"
     except OSError:
         return ""
     if chave in _ESTILO_CACHE:
@@ -576,18 +580,27 @@ def _rotulo_do_estilo(edit_dir: Path) -> str:
 
 
 def _ler_rotulo_do_estilo(sp: Path) -> str:
-    try:
-        st = json.loads(sp.read_text(encoding="utf-8-sig"))
-    except (OSError, json.JSONDecodeError):
+    from app.content_type import LABELS
+
+    # `preset-used.json` e quem guarda o tipo escolhido para ESTE video.
+    tipo = ""
+    usado = sp.parent / "preset-used.json"
+    for origem in (usado, sp):
+        try:
+            d = json.loads(origem.read_text(encoding="utf-8-sig"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(d, dict):
+            continue
+        bruto = d.get("contentType")
+        if not bruto and isinstance(d.get("style"), dict):
+            bruto = d["style"].get("contentType")
+        if bruto:
+            tipo = str(bruto)
+            break
+    if not tipo:
         return ""
-    estilo = st.get("style") if isinstance(st, dict) else None
-    if not isinstance(estilo, dict):
-        return ""
-    partes = [
-        _NOME_HEADLINE.get(str(estilo.get("headline") or ""), ""),
-        _NOME_LEGENDA.get(str(estilo.get("captions") or ""), ""),
-    ]
-    return " · ".join([p for p in partes if p])
+    return LABELS.get(tipo, tipo[:1].upper() + tipo[1:])
 
 
 _DUR_FILA: "queue.Queue[tuple]" = None  # type: ignore[assignment]

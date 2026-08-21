@@ -237,3 +237,81 @@ def test_a_fila_agenda_os_projetos_antigos():
     assert 'sourceDurationSec") in (None, "")' in src[:i], (
         "agenda mesmo quando já foi medido"
     )
+
+
+def test_copiar_legenda_do_post_tem_handler():
+    """O botão existia no card desde sempre e o clique NÃO FAZIA NADA: a cadeia
+    de ações tratava folder, open-final, retry, reimport, ackapply, cancel,
+    detail e rename — `copylegenda` caía fora dela."""
+    js = (REPO / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
+    assert 'act === "copylegenda"' in js, "o copiar legenda continua sem handler"
+    i = js.index('act === "copylegenda"')
+    trecho = js[i:i + 900]
+    assert "copiarTexto(texto)" in trecho
+    assert "mostrarTextoParaCopiar" in trecho, (
+        "sem saída quando a cópia falha — o usuário queria o texto, não o aviso"
+    )
+
+
+def test_copiar_tem_os_dois_caminhos_e_um_ultimo_recurso():
+    """Um caminho só não cobre: a `clipboard` API precisa de contexto seguro E
+    da janela em foco, e a janela do app é um WebView."""
+    js = (REPO / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
+    i = js.index("async function copiarTexto(")
+    corpo = js[i:i + 1200]
+    assert "navigator.clipboard.writeText" in corpo
+    assert 'document.execCommand("copy")' in corpo, "falta o caminho velho"
+    assert "ta.focus()" in corpo, "o execCommand sem foco não copia"
+    j = js.index("function mostrarTextoParaCopiar(")
+    dlg = js[j:j + 900]
+    assert "showModal" in dlg and "selectNodeContents" in dlg, (
+        "o último recurso tem de mostrar o texto já selecionado"
+    )
+
+
+def test_o_estilo_do_card_e_o_que_varia():
+    """A primeira versão juntava manchete e legenda ("Realce · Empilhado") e o
+    usuário reparou na hora: TODOS os cards diziam a mesma coisa. Ele estava
+    certo — nos 128 projetos, `headline` e `captions` têm UM valor cada.
+
+    O que varia é o tipo de conteúdo: viral 69, humor 12, informational 12.
+    E era isso que ele queria — o exemplo dele foi "Estilo: Viral".
+    """
+    src = (REPO / "app" / "local_server.py").read_text(encoding="utf-8")
+    i = src.index("def _ler_rotulo_do_estilo(")
+    corpo = src[i:i + 1200]
+    assert "contentType" in corpo, "o rótulo voltou a não olhar o tipo"
+    assert "preset-used.json" in corpo, "o tipo mora no preset-used"
+    assert "from app.content_type import LABELS" in corpo, (
+        "catálogo duplicado — as duas telas vão discordar"
+    )
+    assert "_NOME_HEADLINE" not in src, "o catálogo antigo ficou para trás"
+
+
+def test_o_rotulo_usa_os_nomes_do_catalogo(tmp_path):
+    from app.local_server import _rotulo_do_estilo
+
+    edit = tmp_path / "edit"
+    edit.mkdir()
+    (edit / "state.json").write_text("{}", encoding="utf-8")
+    (edit / "preset-used.json").write_text(
+        json.dumps({"contentType": "viral"}), encoding="utf-8")
+    assert _rotulo_do_estilo(edit) == "Viral"
+
+    outro = tmp_path / "outro"
+    outro.mkdir()
+    (outro / "state.json").write_text("{}", encoding="utf-8")
+    (outro / "preset-used.json").write_text(
+        json.dumps({"contentType": "informational"}), encoding="utf-8")
+    assert _rotulo_do_estilo(outro) == "Informativo"
+
+
+def test_projeto_sem_tipo_nao_inventa_rotulo(tmp_path):
+    """30 dos 128 projetos do usuário são antigos e não têm o campo — a linha
+    simplesmente não aparece, em vez de mostrar um valor chutado."""
+    from app.local_server import _rotulo_do_estilo
+
+    edit = tmp_path / "edit"
+    edit.mkdir()
+    (edit / "state.json").write_text(json.dumps({"style": {}}), encoding="utf-8")
+    assert _rotulo_do_estilo(edit) == ""

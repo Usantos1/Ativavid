@@ -1940,6 +1940,60 @@ function wireDrop() {
   }
 }
 
+/** Copia texto. `false` se nao deu — e ai quem chamou TEM de dar outra saida.
+ *
+ * Dois caminhos porque um so nao cobre: a `clipboard` API precisa de contexto
+ * seguro E da janela em foco, e a janela do app e um WebView; o `execCommand`
+ * e velho mas funciona sem essas duas condicoes, desde que o campo esteja
+ * focado na hora. */
+async function copiarTexto(texto) {
+  const t = String(texto || "");
+  if (!t) return false;
+  try {
+    await navigator.clipboard.writeText(t);
+    return true;
+  } catch { /* segue para o caminho velho */ }
+  const ta = document.createElement("textarea");
+  ta.value = t;
+  ta.setAttribute("readonly", "");
+  ta.style.position = "fixed";
+  ta.style.top = "0";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  let ok = false;
+  try {
+    ta.focus();
+    ta.select();
+    ta.setSelectionRange(0, t.length);
+    ok = document.execCommand("copy");
+  } catch { ok = false; }
+  ta.remove();
+  return ok;
+}
+
+/** Ultimo recurso do copiar: mostra o texto ja selecionado, para o Ctrl+C.
+ *  Um "nao consegui copiar" sozinho e beco sem saida — o usuario queria o
+ *  texto, nao o aviso. */
+function mostrarTextoParaCopiar(titulo, dica, texto) {
+  const dlg = $("#dlgJobDetail");
+  const body = $("#detailBody");
+  if (!dlg || !body) return false;
+  const t = $("#detailTitle");
+  const h = $("#detailHint");
+  if (t) t.textContent = titulo;
+  if (h) h.textContent = dica;
+  body.textContent = texto;
+  dlg.showModal();
+  try {
+    const r = document.createRange();
+    r.selectNodeContents(body);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(r);
+  } catch { /* selecionar e cortesia, nao requisito */ }
+  return true;
+}
+
 function showJobDetail(id) {
   const j = state.jobs.find((x) => x.id === id);
   if (!j) return;
@@ -2052,6 +2106,25 @@ function wireList() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ id }),
         });
+      } else if (act === "copylegenda") {
+        // Este botao NUNCA teve handler: a cadeia de acoes tratava folder,
+        // open-final, retry, reimport, ackapply, cancel, detail e rename — e
+        // `copylegenda` caia fora dela. O botao existia no card desde sempre e
+        // o clique nao fazia nada.
+        const job = state.jobs.find((x) => x.id === id);
+        const texto = String((job && job.legenda) || "").trim();
+        if (!texto) {
+          toast("Este vídeo ainda não tem legenda de post");
+        } else if (await copiarTexto(texto)) {
+          toast("✓ Legenda copiada");
+        } else if (mostrarTextoParaCopiar(
+          "Legenda do post",
+          "Não consegui copiar sozinho. O texto está selecionado — Ctrl+C.",
+          texto)) {
+          /* o texto esta na tela; nao ha beco sem saida */
+        } else {
+          toast("Não consegui copiar a legenda");
+        }
       } else if (act === "open-final") {
         const job = state.jobs.find((x) => x.id === id);
         if (job) location.href = jobLinks(job).final;
@@ -2135,12 +2208,7 @@ function wireList() {
   if (btnDetailCopy) {
     btnDetailCopy.onclick = async () => {
       const text = $("#detailBody")?.textContent || "";
-      try {
-        await navigator.clipboard.writeText(text);
-        toast("Log copiado");
-      } catch {
-        toast("Não consegui copiar");
-      }
+      toast(await copiarTexto(text) ? "Copiado" : "Não consegui copiar");
     };
   }
 }
