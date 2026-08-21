@@ -550,10 +550,34 @@ _NOME_HEADLINE = {
 }
 
 
+_ESTILO_CACHE: dict[str, str] = {}
+
+
 def _rotulo_do_estilo(edit_dir: Path) -> str:
-    """"Realce · Empilhado" — manchete e legenda, que e o que se ve."""
+    """"Realce · Empilhado" — manchete e legenda, que e o que se ve.
+
+    Cache por caminho+mtime: isto roda para TODO job em TODO poll, e sem ele
+    seriam 125 leituras de state.json a cada 2 segundos, para sempre. Sao 37 ms
+    por poll — nao trava nada, mas e disco batendo a toa. Mesma licao da
+    duracao de origem, que custou 21s.
+    """
+    sp = edit_dir / "state.json"
     try:
-        st = json.loads((edit_dir / "state.json").read_text(encoding="utf-8-sig"))
+        chave = f"{sp}|{sp.stat().st_mtime_ns}"
+    except OSError:
+        return ""
+    if chave in _ESTILO_CACHE:
+        return _ESTILO_CACHE[chave]
+    rotulo = _ler_rotulo_do_estilo(sp)
+    if len(_ESTILO_CACHE) > 2000:
+        _ESTILO_CACHE.clear()
+    _ESTILO_CACHE[chave] = rotulo
+    return rotulo
+
+
+def _ler_rotulo_do_estilo(sp: Path) -> str:
+    try:
+        st = json.loads(sp.read_text(encoding="utf-8-sig"))
     except (OSError, json.JSONDecodeError):
         return ""
     estilo = st.get("style") if isinstance(st, dict) else None

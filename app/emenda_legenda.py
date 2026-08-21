@@ -191,6 +191,62 @@ def _limites_em_keyframe(
     return t_ini, t_fim
 
 
+def _intervalos_desenhados(
+    cues: Any, edit_data: dict[str, Any], dur: float,
+) -> list[tuple[float, float]]:
+    """Elementos que NAO podem ficar partidos pela costura.
+
+    So a manchete e o cartao final. As legendas ficaram de fora de proposito, e
+    a razao e dos dados: medido no projeto do usuario, as cues sao CONTIGUAS —
+    folga zero em 48 de 48 emendas. Nao existe vao entre legendas onde a
+    costura pudesse cair, entao exigir isso e impossivel por construcao: a
+    primeira tentativa alargava de uma cue para a seguinte em cadeia e a fatia
+    ia a 71% do video, matando o atalho em todo caso real.
+
+    E o risco de uma cue partida e pequeno: a metade copiada e a metade
+    redesenhada so diferem se o MOTOR mudou entre o render e a correcao — no
+    caso normal, corrigir um video feito pela mesma versao, as duas metades sao
+    desenhadas identicas e nao ha costura nenhuma. Ja a manchete e o cartao sao
+    grandes, ficam parados na tela varios segundos e sao poucos: alargar por
+    eles custa quase nada e um deles pela metade seria obvio.
+    """
+    saida: list[tuple[float, float]] = []
+    hook = edit_data.get("hook") or {}
+    if hook.get("enabled"):
+        saida.append((0.0, float(hook.get("endSec") or 4.0)))
+    ec = edit_data.get("endCard") or {}
+    if ec.get("enabled"):
+        saida.append((max(0.0, dur - float(ec.get("lastSec") or 2.5)), dur))
+    return saida
+
+
+def _alargar_ate_nao_partir(
+    intervalos: list[tuple[float, float]], *, t_ini: float, t_fim: float,
+    dur: float,
+) -> tuple[float, float] | None:
+    """Cresce a fatia ate nenhum elemento ficar METADE emendado.
+
+    O trecho emendado e desenhado pelo motor de HOJE; o resto e copiado de um
+    render que pode ser de outra versao. Enquanto a costura cai ENTRE elementos
+    isso nao aparece — mas uma legenda que comeca antes da costura e termina
+    depois seria desenhada de dois jeitos, com um salto no meio dela.
+
+    Alargar, e nao recusar: a margem de 30 quadros antes da cue corrigida cai
+    quase sempre dentro da cue anterior, entao recusar ai matava o atalho em
+    praticamente todo caso real (medido: 0 de 2 rodadas).
+    """
+    for _ in range(8):
+        partidos = [(a, b) for a, b in intervalos
+                    if (a < t_ini < b) or (a < t_fim < b)]
+        if not partidos:
+            return t_ini, t_fim
+        t_ini = min([t_ini] + [a for a, _ in partidos])
+        t_fim = max([t_fim] + [b for _, b in partidos])
+        t_ini = max(0.0, t_ini)
+        t_fim = min(dur, t_fim)
+    return None
+
+
 def _desenhar_fatia(
     public: Path, edit_data: dict[str, Any], *,
     ini_f: int, n: int, frames: int, fps: float, width: int, height: int,
@@ -300,12 +356,34 @@ def emendar_legenda(
     dur = float((video_info(final) or {}).get("duration") or 0.0)
     if dur <= 0:
         return None
-    lim = _limites_em_keyframe(keyframes(final), ini_f=ini_f, fim_f=fim_f,
-                              fps=fps, dur=dur)
+    kfs = keyframes(final)
+    elementos = _intervalos_desenhados(cues, edit_data, dur)
+    lim = None
+    for _ in range(4):
+        lim = _limites_em_keyframe(kfs, ini_f=ini_f, fim_f=fim_f, fps=fps, dur=dur)
+        if lim is None:
+            break
+        # alarga ate nenhum elemento ficar partido, e volta a alinhar em
+        # keyframe (o alargamento pode ter tirado a fatia do keyframe)
+        alargado = _alargar_ate_nao_partir(
+            elementos, t_ini=lim[0], t_fim=lim[1], dur=dur)
+        if alargado is None:
+            lim = None
+            break
+        if abs(alargado[0] - lim[0]) < 1e-6 and abs(alargado[1] - lim[1]) < 1e-6:
+            break
+        ini_f = max(0, int(alargado[0] * fps))
+        fim_f = min(frames, int(round(alargado[1] * fps)))
     if lim is None:
-        print("EMENDA_PULADA sem keyframe para fechar a emenda", flush=True)
+        print("EMENDA_PULADA nao consegui fechar a costura entre elementos",
+              flush=True)
         return None
     t_ini, t_fim = lim
+    fracao = (t_fim - t_ini) / max(1e-6, dur)
+    if fracao > FRACAO_MAXIMA:
+        print(f"EMENDA_PULADA fatia={fracao * 100:.0f}% depois de alargar "
+              f"> {FRACAO_MAXIMA * 100:.0f}%", flush=True)
+        return None
     kf_ini_f = int(round(t_ini * fps))
     n = int(round((t_fim - t_ini) * fps))
     if n <= 0 or kf_ini_f + n > frames:
