@@ -158,7 +158,16 @@ def _pos(d: dict, chave: str, padrao: float) -> float:
     calado (medido). O template usa `??` justamente por isso.
     """
     v = d.get(chave)
-    return float(padrao) if v is None else float(v)
+    # `""` conta como ausente: com o `or` antigo uma string vazia caia no
+    # padrao, e aqui viraria `float("")` — troca de defeito calado por
+    # excecao no meio do render.
+    if v is None or v == "":
+        return float(padrao)
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        print(f"  [warn] {chave}={v!r} nao e numero — usando {padrao}", flush=True)
+        return float(padrao)
 
 
 # ---------------------------------------------------------------- suporte ----

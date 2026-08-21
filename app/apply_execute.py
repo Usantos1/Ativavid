@@ -82,6 +82,15 @@ class ApplyHooks:
     progress: ProgressFn
 
 
+# Qual motor desenhou o visual do ultimo apply, e por que caiu se caiu.
+# O log do apply so vai para a tela (`_print_log`), entao o motivo de uma
+# queda se perdia — foi exatamente por isso que deu para diagnosticar o
+# desperdicio do RENDER (que grava `render-stats.json` e `canary-state.json`)
+# e nao o do APPLY. Medido no historico do usuario: o mesmo tipo de apply
+# variou de 1,2x a 31,3x o tempo real, e nao havia como saber qual foi qual.
+_ULTIMO_MOTOR: dict[str, str] = {}
+
+
 def _print_log(line: str) -> None:
     print(line, flush=True)
 
@@ -533,9 +542,19 @@ def _render_visual_real(
                     if bad:
                         raise RuntimeError(bad)
                     overlay_ok = True
+                    _ULTIMO_MOTOR.clear()
+                    _ULTIMO_MOTOR["engine"] = "overlay"
                 except Exception as e:
                     print(f"QUICK_APPLY_OVERLAY_FALLBACK {e}", flush=True)
                     overlay_ok = False
+                    _ULTIMO_MOTOR.clear()
+                    _ULTIMO_MOTOR["engine"] = "remotion"
+                    _ULTIMO_MOTOR["fallbackReason"] = str(e)[:160]
+            else:
+                _ULTIMO_MOTOR.clear()
+                _ULTIMO_MOTOR["engine"] = "remotion"
+                _ULTIMO_MOTOR["fallbackReason"] = (
+                    f"classificado FULL: {cls.get('fullReasons')}")
 
         if not overlay_ok:
             from app.timeline import timeline_from_edit_data
@@ -679,6 +698,7 @@ def record_apply_metric(edit_dir: Path, rec: dict[str, Any]) -> None:
         "videoDuration": round(float(rec.get("videoDuration") or 0), 2),
         "applyDuration": round(float(rec.get("applyDuration") or 0), 1),
         "success": bool(rec.get("success")),
+        **{k: v for k, v in _ULTIMO_MOTOR.items() if v},
     }
     if rec.get("error"):
         row["error"] = str(rec["error"])[:160]
