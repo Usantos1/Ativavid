@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.55
+
+- **Importar de novo um vídeo que você já usou não transcreve tudo outra vez.**
+  A transcrição ficava guardada dentro da pasta do projeto, então uma
+  importação nova começava do zero — mesmo sendo exatamente o mesmo arquivo.
+  Nos seus projetos isso aconteceu com **16 fontes** (uma delas importada 5
+  vezes): 20 transcrições pagas em repetição e cerca de 22 minutos de espera.
+  Agora o app reconhece o arquivo pelo **conteúdo**, não pelo nome, então
+  reconhece até o mesmo vídeo salvo com outro nome — e reaproveita na hora
+
 ## 2.54
 
 - **Corrigir uma legenda podia ser recusado sem motivo.** A conferência que o
