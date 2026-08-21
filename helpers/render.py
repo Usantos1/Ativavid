@@ -2224,7 +2224,32 @@ def main() -> None:
     # preview timeline and segments.json must all describe the same cut as the
     # rendered file, or anything that has to land on a cut lands beside it.
     first_src = next(iter(edl.get("sources", {}).values()), None)
-    target_fps = int(shortform_target_fps(Path(first_src))) if (first_src and not args.keep_resolution) else 30
+    # A grade tem de ser a do ARQUIVO QUE VAI SAIR, senao o snap alinha as
+    # ranges numa grade que o encode nao usa — e ai `snap_ranges_to_frames`,
+    # que existe justamente para o audio e o video terminarem no mesmo
+    # instante, vira um no-op na grade errada.
+    #
+    # Short-form: `extract_segment` passa `-r shortform_target_fps` (30 ou
+    # 24). Longform (`keep_resolution`): ele NAO passa `-r` — a docstring diz
+    # "source resolution + source fps" —, entao a saida fica no fps da fonte.
+    # Fixar 30 ali alinhava a 1/30 um arquivo que sai a 24, e cada emenda
+    # ficava fora da grade.
+    if first_src and not args.keep_resolution:
+        target_fps = int(shortform_target_fps(resolve_path(first_src, edit_dir)))
+    else:
+        sonda = source_fps(resolve_path(first_src, edit_dir)) if first_src else 0.0
+        target_fps = int(round(sonda)) if sonda >= 1.0 else 30
+        if first_src and sonda < 1.0:
+            print("  [warn] nao consegui ler o fps da fonte — grade em 30fps",
+                  flush=True)
+    # Fontes com fps diferentes na mesma linha do tempo nao tem grade comum;
+    # a do primeiro e um chute. Avisa alto em vez de decidir calado.
+    outras = {round(source_fps(resolve_path(v, edit_dir)))
+              for v in (edl.get("sources") or {}).values()}
+    outras.discard(0)
+    if len(outras) > 1:
+        print(f"  [warn] fontes com fps diferentes {sorted(outras)} — "
+              f"grade em {target_fps}fps", flush=True)
     snapped = snap_ranges_to_frames(edl, target_fps)
     if snapped:
         edl["total_duration_s"] = round(sum(r["end"] - r["start"] for r in edl["ranges"]), 3)
