@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import subprocess
 import threading
 import time
 from contextlib import contextmanager
@@ -790,6 +791,56 @@ def _current_final(edit_dir: Path) -> Path:
     return found if found is not None else Path(edit_dir) / "final.mp4"
 
 
+def _reembutir_capa(edit: Path, final: Path, log: Any) -> None:
+    """Devolve a CAPA embutida que o apply perdia.
+
+    `seal_delivery_cover` so roda no fim do pipeline completo; o apply refaz o
+    final.mp4 do zero e o arquivo promovido saia SEM o JPEG anexado
+    (`attached_pic`) — que e o que o Instagram usa como capa ao postar. Medido
+    nos entregues do usuario: dos que passaram por apply, quase todos estavam
+    sem a capa; dos que vieram so do pipeline, 13 de 15 tinham.
+
+    NAO chama `seal_delivery_cover` quando ja existe `cover.jpg`: aquele
+    regenera a capa a partir do quadro 0, e `cover.jpg` pode ser uma capa que
+    o USUARIO escolheu pelo botao Capa do editor — regenerar atropelava a
+    escolha dele. Com o arquivo existente, so o remux barato de anexar.
+    """
+    try:
+        from app.overlay_compose import _ffmpeg, probe_json
+
+        streams = probe_json(final).get("streams") or []
+        if any((st.get("disposition") or {}).get("attached_pic") for st in streams):
+            return                        # ja tem capa — nada a fazer
+        cover = edit / "cover.jpg"
+        if not cover.is_file():
+            # nunca houve capa: gera do zero pelo caminho do pipeline
+            from pipeline.run_fast import seal_delivery_cover
+
+            seal_delivery_cover(edit, final)
+            log("QUICK_APPLY_COVER_SEAL")
+            return
+        tagged = edit / "_final_tagged.mp4"
+        r = subprocess.run(
+            [_ffmpeg(), "-y", "-hide_banner", "-loglevel", "error",
+             "-i", str(final), "-i", str(cover),
+             "-map", "0", "-map", "1",
+             "-c", "copy", "-c:v:1", "mjpeg",
+             "-disposition:v:1", "attached_pic",
+             "-movflags", "+faststart", str(tagged)],
+            capture_output=True, text=True, timeout=120,
+            **({"creationflags": subprocess.CREATE_NO_WINDOW}
+               if hasattr(subprocess, "CREATE_NO_WINDOW") else {}),
+        )
+        if r.returncode == 0 and tagged.is_file() and tagged.stat().st_size > 1000:
+            os.replace(tagged, final)
+            log("QUICK_APPLY_COVER_OK")
+        else:
+            tagged.unlink(missing_ok=True)
+            log(f"QUICK_APPLY_COVER_WARN {(r.stderr or '')[-160:]}")
+    except Exception as e:  # noqa: BLE001 — capa nunca derruba o apply
+        log(f"QUICK_APPLY_COVER_WARN {e}")
+
+
 def _so_legenda_mudou(plan: dict[str, Any]) -> bool:
     """True quando a UNICA coisa suja e o texto da legenda.
 
@@ -992,6 +1043,16 @@ def execute_apply_plan(
                 except OSError:
                     pass
         log("QUICK_APPLY_PROMOTE_FINAL")
+        # a capa volta ANTES do sync_pack, para o entregue em publicar/ ja
+        # sair com ela
+        _reembutir_capa(edit, live_final, log)
+        if live_final.name != "final.mp4":
+            hard = edit / "final.mp4"
+            if hard.resolve() != live_final.resolve() and hard.is_file():
+                try:
+                    shutil.copy2(live_final, hard)
+                except OSError:
+                    pass
 
         packed = None
         try:
