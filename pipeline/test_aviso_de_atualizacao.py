@@ -142,3 +142,43 @@ def test_github_nao_oferece_downgrade(monkeypatch):
     monkeypatch.setattr(uc, "current_version", lambda: "2.46")
     r = uc.check_update()
     assert r["updateAvailable"] is False, "ofereceu voltar para uma versao velha"
+
+
+def test_o_botao_de_baixar_usa_o_verificador_e_nao_o_link_da_licenca():
+    """O aviso dizia "Nova versão 2.50" e o botão baixava a **0.1.24**.
+
+    Cada metade lia uma fonte diferente: o texto vinha do verificador e o botão
+    usava `update.downloadUrl`, que chega junto da licença e apontava para uma
+    política parada em v0.1.24 — o mesmo dado que já tinha cegado o aviso.
+
+    O verificador resolve os dois casos: em update OBRIGATÓRIO ele devolve a URL
+    da própria política, então usar só ele não perde nada.
+    """
+    js = (REPO / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
+    i = js.index("async function openUpdateDownload(")
+    corpo = js[i:js.index("\nfunction ", i)]
+    # As ATRIBUICOES, nao as mencoes: o comentario acima do codigo cita
+    # `upd.downloadUrl` e faria o teste passar/falhar pelo texto errado.
+    pos_check = corpo.index('url = (check.downloadUrl')
+    pos_lic = corpo.index("url = (upd.downloadUrl")
+    assert pos_check < pos_lic, (
+        "o link da licença voltou a ter precedência sobre o verificador"
+    )
+    assert "if (!url) url = (upd.downloadUrl" in corpo, (
+        "sem reserva: offline o botão ficaria sem nenhuma URL"
+    )
+
+
+def test_nenhum_caminho_de_download_ignora_o_verificador():
+    """Os três botões que abrem download têm de sair da mesma fonte."""
+    js = (REPO / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
+    for i, _ in enumerate(js.split('"/api/update/open"')[1:], start=1):
+        pass
+    aberturas = js.count('"/api/update/open"')
+    assert aberturas >= 2, "a busca quebrou — nenhum caminho de download achado"
+    # todo trecho que abre download precisa ter consultado o check antes
+    for pedaco in js.split('"/api/update/open"')[:-1]:
+        janela = pedaco[-1200:]
+        assert "/api/update/check" in janela, (
+            "um caminho de download não consulta o verificador"
+        )

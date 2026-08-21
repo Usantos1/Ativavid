@@ -1322,12 +1322,19 @@ function openUpdateDialog(lic) {
 async function openUpdateDownload(lic) {
   const L = lic || state.license || {};
   const upd = L.update || {};
-  let url = (upd.downloadUrl || "").trim();
+  let url = "";
   try {
-    if (!url) {
+    // O VERIFICADOR primeiro, sempre. `upd.downloadUrl` vem junto da licenca e
+    // apontava para a v0.1.24 — uma politica que ficou parada. O aviso dizia
+    // "Nova versao 2.50" (do verificador) e o botao baixava a 0.1.24, porque
+    // cada metade lia uma fonte diferente. O verificador ja resolve os dois
+    // casos: quando o update e OBRIGATORIO ele devolve a URL da propria
+    // politica, entao usar so ele nao perde nada.
+    try {
       const check = await api("/api/update/check");
       url = (check.downloadUrl || check.releaseUrl || "").trim();
-    }
+    } catch { /* offline: cai no que veio com a licenca */ }
+    if (!url) url = (upd.downloadUrl || "").trim();
     await api("/api/update/open", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
