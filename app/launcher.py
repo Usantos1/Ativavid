@@ -97,6 +97,45 @@ class WindowApi:
     def is_maximized(self) -> bool:
         return bool(self._maximized)
 
+    # ---- seletor NATIVO de arquivos ------------------------------------
+    # O `<input type=file>` do navegador nao aceita pasta, e o
+    # `webkitdirectory` so entrega os BYTES: para importar 1,5 GB que ja estao
+    # no disco, a tela subia tudo por HTTP para 127.0.0.1. Com o dialogo
+    # nativo vem o CAMINHO, e o servidor ja sabe importar por caminho
+    # (`_ingest_paths`, que varre subpasta e faz um video por pasta).
+    #
+    # Devolve lista de caminhos (vazia = o usuario cancelou). Nunca levanta:
+    # o JS trata a lista vazia como "nao escolheu", e sem dialogo nativo a
+    # tela cai no `<input>` de sempre.
+
+    def escolher_pasta(self) -> list[str]:
+        return self._dialogo(pasta=True)
+
+    def escolher_videos(self) -> list[str]:
+        return self._dialogo(pasta=False)
+
+    def _dialogo(self, *, pasta: bool) -> list[str]:
+        if not self._window:
+            return []
+        try:
+            import webview
+
+            if pasta:
+                tipo = getattr(webview, "FOLDER_DIALOG", 20)
+                r = self._window.create_file_dialog(tipo)
+            else:
+                tipo = getattr(webview, "OPEN_DIALOG", 10)
+                r = self._window.create_file_dialog(
+                    tipo,
+                    allow_multiple=True,
+                    file_types=("Vídeos (*.mp4;*.mov;*.m4v;*.mkv;*.webm;*.avi)",
+                                "Todos os arquivos (*.*)"),
+                )
+        except Exception as e:  # noqa: BLE001
+            print(f"[warn] dialogo nativo: {e}", flush=True)
+            return []
+        return [str(x) for x in (r or [])]
+
     def close(self) -> None:
         """X da titlebar: esconde na bandeja — servidor e cookies continuam."""
         _hide_to_tray(self)

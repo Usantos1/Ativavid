@@ -453,6 +453,68 @@ def _walk_import_videos(root: Path) -> list[Path]:
     return found
 
 
+def agrupar_import(paths: list, merge: bool = False) -> list[tuple[str, list[Path]]]:
+    """Como estes caminhos viram videos. `(titulo, arquivos)` por video.
+
+    A REGRA, que e a que a tela promete: "cada SUBPASTA vira um video". A pasta
+    ESCOLHIDA nao e subpasta — os videos soltos dentro dela sao cada um o seu
+    video, com o seu nome. Antes eles eram colados num video so batizado com o
+    nome da pasta escolhida: escolher `SSD` (9 videos soltos + 3 subpastas)
+    dava um video "SSD" de 9 takes emendados, que ninguem pediu.
+
+    Uma funcao so para o preview e para a importacao de proposito: eram duas, e
+    duas copias da mesma regra e como a tela passa a prometer uma coisa e o
+    servidor fazer outra.
+    """
+    raizes: list[Path] = []
+    soltos: list[Path] = []
+    for bruto in paths or []:
+        try:
+            src = Path(str(bruto))
+            if src.is_dir():
+                raizes.append(src.resolve())
+            elif src.is_file() and _is_import_video(src):
+                soltos.append(src)
+        except (OSError, TypeError, ValueError):
+            continue
+
+    achados: list[Path] = list(soltos)
+    for raiz in raizes:
+        achados.extend(_walk_import_videos(raiz))
+    if not achados:
+        return []
+    if merge and len(achados) > 1:
+        return [(achados[0].stem, sorted(achados, key=lambda f: str(f).lower()))]
+
+    por_pasta: dict[str, list[Path]] = {}
+    individuais: list[Path] = []
+    for f in achados:
+        try:
+            pai = f.parent.resolve()
+        except OSError:
+            individuais.append(f)
+            continue
+        # direto dentro de uma pasta ESCOLHIDA (ou solto) = video proprio
+        if pai in raizes or not any(pai.is_relative_to(r) for r in raizes):
+            individuais.append(f)
+        else:
+            por_pasta.setdefault(str(pai), []).append(f)
+
+    grupos: list[tuple[str, list[Path]]] = []
+    for pasta, lista in sorted(por_pasta.items()):
+        grupos.append((Path(pasta).name,
+                       sorted(lista, key=lambda f: f.name.lower())))
+    for f in sorted(individuais, key=lambda x: x.name.lower()):
+        grupos.append((f.stem, [f]))
+    return grupos
+
+
+def _planejar_import(paths: list, merge: bool = False) -> tuple[list[dict], int]:
+    grupos = agrupar_import(paths, merge=merge)
+    return ([{"titulo": t, "n": len(fs)} for t, fs in grupos],
+            sum(len(fs) for _, fs in grupos))
+
+
 def _safe_name(name: str) -> str:
     stem = Path(name).stem
     stem = re.sub(r"[^\w\-]+", "_", stem, flags=re.UNICODE).strip("_")
@@ -2769,6 +2831,17 @@ class StudioHandler(BaseHTTPRequestHandler):
             self._json({"ok": True, "removedFromList": True, "deletedFiles": deleted_files, "recycled": deleted_files})
             return
 
+        if path == "/api/import-preview":
+            # Diz o que SERIA criado, sem criar nada. A tela precisa disto para
+            # o dialogo de importacao: com upload ela contava os File objects
+            # que o navegador entregou, mas na importacao por CAMINHO quem sabe
+            # o que tem dentro da pasta e o servidor.
+            body = self._read_json()
+            grupos, total = _planejar_import(body.get("paths") or [],
+                                             merge=bool(body.get("merge")))
+            self._json({"ok": True, "grupos": grupos, "total": total})
+            return
+
         if path == "/api/jobs":
             from app import license as lic
 
@@ -2886,33 +2959,22 @@ class StudioHandler(BaseHTTPRequestHandler):
         intent: dict | None = None,
         title: str | None = None,
     ) -> list[dict]:
-        files: list[Path] = []
-        saw_dir = False
-        for p in paths:
-            src = Path(p)
-            if src.is_dir():
-                saw_dir = True
-                files.extend(_walk_import_videos(src))
-            elif src.is_file():
-                files.append(src)
-        if not files:
+        grupos = agrupar_import(paths, merge=merge)
+        if not grupos:
             return []
-        if saw_dir and not merge:
-            groups: dict[str, list[Path]] = {}
-            for src in files:
-                groups.setdefault(str(src.parent.resolve()), []).append(src)
-            jobs: list[dict] = []
-            for parent, group in groups.items():
-                group.sort(key=lambda item: item.name.lower())
-                folder_title = Path(parent).name
-                if len(group) > 1:
-                    jobs.append(self._create_job_from_many_files(group, intent=intent, title=folder_title))
-                else:
-                    jobs.append(self._create_job_from_file(group[0], copy=True, intent=intent, title=folder_title))
-            return jobs
-        if merge and len(files) > 1:
-            return [self._create_job_from_many_files(files, intent=intent, title=title)]
-        return [self._create_job_from_file(src, copy=True, intent=intent, title=title) for src in files]
+        # Um titulo explicito (o usuario nomeou o lote) so faz sentido quando e
+        # UM video so; com varios, cada um fica com o nome da sua pasta.
+        unico = title if len(grupos) == 1 else None
+        jobs: list[dict] = []
+        for rotulo, arquivos in grupos:
+            nome = unico or rotulo
+            if len(arquivos) > 1:
+                jobs.append(self._create_job_from_many_files(
+                    arquivos, intent=intent, title=nome))
+            else:
+                jobs.append(self._create_job_from_file(
+                    arquivos[0], copy=True, intent=intent, title=nome))
+        return jobs
 
     def _ingest_multipart(self, merge: bool = False) -> list[dict]:
         """Recebe o upload gravando direto no disco.

@@ -9,6 +9,9 @@ const state = {
   pendingRenameId: null,
   pendingRenameCurrent: "",
   pendingFiles: null,
+  // Caminhos escolhidos no dialogo NATIVO. Excludente com pendingFiles: ou a
+  // tela tem os bytes (upload) ou tem os caminhos (import direto).
+  pendingPaths: null,
   pendingDuration: null,
   pendingRecommended: null,
   uploads: {},
@@ -1608,6 +1611,100 @@ async function openImportDialog(fileList) {
   }
 }
 
+/** A API da janela nativa, quando a tela roda dentro do app. No navegador
+ *  comum ela nao existe e tudo cai no `<input type=file>` de sempre. */
+function apiNativa() {
+  const api = window.pywebview && window.pywebview.api;
+  return (api && typeof api.escolher_pasta === "function") ? api : null;
+}
+
+/** Importa por CAMINHO: nada de bytes subindo por HTTP.
+ *
+ *  O app e desktop e os arquivos ja estao no disco — a tela subia 1,5 GB para
+ *  127.0.0.1 para importar o que estava ali do lado. O servidor sempre soube
+ *  importar por caminho (`_ingest_paths`, que varre subpasta e faz um video
+ *  por pasta); ninguem usava. */
+async function importarPorCaminho(paths, intent) {
+  const lista = (paths || []).filter(Boolean);
+  if (!lista.length) return;
+  let plano = null;
+  try {
+    plano = await api("/api/import-preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paths: lista }),
+    });
+  } catch { /* o servidor decide de novo na hora de importar */ }
+  const grupos = (plano && plano.grupos) || [];
+  if (plano && !grupos.length) {
+    toast("Nenhum vídeo encontrado nessa pasta");
+    return;
+  }
+  toast(grupos.length > 1
+    ? `Importando ${plano.total} vídeo(s) em ${grupos.length} projeto(s)…`
+    : "Importando…");
+  try {
+    const r = await api("/api/jobs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paths: lista, intent: intent || null }),
+    });
+    const n = ((r && r.jobs) || []).length;
+    if (!n) throw new Error("não consegui importar nenhum vídeo desses caminhos");
+    setView("fila");
+  } catch (err) {
+    toast(err.message || "Falha ao importar");
+  }
+  await refreshJobs();
+}
+
+/** Abre o dialogo de importacao para CAMINHOS (sem File objects). */
+async function abrirImportPorCaminho(paths) {
+  const lista = (paths || []).filter(Boolean);
+  if (!lista.length) return;
+  let plano = null;
+  try {
+    plano = await api("/api/import-preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paths: lista }),
+    });
+  } catch { /* segue sem o resumo */ }
+  const grupos = (plano && plano.grupos) || [];
+  if (plano && !grupos.length) {
+    toast("Nenhum vídeo encontrado nessa pasta");
+    return;
+  }
+  state.pendingFiles = null;
+  state.pendingPaths = lista;
+  state.pendingDuration = null;
+  const recommended = "dynamic";
+  state.pendingRecommended = recommended;
+  const hint = $("#importHint");
+  if (hint) {
+    hint.textContent = grupos.length
+      ? `${plano.total} vídeo${plano.total > 1 ? "s" : ""} → ${grupos.length} projeto${grupos.length > 1 ? "s" : ""}`
+      : `${lista.length} item(ns) selecionado(s)`;
+  }
+  const folderHint = $("#importFolderHint");
+  if (folderHint) {
+    const juntos = grupos.filter((g) => g.n > 1).length;
+    folderHint.classList.remove("hidden");
+    folderHint.textContent = juntos
+      ? `Cada subpasta vira um vídeo — ${juntos} com mais de um arquivo entram juntos.`
+      : "Cada subpasta vira um vídeo.";
+  }
+  const mergeWrap = $("#mergeTakesWrap");
+  if (mergeWrap) mergeWrap.classList.add("hidden");
+  applyIntentDefaults(recommended, recommended);
+  loadImportPresets().catch(() => {});
+  try {
+    $("#dlgImport").showModal();
+  } catch {
+    await importarPorCaminho(lista, collectImportIntent());
+  }
+}
+
 function friendlyFileTitle(file) {
   return String(file?.name || "Vídeo").replace(/\.[^.]+$/, "") || "Vídeo";
 }
@@ -1816,17 +1913,29 @@ function wireDrop() {
   const zone = $("#dropZone");
   const input = $("#fileInput");
   const folderInput = $("#folderInput");
-  $("#btnPick").onclick = (e) => {
+  $("#btnPick").onclick = async (e) => {
     e.preventDefault();
     e.stopPropagation();
+    const nat = apiNativa();
+    if (nat) {
+      const paths = await nat.escolher_videos();
+      if (paths && paths.length) await abrirImportPorCaminho(paths);
+      return;
+    }
     input.click();
   };
   const btnFolder = $("#btnPickFolder");
-  if (btnFolder && folderInput) {
-    btnFolder.onclick = (e) => {
+  if (btnFolder) {
+    btnFolder.onclick = async (e) => {
       e.preventDefault();
       e.stopPropagation();
-      folderInput.click();
+      const nat = apiNativa();
+      if (nat) {
+        const paths = await nat.escolher_pasta();
+        if (paths && paths.length) await abrirImportPorCaminho(paths);
+        return;
+      }
+      if (folderInput) folderInput.click();
     };
   }
   zone.addEventListener("click", (e) => {
@@ -1914,13 +2023,16 @@ function wireDrop() {
   if (btnGo) {
     btnGo.onclick = async () => {
       const files = state.pendingFiles || [];
+      const paths = state.pendingPaths || null;
       $("#dlgImport")?.close();
       try {
-        await uploadFiles(files, collectImportIntent());
+        if (paths) await importarPorCaminho(paths, collectImportIntent());
+        else await uploadFiles(files, collectImportIntent());
       } catch (err) {
         toast(err.message);
       } finally {
         state.pendingFiles = null;
+        state.pendingPaths = null;
       }
     };
   }
@@ -1928,6 +2040,7 @@ function wireDrop() {
   if (btnCancel) {
     btnCancel.onclick = () => {
       state.pendingFiles = null;
+      state.pendingPaths = null;
       $("#dlgImport")?.close();
     };
   }
