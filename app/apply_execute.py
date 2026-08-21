@@ -7,6 +7,7 @@ delivery_pack para a pasta publicar.
 from __future__ import annotations
 
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -367,19 +368,38 @@ def tolerancia_de_quadros(n_ranges: int) -> int:
     ali), e a emenda com J-cut compensa parte disso. O que sobra e uma deriva
     que ACOMPANHA o numero de emendas.
 
-    Medido nos 39 projetos do usuario em 21/08/2026: a deriva vai de 0 a 21
-    quadros e nunca passa de **0,75 quadro por emenda** — 21 quadros num
-    projeto de 38 ranges, 5 num de 12, 0 nos de 3 a 5.
+    Medido nos 128 projetos do usuario em 21/08/2026: a deriva vai de 0 a 21
+    quadros e chega a **1,80 quadro por emenda** (9 quadros num projeto de 5
+    ranges). Uma medicao anterior, com 39 projetos, viu no maximo 0,75 por
+    emenda e a folga foi calibrada nisso — a amostra maior desmente: com
+    `2 + 0,8n` esse projeto de 5 ranges era RECUSADO por 3 quadros.
 
-    Com a tolerancia de 1 quadro que estava aqui, **25 dos 39 projetos (64%)
-    eram recusados**: o usuario corrigia uma legenda e o apply respondia
-    "OLD map Nf vs cut.mp4 Mf" sem aplicar nada. Foi 9 das 10 falhas de apply
-    registradas no historico dele.
+    E a deriva nao cresce em linha com as emendas, cresce como RAIZ: 9 quadros
+    com 5 emendas e 21 com 38. Um modelo linear generoso o bastante para o
+    projeto de 5 daria 78 quadros de folga no de 38 — mais que um take inteiro
+    de 2s, e a guarda pararia de pegar o que existe para pegar. Uma raiz
+    acompanha as duas pontas com a mesma constante (3,1 sai de cada uma delas
+    isolada; 5,0 e essa curva com margem de guarda).
 
-    A folga aqui e 0,8 por emenda mais 2 fixos. So 0,8 por emenda deixava o
-    projeto de 5 ranges com 1 quadro de margem (deriva 3, folga 4) — apertado
-    demais para uma guarda; os 2 fixos dao a almofada. Nos 39 projetos as
-    margens ficam entre 3 e 11 quadros.
+    Contra os 128 projetos, comparado com o `2 + 0,8n` que estava aqui:
+
+    | | 2+0,8n | 2+5,0*raiz(n) |
+    |---|---|---|
+    | projetos aceitos | 127/128 | **128/128** |
+    | margem no mais apertado | -3 (recusa) | +4 |
+    | folga com 38 emendas | 32 | 33 |
+    | menor take que ainda pega | 1,1s | 1,1s |
+    | mapa de OUTRO corte que passa | 3/128 | 3/128 |
+
+    Ou seja: a recusa falsa some sem custar nada em deteccao. Os 3 que passam
+    nos dois modelos sao projetos diferentes cuja contagem de quadros bate por
+    coincidencia — a contagem nao separa esses, e quem os pega e outra rede
+    (veja abaixo).
+
+    Com a tolerancia de 1 quadro que estava aqui antes de tudo isso, **25 dos
+    39 projetos (64%) eram recusados**: o usuario corrigia uma legenda e o
+    apply respondia "OLD map Nf vs cut.mp4 Mf" sem aplicar nada. Foi 9 das 10
+    falhas de apply registradas no historico dele.
 
     Continua pegando o caso que a guarda existe para pegar — mapa de OUTRO
     corte, que difere pelo tamanho de um range inteiro, tipicamente segundos.
@@ -393,7 +413,7 @@ def tolerancia_de_quadros(n_ranges: int) -> int:
     A deriva em si e divida separada: [[extract_segment perde quadro de
     cabeca no `-ss`]].
     """
-    return 2 + round(0.8 * max(0, int(n_ranges)))
+    return 2 + round(5.0 * math.sqrt(max(0, int(n_ranges))))
 
 
 def prepare_edl_apply(edit_dir: Path) -> tuple[str | None, dict[str, Any] | None, list | None]:
