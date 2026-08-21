@@ -1,11 +1,17 @@
 """Licença / trial ATIVAVID — cliente local + Supabase RPC.
 
-Sem supabaseUrl configurado → modo aberto (dev).
-Com URL → trial 7 dias ou licença anual (gate no /api/jobs).
+Sem supabaseUrl configurado: aberto em dev, BLOQUEADO em build de cliente.
+Com URL → trial 7 dias, chave anual ou acesso por conta (gate no do_POST).
 Gate de versão: resposta `update.force` trava builds abaixo de min_version.
+
+O cache local é assinado (HMAC): editar `entitled` no license.json deixou de
+render licença. Não é à prova de quem lê o código — nada client-side é —, mas
+tira o bypass do alcance de um editor de texto.
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import os
 import uuid
@@ -45,19 +51,93 @@ def _load_blob() -> dict[str, Any]:
     return {}
 
 
+def _cache_key() -> bytes:
+    """Segredo de assinatura do cache.
+
+    Vem do license_config.json da build (não versionado), então cada build tem
+    o seu e o valor não está no código público. Em dev cai num padrão — lá o
+    cache não protege nada mesmo.
+    """
+    cfg = ss.bundled_raw()
+    seed = str(cfg.get("cacheSecret") or "") or str(cfg.get("supabaseAnonKey") or "")
+    return ("ativavid-cache-v1|" + (seed or "dev")).encode("utf-8")
+
+
+def _sign_cache(blob: dict[str, Any]) -> str | None:
+    cached = blob.get("cached")
+    if not isinstance(cached, dict):
+        return None
+    payload = {
+        "cached": cached,
+        "cachedAt": blob.get("cachedAt"),
+        # Amarra ao device: copiar o license.json de outra máquina não vale.
+        "deviceId": blob.get("deviceId"),
+    }
+    msg = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hmac.new(_cache_key(), msg.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def _cache_intact(blob: dict[str, Any]) -> bool:
+    """False se o cache foi editado à mão (ou é de uma versão sem assinatura)."""
+    sig = str(blob.get("sig") or "")
+    expected = _sign_cache(blob)
+    if not sig or not expected:
+        return False
+    return hmac.compare_digest(sig, expected)
+
+
 def _save_blob(data: dict[str, Any]) -> None:
     LICENSE_DIR.mkdir(parents=True, exist_ok=True)
+    data = dict(data)
+    sig = _sign_cache(data)
+    if sig:
+        data["sig"] = sig
+    else:
+        data.pop("sig", None)
     LICENSE_PATH.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+_REG_KEY = r"Software\ATIVAVID"
+
+
+def _reg_device_id() -> str | None:
+    if os.name != "nt":
+        return None
+    try:
+        import winreg
+
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _REG_KEY) as key:
+            val, _ = winreg.QueryValueEx(key, "DeviceId")
+        return str(val or "").strip() or None
+    except OSError:
+        return None
+
+
+def _reg_set_device_id(did: str) -> None:
+    if os.name != "nt" or not did:
+        return
+    try:
+        import winreg
+
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, _REG_KEY) as key:
+            winreg.SetValueEx(key, "DeviceId", 0, winreg.REG_SZ, did)
+    except OSError:
+        pass
 
 
 def device_id() -> str:
     blob = _load_blob()
     did = str(blob.get("deviceId") or "").strip()
     if did:
+        _reg_set_device_id(did)
         return did
-    did = _machine_guid() or ("av-" + uuid.uuid4().hex)
+    # Segunda cópia no registro: quando o MachineGuid não existe, o id caía num
+    # uuid guardado só no license.json — apagar o arquivo dava trial novo, sem
+    # limite. O registro sobrevive a isso.
+    did = _reg_device_id() or _machine_guid() or ("av-" + uuid.uuid4().hex)
     blob["deviceId"] = did
     _save_blob(blob)
+    _reg_set_device_id(did)
     return did
 
 
@@ -277,6 +357,14 @@ def _offline_fallback(err: str) -> dict[str, Any]:
     blob = _load_blob()
     cached = blob.get("cached")
     cached_at = blob.get("cachedAt")
+    if isinstance(cached, dict) and cached_at and not _cache_intact(blob):
+        return {
+            "entitled": False,
+            "mode": "blocked",
+            "error": "cache_tampered",
+            "message": "Não foi possível validar a licença guardada. Conecte-se à internet.",
+            "detail": err,
+        }
     if isinstance(cached, dict) and cached_at:
         upd = _normalize_update(cached.get("update"))
         if upd and upd.get("force"):
@@ -352,7 +440,12 @@ def entitlement(*, refresh: bool = False) -> dict[str, Any]:
         return out
 
     blob = _load_blob()
-    if not refresh and isinstance(blob.get("cached"), dict) and blob.get("cachedAt"):
+    if (
+        not refresh
+        and isinstance(blob.get("cached"), dict)
+        and blob.get("cachedAt")
+        and _cache_intact(blob)
+    ):
         try:
             ts = datetime.fromisoformat(str(blob["cachedAt"]).replace("Z", "+00:00"))
             age_min = (datetime.now(timezone.utc) - ts).total_seconds() / 60

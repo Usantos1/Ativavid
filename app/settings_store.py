@@ -56,11 +56,17 @@ def _read_json(path: Path) -> dict[str, Any]:
         return {}
 
 
-def bundled_license_config() -> dict[str, Any]:
-    """Config de licença embutida pelo instalador (vazio em dev/checkout do repo)."""
+def bundled_raw() -> dict[str, Any]:
+    """Arquivo embutido inteiro — inclui campos que não são settings da UI
+    (ex.: cacheSecret, usado para assinar o cache de licença)."""
     if not BUNDLED_LICENSE_PATH.exists():
         return {}
-    raw = _read_json(BUNDLED_LICENSE_PATH)
+    return _read_json(BUNDLED_LICENSE_PATH)
+
+
+def bundled_license_config() -> dict[str, Any]:
+    """Só os campos que viram settings do app (vazio em dev/checkout do repo)."""
+    raw = bundled_raw()
     return {k: raw[k] for k in _MANAGED_KEYS if str(raw.get(k) or "").strip()}
 
 

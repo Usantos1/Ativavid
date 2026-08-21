@@ -5,9 +5,15 @@
     "é ele que liga o gate de licença na build que sai para venda.",
     "Sem ele, uma build de cliente sobe BLOQUEADA (fail-closed) — de propósito.",
     "No checkout de desenvolvimento (tem .git), a ausência dele mantém o modo aberto.",
-    "NUNCA coloque aqui a service role key: só a anon (public)."
+    "NUNCA coloque aqui a service role key: só a anon (public).",
+    "cacheSecret assina o cache de licença no PC do cliente (license.json).",
+    "Gere um por build e NÃO reaproveite entre projetos:",
+    "  py -c \"import secrets; print(secrets.token_urlsafe(32))\"",
+    "Trocar o cacheSecret invalida os caches existentes — os clientes revalidam",
+    "contra o servidor na abertura seguinte, então troque só se ele vazar."
   ],
   "supabaseUrl": "https://SEU-PROJETO.supabase.co",
   "supabaseAnonKey": "eyJhbGciOi...anon(public)...",
-  "checkoutUrl": "https://link-do-seu-checkout"
+  "checkoutUrl": "https://link-do-seu-checkout",
+  "cacheSecret": "troque-por-um-valor-aleatorio-longo"
 }

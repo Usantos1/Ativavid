@@ -71,8 +71,13 @@ if ($cfg.PSObject.Properties.Name -contains "supabaseServiceRoleKey") {
   Write-Host "license_config.json contem service role — NUNCA embutir no cliente." -ForegroundColor Red
   exit 3
 }
+if (-not $cfg.cacheSecret -or $cfg.cacheSecret.Length -lt 16) {
+  Write-Host "license_config.json sem 'cacheSecret' forte (>=16 chars)." -ForegroundColor Red
+  Write-Host "Gere um: py -c ""import secrets; print(secrets.token_urlsafe(32))"""
+  exit 3
+}
 if (-not $cfg.checkoutUrl) {
-  Write-Host "Aviso: checkoutUrl vazio — o botao Assinar nao leva a lugar nenhum." -ForegroundColor Yellow
+  Write-Host "Aviso: checkoutUrl vazio — o botao Assinar fica escondido para o cliente." -ForegroundColor Yellow
 }
 
 $ver = Read-AppVersion

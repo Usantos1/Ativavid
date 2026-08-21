@@ -209,6 +209,49 @@ def test_cifrar_duas_vezes_nao_corrompe():
     assert secret_store.unprotect(uma) == "abc"
 
 
+# --- cache assinado -------------------------------------------------------
+
+
+def test_cache_legitimo_libera_offline(blob):
+    blob({"entitled": True, "mode": "account", "validUntil": _utc(720)}, _utc(-1))
+    assert lic._offline_fallback("sem rede")["entitled"] is True
+
+
+def test_cache_editado_a_mao_nao_libera(blob):
+    """O bypass do bloco de notas: trocar entitled/validUntil no license.json."""
+    blob({"entitled": True, "mode": "account", "validUntil": _utc(720)}, _utc(-1))
+    d = json.loads(lic.LICENSE_PATH.read_text(encoding="utf-8"))
+    d["cached"]["validUntil"] = _utc(24 * 3650)
+    lic.LICENSE_PATH.write_text(json.dumps(d), encoding="utf-8")
+    out = lic._offline_fallback("sem rede")
+    assert out["entitled"] is False
+    assert out["error"] == "cache_tampered"
+
+
+def test_cache_sem_assinatura_nao_libera(tmp_path, monkeypatch):
+    """Blob de versão anterior: revalida contra o servidor em vez de confiar."""
+    monkeypatch.setattr(lic, "LICENSE_DIR", tmp_path)
+    monkeypatch.setattr(lic, "LICENSE_PATH", tmp_path / "license.json")
+    (tmp_path / "license.json").write_text(
+        json.dumps({
+            "deviceId": "dev-test",
+            "cached": {"entitled": True, "mode": "account", "validUntil": _utc(720)},
+            "cachedAt": _utc(-1),
+        }),
+        encoding="utf-8",
+    )
+    assert lic._offline_fallback("sem rede")["entitled"] is False
+
+
+def test_cache_de_outra_maquina_nao_vale(blob):
+    """A assinatura amarra ao deviceId: copiar o arquivo não transfere licença."""
+    blob({"entitled": True, "mode": "account", "validUntil": _utc(720)}, _utc(-1))
+    d = json.loads(lic.LICENSE_PATH.read_text(encoding="utf-8"))
+    d["deviceId"] = "outro-pc"
+    lic.LICENSE_PATH.write_text(json.dumps(d), encoding="utf-8")
+    assert lic._offline_fallback("sem rede")["entitled"] is False
+
+
 # --- ativação sob force-update -------------------------------------------
 
 

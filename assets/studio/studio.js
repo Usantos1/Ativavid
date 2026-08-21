@@ -1348,8 +1348,14 @@ function openLicenseDialog(lic) {
     return;
   }
   $("#licDlgTitle").textContent = L.mode === "blocked" ? "Ative o ATIVAVID" : "Licença";
-  $("#licDlgHint").textContent = L.message || "Assine o plano anual ou cole a chave de ativação.";
+  $("#licDlgHint").textContent = L.message || "Entre com a conta liberada, assine o plano anual ou cole a chave.";
   $("#licDlgPrice").textContent = L.priceLabel || "R$ 399 / ano";
+  // Sem checkout configurado, "Assinar agora" so levava a um toast de erro.
+  const pay = $("#btnLicDlgPay");
+  if (pay) pay.hidden = !L.checkoutUrl;
+  // Ja logado nao precisa da saida de login.
+  const login = $("#btnLicDlgLogin");
+  if (login) login.hidden = !!state.auth?.loggedIn;
   if (!dlg.open) dlg.showModal();
 }
 
@@ -3639,6 +3645,16 @@ function wireForms() {
       } catch (e) {
         toast(e.message || "Falha ao ativar");
       }
+    };
+  }
+  // Quem foi liberado por CONTA (o caminho recomendado) nao tem chave nenhuma
+  // para digitar: sem esta saida ele ficava preso olhando o campo de chave.
+  const btnDlgLogin = $("#btnLicDlgLogin");
+  if (btnDlgLogin) {
+    btnDlgLogin.onclick = () => {
+      const dlg = $("#dlgLicense");
+      if (dlg?.open) dlg.close();
+      openLoginDialog("login");
     };
   }
   const btnDlgPay = $("#btnLicDlgPay");
