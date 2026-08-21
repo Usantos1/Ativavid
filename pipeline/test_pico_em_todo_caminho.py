@@ -21,10 +21,8 @@ nenhum caminho consegue baixar o pico (teve 3 applies, um por motor).
 """
 from __future__ import annotations
 
-import io
 import re
 import sys
-import tokenize
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -33,40 +31,16 @@ if str(REPO) not in sys.path:
 
 LIMITE_DE_ENTREGA = -1.0
 
-_ASPAS_TRIPLAS = ('"""', "'''")
+from pipeline.leitura_de_codigo import apenas_codigo
 
 
 def _codigo(rel: str) -> str:
-    """O arquivo sem comentários e sem docstrings.
+    """Atalho para `apenas_codigo`, que mora em `pipeline/leitura_de_codigo`.
 
-    Necessário, não preciosismo: a primeira versão destes testes casava com o
-    COMENTÁRIO que explica a decisão em vez do código, e acusou defeito onde
-    não havia — `TP=-1.0` aparece no texto que explica por que o alvo deixou
-    de ser −1,0. Um teste assim também passaria com o código errado, desde que
-    o comentário continuasse certo.
-
-    Aspas triplas caem junto: neste código elas são sempre docstring ou texto
-    longo, nunca argumento de ffmpeg.
-
-    O resto do arquivo sai IDÊNTICO: os trechos a ignorar são apagados no
-    lugar, em vez de o código ser remontado a partir dos tokens. Remontar
-    normaliza o espaçamento (`def f(` vira `def f (`) e quebraria toda busca
-    escrita do jeito natural.
+    Ele foi extraído para lá quando um TERCEIRO teste casou com o comentário
+    em vez do código — o motivo completo está documentado no módulo.
     """
-    linhas = (REPO / rel).read_text(encoding="utf-8").splitlines(keepends=True)
-    for tok in tokenize.generate_tokens(io.StringIO("".join(linhas)).readline):
-        se_apaga = tok.type == tokenize.COMMENT or (
-            tok.type == tokenize.STRING
-            and tok.string.lstrip("rbfuRBFU")[:3] in _ASPAS_TRIPLAS)
-        if not se_apaga:
-            continue
-        (l0, c0), (l1, c1) = tok.start, tok.end
-        for n in range(l0 - 1, l1):
-            linha = linhas[n]
-            ini = c0 if n == l0 - 1 else 0
-            fim = c1 if n == l1 - 1 else len(linha.rstrip("\n"))
-            linhas[n] = linha[:ini] + " " * (fim - ini) + linha[fim:]
-    return "".join(linhas)
+    return apenas_codigo(REPO / rel)
 
 
 def test_o_motor_proprio_nao_tem_alvo_proprio():

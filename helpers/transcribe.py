@@ -904,9 +904,26 @@ def transcribe_one(
         size_mb = audio.stat().st_size / (1024 * 1024)
         if verbose:
             print(f"  transcribing {video.stem}.mp3 ({size_mb:.1f} MB) via {backend_label}", flush=True)
-        payload = _transcribe_audio(audio, active_key, active_model, language, verbose,
-                                    cache_dir=chunk_cache, chunk_seconds=active_chunk,
-                                    backend=resolved, wcpp=wcpp)
+        try:
+            payload = _transcribe_audio(audio, active_key, active_model, language, verbose,
+                                        cache_dir=chunk_cache, chunk_seconds=active_chunk,
+                                        backend=resolved, wcpp=wcpp)
+        except Exception as e:  # noqa: BLE001
+            # Forçar um provedor não pode derrubar o job quando ele cai. Só o
+            # ElevenLabs desce para o Groq: é o caminho que o `auto` já usava
+            # para fonte curta, então a queda leva ao comportamento antigo, e
+            # não a um desconhecido. O Groq não sobe para lugar nenhum.
+            if resolved != "elevenlabs" or not api_key:
+                raise
+            print(f"  ELEVENLABS_FALHOU ({str(e)[:140]}) — caindo para o Groq",
+                  flush=True)
+            resolved, active_key, active_model = "groq", api_key, model
+            active_chunk = chunk_seconds
+            backend_label = "Groq (queda do ElevenLabs)"
+            chunk_cache = chunk_cache.with_name(chunk_cache.name + "-groq")
+            payload = _transcribe_audio(audio, active_key, active_model, language, verbose,
+                                        cache_dir=chunk_cache, chunk_seconds=active_chunk,
+                                        backend=resolved, wcpp=wcpp)
 
     out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     try:

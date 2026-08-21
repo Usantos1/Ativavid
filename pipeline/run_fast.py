@@ -2429,9 +2429,27 @@ def run(
         from concurrent.futures import ThreadPoolExecutor
 
         with ThreadPoolExecutor(max_workers=4) as _an_ex:
+            # `--backend elevenlabs` explícito, não o `auto` que estava aqui.
+            # O `auto` só escolhe o Scribe para fonte acima de 5 min, e NENHUMA
+            # fonte do usuário chega perto disso: das 149 medidas no disco dele,
+            # a mais longa tem 2,8 min. Resultado, 149 de 149 foram para o Groq
+            # — o plano pago de Scribe nunca foi usado no vídeo curto, que é
+            # todo o trabalho dele.
+            #
+            # Não é só qualidade. O Groq gratuito responde 429 sob carga e o
+            # cliente espera 5,10,20,40,60,60s por tentativa: e é isso que a
+            # fase ANALYZE mostra. Medido por período nos projetos dele, o
+            # custo por segundo de fonte foi de 2,27 na manhã de 20/08 (lote
+            # grande, muito 429) contra 0,12 na tarde do MESMO dia — 19x de
+            # espalhamento sem nada mudar no código.
+            #
+            # Quem não tem chave do ElevenLabs não é afetado: `transcribe_one`
+            # desce para o Groq sozinho quando a chave falta, e agora também
+            # quando o Scribe falha em execução.
             _f_tr = _an_ex.submit(
                 _helper, "transcribe.py", str(src),
                 "--edit-dir", str(edit_dir), "--language", language,
+                "--backend", "elevenlabs",
             )
             _f_sr = _an_ex.submit(_helper, "speech_regions.py", str(src))
             _f_vl = _an_ex.submit(
@@ -2822,7 +2840,8 @@ def run(
     _t_phase = time.perf_counter()
     if is_longform:
         # Longform gera .srt/chapters do transcript do corte — precisa transcrever.
-        _helper("transcribe.py", str(cut_path), "--edit-dir", str(edit_dir), "--language", language)
+        _helper("transcribe.py", str(cut_path), "--edit-dir", str(edit_dir),
+                "--language", language, "--backend", "elevenlabs")
         cut_spoken = transcript_text(edit_dir, "cut") or spoken
     else:
         # Shortform: as palavras da fonte já foram transcritas na fase 1 e o
@@ -2926,7 +2945,8 @@ def run(
             if joined:
                 cut_spoken = joined
         else:
-            _helper("transcribe.py", str(cut_path), "--edit-dir", str(edit_dir), "--language", language)
+            _helper("transcribe.py", str(cut_path), "--edit-dir", str(edit_dir),
+                "--language", language, "--backend", "elevenlabs")
             cut_spoken = transcript_text(edit_dir, "cut") or spoken
             # Groq/Whisper often stretches OR truncates word times vs the real
             # cut — either breaks full-video karaoke. Prefer EDL remap then.
