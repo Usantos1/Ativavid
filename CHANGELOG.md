@@ -1,5 +1,36 @@
 # Changelog
 
+## 2.36
+
+Uma auditoria de leitura no código achou dez coisas; conferi cada uma nos
+seus próprios projetos antes de mexer. Quatro delas mexem no que você vê:
+
+- **Dois vídeos processando ao mesmo tempo podiam se atropelar.** Todos os
+  projetos usavam a MESMA pasta temporária de trabalho — uma só, para os seus
+  113. O render da fila e a correção que você faz no editor escrevem lá com o
+  mesmo nome de arquivo, e um apagava o do outro no meio do caminho. Agora
+  cada projeto tem a sua
+- **Legenda voltou a ficar no tempo certo depois de uma emenda.** Quando um
+  trecho terminava exatamente em fala, o app guardava "corte zero" e depois
+  lia esse zero como se fosse o valor padrão — e a legenda de tudo que vinha
+  depois aparecia 66 ms cedo demais, somando a cada trecho. Nos seus projetos
+  isso acontecia em **55 de 111**
+- **"Descartar" parou de desfazer trabalho já aplicado.** Se você corrigia,
+  aplicava, corrigia de novo e desistia, ele voltava para antes da PRIMEIRA
+  correção — jogando fora a que você já tinha visto pronta no vídeo
+- **A palavra grande da legenda volta a crescer ao aparecer.** Ela nasce em
+  88% e chega a 100% junto com o fade; estava aparecendo em tamanho fixo
+
+E três que só aparecem se você mudar de estilo ou de formato — arrumadas
+agora para não te esperarem lá na frente: o contador de lista (que nunca
+desenhava no motor rápido), o número do contador que saía sem o "º", e o
+alinhamento de quadro no formato YouTube.
+
+Também passei a registrar, junto de cada correção, qual motor a desenhou e
+por que caiu se caiu. Foi olhando esse tipo de registro que achei o
+desperdício das versões 2.34 e 2.35 — e para as correções essa informação
+não existia.
+
 ## 2.35
 
 Duas coisas que atrapalhavam justamente o seu jeito de trabalhar: corrigir a
