@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.45
+
+Três coisas que aplicar uma correção estragava — no arquivo entregue e na tela.
+
+- **A capa embutida voltou ao arquivo entregue.** Aplicar uma correção refazia
+  o vídeo e o arquivo em `publicar/` saía **sem a capa embutida** — a que o
+  Instagram usa ao postar. Conferido nos seus entregues: os que vieram direto
+  do pipeline tinham a capa; os que passaram por correção tinham perdido quase
+  todos. Agora ela volta em ~1 s, e uma capa que você escolheu pelo botão
+  Capa é preservada, nunca regenerada
+- **Corrigir uma palavra também conserta a legenda do post.** O texto que você
+  copia para o Instagram cita a fala, então a palavra errada podia estar lá —
+  e ficava, mesmo depois da correção. O botão Copiar também passou a ler o
+  arquivo atual em vez de uma cópia antiga
+- **"Dispensar" no aviso de correção falha agora vale.** O cartaz REVISAR
+  voltava a cada atualização da tela, para sempre. Dispensou, sumiu — e se
+  falhar de novo, o aviso volta, porque é uma falha nova
+
 ## 2.44
 
 Um defeito de legenda que estava em 73% dos seus vídeos.
