@@ -214,19 +214,34 @@ def legenda_valor_para_y(estilo: str, valor, altura: int = 1920):
 
 
 def ancoras_de_headline() -> dict[str, dict[str, object]]:
-    """{estilo: {"base": "top"|"bottom", "px": N}} — a altura padrao.
+    """{estilo: altura padrao + tipografia} — tudo que o editor precisa.
 
     O editor desenha a headline arrastavel a partir daqui, entao ele mostra
     exatamente onde o motor vai desenhar. Sem isto, a tabela teria uma
     terceira copia no JavaScript e as tres sairiam de sincronia.
+
+    Vai junto a TIPOGRAFIA do estilo (caixa alta, pesos, teto de fonte,
+    largura util, entrelinha) porque a caixa da headline muda de altura com
+    ela: tres estilos sobem tudo para maiuscula e cada um tem seu teto de
+    tamanho. Sem esses campos o editor mostrava sempre a mesma fonte de 36px
+    em caixa baixa, e a manchete — que se ancora pela BASE — aparecia numa
+    altura que o render nao usava.
     """
     out: dict[str, dict[str, object]] = {}
     for nome, spec in Renderizador.HL_STYLES.items():
-        if nome == "manchete":
-            # a manchete se ancora pela BASE (paddingBottom, padrao 140)
-            out[nome] = {"base": "bottom", "px": 140}
-        else:
-            out[nome] = {"base": "top", "px": int(spec[4])}
+        pesos, cap, safe_w, lh, top = spec
+        base = ({"base": "bottom", "px": 140} if nome == "manchete"
+                # a manchete se ancora pela BASE (paddingBottom, padrao 140)
+                else {"base": "top", "px": int(top)})
+        out[nome] = {
+            **base,
+            "maiuscula": nome in Renderizador.HL_MAIUSCULA,
+            "pesos": list(pesos),
+            "cap": int(cap),
+            "safeWidth": float(safe_w),
+            "lineHeight": float(lh),
+            "minimo": HL_MIN,
+        }
     return out
 
 

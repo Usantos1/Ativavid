@@ -3804,6 +3804,56 @@ function hlAncora() {
   return { base: padrao.base, px: Number(padrao.px) };
 }
 
+/** Tipografia do estilo em uso, vinda do MOTOR (nao ha copia aqui). */
+function hlEstilo() {
+  const hook = (S.editData && S.editData.hook) || {};
+  const e = (HL_ANCORAS && HL_ANCORAS[String(hook.style || 'outline')]) || {};
+  return {
+    maiuscula: !!e.maiuscula,
+    pesos: e.pesos || [800, 800],
+    cap: Number(e.cap) || 92,
+    safeWidth: Number(e.safeWidth) || 900,
+    lineHeight: Number(e.lineHeight) || 1.02,
+    minimo: Number(e.minimo) || 40,
+  };
+}
+
+let hlMedidor = null;
+/** Largura do texto no tamanho/peso pedidos, como `_larg_hl` no motor. */
+function hlLargura(txt, tam, peso) {
+  if (!hlMedidor) hlMedidor = document.createElement('canvas').getContext('2d');
+  hlMedidor.font = `${peso} ${tam}px Poppins, sans-serif`;
+  // o motor desenha com letter-spacing -1px (absoluto, nao em em)
+  return hlMedidor.measureText(txt).width - Math.max(0, txt.length - 1);
+}
+
+/**
+ * Quebra em duas linhas e ajusta o tamanho como `_hl_linhas` no motor.
+ *
+ * O overlay existe para o usuario POSICIONAR a headline; se ele mostra uma
+ * caixa de altura diferente da que vai ser desenhada, a posicao escolhida
+ * esta errada — e mais ainda na manchete, que se ancora pela base.
+ */
+function hlLayout(texto, e) {
+  const palavras = String(texto || '').trim().split(/\s+/).filter(Boolean);
+  let linhas = palavras.length ? [palavras.join(' ')] : [];
+  if (palavras.length > 1) {
+    let melhor = null, dif = Infinity;
+    for (let i = 1; i < palavras.length; i++) {
+      const a = palavras.slice(0, i).join(' ');
+      const b = palavras.slice(i).join(' ');
+      const d = Math.abs(hlLargura(a, 100, e.pesos[0]) - hlLargura(b, 100, e.pesos[1]));
+      if (d < dif) { melhor = [a, b]; dif = d; }
+    }
+    linhas = melhor.filter(Boolean);
+  }
+  const maisLarga = (t) => Math.max(1, ...linhas.map(
+    (l, i) => hlLargura(l, t, e.pesos[Math.min(i, 1)])));
+  let tam = Math.floor(e.safeWidth / maisLarga(100) * 100);
+  tam = Math.max(e.minimo, Math.min(e.cap, Math.floor(e.safeWidth / maisLarga(tam) * tam)));
+  return { linhas, tam };
+}
+
 /** Escala e deslocamento do VIDEO dentro da caixa da camada. */
 function hlMetrica(boxId) {
   const box = $(boxId || 'hlOverlay');
@@ -3930,13 +3980,35 @@ function updateHlOverlay() {
   box.classList.remove('hidden');
   if (editing) return;
   const showLines = hlAnswerMode() && hlAnswerLines().length ? hlAnswerLines() : lines;
-  const want = showLines.join('\n');
+  const e = hlEstilo();
+  let texto = showLines.join(' ');
+  if (e.maiuscula) texto = texto.toUpperCase();
+  const lay = hlLayout(texto, e);
+  const want = lay.linhas.join('\n');
   let line = box.querySelector('.hl-overlay-line');
   if (!line) {
     box.innerHTML = '';
     line = el('div', 'hl-overlay-line', box);
   }
   if (line.textContent !== want) line.textContent = want;
+  // Tamanho e entrelinha do ESTILO, na escala do video — sem isto a caixa
+  // tinha sempre a mesma altura e a posicao escolhida no arrasto nao batia
+  // com a desenhada.
+  const m = hlMetrica();
+  if (m) {
+    // So escreve quando MUDA: `style.*` suja o layout, e isto roda a cada
+    // quadro do rafLoop enquanto o video toca.
+    const tipo = [e.pesos[0], Math.max(9, Math.round(lay.tam * m.escala * 10) / 10),
+                  e.lineHeight, Math.round(e.safeWidth * m.escala)].join('|');
+    if (line.dataset.tipo !== tipo) {
+      line.dataset.tipo = tipo;
+      const [peso, tam, lh, larg] = tipo.split('|');
+      line.style.fontWeight = peso;
+      line.style.fontSize = tam + 'px';
+      line.style.lineHeight = lh;
+      line.style.maxWidth = larg + 'px';
+    }
+  }
   hlArrastavel(line);
   hlPosicionar(line);
 }
