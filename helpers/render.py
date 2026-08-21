@@ -647,6 +647,10 @@ def _prep_fps(source: Path) -> str:
     da fonte. Descartar antes do tonemap evita processar quadro que o
     `-r` do segmento joga fora no fim.
     """
+    # Interruptor, no mesmo estilo do ATIVAVID_PREP_SOURCE=0: serve para o
+    # A/B da medicao e como escape se a maquina de alguem reagir mal.
+    if os.environ.get("ATIVAVID_PREP_FPS", "").strip() == "0":
+        return ""
     alvo = shortform_target_fps(source)
     try:
         fonte = source_fps(source)

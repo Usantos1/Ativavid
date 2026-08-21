@@ -276,3 +276,16 @@ def test_reserva_solta_o_lock_mesmo_com_erro():
     except RuntimeError:
         pass
     assert not render._NVDEC_LOCK.exists()
+
+
+def test_interruptor_do_fps_do_prep(tmp_path, monkeypatch):
+    """`ATIVAVID_PREP_FPS=0` volta ao comportamento antigo — mesmo estilo do
+    ATIVAVID_PREP_SOURCE=0. Serviu para o A/B fim a fim (702s -> 410s) e fica
+    como escape se a máquina de alguém reagir mal."""
+    src = _fake_src(tmp_path)
+    monkeypatch.setattr(render, "source_fps", lambda _p: 60.0)
+    monkeypatch.setattr(render, "shortform_target_fps", lambda _p: "30")
+    monkeypatch.delenv("ATIVAVID_PREP_FPS", raising=False)
+    assert render._prep_fps(src) == "30"
+    monkeypatch.setenv("ATIVAVID_PREP_FPS", "0")
+    assert render._prep_fps(src) == ""
