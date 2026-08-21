@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.48
+
+- **O aviso de atualização estava cego.** Você viu "está em 2.46 — sem
+  atualização" com a 2.47 publicada, e estava certo em desconfiar: o app
+  consultava uma política de versão que ficou parada em `0.1.24` e **parava
+  ali**, sem nunca olhar as versões publicadas. Nenhuma das últimas versões
+  chegou a aparecer como atualização. Agora ele olha o que foi publicado de
+  verdade, e "atualização" passou a ser versão **maior** — antes, uma versão
+  mais velha também seria oferecida
+- **Mudar ritmo, intensidade ou tipo de conteúdo volta a replanejar o corte.**
+  A verificação comparava o ajuste atual com ele mesmo, então nunca disparava:
+  você mudava o ritmo, reprocessava, e o corte antigo ficava. Vale para cortes
+  feitos a partir desta versão
+
 ## 2.47
 
 - **A Lixeira parou de prometer o que não fez.** Apagar um projeto sempre dizia
