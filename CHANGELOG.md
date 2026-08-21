@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.38
+
+Comparei o desenho das legendas quadro a quadro com o renderizador de
+referência — coisa que a validação antiga não fazia, porque ela só olhava os
+quadros em que a palavra já tinha terminado de aparecer. Foi ali que estavam
+os defeitos.
+
+- **Metade das legendas aparecia um quadro fora do lugar.** A conta que decide
+  em que quadro cada legenda entra arredondava para baixo quando devia
+  arredondar para o mais próximo. Nos seus projetos, **57 de 112 legendas**
+  caíam num quadro diferente do previsto — e o relógio interno delas (entrada,
+  saída) ia junto. Num dos quadros conferidos o app desenhava três vezes mais
+  do que devia; noutro, nada
+- **A manchete voltou a aparecer com a animação dela.** Ao acertar a curva de
+  entrada das legendas na versão anterior, acabei aplicando a mesma curva na
+  manchete — que usa outra. Ela fica na tela nos primeiros 4 segundos de todo
+  vídeo, então dava para notar
+
+Depois dos dois, de 33 pontos conferidos contra a referência, os que ficavam
+mais de 10% fora caíram de 11 para 4 — e desses 4, dois são diferença
+conhecida do próprio navegador, já documentada.
+
 ## 2.37
 
 Uma segunda auditoria, desta vez mirando só o que você usa de verdade — o
