@@ -23,7 +23,11 @@ DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 DisableDirPage=no
 OutputDir=dist
-OutputBaseFilename=Instalar ATIVAVID {#MyAppVersion}
+; Pontos, não espaços: ao subir o asset o GitHub troca espaço por ponto, então
+; o arquivo publicado vira "Instalar.ATIVAVID.x.y.exe" — que é exatamente o
+; nome para onde o download_url do gate de atualização aponta. Gerar já com o
+; nome final evita ter um arquivo local com um nome e o do cliente com outro.
+OutputBaseFilename=Instalar.ATIVAVID.{#MyAppVersion}
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern

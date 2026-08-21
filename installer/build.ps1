@@ -81,7 +81,20 @@ if (-not $cfg.checkoutUrl) {
 }
 
 $ver = Read-AppVersion
-$expectedName = "Instalar ATIVAVID $ver.exe"
+
+# O .iss tem a versao escrita a mao. Se ela ficar para tras do VERSION, o exe
+# sai com o numero errado e o nome deixa de bater com a release publicada.
+$issVer = (Select-String -Path $Iss -Pattern '#define MyAppVersion "([^"]+)"' | Select-Object -First 1)
+if ($issVer) {
+  $issVerVal = $issVer.Matches[0].Groups[1].Value
+  if ($issVerVal -ne $ver) {
+    Write-Host "VERSION diz $ver mas ativa-vid.iss diz $issVerVal." -ForegroundColor Red
+    Write-Host "Alinhe o #define MyAppVersion antes de compilar."
+    exit 4
+  }
+}
+
+$expectedName = "Instalar.ATIVAVID.$ver.exe"
 
 # Remove nomes antigos / duplicados na dist (so fica a build nova)
 Get-ChildItem $Out -Filter "*.exe" -ErrorAction SilentlyContinue | Remove-Item -Force
@@ -92,7 +105,7 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 $setup = Get-ChildItem $Out -Filter $expectedName | Select-Object -First 1
 if (-not $setup) {
-  $setup = Get-ChildItem $Out -Filter "Instalar ATIVAVID*.exe" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+  $setup = Get-ChildItem $Out -Filter "Instalar*ATIVAVID*.exe" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 }
 if (-not $setup) {
   Write-Host "Instalador nao encontrado em $Out" -ForegroundColor Red
