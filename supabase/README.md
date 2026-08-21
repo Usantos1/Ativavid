@@ -76,4 +76,31 @@ supabase functions delete license
 
 ## Gate de versão
 
-Tabela `app_config` — ver comentários em `rpc_license.sql`.
+Tabela `app_config`. **Não edite a mão** — ela ficou parada em `0.1.24` até o
+app chegar na 2.50, e com a tabela velha o `download_url` do force-update
+mandaria o cliente instalar uma build de meses atrás.
+
+No fim de cada release, depois de publicar o `.exe` no GitHub:
+
+```bash
+py tools/publicar_versao.py
+```
+
+Ele confere que a release existe com instalador anexado antes de gravar, e
+só anuncia (`latest_version`). Para **bloquear** builds antigas:
+
+```bash
+py tools/publicar_versao.py --forcar
+```
+
+`--forcar` sobe `min_version` e trava todo cliente em versão anterior até
+atualizar. Use como botão de emergência, não de rotina.
+
+## Conferir o projeto
+
+```bash
+py tools/checar_licenca.py
+```
+
+Diz o que falta (Confirm email, SQL desatualizado, RLS, funções no ar,
+política de versão) em vez de você descobrir por um cliente travado.
