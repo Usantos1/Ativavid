@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -99,15 +100,17 @@ def test_sem_startedAt_o_inicio_cai_na_importacao(tmp_path):
     assert job["startedAtLabel"] == job["createdAtLabel"]
 
 
-def test_a_duracao_de_origem_entra_no_job(tmp_path, fontes):
+def test_a_duracao_ja_medida_atravessa_o_enrich_intacta(tmp_path, fontes):
+    """Quem mede e o fundo; o enrich so nao pode estragar o que ja esta la."""
     from app.local_server import enrich_job_display
 
     job = {
         "createdAt": "2026-08-21T11:21:00Z", "status": "done",
         "editDir": str(tmp_path), "sources": [str(p) for p in fontes],
+        "sourceDurationSec": 5.0,
     }
     enrich_job_display(job, tmp_path)
-    assert job["sourceDurationSec"] == pytest.approx(5.0, abs=0.2)
+    assert job["sourceDurationSec"] == pytest.approx(5.0, abs=0.01)
 
 
 def test_a_tela_mostra_as_duas_duracoes_e_o_periodo():
@@ -144,3 +147,66 @@ def test_o_menu_do_card_e_refeito_no_patch():
     )
     assert "periodoLabel(j)" in corpo, "o patch não atualiza início → fim"
     assert "duracoesLabel(j)" in corpo, "o patch não atualiza as durações"
+
+
+def test_o_enrich_nunca_mede_dentro_da_requisicao(tmp_path, fontes):
+    """A medição da duração de origem NÃO pode acontecer no `enrich_job_display`.
+
+    Ele roda para TODO job em TODO poll da tela. Com os 125 projetos do usuário
+    seriam 145 chamadas de ffprobe dentro da requisição — medido, 0,146 s por
+    arquivo, **21 segundos** de tela congelada no primeiro poll, e pior com um
+    render disputando o disco. Foi assim que a primeira versão disto ficou.
+    """
+    import time
+
+    from app.local_server import enrich_job_display
+
+    jobs = [
+        {"createdAt": "2026-08-21T11:21:00Z", "status": "done",
+         "editDir": str(tmp_path), "sources": [str(p) for p in fontes]}
+        for _ in range(40)
+    ]
+    t0 = time.perf_counter()
+    for j in jobs:
+        enrich_job_display(j, tmp_path)
+    dt = time.perf_counter() - t0
+    assert dt < 0.5, f"o enrich está medindo dentro da requisição ({dt:.2f}s para 40 jobs)"
+    assert all("sourceDurationSec" not in j for j in jobs)
+
+
+def test_a_medicao_em_fundo_grava_no_store_e_nao_repete(fontes):
+    from app.local_server import medir_duracao_em_fundo
+
+    class Store:
+        def __init__(self):
+            self.escritos = []
+
+        def update(self, jid, **kw):
+            self.escritos.append((jid, kw))
+
+    st = Store()
+    srcs = [str(p) for p in fontes]
+    medir_duracao_em_fundo(st, "job-a", srcs)
+    for _ in range(60):
+        if st.escritos:
+            break
+        time.sleep(0.1)
+    assert st.escritos, "a medição em fundo nunca gravou"
+    jid, kw = st.escritos[0]
+    assert jid == "job-a"
+    assert kw["sourceDurationSec"] == pytest.approx(5.0, abs=0.2)
+
+    medir_duracao_em_fundo(st, "job-a", srcs)
+    time.sleep(0.4)
+    assert len(st.escritos) == 1, "o mesmo job foi medido duas vezes"
+
+
+def test_a_fila_agenda_os_projetos_antigos():
+    """Os 125 projetos do usuário não têm o campo — alguém precisa preencher,
+    sem segurar a tela."""
+    src = (REPO / "app" / "jobs_view.py").read_text(encoding="utf-8")
+    assert "medir_duracao_em_fundo" in src, "os projetos antigos nunca ganham a duração"
+    i = src.index("medir_duracao_em_fundo(store")
+    assert 'sourceDurationSec") in (None, "")' in src[:i], (
+        "agenda mesmo quando já foi medido"
+    )

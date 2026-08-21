@@ -38,6 +38,7 @@ def build(store: Any, projects_root: Path, *, com_links: bool = False) -> list[d
     from app.local_server import (  # import tardio: o local_server usa este módulo
         STAGE_LABELS,
         enrich_job_display,
+        medir_duracao_em_fundo,
         resolve_delivery_mp4,
     )
 
@@ -62,6 +63,11 @@ def build(store: Any, projects_root: Path, *, com_links: bool = False) -> list[d
             except (OSError, json.JSONDecodeError):
                 pass
         enrich_job_display(j, edit)
+        if j.get("sourceDurationSec") in (None, "") and (j.get("sources") or j.get("source")):
+            # Projeto de antes deste campo existir. A medicao vai para o fundo
+            # e o proximo poll ja acha pronta — a requisicao nunca espera.
+            medir_duracao_em_fundo(store, str(j.get("id") or ""),
+                                   j.get("sources") or [j.get("source")])
 
     try:
         from app.eta_estimate import attach_eta, collect_history

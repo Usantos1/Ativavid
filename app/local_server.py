@@ -533,6 +533,46 @@ def _duracao_das_fontes(sources: list) -> float:
     return round(total, 3) if total > 0 else 0.0
 
 
+_DUR_FILA: "queue.Queue[tuple]" = None  # type: ignore[assignment]
+_DUR_THREAD_LOCK = threading.Lock()
+_DUR_PEDIDOS: set[str] = set()
+
+
+def medir_duracao_em_fundo(store: Any, job_id: str, sources: list) -> None:
+    """Mede a duracao de origem FORA da requisicao e grava no store.
+
+    Uma vez por job: o resultado vai para o proprio registro, entao o poll
+    seguinte ja acha pronto. A fila e serial de proposito — o ffprobe disputa
+    disco com o render, e a tela nao esta esperando por isto.
+    """
+    global _DUR_FILA
+    if not sources or not job_id:
+        return
+    with _DUR_THREAD_LOCK:
+        if job_id in _DUR_PEDIDOS:
+            return
+        _DUR_PEDIDOS.add(job_id)
+        if _DUR_FILA is None:
+            import queue as _q
+
+            _DUR_FILA = _q.Queue()
+
+            def _worker() -> None:
+                while True:
+                    st, jid, srcs = _DUR_FILA.get()
+                    try:
+                        d = _duracao_das_fontes(srcs)
+                        if d:
+                            st.update(jid, sourceDurationSec=d)
+                    except Exception as e:  # noqa: BLE001
+                        print(f"[warn] duracao de origem {jid}: {e}", flush=True)
+                    finally:
+                        _DUR_FILA.task_done()
+
+            threading.Thread(target=_worker, daemon=True, name="dur-fontes").start()
+    _DUR_FILA.put((store, job_id, list(sources)))
+
+
 def enrich_job_display(job: dict, edit_dir: Path | None = None) -> dict:
     """Campos de UI: título amigável + início/fim formatados."""
     edit = edit_dir or Path(job.get("editDir") or ".")
@@ -547,10 +587,11 @@ def enrich_job_display(job: dict, edit_dir: Path | None = None) -> dict:
     started = job.get("startedAt")
     job["startedAtLabel"] = _fmt_job_when(started) if started else job["createdAtLabel"]
     job["finishedAtLabel"] = _fmt_job_when(finished) if finished else ""
-    if job.get("sourceDurationSec") in (None, "") and job.get("sources"):
-        d = _duracao_das_fontes(job.get("sources") or [])
-        if d:
-            job["sourceDurationSec"] = d
+    # A medicao NAO acontece aqui. `enrich_job_display` roda para TODO job em
+    # TODO poll da tela: com os 125 projetos do usuario seriam 145 chamadas de
+    # ffprobe dentro da requisicao — medido, 0,146s por arquivo, 21s de tela
+    # congelada no primeiro poll, e pior com render rodando. Quem mede e o
+    # `medir_duracao_em_fundo`, uma vez por job, gravando no store.
     job["title"] = _resolve_job_title(job, edit)
     return job
 
@@ -2966,6 +3007,9 @@ class StudioHandler(BaseHTTPRequestHandler):
             "updatedAt": created,
         }
         self.store.upsert(job)
+        # Medida uma vez, na importacao, quando sao 1 ou 2 arquivos e o disco
+        # ja esta quente deles. Em fundo: nao segura a resposta do import.
+        medir_duracao_em_fundo(self.store, job_id, src_list)
         self.worker.enqueue(job_id)
         threading.Thread(
             target=ensure_job_thumb,
