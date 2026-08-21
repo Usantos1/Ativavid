@@ -142,3 +142,29 @@ def test_headline_sem_marca_propria_nao_pega_a_das_legendas(tmp_path):
 def test_headline_veste_a_propria_marca(tmp_path):
     r = _r(tmp_path, "stacked", cap=False, hook=True, endcard_on=False)
     assert MARCA_HOOK in _familias(r)
+
+
+def test_marca_herda_o_PESO_da_variante(tmp_path):
+    """`capWeight(base.weight)` no template. Aqui o peso ficava implícito no
+    arquivo (`Poppins-SemiBold.ttf` É o 600), então a fonte da marca o apagava
+    junto — todas as variantes saíam no peso padrão da família."""
+    cues = [{"i": 0, "preset": "STACK_MIXED", "startMs": 0, "endMs": 900,
+             "lines": [[{"text": "Olá mundo", "fromMs": 0, "toMs": 400}]]}]
+    esperado = {"simples": 600, "serifada": 700, "classica": 500,
+                "bloco": 800, "recorte": 800}
+    for estilo, peso in esperado.items():
+        r = _r(tmp_path, estilo, cues=cues, hook_on=False, endcard_on=False)
+        eixos = {k[2] for k in r._fontes if Path(k[0]).name == MARCA_CAP}
+        assert eixos == {str(peso)}, f"{estilo}: {eixos}"
+
+
+def test_marca_com_teto_nao_pede_negrito_falso(tmp_path):
+    """`archivo` tem teto 400 — pedir 800 nela daria negrito sintético."""
+    cues = [{"i": 0, "preset": "STACK_MIXED", "startMs": 0, "endMs": 900,
+             "lines": [[{"text": "Olá mundo", "fromMs": 0, "toMs": 400}]]}]
+    ed = {"width": 1080, "height": 1920, "fps": 30,
+          "captions": {"style": "bloco", "fontFamily": "archivo"},
+          "hook": {"enabled": False}, "endCard": {"enabled": False}}
+    r = Renderizador(_public(tmp_path, cues), ed, frames=120, fps=30.0)
+    eixos = {k[2] for k in r._fontes if Path(k[0]).name == MARCA_HOOK}
+    assert eixos == {"400"}, eixos

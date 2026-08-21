@@ -1727,22 +1727,34 @@ class Renderizador:
         "bloco":    ("Poppins-ExtraBold.ttf", None, 76, 3, 1, 1.0, 1.0, -2, 430, 760, "bloco"),
         "recorte_simple": ("Poppins-ExtraBold.ttf", None, 78, 3, 1, 1.0, 1.0, -1, 430, 800, "sticker"),
     }
+    # Peso que cada variante estatica tem no template (`capWeight(base.weight)`
+    # em SimpleCaptions.tsx:218). Aqui ele fica implicito no ARQUIVO —
+    # `Poppins-SemiBold.ttf` E o 600 — entao, quando a fonte da marca
+    # substitui o arquivo, o peso se perdia junto. Escrito, ele sobrevive.
+    SIMPLE_PESO = {"simples": 600, "serifada": 700, "classica": 500,
+                   "bloco": 800, "recorte_simple": 800}
+
     _ORFAO = ("o", "a", "os", "as", "e", "\u00e9", "de", "do", "da", "em", "no",
               "na", "um", "uma", "que", "se", "ao", "\u00e0", "por", "com")
 
-    def _fonte_estilo(self, nome: str, tam: int, eixo) -> ImageFont.FreeTypeFont:
+    def _fonte_estilo(self, nome: str, tam: int, eixo,
+                      peso: int | None = None) -> ImageFont.FreeTypeFont:
         """Fonte de um estilo que ACEITA a marca (`capFamily` no template).
 
-        O eixo do estilo (peso 700, instancia "Medium") nao existe na fonte
-        da marca; o que passa e o TETO dela, como `capWeight` faz — clampar
-        em vez de pedir um negrito que a fonte nao tem.
+        `eixo` e como a fonte DO ESTILO pede o peso (um numero, ou o nome de
+        uma instancia como "Medium", ou None quando o arquivo ja e o peso).
+        Nada disso vale na fonte da marca — nela o que se pede e `peso`, o
+        numero que o template usa, clampado no teto da familia. E exatamente
+        o que `capWeight(base.weight)` faz: clampar em vez de pedir um
+        negrito que a fonte nao tem.
         """
         if not self.marca_cap:
             return self._fonte_arquivo(nome, tam, eixo)
         arq, teto = self.marca_cap
-        e = min(eixo, teto) if isinstance(eixo, int) and teto is not None else (
-            eixo if isinstance(eixo, int) else teto)
-        return self._fonte_arquivo(arq, tam, e)
+        alvo = peso if peso is not None else (eixo if isinstance(eixo, int) else None)
+        if alvo is not None and teto is not None:
+            alvo = min(alvo, teto)
+        return self._fonte_arquivo(arq, tam, alvo if alvo is not None else teto)
 
     def _fonte_arquivo(self, nome: str, tam: int, eixo) -> ImageFont.FreeTypeFont:
         chave = (nome, tam, str(eixo))
@@ -1776,7 +1788,7 @@ class Renderizador:
         pos = {"centro": 900, "alto": 1330}.get(caps_cfg.get("position") or "")
         bottom = pos if pos else bottom0
         accent = caps_cfg.get("accent")
-        f = self._fonte_estilo(arq, tam, eixo)
+        f = self._fonte_estilo(arq, tam, eixo, self.SIMPLE_PESO.get(variante))
 
         def limpar(t):
             t = re.sub(r"[.,!?\u2026]+$", "", t)
@@ -1847,7 +1859,8 @@ class Renderizador:
                     # espessura do traco. Rasterizar no tamanho final e
                     # so redimensionar deixava o texto 44% mais gordo que o
                     # do Remotion (medido). Rasteriza-se maior e reduz.
-                    f_big = self._fonte_estilo(arq, max(8, int(tam / sq_y)), eixo)
+                    f_big = self._fonte_estilo(arq, max(8, int(tam / sq_y)), eixo,
+                                            self.SIMPLE_PESO.get(variante))
                     m, cor_emj = self._mascara_cor(f_big, texto,
                                                    float(track) / sq_x)
                     novo_t = (max(1, int(m.shape[1] * sq_x * sq_y)),
