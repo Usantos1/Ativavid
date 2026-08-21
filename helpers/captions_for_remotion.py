@@ -128,17 +128,59 @@ def _transcript_path_for_source(edl: dict, edit_dir: Path, source_key: str) -> P
     return None
 
 
-def _words_in_range(words: list[dict], a: float, b: float, pad: float = 0.12) -> list[dict]:
-    """Words whose [start,end] overlaps the range (not start-only)."""
-    out: list[dict] = []
-    for w in words:
+def _indices_in_range(words: list[dict], a: float, b: float,
+                      pad: float = 0.12) -> list[int]:
+    """Indices das palavras cujo [start,end] cruza o trecho (nao so o start)."""
+    out: list[int] = []
+    for k, w in enumerate(words):
         ws = float(w["start"])
         we = float(w.get("end") or ws)
         if we < a - pad or ws > b + pad:
             continue
-        out.append(w)
-    out.sort(key=lambda w: float(w["start"]))
+        out.append(k)
+    out.sort(key=lambda k: float(words[k]["start"]))
     return out
+
+
+def _words_in_range(words: list[dict], a: float, b: float, pad: float = 0.12) -> list[dict]:
+    """Words whose [start,end] overlaps the range (not start-only)."""
+    return [words[k] for k in _indices_in_range(words, a, b, pad)]
+
+
+def _dono_de_cada_palavra(
+    ranges: list, palavras_por_fonte: dict, pad: float = 0.12,
+) -> dict:
+    """`(fonte, indice) -> indice do trecho` que fica com aquela palavra.
+
+    `_words_in_range` escolhe por SOBREPOSICAO, entao uma palavra que atravessa
+    dois trechos era emitida nos DOIS. Como a transcricao as vezes junta uma
+    fala inteira numa "palavra" so, isso nao e raro: medido nos 127 projetos do
+    usuario, **93 (73%)** tinham pelo menos uma palavra em mais de um trecho —
+    298 copias extras, ate 5x a mesma palavra.
+
+    E aparece na tela. Num projeto a fonte diz "bora" UMA vez (0,32 -> 4,22s, a
+    transcricao juntou tudo) e os tres trechos guardados caem dentro dela: a
+    primeira legenda do video desenhava "bora / bora / bora 32".
+
+    O criterio e a maior SOBREPOSICAO — o trecho que ficou com a maior parte da
+    palavra e quem a mostra. Empate fica com o primeiro, que preserva a ordem
+    da fala.
+    """
+    melhor: dict = {}
+    for i, r in enumerate(ranges):
+        src = str(r.get("source") or "")
+        a, b = float(r.get("start") or 0), float(r.get("end") or 0)
+        for k, w in enumerate(palavras_por_fonte.get(src) or []):
+            ws = float(w["start"])
+            we = float(w.get("end") or ws)
+            if we < a - pad or ws > b + pad:
+                continue
+            cobre = min(we, b) - max(ws, a)
+            chave = (src, k)
+            atual = melhor.get(chave)
+            if atual is None or cobre > atual[0] + 1e-9:
+                melhor[chave] = (cobre, i)
+    return {chave: i for chave, (_, i) in melhor.items()}
 
 
 def build_captions(edl: dict, edit_dir: Path) -> list[dict]:
@@ -164,6 +206,23 @@ def build_captions_with_provenance(edl: dict, edit_dir: Path, *, quiet: bool = F
     off = 0.0
     missing: list[str] = []
 
+    # Le cada transcricao UMA vez: o laco abaixo relia por trecho, e um video
+    # com 40 trechos abria o mesmo arquivo 40 vezes.
+    por_fonte: dict[str, list] = {}
+    for r in ranges:
+        src = str(r.get("source") or "")
+        if src in por_fonte:
+            continue
+        tr = _transcript_path_for_source(edl, edit_dir, src)
+        try:
+            por_fonte[src] = (
+                _word_items(json.loads(tr.read_text(encoding="utf-8")))
+                if tr is not None else []
+            )
+        except (OSError, json.JSONDecodeError):
+            por_fonte[src] = []
+    dono = _dono_de_cada_palavra(ranges, por_fonte)
+
     for i, r in enumerate(ranges):
         src = r["source"]
         a, b = float(r["start"]), float(r["end"])
@@ -180,8 +239,11 @@ def build_captions_with_provenance(edl: dict, edit_dir: Path, *, quiet: bool = F
         if tr_path is None:
             missing.append(src)
         else:
-            words = _word_items(json.loads(tr_path.read_text(encoding="utf-8")))
-            for w in _words_in_range(words, a, b):
+            words = por_fonte.get(src) or []
+            for k_w in _indices_in_range(words, a, b):
+                if dono.get((src, k_w), i) != i:
+                    continue      # esta palavra e de outro trecho
+                w = words[k_w]
                 rel_t = max(0.0, float(w["start"]) - a)
                 rel_e = max(rel_t + 0.04, float(w.get("end") or w["start"]) - a)
                 t = min(out_dur, rel_t) + out_a
