@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.52
+
+- **A tela de Presets mexia na marca errada.** Se você abrisse Presets sem
+  passar antes pela tela de Marca, ela mostrava os presets da sua marca ativa
+  (Prime Camp) mas criar, renomear e apagar iam para a marca "Padrão" — a lista
+  na sua frente nem se mexia, então parecia que o botão não funcionou, enquanto
+  o preset de outra marca mudava. Agora ela grava exatamente na marca que está
+  mostrando, e o rótulo diz o nome certo
+
 ## 2.51
 
 - **O botão "Baixar atualização" mandava para a versão errada.** O aviso dizia
