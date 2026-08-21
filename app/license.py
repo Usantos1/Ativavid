@@ -538,6 +538,13 @@ _GATE_FREE_EXACT = frozenset({
     "/api/jobs/rename",
     "/api/jobs/cancel",
     "/api/jobs/delete",
+    # Mesmas ações, nomes do preview_server: quem está bloqueado ainda precisa
+    # alcançar os vídeos que já produziu. /api/project/action só abre pasta,
+    # abre o vídeo e conserta o ponteiro do arquivo final — não edita nada.
+    "/api/open-folder",
+    "/api/open-final",
+    "/api/style-export",
+    "/api/project/action",
 })
 _GATE_FREE_PREFIX = (
     "/api/auth/",

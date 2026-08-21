@@ -70,6 +70,54 @@ def test_rotas_que_produzem_video_exigem_licenca(path):
     assert lic.gate_free(path) is False
 
 
+def _rotas_post_do_codigo() -> set[str]:
+    """Toda rota /api/ que os handlers de POST realmente despacham.
+
+    Lê o código em vez de uma lista escrita à mão: era exatamente uma lista à
+    mão que deixou /api/ai-edit e /api/corrections de fora do gate.
+    """
+    import re
+
+    rotas: set[str] = set()
+    for nome in ("app/local_server.py", "app/desktop_server.py", "helpers/preview_server.py"):
+        texto = (REPO / nome).read_text(encoding="utf-8")
+        # do_POST até o fim do método (próximo "\n    def ")
+        i = texto.find("def do_POST")
+        if i < 0:
+            continue
+        fim = texto.find("\n    def ", i + 10)
+        corpo = texto[i:fim if fim > 0 else len(texto)]
+        rotas |= set(re.findall(r'["\'](/api/[a-z0-9\-/]+)["\']', corpo))
+    return rotas
+
+
+def test_toda_rota_post_esta_gateada_ou_explicitamente_livre():
+    """Rota nova nasce gateada. Se alguém liberar uma, tem de ser de propósito
+    — adicionando a license._GATE_FREE_*, que este teste enumera."""
+    rotas = _rotas_post_do_codigo()
+    assert len(rotas) > 15, f"a varredura quebrou: só achei {len(rotas)} rotas"
+
+    livres = {r for r in rotas if lic.gate_free(r)}
+    gateadas = rotas - livres
+
+    # As que produzem vídeo NÃO podem estar livres.
+    for critica in ("/api/jobs", "/api/ai-edit", "/api/corrections", "/api/apply-plan",
+                    "/api/intent", "/api/cover", "/api/images/pick", "/api/append-cta"):
+        if critica in rotas:
+            assert critica in gateadas, f"{critica} ficou fora do gate"
+
+    # As que permitem sair do bloqueio NÃO podem estar gateadas.
+    for saida in ("/api/auth/login", "/api/license/activate", "/api/settings"):
+        assert lic.gate_free(saida), f"{saida} ficou gateada — o cliente não consegue se desbloquear"
+
+    # Nem as que só alcançam o que o cliente já produziu.
+    for guardado in ("/api/open-folder", "/api/open-final", "/api/project/action",
+                     "/api/jobs/open-folder", "/api/jobs/delete"):
+        assert lic.gate_free(guardado), (
+            f"{guardado} ficou gateada — bloqueado não conseguiria abrir o próprio vídeo"
+        )
+
+
 # --- fail-closed ----------------------------------------------------------
 
 
