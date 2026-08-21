@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.49
+
+- **A tela de Estilo mostrava o estilo de fábrica, não o seu.** Ela carregava o
+  arquivo que vem na instalação, enquanto "Salvar como padrão" grava em outro
+  lugar — o que o app realmente usa. Na sua máquina, 7 campos divergiam: a tela
+  dizia marca "Padrão" e cartão final vazio enquanto os vídeos saíam com
+  "Prime Camp" e o seu CTA, e o ritmo e a limpeza de fala (que decidem o corte)
+  apareciam errados
+
 ## 2.48
 
 - **O aviso de atualização estava cego.** Você viu "está em 2.46 — sem
