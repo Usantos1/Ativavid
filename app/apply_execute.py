@@ -811,6 +811,39 @@ def _current_final(edit_dir: Path) -> Path:
     return found if found is not None else Path(edit_dir) / "final.mp4"
 
 
+def _conferir_pico(final: Path, log: Any) -> None:
+    """O apply entrega dentro do limite de pico, como o render de um job novo.
+
+    `garantir_true_peak` só era chamado pelo `run_fast`, então um vídeo que
+    passa por "corrigir legenda" ou "mudar o corte" saía sem essa conferência.
+    Na prática o apply refaz o final pelo MESMO `try_overlay_final`, herdando o
+    mesmo alvo de loudnorm — medido nos 31 projetos do usuário com apply
+    bem-sucedido, 30 estão dentro de -1,0 dBTP. O único fora é um arquivo em
+    que nenhum caminho consegue baixar o pico (teve 3 applies, um por motor).
+
+    Ou seja: é rede, não conserto de rotina. Custa um `ebur128` — 0,29s medido
+    num final de 30 MB — e sai na hora quando já está dentro do limite. Quando
+    encontra um final ANTIGO fora de especificação, conserta de vez.
+
+    Chamar isto aqui só passou a ser seguro depois que `garantir_true_peak`
+    parou de trocar o arquivo sem conferir se melhorou: em material teimoso o
+    loudnorm PIORA o pico, e antes a piora ficava gravada.
+
+    Nunca derruba o apply: o pico é acabamento, e recusar a correção de texto
+    do usuário por causa dele seria pior que entregar 0,2 dB acima.
+    """
+    try:
+        from app.overlay_compose import garantir_true_peak
+
+        tp = garantir_true_peak(final).get("truePeakDb")
+        if tp is not None:
+            log(f"QUICK_APPLY_TRUE_PEAK {tp} dBTP")
+            if float(tp) > -0.99:
+                log(f"QUICK_APPLY_TRUE_PEAK_ALTO {tp} — entregue mesmo assim")
+    except Exception as e:  # noqa: BLE001
+        log(f"QUICK_APPLY_TRUE_PEAK_FALHOU {e}")
+
+
 def _reembutir_capa(edit: Path, final: Path, log: Any) -> None:
     """Devolve a CAPA embutida que o apply perdia.
 
@@ -1031,6 +1064,8 @@ def execute_apply_plan(
         if not _tentar_emenda(edit, plan, cut=work_cut, dest=final_tmp, log=log):
             hooks.render_visual(edit, cut=work_cut, captions=caps_new, dest=final_tmp)
         log(f"QUICK_APPLY_RENDER_SEC {_fase(edit, 'render', t0):.3f}")
+
+        _conferir_pico(final_tmp, log)
 
         hooks.progress("export", "Finalizando vídeo...")
         expected = None
