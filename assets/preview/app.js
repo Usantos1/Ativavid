@@ -4810,42 +4810,68 @@ window.addEventListener('storage', (e) => {
 
 
 // ---------- desktop: marcação IN/OUT → aplicar + fila ----------
+// Elementos que a nota pode estar mandando mexer. Se ela NOMEIA um deles, e
+// instrucao sobre o take, nao ordem de apagar o take: "tira o zoom daqui" quer
+// dizer tira o zoom, e a nota antiga apagava o trecho inteiro.
+const NOTA_ELEMENTOS =
+  /\b(zoom|legenda|legendas|texto|manchete|headline|titulo|título|musica|música|trilha|som|audio|áudio|efeito|efeitos|capa|thumb|cor|filtro|emoji|logo|marca|insert|imagem|foto)\b/;
+
+// Ordem EXPLICITA de remover, com borda de palavra. A versao antiga casava por
+// substring: `fora` pegava "fora de foco", `cort` pegava "o corte ficou
+// estranho", `tir[ae]` pegava "tira o zoom". Qualquer um desses apagava o
+// trecho marcado E jogava fora o texto que o usuario tinha escrito.
+const NOTA_REMOVER =
+  /\b(corta|corte|cortar|tira|tire|tirar|remove|remova|remover|apaga|apague|apagar|exclui|exclua|excluir|deleta|delete|deletar|descarta|descarte|descartar)\b|\b(joga|jogue|joga)\s+(isso\s+)?fora\b|\bfora\s+daqui\b|\bsem\s+isso\b|\bnao\s+usa\b|\bnão\s+usa\b/;
+
+// `corte` com artigo antes e SUBSTANTIVO, nao ordem: "aqui o corte ficou
+// estranho" e comentario, "corte isso" e ordem. Tira essas ocorrencias antes
+// de procurar o verbo.
+const NOTA_CORTE_SUBSTANTIVO =
+  /\b(?:o|a|os|as|um|uma|esse|essa|este|esta|do|da|no|na|nesse|neste)\s+cortes?\b/g;
+
 function noteLooksLikeRemove(text) {
-  const s = String(text || '').toLowerCase();
-  return /remov|apag|cort|tir[ae]|exclu|deleta|fora|tira isso|corta isso|sem isso/.test(s);
+  const s = String(text || '').toLowerCase().replace(NOTA_CORTE_SUBSTANTIVO, ' ');
+  if (!NOTA_REMOVER.test(s)) return false;
+  // "tira o zoom", "corta a musica": e sobre o que esta DENTRO do trecho.
+  if (NOTA_ELEMENTOS.test(s)) return false;
+  return true;
 }
 
 function removeDraftTimeRange(tStart, tEnd) {
   if (!(tEnd > tStart + 0.04)) return false;
+  // A janela marcada esta em tempo de SAIDA, e cada remocao ENCURTA a saida:
+  // tudo que vinha depois desliza para dentro da janela. O laco antigo
+  // relia o layout a cada volta com `tStart`/`tEnd` fixos e ia comendo o que
+  // escorregava para la, ate 64 vezes.
+  //
+  // Medido com 10 takes de 6s (60s de video): marcar de 10,0s a 12,0s — dois
+  // segundos — removia 50 dos 60, tudo da marca ate o fim, em 25 pedacos.
+  //
+  // Por isso a janela e traduzida para a FONTE de uma vez, antes de mexer em
+  // nada; depois os cortes sao aplicados de TRAS PARA FRENTE, para os indices
+  // ja coletados continuarem valendo enquanto o array muda.
+  const dl = draftLayout();
+  const alvos = [];
+  for (let i = 0; i < dl.length; i++) {
+    const d = dl[i];
+    if (d.removed || d.dur <= 0) continue;
+    const clipStart = d.out;
+    const clipEnd = d.out + d.dur;
+    if (tEnd <= clipStart || tStart >= clipEnd) continue;
+    const srcA = draftTimeToSource(i, Math.max(tStart, clipStart));
+    const srcB = draftTimeToSource(i, Math.min(tEnd, clipEnd));
+    if (srcB - srcA < MIN_SEG) continue;
+    alvos.push({ i, srcA, srcB });
+  }
+  if (!alvos.length) return false;
   pushHistory();
-  let changed = false;
-  // iterate by index while draft mutates — always re-layout
-  let guard = 0;
-  while (guard++ < 64) {
-    const dl = draftLayout();
-    let hit = -1;
-    let srcA = 0;
-    let srcB = 0;
-    for (let i = 0; i < dl.length; i++) {
-      const d = dl[i];
-      if (d.removed || d.dur <= 0) continue;
-      const clipStart = d.out;
-      const clipEnd = d.out + d.dur;
-      if (tEnd <= clipStart || tStart >= clipEnd) continue;
-      const overlapA = Math.max(tStart, clipStart);
-      const overlapB = Math.min(tEnd, clipEnd);
-      srcA = draftTimeToSource(i, overlapA);
-      srcB = draftTimeToSource(i, overlapB);
-      if (srcB - srcA < MIN_SEG) continue;
-      hit = i;
-      break;
-    }
-    if (hit < 0) break;
-    const r = S.draft[hit];
+  // Sobra menor que isto vira um flash de frames no final — melhor levar
+  // junto na remoção do que manter um take que parece corte errado.
+  const PIECE_MIN = 0.35;
+  for (let k = alvos.length - 1; k >= 0; k--) {
+    const { i, srcA, srcB } = alvos[k];
+    const r = S.draft[i];
     const pieces = [];
-    // Sobra menor que isto vira um flash de frames no final — melhor levar
-    // junto na remoção do que manter um take que parece corte errado.
-    const PIECE_MIN = 0.35;
     if (srcA - r.start >= PIECE_MIN) {
       pieces.push({
         source: r.source, start: r.start, end: srcA, beat: r.beat,
@@ -4862,15 +4888,12 @@ function removeDraftTimeRange(tStart, tEnd) {
         removed: false, srcIdx: null, orig: { start: r.start, end: r.end },
       });
     }
-    S.draft.splice(hit, 1, ...pieces);
-    changed = true;
+    S.draft.splice(i, 1, ...pieces);
   }
-  if (changed) {
-    S.selected = -1;
-    renderAll();
-    refreshHeader();
-  }
-  return changed;
+  S.selected = -1;
+  renderAll();
+  refreshHeader();
+  return true;
 }
 
 async function saveEditsAndReturnToQueue() {
@@ -5051,8 +5074,14 @@ $('noteOk').addEventListener('click', async () => {
   $('noteEditor').classList.add('hidden');
   // Pedidos de corte/remoção: aplica já na timeline (desktop 1-clique)
   if (noteLooksLikeRemove(text)) {
-    removeDraftTimeRange(start, end);
-    S.notes = S.notes.filter((x) => x.id !== n.id);
+    // So descarta a nota se o corte aconteceu de verdade. Se a marca nao
+    // pegou nenhum take (fora do video, ou menor que o minimo), a nota
+    // sumia levando junto o texto que o usuario escreveu.
+    if (removeDraftTimeRange(start, end)) {
+      S.notes = S.notes.filter((x) => x.id !== n.id);
+    } else {
+      toast('Não achei trecho para remover aí — a nota foi mantida', 3500);
+    }
   }
   renderNotes();
   refreshHeader();
