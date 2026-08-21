@@ -754,8 +754,12 @@ class Renderizador:
         dur = float(max(2, min(fim_f, self.frames) - ini_f))
         enter = max(3, min(8, math.floor(dur * 0.45)))
         exit_ = max(2, min(7, math.floor(dur * 0.35)))
+        # `default=0.0`: cue sem palavra nenhuma levantava aqui
+        # (`max() iterable argument is empty`) e derrubava o render inteiro.
+        # Quem produz o arquivo ja evita isso, mas um cues.json vindo de fora
+        # nao deve conseguir quebrar o motor.
         ultima = max((w["fromMs"] - cue["startMs"]) / 1000 * self.fps
-                     for ln in cue["lines"] for w in ln)
+                     for ln in cue["lines"] for w in ln) if any(cue.get("lines") or []) else 0.0
         saida_f = max(dur - exit_, min(ultima + enter, dur - 2))
         return ini_f, fim_f, dur, enter, saida_f
 

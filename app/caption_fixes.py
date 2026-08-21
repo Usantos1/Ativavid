@@ -376,6 +376,23 @@ def _e_lista_de_palavras(v: Any) -> bool:
     return isinstance(v, list) and bool(v) and isinstance(v[0], dict) and "text" in v[0]
 
 
+def _drop_cues_vazias(cues: Any) -> Any:
+    """Tira a cue que ficou sem NENHUMA linha.
+
+    Apagar todas as palavras de uma cue deixava a cue no arquivo, vazia. O
+    motor levanta nela (`_tempos_cue` faz `max()` sobre as palavras e a
+    sequencia esta vazia), entao isto nao e arrumacao: e o que separa o
+    apagar de quebrar o render. O campo `i` da cue e rotulo, nao indice do
+    array — nada no motor procura cue por `i`.
+    """
+    if isinstance(cues, list):
+        return [c for c in cues
+                if not isinstance(c, dict) or any(c.get("lines") or [])]
+    if isinstance(cues, dict) and isinstance(cues.get("cues"), list):
+        cues["cues"] = _drop_cues_vazias(cues["cues"])
+    return cues
+
+
 def _prune_empty_cue_words(node: Any) -> None:
     if isinstance(node, dict):
         for v in node.values():
@@ -437,6 +454,7 @@ def apply_caption_fixes(edit_dir: Path, fixes: list[dict] | None) -> dict:
         _collect_text_nodes(cues, nodes)
         applied += apply_replacements_to_words(nodes, fixes, splice=False)
         _prune_empty_cue_words(cues)
+        cues = _drop_cues_vazias(cues)
         cues_p.write_text(json.dumps(cues, ensure_ascii=False) + "\n", encoding="utf-8")
 
     packed = edit / "takes_packed.md"

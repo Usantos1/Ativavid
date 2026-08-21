@@ -98,7 +98,7 @@ def test_a_tela_nao_joga_fora_a_correcao_que_falhou():
     assert "data.captionFix && data.captionFix.ok === false" in js, (
         "o cliente não lê o veredito"
     )
-    assert "if (!capFalhou) S.captionFixes = {};" in js, (
+    assert "if (!capFalhou) { S.captionFixes = {}; S.capApagadas = []; }" in js, (
         "o cliente ainda apaga a correção que não pegou"
     )
     i = js.index("if (captionOnly) {")
@@ -164,3 +164,86 @@ def test_o_cursor_da_headline_vai_para_onde_se_clica():
     trecho = js[i:i + 2600]
     assert "caretRangeFromPoint" in trecho, "o clique ainda não posiciona o cursor"
     assert "beginHeadlineEdit(e)" in js, "o clique na headline não passa o evento"
+
+
+def _cue(i: int, ini: int, fim: int, palavras: list[tuple[str, int, int]]) -> dict:
+    return {"i": i, "startMs": ini, "endMs": fim, "preset": "STACK_MIXED",
+            "lines": [[{"text": t, "fromMs": a, "toMs": b} for t, a, b in palavras]]}
+
+
+def test_apagar_a_cue_inteira_tira_a_cue_e_nao_derruba_o_render(tmp_path):
+    """Cue sem NENHUMA linha quebrava o motor.
+
+    `_tempos_cue` faz `max()` sobre as palavras da cue; com a sequência vazia
+    ele levantava `max() iterable argument is empty` e o render inteiro caía.
+    Foi o que aconteceu ao apagar as 4 legendas de uma vez no editor: duas cues
+    ficaram sem linha e o projeto parou de renderizar.
+    """
+    import numpy as np
+
+    from app.caption_fixes import apply_caption_fixes
+    from app.render_proprio import Renderizador
+
+    edit = _projeto(tmp_path, [
+        ("moço", 0, 500), ("nossa", 500, 1000), ("capinha", 1000, 1600),
+        ("do", 2000, 2400), ("celular", 2400, 3000),
+    ])
+    pub = edit / "remotion" / "public"
+    (pub / "caption-cues.json").write_text(json.dumps([
+        _cue(0, 0, 1600, [("moço", 0, 500), ("nossa", 500, 1000), ("capinha", 1000, 1600)]),
+        _cue(1, 2000, 3000, [("do", 2000, 2400), ("celular", 2400, 3000)]),
+    ]), encoding="utf-8")
+    (pub / "edit-data.json").write_text(json.dumps({
+        "durationSec": 4, "fps": 30, "width": 1080, "height": 1920,
+        "captions": {"enabled": True, "style": "stacked"},
+    }), encoding="utf-8")
+
+    # apaga TODAS as palavras da cue 1
+    apply_caption_fixes(edit, [{"from": "do", "to": "", "delete": True,
+                                "startMs": 2000, "endMs": 2400}])
+    apply_caption_fixes(edit, [{"from": "celular", "to": "", "delete": True,
+                                "startMs": 2400, "endMs": 3000}])
+
+    cues = json.loads((pub / "caption-cues.json").read_text(encoding="utf-8"))
+    assert len(cues) == 1, "a cue que ficou sem linha continuou no arquivo"
+    assert cues[0]["i"] == 0
+
+    # e o motor desenha o vídeo inteiro sem levantar
+    ed = json.loads((pub / "edit-data.json").read_text(encoding="utf-8"))
+    r = Renderizador(pub, ed, frames=120, fps=30.0)
+    for f in (0, 15, 30, 60, 90, 119):
+        buf = np.zeros((r.h, r.w, 4), dtype=np.uint8)
+        sujo = [0, 0, 0, 0]
+        for leg in r.camadas:
+            if leg.inicio_f <= f <= leg.fim_f:
+                r.desenhar(leg, f - leg.inicio_f, buf, sujo, False)
+
+
+def test_o_motor_aguenta_uma_cue_vazia_vinda_de_fora(tmp_path):
+    """Cinto de seguranca: um caption-cues.json produzido por outra versao (ou
+    editado a mao) nao pode derrubar o render."""
+    from app.render_proprio import Renderizador
+
+    edit = _projeto(tmp_path, [("moço", 0, 500)])
+    pub = edit / "remotion" / "public"
+    (pub / "caption-cues.json").write_text(json.dumps([
+        {"i": 0, "startMs": 0, "endMs": 500, "preset": "STACK_MIXED", "lines": []},
+    ]), encoding="utf-8")
+    (pub / "edit-data.json").write_text(json.dumps({
+        "durationSec": 2, "fps": 30, "width": 1080, "height": 1920,
+        "captions": {"enabled": True, "style": "stacked"},
+    }), encoding="utf-8")
+    Renderizador(pub, json.loads((pub / "edit-data.json").read_text(encoding="utf-8")),
+                 frames=60, fps=30.0)
+
+
+def test_apagar_desloca_as_correcoes_de_texto_de_baixo():
+    """`captionFixes` é indexado por posição em `S.captions`. Apagar a legenda i
+    faz tudo abaixo dela descer uma casa — sem o deslocamento, a correção de uma
+    legenda passava a aparecer noutra."""
+    js = (REPO / "assets" / "preview" / "app.js").read_text(encoding="utf-8")
+    i = js.index("function apagarLegendas(")
+    trecho = js[i:i + 1800]
+    assert "sort((a, b) => b - a)" in trecho, "apaga de frente para trás e desloca errado"
+    assert "desloc[n > i ? n - 1 : n]" in trecho, "as correções de baixo não descem"
+    assert "S.capApagadas.push" in trecho, "o apagar não fica pendente para o salvar"

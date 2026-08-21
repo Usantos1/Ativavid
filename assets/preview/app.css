@@ -1026,6 +1026,14 @@ canvas { display: block; }
   background: rgba(255, 119, 19, 0.16);
   color: #ffc08a;
 }
+/* selecionada para apagar (Ctrl/Shift+clique). Preenchida, nao so contornada:
+   com varias marcadas de uma vez a leitura tem de ser instantanea na faixa. */
+.chip.caption.sel {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: #fff;
+  color: #101014;
+  font-weight: 700;
+}
 
 .cap-editor {
   position: fixed;

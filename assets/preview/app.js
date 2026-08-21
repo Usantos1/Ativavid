@@ -956,6 +956,15 @@ let S = {
   // The UI never rewrites captions.json — it records the intent and the skill
   // re-runs the caption pipeline, which is what owns word timings.
   captionFixes: {},
+  // Legendas APAGADAS. Lista separada de proposito: `captionFixes` e indexado
+  // pela posicao em `S.captions`, e remover uma legenda desloca todas as de
+  // baixo — guardar o apagar no mesmo dicionario faria a correcao de texto de
+  // uma legenda aparecer noutra. Aqui cada item se descreve sozinho.
+  capApagadas: [],
+  // Selecao multipla de legendas (indices em S.captions). Ctrl/Cmd+clique
+  // marca uma, Shift+clique marca o intervalo, Delete apaga todas.
+  capSel: [],
+  capSelAncora: -1,
   applying: false,
   applyToastAt: '',
   applyDoneAt: '',
@@ -1345,6 +1354,8 @@ function snapshotState() {
   return structuredClone({
     draft: S.draft, insertsDraft: S.insertsDraft, notes: S.notes, style: S.style,
     captionFixes: S.captionFixes,
+    capApagadas: S.capApagadas,
+    captions: S.captions,
     hookLines: headlineLines(),
   });
 }
@@ -1370,6 +1381,12 @@ function restoreSnapshot(snap) {
   S.notes = snap.notes;
   if (snap.style) S.style = snap.style;
   S.captionFixes = snap.captionFixes || {};
+  // Desfazer um apagar precisa devolver a legenda a lista, nao so tirar o
+  // pedido: `S.captions` foi encurtado na hora para o usuario ver o efeito.
+  if (snap.capApagadas) S.capApagadas = snap.capApagadas;
+  if (snap.captions) S.captions = snap.captions;
+  S.capSel = [];
+  S.capSelAncora = -1;
   if (snap.hookLines && S.editData) {
     S.editData.hook = { ...(S.editData.hook || {}), enabled: true, lines: snap.hookLines };
   }
@@ -1418,13 +1435,15 @@ function dirtyCount() {
   n += S.insertsDraft.filter((c) => c.isNew || c.start !== c.orig.start || c.end !== c.orig.end).length;
   n += S.notes.length; // each correction marker is an unsaved adjustment too
   n += Object.keys(S.captionFixes).length; // and each caption text fix
+  n += (S.capApagadas || []).length;       // e cada legenda apagada
   return n;
 }
 function pendingFlags() {
   const d = (S.corrections && S.corrections.dirty) || {};
   return {
     headline: !!d.headline,
-    captions: !!d.captions || Object.keys(S.captionFixes).length > 0,
+    captions: !!d.captions || Object.keys(S.captionFixes).length > 0
+      || (S.capApagadas || []).length > 0,
     edl: !!d.edl || edlDirty(),
     style: !!d.style,
   };
@@ -1651,6 +1670,7 @@ function applyApplyStatus(st, task) {
     S.history = [];
     S.future = [];
     S.captionFixes = {};
+    S.capApagadas = [];
     refreshUndoRedoButtons();
     S.lastSig = '';
     if (BASE) {
@@ -1675,6 +1695,7 @@ async function persistCaptionFix(from, to, extra) {
   if (data && Array.isArray(data.captionWords) && data.captionWords.length) {
     S.captions = groupCaptions(data.captionWords);
     S.captionFixes = {};
+    S.capApagadas = [];
   }
   return data;
 }
@@ -1886,6 +1907,51 @@ function refreshHeadlineOptions(hlLines) {
       e.stopPropagation();
       commitHeadline(headlineTwoLines(opt));
       toast('Headline trocada — Aplicar alterações para gravar no vídeo');
+    });
+  }
+}
+
+/** Apaga uma ou VARIAS legendas. Indices em S.captions. */
+function apagarLegendas(indices) {
+  const alvos = [...new Set(indices.map(Number))]
+    .filter((i) => i >= 0 && S.captions[i])
+    .sort((a, b) => b - a);            // de tras para frente: nao desloca o resto
+  if (!alvos.length) return;
+  pushHistory();
+  const pedidos = [];
+  for (const i of alvos) {
+    const c = S.captions[i];
+    pedidos.push({
+      from: c.text, start: c.start, end: c.end,
+      index: c.wordIndex, tokenId: c.tokenId || undefined, cueId: c.cueId || undefined,
+    });
+    S.captions.splice(i, 1);
+    // As correcoes de TEXTO sao indexadas por posicao: tirar a legenda i faz
+    // tudo abaixo dela descer uma casa. Sem isto a correcao de uma legenda
+    // passava a aparecer noutra.
+    const desloc = {};
+    for (const k of Object.keys(S.captionFixes)) {
+      const n = Number(k);
+      if (n === i) continue;
+      desloc[n > i ? n - 1 : n] = S.captionFixes[k];
+    }
+    S.captionFixes = desloc;
+  }
+  S.capApagadas.push(...pedidos);
+  S.capSel = [];
+  S.capSelAncora = -1;
+  renderAll();
+  refreshHeader();
+  toast(alvos.length === 1
+    ? 'Legenda apagada — Ctrl+Z desfaz'
+    : `${alvos.length} legendas apagadas — Ctrl+Z desfaz`, 3000);
+  for (const p of pedidos) {
+    persistCaptionFix(p.from, '', {
+      delete: true,
+      start: p.start, end: p.end,
+      startMs: Math.round((p.start || 0) * 1000),
+      endMs: Math.round((p.end || 0) * 1000),
+      index: p.index, tokenId: p.tokenId, cueId: p.cueId,
     });
   }
 }
@@ -2141,6 +2207,8 @@ async function applyState(data) {
   // caption lines themselves actually changed under us
   if (JSON.stringify(S.captions.map((c) => c.text)) !== S.captionsSigBefore) {
     S.captionFixes = {};
+    S.capApagadas = [];
+    S.capSel = [];
     closeCaptionEditor();
   }
 
@@ -2323,33 +2391,7 @@ function openCaptionEditor(i, anchorEl) {
     }
     renderAll(); refreshHeader();
   };
-  const apagar = () => {
-    closeCaptionEditor();
-    pushHistory();
-    const from = c.text;
-    S.captionFixes[i] = { from, to: '', delete: true, start: c.start, end: c.end };
-    S.captions = S.captions.filter((_, k) => k !== i);
-    renderAll();
-    refreshHeader();
-    persistCaptionFix(from, '', {
-      delete: true,
-      start: c.start,
-      end: c.end,
-      startMs: Math.round((c.start || 0) * 1000),
-      endMs: Math.round((c.end || 0) * 1000),
-      index: c.wordIndex,
-      tokenId: c.tokenId || undefined,
-      cueId: c.cueId || undefined,
-    }).then((data) => {
-      if (data && data.ok === false) {
-        S.captions.splice(i, 0, c);
-        delete S.captionFixes[i];
-        renderAll();
-        refreshHeader();
-      }
-    });
-  };
-  del.addEventListener('click', apagar);
+  del.addEventListener('click', () => { closeCaptionEditor(); apagarLegendas([i]); });
   ok.addEventListener('click', commit);
   reset.addEventListener('click', () => {
     closeCaptionEditor();
@@ -3431,7 +3473,8 @@ function renderChips() {
       const start = renderedToDraft(c.start);
       const end = renderedToDraft(c.end);
       const fix = S.captionFixes[i];
-      const chip = el('div', 'chip caption' + (fix ? ' fixed' : ''), laneCaptions);
+      const chip = el('div', 'chip caption' + (fix ? ' fixed' : '')
+        + (S.capSel.includes(i) ? ' sel' : ''), laneCaptions);
       chip.style.left = `${start * S.pps}px`;
       chip.style.width = `${Math.max((end - start) * S.pps, 6)}px`;
       chip.textContent = fix ? fix.to : c.text;
@@ -4139,7 +4182,29 @@ panel.addEventListener('pointerdown', (e) => {
   // the transcript, only the WORDS are the user's to correct here
   const cap = e.target.closest('.chip.caption');
   if (cap) {   // any tab the chips render on — Fase 1 is where fixing pays off
-    openCaptionEditor(+cap.dataset.ci, cap);
+    const ci = +cap.dataset.ci;
+    // Ctrl/Cmd marca uma; Shift marca o intervalo. O clique SIMPLES continua
+    // abrindo o editor, que e o uso de longe mais comum — a selecao multipla
+    // existe para apagar varias de uma vez, nao para atrapalhar o resto.
+    if (e.ctrlKey || e.metaKey) {
+      const k = S.capSel.indexOf(ci);
+      if (k >= 0) S.capSel.splice(k, 1); else S.capSel.push(ci);
+      S.capSelAncora = ci;
+    } else if (e.shiftKey && S.capSelAncora >= 0) {
+      const a = Math.min(S.capSelAncora, ci), b = Math.max(S.capSelAncora, ci);
+      for (let n = a; n <= b; n++) if (!S.capSel.includes(n)) S.capSel.push(n);
+    } else {
+      S.capSel = [];
+      S.capSelAncora = ci;
+      openCaptionEditor(ci, cap);
+      e.preventDefault();
+      return;
+    }
+    closeCaptionEditor();
+    renderAll();
+    if (S.capSel.length) {
+      toast(`${S.capSel.length} legenda${S.capSel.length > 1 ? 's' : ''} selecionada${S.capSel.length > 1 ? 's' : ''} · Delete apaga`, 2400);
+    }
     e.preventDefault();
     return;
   }
@@ -4323,6 +4388,9 @@ document.addEventListener('keydown', (e) => {
   } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
     const step = e.shiftKey ? 1 : 1 / S.fps;
     seekDraft(renderedToDraft(video.currentTime) + (e.key === 'ArrowRight' ? step : -step));
+  } else if ((e.key === 'Delete' || e.key === 'Backspace') && S.capSel.length) {
+    e.preventDefault();
+    apagarLegendas(S.capSel);
   } else if ((e.key === 'Delete' || e.key === 'Backspace') && S.selected >= 0 && S.tab === 1) {
     toggleSelectedTake();
   } else if ((e.key === 's' || e.key === 'S') && !e.ctrlKey && !e.metaKey) {
@@ -5027,13 +5095,17 @@ async function saveEditsAndReturnToQueue() {
     }));
   }
   const capFixes = Object.values(S.captionFixes);
-  if (capFixes.length) {
+  const capApagar = (S.capApagadas || []).map((f) => ({
+    from: f.from, to: '', delete: true,
+    renderedStart: +f.start.toFixed(3),
+    renderedEnd: +f.end.toFixed(3),
+  }));
+  if (capFixes.length || capApagar.length) {
     payload.captionFixes = capFixes.map((f) => ({
       from: f.from, to: f.to,
-      ...(f.delete ? { delete: true } : {}),
       renderedStart: +f.start.toFixed(3),
       renderedEnd: +f.end.toFixed(3),
-    }));
+    })).concat(capApagar);
   }
   if (!payload.edl && !payload.editData && !payload.notes && !payload.captionFixes && !payload.extraSources) {
     toast('Nada para salvar', 2000);
@@ -5055,7 +5127,7 @@ async function saveEditsAndReturnToQueue() {
   const capFalhou = !!(data.captionFix && data.captionFix.ok === false);
   S.savedPending = true;
   S.notes = [];
-  if (!capFalhou) S.captionFixes = {};
+  if (!capFalhou) { S.captionFixes = {}; S.capApagadas = []; }
   S.pendingIn = null;
   S.draft.forEach((r) => {
     r.orig = { start: r.start, end: r.end };
@@ -5325,6 +5397,8 @@ $('btnDiscard').addEventListener('click', async () => {
   buildInsertsDraft();
   S.notes = [];
   S.captionFixes = {};
+  S.capApagadas = [];
+  S.capSel = [];
   closeCaptionEditor();
   S.pendingIn = null;
   S.editingNote = null;
