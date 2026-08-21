@@ -4974,9 +4974,13 @@ async function saveEditsAndReturnToQueue() {
     toast('Erro ao salvar — o servidor está de pé?', 4000);
     return false;
   }
+  // O servidor agora diz se a correcao de legenda pegou. Antes ele respondia
+  // ok sempre e esta linha jogava fora o pedido do usuario mesmo quando nada
+  // tinha sido trocado: a palavra continuava errada e a tela dizia que nao.
+  const capFalhou = !!(data.captionFix && data.captionFix.ok === false);
   S.savedPending = true;
   S.notes = [];
-  S.captionFixes = {};
+  if (!capFalhou) S.captionFixes = {};
   S.pendingIn = null;
   S.draft.forEach((r) => {
     r.orig = { start: r.start, end: r.end };
@@ -5040,6 +5044,10 @@ async function saveEditsAndReturnToQueue() {
     return true;
   }
   if (captionOnly) {
+    if (capFalhou) {
+      toast(data.captionFix.error || 'Nao consegui corrigir essa legenda', 4200);
+      return false;
+    }
     try {
       const r = await fetch(`${BASE}/media/${S.state.captions || 'remotion/public/captions.json'}?v=${Date.now()}`);
       if (r.ok) {

@@ -647,13 +647,24 @@ class Handler(BaseHTTPRequestHandler):
         tmp = out.with_suffix(".tmp")
         tmp.write_text(json.dumps(body, ensure_ascii=False, indent=2), encoding="utf-8")
         tmp.replace(out)
+        # O VEREDITO do apply volta na resposta. Antes ele era descartado e a
+        # resposta dizia "ok" sempre: a tela limpava a correcao, cantava
+        # "Legenda corrigida" e a palavra continuava errada no video. Pior no
+        # meio do caminho — o apply grava captions.json ANTES das cues, entao
+        # um erro ali deixa os dois discordando, calado.
+        #
+        # `changed == 0` NAO e falha: no app o mesmo fix passa por aqui duas
+        # vezes (no clique e ao salvar) e na segunda o texto ja esta no lugar.
+        # Quem separa "ja aplicado" de "nao achei" e o apply_caption_fixes.
+        cap_res: dict | None = None
+        snap_err: str | None = None
         if name == "preview_edits.json" and body.get("captionFixes"):
             try:
                 from app.caption_fixes import apply_caption_fixes
 
-                apply_caption_fixes(self.root, body.get("captionFixes"))
-            except Exception:
-                pass
+                cap_res = apply_caption_fixes(self.root, body.get("captionFixes"))
+            except Exception as e:
+                cap_res = {"ok": False, "changed": 0, "error": f"nao consegui gravar a legenda: {e}"}
         if name == "preview_edits.json" and body.get("edl"):
             try:
                 from app.project_versions import snapshot
@@ -664,9 +675,19 @@ class Handler(BaseHTTPRequestHandler):
                     description="Antes de salvar nova revisão",
                     extra={"edl": body.get("edl"), "intent": body.get("intent")},
                 )
-            except Exception:
-                pass
-        self._json({"ok": True, "file": str(out)})
+            except Exception as e:
+                # Nao derruba o salvamento — o preview_edits.json ja esta
+                # gravado. Mas tambem nao some: este snapshot e o que permite
+                # "voltar versao", e falhar calado deixa o usuario achando que
+                # tem para onde voltar.
+                print(f"[warn] snapshot de versao falhou: {e}", flush=True)
+                snap_err = str(e)[:200]
+        resp: dict = {"ok": True, "file": str(out)}
+        if cap_res is not None:
+            resp["captionFix"] = cap_res
+        if snap_err:
+            resp["snapshotError"] = snap_err
+        self._json(resp)
 
     def _open_folder(self) -> None:
         """Reveal the exported file in Explorer — same idea as any NLE's

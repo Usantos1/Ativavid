@@ -383,6 +383,7 @@ def apply_caption_fixes(edit_dir: Path, fixes: list[dict] | None) -> dict:
             words = [w for w in words if isinstance(w, dict) and str(w.get("text") or "").strip()]
             caps_p.write_text(json.dumps(words, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
+    ja_estava = _destino_ja_no_lugar(words if caps_p.exists() else None, fixes)
     applied += patch_edit_data_text(edit, fixes)
 
     if cues_p.exists():
@@ -416,7 +417,43 @@ def apply_caption_fixes(edit_dir: Path, fixes: list[dict] | None) -> dict:
         store.write_text(json.dumps(merged, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     except (OSError, json.JSONDecodeError, TypeError):
         pass
-    return {"ok": True, "changed": applied}
+    if applied:
+        return {"ok": True, "changed": applied}
+    # Nada mudou. Isso tem DOIS significados opostos e tratar os dois igual foi
+    # o defeito: no app o mesmo fix passa por aqui DUAS vezes (uma no clique,
+    # via /api/corrections, e outra ao salvar), entao "0 trocas" e o caso
+    # normal — o texto ja esta no lugar. Mas se o destino tambem nao esta la, a
+    # correcao simplesmente NAO pegou, e dizer "ok" faz a tela apagar o pedido
+    # do usuario e cantar "Legenda corrigida" com a palavra errada na tela.
+    if ja_estava:
+        return {"ok": True, "changed": 0, "alreadyApplied": True}
+    return {
+        "ok": False,
+        "changed": 0,
+        "notFound": True,
+        "error": "não achei esse texto na legenda para corrigir",
+    }
+
+
+def _destino_ja_no_lugar(words: list[dict] | None, fixes: list[dict]) -> bool:
+    """True se o texto de DESTINO de todo fix ja esta nas palavras.
+
+    E o que separa "ja foi aplicado antes" de "nao pegou". Usa o mesmo
+    localizador do apply, com a mesma janela de tempo do fix, para nao
+    confundir com outra ocorrencia da mesma palavra noutro ponto do video.
+    """
+    if not isinstance(words, list) or not words:
+        return False
+    for fix in fixes or []:
+        if not isinstance(fix, dict):
+            continue
+        dst = _split_tokens(str(fix.get("to") or ""))
+        if not dst:
+            continue
+        status, _ = resolve_replacement_index(words, dst, fix)
+        if status == "none":
+            return False
+    return True
 
 
 def load_stored_fixes(edit_dir: Path) -> list[dict]:
