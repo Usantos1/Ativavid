@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.41
+
+Corrigir uma palavra da legenda deixou de refazer o vídeo inteiro, e o card de
+Concluídos ficou no formato que você desenhou.
+
+- **Corrigir uma legenda ficou 3,5x mais rápido.** O app redesenhava todos os
+  quadros e reencodava o arquivo todo para trocar uma palavra. Agora ele
+  reaproveita o que não mudou e refaz só a fatia mexida. Medido no mesmo vídeo,
+  alternando os dois caminhos: **41,5 s → 11,9 s**, redesenhando 148 de 1243
+  quadros. Quando as correções estão espalhadas pelo vídeo a fatia fica grande
+  e ele mesmo desiste do atalho, refazendo tudo como antes — o resultado nunca
+  fica pior, no máximo demora o de sempre
+- **O card de Concluídos foi refeito:** o nome do vídeo manda, o selo desce
+  para baixo dele, e o resto virou ficha com rótulo — vídeo original, vídeo
+  editado, formato, estilo, início e final. A mensagem "Vídeo concluído" saiu:
+  ela não dizia nada que o selo já não dissesse
+- **"Estilo" é uma informação nova no card** (ex.: `Realce · Empilhado`)
+
 ## 2.40
 
 O card de Concluídos passou a mostrar o que você pediu, e o arrastar pasta
