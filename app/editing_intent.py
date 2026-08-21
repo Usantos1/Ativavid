@@ -313,8 +313,26 @@ def _covers(ranges: list[dict], start: float, end: float, *, min_overlap: float 
 
 
 def _insert_range(ranges: list[dict], start: float, end: float, beat: str, reason: str) -> list[dict]:
+    """Insere um trecho e funde vizinhos — DENTRO DA MESMA FONTE.
+
+    Os tempos de cada take sao LOCAIS do arquivo dele: o take 2 comeca em 0,0
+    de novo. Ordenar e fundir a lista inteira por `start`, ignorando `source`,
+    intercalava os arquivos e engolia os ranges do take curto dentro de um
+    range longo do take 1.
+
+    Medido nos projetos do usuario: **5 projetos multi-take onde uma fonte
+    inteira sumiu do EDL** — tres deles o take de CTA que ele gravou e anexou
+    (`cta_IMG_0098`, `cta_cta_mais_feliz`, `IMG_4048`) e dois a `Parte_2` de
+    uma gravacao em duas partes. Nenhum erro, o take simplesmente nao aparece
+    no video.
+
+    A guarda so trabalha na fonte de onde vieram as `regions` (a de indice 0
+    em run_fast), que e a mesma do primeiro range. As outras passam intactas,
+    e a ordem relativa da lista e preservada — ela e a ordem do corte.
+    """
+    alvo = (ranges[0].get("source") if ranges else "SRC")
     item = {
-        "source": (ranges[0].get("source") if ranges else "SRC"),
+        "source": alvo,
         "start": round(start, 3),
         "end": round(end, 3),
         "beat": beat,
@@ -322,10 +340,14 @@ def _insert_range(ranges: list[dict], start: float, end: float, beat: str, reaso
         "reason": reason,
         "gain_db": 0.0,
     }
-    out = list(ranges) + [item]
-    out.sort(key=lambda r: float(r.get("start") or 0))
+
+    def _e_alvo(r: dict) -> bool:
+        return (r.get("source") or alvo) == alvo
+
+    do_alvo = [r for r in ranges if _e_alvo(r)] + [item]
+    do_alvo.sort(key=lambda r: float(r.get("start") or 0))
     merged: list[dict] = []
-    for r in out:
+    for r in do_alvo:
         if merged and float(r["start"]) <= float(merged[-1]["end"]) + 0.08:
             merged[-1]["end"] = round(max(float(merged[-1]["end"]), float(r["end"])), 3)
             if r.get("beat") == "HOOK":
@@ -334,7 +356,21 @@ def _insert_range(ranges: list[dict], start: float, end: float, beat: str, reaso
                 merged[-1]["beat"] = "CTA"
         else:
             merged.append(dict(r))
-    return merged
+
+    # Recompoe: o bloco da fonte alvo entra onde estava o primeiro range dela;
+    # os das outras fontes ficam onde estavam.
+    saida: list[dict] = []
+    posto = False
+    for r in ranges:
+        if _e_alvo(r):
+            if not posto:
+                saida.extend(merged)
+                posto = True
+            continue
+        saida.append(r)
+    if not posto:
+        saida.extend(merged)
+    return saida
 
 
 def looks_like_cta(text: str) -> bool:
@@ -768,14 +804,31 @@ def guard_ranges(
     if bool(p.get("preserveCTA", DEFAULTS[mode]["preserveCTA"])):
         cta = last_cta_region(regions)
         if cta:
-            if out:
-                last = out[-1]
-                if float(last.get("end") or 0) < cta[1] - 0.15:
-                    last["end"] = round(cta[1], 3)
-                    last["beat"] = "CTA"
-                    last["reason"] = (str(last.get("reason") or "") + " · preserve-cta").strip(" ·")
+            # `regions` e `duration_s` sao da fonte de indice 0 (run_fast so
+            # guarda os do primeiro arquivo). Esticar o ULTIMO range da lista
+            # com um instante desse relogio so faz sentido se ele for dessa
+            # mesma fonte — senao pede um trecho que nao existe: medido num
+            # projeto real, `cta_IMG_0098 0.41-0.90` virava `0.41-84.2`, ou
+            # seja, 84s de um arquivo de 7s.
+            alvo = (out[0].get("source") if out else None)
+            ultimo = out[-1] if out else None
+            mesma_fonte = (ultimo is not None
+                           and (ultimo.get("source") or alvo) == alvo)
+            fim = round(cta[1], 3)
+            if duration_s:
+                fim = min(fim, round(float(duration_s), 3))
+            if ultimo is not None and mesma_fonte:
+                if float(ultimo.get("end") or 0) < fim - 0.15:
+                    ultimo["end"] = fim
+                    ultimo["beat"] = "CTA"
+                    ultimo["reason"] = (str(ultimo.get("reason") or "")
+                                        + " · preserve-cta").strip(" ·")
+            elif ultimo is not None:
+                # O corte ja termina noutro take (tipicamente o CTA gravado a
+                # parte). Ele E o CTA — nao ha o que esticar.
+                pass
             else:
-                out = _insert_range(out, cta[0], cta[1], "CTA", "preserve-cta")
+                out = _insert_range(out, cta[0], min(cta[1], fim), "CTA", "preserve-cta")
 
     for pr in p.get("protectedRanges") or []:
         try:

@@ -285,3 +285,85 @@ def test_regex_da_frase_vive_num_lugar_so():
              / "smoke_intent_report.py").read_text(encoding="utf-8")
     assert "from app.editing_intent import PHRASE_RE" in fonte
     assert "PHRASE_RE = re.compile(" not in fonte
+
+
+def test_a_guarda_nao_engole_o_take_de_outra_fonte():
+    """Os tempos de cada take são LOCAIS do arquivo dele: o take 2 começa em
+    0,0 de novo. Ordenar e fundir a lista inteira por `start`, ignorando
+    `source`, intercalava os arquivos e engolia os ranges do take curto
+    dentro de um range longo do take 1.
+
+    Medido nos projetos do usuário: **5 projetos multi-take onde uma fonte
+    inteira sumiu do EDL** — três deles o take de CTA que ele gravou e anexou,
+    dois a `Parte_2` de uma gravação em duas partes. Sem erro nenhum: o take
+    simplesmente não aparece no vídeo."""
+    from app.editing_intent import _insert_range
+
+    ranges = [
+        {"source": "IMG_4046", "start": 0.0, "end": 40.0, "beat": "HOOK",
+         "quote": "", "reason": "", "gain_db": 0.0},
+        {"source": "IMG_4046", "start": 50.0, "end": 90.0, "beat": None,
+         "quote": "", "reason": "", "gain_db": 0.0},
+        {"source": "IMG_4048", "start": 0.4, "end": 3.0, "beat": "CTA",
+         "quote": "", "reason": "", "gain_db": 0.0},
+    ]
+    out = _insert_range(ranges, 95.0, 98.0, "KEEP", "teste")
+    assert {r["source"] for r in out} == {"IMG_4046", "IMG_4048"}
+    # o CTA continua inteiro, no fim, com o beat dele
+    cta = [r for r in out if r["source"] == "IMG_4048"]
+    assert len(cta) == 1 and cta[0]["end"] == 3.0 and cta[0]["beat"] == "CTA"
+    assert out[-1]["source"] == "IMG_4048", "a ordem do corte tem de valer"
+    # e o beat do CTA não contamina o primeiro range da outra fonte
+    assert out[0]["beat"] == "HOOK"
+
+
+def test_a_fusao_dentro_da_mesma_fonte_continua_valendo():
+    from app.editing_intent import _insert_range
+
+    r = [{"source": "A", "start": 0.0, "end": 5.0, "beat": None,
+          "quote": "", "reason": "", "gain_db": 0.0}]
+    assert len(_insert_range(r, 5.05, 8.0, "KEEP", "t")) == 1     # encosta: funde
+    assert len(_insert_range(r, 20.0, 25.0, "KEEP", "t")) == 2    # longe: não
+
+
+def _r(**kw):
+    return {"quote": "", "reason": "", "gain_db": 0.0, **kw}
+
+
+def test_preserve_cta_nao_estica_um_take_de_outra_fonte():
+    """`regions` e `duration_s` são da fonte de índice 0. Esticar o ÚLTIMO
+    range da lista com um instante desse relógio só faz sentido se ele for
+    dessa mesma fonte — senão pede um trecho que não existe.
+
+    Medido num projeto real: `cta_IMG_0098 0.41-0.90` virava `0.41-84.2`, ou
+    seja, 84 s de um arquivo de 7 s."""
+    from app.editing_intent import guard_ranges
+
+    ranges = [_r(source="IMG_1631", start=0.0, end=40.0, beat="HOOK"),
+              _r(source="cta_IMG_0098", start=0.41, end=0.90, beat="CTA")]
+    out = guard_ranges([dict(r) for r in ranges],
+                       preset={"editingIntent": "dynamic"},
+                       regions=[(0.0, 30.0), (60.0, 84.2)], duration_s=84.6)
+    cta = [r for r in out if r["source"] == "cta_IMG_0098"]
+    assert len(cta) == 1, out
+    assert cta[0]["end"] <= 1.0, cta
+
+
+def test_preserve_cta_continua_esticando_em_fonte_unica():
+    """O comportamento que a guarda existe para ter, quando faz sentido."""
+    from app.editing_intent import guard_ranges
+
+    out = guard_ranges([_r(source="A", start=0.0, end=40.0, beat="HOOK")],
+                       preset={"editingIntent": "dynamic"},
+                       regions=[(0.0, 30.0), (60.0, 84.2)], duration_s=84.6)
+    assert out[-1]["end"] == 84.2, out
+    assert out[-1]["beat"] == "CTA"
+
+
+def test_preserve_cta_nao_passa_da_duracao_da_fonte():
+    from app.editing_intent import guard_ranges
+
+    out = guard_ranges([_r(source="A", start=0.0, end=10.0, beat="HOOK")],
+                       preset={"editingIntent": "dynamic"},
+                       regions=[(0.0, 5.0), (20.0, 99.0)], duration_s=30.0)
+    assert out[-1]["end"] <= 30.0, out
