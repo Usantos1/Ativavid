@@ -790,6 +790,72 @@ def _current_final(edit_dir: Path) -> Path:
     return found if found is not None else Path(edit_dir) / "final.mp4"
 
 
+def _so_legenda_mudou(plan: dict[str, Any]) -> bool:
+    """True quando a UNICA coisa suja e o texto da legenda.
+
+    A emenda so vale ai: headline, estilo e corte mexem em quadros espalhados
+    (ou em todos), e ai nao ha fatia para emendar.
+    """
+    if str(plan.get("mode") or "") != "REUSE_CUT":
+        return False
+    if plan.get("rebuildCut") or plan.get("remapCaptions"):
+        return False
+    sujo = plan.get("dirty") or {}
+    return bool(sujo.get("captions")) and not any(
+        sujo.get(k) for k in ("headline", "edl", "style")
+    )
+
+
+def _tentar_emenda(edit: Path, plan: dict[str, Any], *, cut: Path, dest: Path,
+                   log: Any) -> bool:
+    """Refaz so a fatia da legenda mexida. False = siga pelo caminho normal.
+
+    Nunca e a unica saida: qualquer recusa, erro ou divergencia na conferencia
+    cai no render completo, que e o que sempre foi feito.
+    """
+    if (os.environ.get("ATIVAVID_EMENDA") or "").strip() == "0":
+        return False
+    if not _so_legenda_mudou(plan):
+        return False
+    try:
+        from app.caption_fixes import load_stored_fixes
+        from app.emenda_legenda import emendar_legenda
+        from app.timeline import timeline_from_edit_data
+
+        public = edit / "remotion" / "public"
+        edit_data = _read_json(public / "edit-data.json", {})
+        if not isinstance(edit_data, dict) or not edit_data:
+            return False
+        cues = _read_json(public / "caption-cues.json", None)
+        fixes = load_stored_fixes(edit)
+        if not cues or not fixes:
+            return False
+        tl = timeline_from_edit_data(edit_data)
+        final_atual = _current_final(edit)
+        saida = emendar_legenda(
+            edit,
+            public=public,
+            edit_data=edit_data,
+            cut=cut,
+            final=final_atual,
+            cues=cues,
+            fixes=fixes,
+            frames=int(tl["durationInFrames"]),
+            fps=float(edit_data.get("fps") or 30),
+            width=int(edit_data.get("width") or 1080),
+            height=int(edit_data.get("height") or 1920),
+            dest=dest,
+        )
+    except Exception as e:  # noqa: BLE001
+        log(f"QUICK_APPLY_EMENDA_ERRO {e}")
+        return False
+    if saida is None:
+        return False
+    log("QUICK_APPLY_EMENDA_OK")
+    _ULTIMO_MOTOR.setdefault(_chave(edit), {})["engine"] = "emenda"
+    return True
+
+
 def execute_apply_plan(
     edit_dir: Path,
     plan: dict[str, Any] | None = None,
@@ -891,7 +957,8 @@ def execute_apply_plan(
         hooks.progress("visual", "Aplicando edição...")
         log("QUICK_APPLY_RENDER_VISUAL")
         t0 = time.time()
-        hooks.render_visual(edit, cut=work_cut, captions=caps_new, dest=final_tmp)
+        if not _tentar_emenda(edit, plan, cut=work_cut, dest=final_tmp, log=log):
+            hooks.render_visual(edit, cut=work_cut, captions=caps_new, dest=final_tmp)
         log(f"QUICK_APPLY_RENDER_SEC {_fase(edit, 'render', t0):.3f}")
 
         hooks.progress("export", "Finalizando vídeo...")

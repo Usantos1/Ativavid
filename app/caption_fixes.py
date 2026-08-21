@@ -524,6 +524,14 @@ def apply_caption_fixes(edit_dir: Path, fixes: list[dict] | None) -> dict:
                 continue
             merged = [x for x in merged if str(x.get("from") or "") != str(fix.get("from"))]
             guardado = {"from": fix["from"], "to": fix.get("to") or ""}
+            # Os TEMPOS vao junto. Sem eles o fix guardado so da para localizar
+            # por texto, e uma palavra que aparece duas vezes no video vira
+            # "ambiguo" — foi por isso que, dos 35 projetos com correcao, 15
+            # nao conseguiram ser localizados para a emenda parcial. Sao 4
+            # numeros por correcao; o arquivo nao sente.
+            for chave in ("startMs", "endMs", "renderedStart", "renderedEnd"):
+                if fix.get(chave) is not None:
+                    guardado[chave] = fix[chave]
             # A marca `delete` TEM de ser guardada. Sem ela o reprocesso relia
             # um fix com `to` vazio, que o proprio apply ignora — e a legenda
             # apagada voltava ao video. Apagar que volta sozinho e pior do que

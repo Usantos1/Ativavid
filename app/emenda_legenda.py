@@ -98,70 +98,69 @@ def keyframes(path: Path) -> list[float]:
     return sorted(saida)
 
 
-def janela_de_cues(
-    cues_velhas: Any, cues_novas: Any, *, fps: float, frames: int,
+def janela_das_correcoes(
+    cues: Any, fixes: list, *, fps: float, frames: int,
 ) -> tuple[int, int] | None:
-    """Quadros [ini, fim) afetados por uma mudança de TEXTO nas cues.
+    """Quadros [ini, fim) afetados por estas correcoes de legenda.
 
-    `None` quando a diferença não é só de texto — cue a mais/a menos, tempo
-    diferente, ordem diferente. Nesses casos a emenda não se aplica e quem
-    chamou refaz do jeito normal.
+    A janela sai das PROPRIAS correcoes, localizando o texto de destino nas
+    cues ja corrigidas. Depender de um retrato das cues antigas nao serve: o
+    caminho de uma passada (o padrao hoje) nao guarda overlay nenhum, entao
+    esse retrato simplesmente nao existe na maioria dos jobs.
 
-    A janela cobre da PRIMEIRA à ÚLTIMA cue mexida. Ir até o fim do vídeo, que
-    é o que o incremental faz hoje, joga fora o ganho: cada cue é uma janela de
-    tempo independente e trocar o texto de uma não mexe no relógio das outras
-    (`_apply_window` preserva os tempos da palavra).
+    `None` quando nao da para localizar com seguranca — dai o apply segue pelo
+    caminho normal, que e sempre o certo, so mais caro.
     """
-    a = cues_velhas if isinstance(cues_velhas, list) else None
-    b = cues_novas if isinstance(cues_novas, list) else None
-    if a is None or b is None or len(a) != len(b):
+    from app.caption_fixes import _split_tokens, resolve_replacement_index
+
+    lista = cues if isinstance(cues, list) else (cues or {}).get("cues")
+    if not isinstance(lista, list) or not lista or not fixes:
         return None
 
-    def _tempos(c: Any) -> tuple:
+    # cada palavra de cue, com a cue de onde veio
+    palavras: list[dict] = []
+    dono: list[int] = []
+    for i, c in enumerate(lista):
         if not isinstance(c, dict):
-            return ()
-        return (c.get("startMs"), c.get("endMs"), c.get("preset"), c.get("exit"))
-
-    def _textos(c: Any) -> list:
-        if not isinstance(c, dict):
-            return []
-        return [str(w.get("text") or "") for ln in (c.get("lines") or []) for w in ln]
-
-    def _relogios(c: Any) -> list:
-        if not isinstance(c, dict):
-            return []
-        return [(w.get("fromMs"), w.get("toMs"))
-                for ln in (c.get("lines") or []) for w in ln]
-
-    mexidas: list[int] = []
-    for i, (ca, cb) in enumerate(zip(a, b)):
-        if _tempos(ca) != _tempos(cb):
             return None
-        ta, tb = _textos(ca), _textos(cb)
-        if len(ta) != len(tb):
-            # a correção trocou o NÚMERO de palavras: os tempos são
-            # redistribuídos dentro da mesma janela, o que ainda é local — mas
-            # o relógio de cada palavra muda, então não dá para conferir por
-            # igualdade. Aceita como mexida e segue.
-            mexidas.append(i)
+        for ln in c.get("lines") or []:
+            for w in ln or []:
+                if not isinstance(w, dict):
+                    return None
+                palavras.append(w)
+                dono.append(i)
+    if not palavras:
+        return None
+
+    tocadas: set[int] = set()
+    for fix in fixes:
+        if not isinstance(fix, dict):
             continue
-        if _relogios(ca) != _relogios(cb):
+        alvo = str(fix.get("to") or "").strip()
+        if not alvo:
+            # apagar: o texto sumiu das cues, entao nao da para localizar por
+            # ele. A janela ficaria adivinhada — melhor recusar.
             return None
-        if ta != tb:
-            mexidas.append(i)
-    if not mexidas:
+        toks = _split_tokens(alvo)
+        if not toks:
+            return None
+        status, hits = resolve_replacement_index(palavras, toks, fix)
+        if status != "ok" or not hits:
+            return None
+        for h in hits:
+            for k in range(len(toks)):
+                if h + k < len(dono):
+                    tocadas.add(dono[h + k])
+    if not tocadas:
         return None
 
-    ms_ini = float(a[mexidas[0]].get("startMs") or 0)
-    ms_fim = float(a[mexidas[-1]].get("endMs") or 0)
-    ms_fim = max(ms_fim, float(b[mexidas[-1]].get("endMs") or 0))
+    ms_ini = min(float(lista[i].get("startMs") or 0) for i in tocadas)
+    ms_fim = max(float(lista[i].get("endMs") or 0) for i in tocadas)
     if ms_fim <= ms_ini:
         return None
     ini = max(0, int(ms_ini / 1000.0 * fps) - FOLGA_ANTES)
     fim = min(frames, int(ms_fim / 1000.0 * fps) + FOLGA_DEPOIS)
-    if fim <= ini:
-        return None
-    return ini, fim
+    return (ini, fim) if fim > ini else None
 
 
 def _limites_em_keyframe(
@@ -218,12 +217,21 @@ def _desenhar_fatia(
         "-f", "rawvideo", "-pix_fmt", "rgba", "-s", f"{width}x{height}",
         "-r", f"{fps:g}", "-i", "-",
         "-filter_complex",
-        f"[0:v]fps={fps:g},setpts=PTS-STARTPTS,trim=end_frame={n}[cutv];"
-        f"[1:v]setpts=PTS-STARTPTS[ovl];[cutv][ovl]overlay=0:0:format=auto[vid]",
+        # A MESMA cadeia do caminho de uma passada (render_proprio.py), na
+        # mesma ordem. Faltavam `format=yuv420p` e sobretudo
+        # `scale=in_range=full:out_range=limited`: sem a conversao de FAIXA o
+        # trecho emendado sai com nivel diferente do resto do arquivo, que e
+        # copiado — uma costura visivel. Medido: os quadros da fatia diferiam
+        # do render completo em ~10 de 255, enquanto dois renders completos sao
+        # bit a bit identicos.
+        f"[0:v]trim=end_frame={n},fps={fps:g},setpts=PTS-STARTPTS[cutv];"
+        f"[1:v]setpts=PTS-STARTPTS[ovl];"
+        f"[cutv][ovl]overlay=eof_action=pass:format=auto,"
+        f"format=yuv420p,"
+        f"scale=in_range=full:out_range=limited,"
+        f"setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv[vid]",
         "-map", "[vid]", "-an",
         "-c:v", enc, *extra,
-        "-colorspace", "bt709", "-color_primaries", "bt709",
-        "-color_trc", "bt709", "-color_range", "tv",
         "-frames:v", str(n), str(dest),
     ]
     ff = subprocess.Popen(argv, stdin=subprocess.PIPE, **NOWIN)
@@ -268,8 +276,9 @@ def _desenhar_fatia(
 
 def emendar_legenda(
     edit_dir: Path, *, public: Path, edit_data: dict[str, Any],
-    cut: Path, final: Path, cues_velhas: Any, cues_novas: Any,
+    cut: Path, final: Path, cues: Any, fixes: list,
     frames: int, fps: float, width: int = 1080, height: int = 1920,
+    dest: Path | None = None,
 ) -> Path | None:
     """Refaz só a fatia mexida e emenda no final. `None` = siga o caminho normal."""
     from app.overlay_compose import count_frames, video_info
@@ -277,9 +286,9 @@ def emendar_legenda(
     t0 = time.perf_counter()
     if not (final.is_file() and cut.is_file()):
         return None
-    janela = janela_de_cues(cues_velhas, cues_novas, fps=fps, frames=frames)
+    janela = janela_das_correcoes(cues, fixes, fps=fps, frames=frames)
     if janela is None:
-        print("EMENDA_PULADA mudanca nao e so de texto", flush=True)
+        print("EMENDA_PULADA nao localizei a fatia com seguranca", flush=True)
         return None
     ini_f, fim_f = janela
     fracao = (fim_f - ini_f) / max(1, frames)
@@ -309,7 +318,7 @@ def emendar_legenda(
     cauda = trab / "cauda.mp4"
     lista = trab / "concat.txt"
     juntos = trab / "juntos.mp4"
-    saida = trab / "final.mp4"
+    saida = Path(dest) if dest is not None else trab / "final.mp4"
     try:
         if not _desenhar_fatia(public, edit_data, ini_f=kf_ini_f, n=n,
                                frames=frames, fps=fps, width=width,
@@ -319,8 +328,12 @@ def emendar_legenda(
 
         pedacos: list[Path] = []
         if t_ini > 1e-6:
+            # `-frames:v`, nao `-t`. Com `-c copy` o corte por TEMPO acontece no
+            # pacote e passa do ponto: medido neste projeto, `-t 19,4667` deu
+            # 586 quadros onde a fatia comeca no 584 — dois quadros duplicados
+            # na emenda, e a conferencia (com razao) reprovava o arquivo.
             r = _run([_ffmpeg(), "-y", "-hide_banner", "-loglevel", "error",
-                      "-i", str(final), "-t", f"{t_ini:.6f}",
+                      "-i", str(final), "-frames:v", str(kf_ini_f),
                       "-map", "0:v:0", "-c:v", "copy", "-an", str(cabeca)])
             if r.returncode != 0 or not cabeca.is_file():
                 print("EMENDA_FALHOU cabeca", flush=True)
@@ -359,7 +372,11 @@ def emendar_legenda(
 
         got = int(count_frames(saida) or 0)
         if got != frames:
-            print(f"EMENDA_REPROVADA quadros {got}!={frames}", flush=True)
+            partes = " ".join(
+                f"{x.stem}={count_frames(x)}" for x in pedacos if x.is_file())
+            print(f"EMENDA_REPROVADA quadros {got}!={frames} "
+                  f"[{partes}] t_ini={t_ini:.4f} t_fim={t_fim:.4f} n={n}",
+                  flush=True)
             return None
         got_sec = float((video_info(saida) or {}).get("duration") or 0.0)
         if abs(got_sec - dur) > 0.08:
