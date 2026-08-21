@@ -26,10 +26,26 @@ from pathlib import Path
 
 
 def _word_items(raw: dict) -> list[dict]:
-    return [
-        w for w in (raw.get("words") or [])
+    out = [
+        dict(w) for w in (raw.get("words") or [])
         if w.get("type") == "word" and w.get("start") is not None
     ]
+    # Os transcripts JA GRAVADOS tem palavra voltando no tempo (133 de 178 nos
+    # projetos do usuario) e quem consome ordena por start — a legenda saia
+    # com palavras trocadas. A ordem do array e a da fala; o clamp so garante
+    # starts crescentes. O mesmo conserto existe na escrita (transcribe.py),
+    # mas os arquivos antigos passam por AQUI a cada rebuild de legenda.
+    prev = None
+    for w in out:
+        s = float(w["start"])
+        e = float(w.get("end") or s)
+        if prev is not None and s < prev + 1e-3:
+            s = prev + 1e-3
+        if e < s + 0.04:
+            e = s + 0.04
+        w["start"], w["end"] = s, e
+        prev = s
+    return out
 
 
 def _pack(text: str, t: float, e: float) -> dict:

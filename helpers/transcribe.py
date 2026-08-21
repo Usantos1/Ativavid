@@ -481,6 +481,34 @@ def call_elevenlabs(
     raise RuntimeError(last_err)
 
 
+def _prender_ordem(words: list[dict]) -> list[dict]:
+    """Starts estritamente crescentes, preservando a ORDEM DO ARRAY.
+
+    A ordem do array e a ordem da fala (e a ordem do texto transcrito); o
+    timestamp e a parte com jitter. Medido nos 178 transcripts reais do
+    usuario: 133 tinham palavra "voltando" no tempo (746 pares, ate 0,98s) —
+    e quem consome ordena por start, entao a legenda saia com as palavras
+    TROCADAS ("Olha jeito!" onde a fala diz "jeito! Olha").
+
+    O clamp move o start para 1ms depois do anterior, o minimo que garante a
+    ordem sob qualquer sort. O end acompanha para a palavra nunca ter duracao
+    negativa.
+    """
+    prev_s: float | None = None
+    for w in words:
+        if w.get("type") != "word":
+            continue
+        s = float(w.get("start") or 0.0)
+        e = float(w.get("end") or s)
+        if prev_s is not None and s < prev_s + 1e-3:
+            s = prev_s + 1e-3
+        if e < s + 0.04:
+            e = s + 0.04
+        w["start"], w["end"] = s, e
+        prev_s = s
+    return words
+
+
 def _to_scribe_words(groq_words: list[dict], offset: float) -> list[dict]:
     """Convert Groq word list to Scribe-schema entries, inserting 'spacing'
     entries for inter-word gaps so downstream silence detection works.
@@ -513,7 +541,7 @@ def _to_scribe_words(groq_words: list[dict], offset: float) -> list[dict]:
             "speaker_id": "speaker_0",
         })
         prev_end = e
-    return out
+    return _prender_ordem(out)
 
 
 def _el_to_scribe_words(el_words: list[dict], offset: float) -> list[dict]:
@@ -537,7 +565,7 @@ def _el_to_scribe_words(el_words: list[dict], offset: float) -> list[dict]:
             "type": wtype,
             "speaker_id": w.get("speaker_id") or "speaker_0",
         })
-    return out
+    return _prender_ordem(out)
 
 
 def _transcribe_audio(
