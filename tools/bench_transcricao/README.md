@@ -177,11 +177,14 @@ python -m pytest pipeline/test_bench_contrato.py pipeline/test_bench_impacto.py 
 # ou todos: python -m pytest pipeline/test_bench_*.py -q
 ```
 
-50 testes. Os de alinhamento cobrem divisão, fusão, remoção, inserção recusada,
+62 testes. Os de alinhamento cobrem divisão, fusão, remoção, inserção recusada,
 intervalo apertado e o freio de retranscrição — cada um conferindo que a linha
 do tempo do Whisper sobreviveu. Os de contrato usam os tipos e a conversão
 REAIS do projeto: se o schema mudar, isto falha antes de alguém gastar uma
-noite de GPU.
+noite de GPU. E `test_bench_gemini_resposta.py` cobre o que uma rodada de
+horas encontra de verdade: JSON em cerca de código, prosa em volta, índice
+errado, correções sobrepostas — nada disso pode derrubar o vídeo 7 nem, pior,
+corromper a palavra errada em silêncio.
 
 ## Karaokê: a métrica certa não é "quebrou?"
 

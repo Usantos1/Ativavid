@@ -118,6 +118,46 @@ def _rodar_transcribe(video: Path, trabalho: Path, backend: str,
     return json.loads(Path(saida).read_text(encoding="utf-8")), dt
 
 
+def aplicar_correcoes(palavras: list[Palavra], correcoes: list[dict]
+                      ) -> tuple[list[str], list[dict], list[dict]]:
+    """Aplica as correções do Gemini sobre os tokens do Whisper.
+
+    Devolve (tokens, aplicadas, ignoradas). Não toca em tempo: quem reconcilia
+    a linha do tempo depois é `alinhar.aplicar`.
+
+    DE TRÁS PARA FRENTE, sempre: aplicar em ordem crescente faria a segunda
+    correção errar o alvo assim que a primeira mudasse a quantidade de
+    palavras (uma divisão desloca todo o resto do array).
+
+    Duas proteções contra o modelo errar a conta:
+
+      **índice fora do intervalo** — descartado.
+
+      **âncora** — a correção declara `de`, e se o texto naquele índice não
+      bate, ela é descartada. Este é o erro mais perigoso do conjunto: o
+      modelo acerta QUAL palavra está errada e erra ONDE ela está. Sem a
+      âncora, "praimcamp → PrimeCamp" no índice 0 sobrescreveria "eu".
+      De quebra, resolve correções sobrepostas: a primeira aplicada muda o
+      texto, a âncora da segunda deixa de bater e ela cai sozinha em vez de
+      sobrescrever o que já foi corrigido.
+    """
+    tokens = [p.texto for p in palavras]
+    aplicadas: list[dict] = []
+    ignoradas: list[dict] = []
+    for c in sorted(correcoes, key=lambda c: int(c["indice"]), reverse=True):
+        i, n = int(c["indice"]), int(c.get("n", 1))
+        if i < 0 or n < 1 or i + n > len(tokens):
+            ignoradas.append({**c, "motivo": "índice fora do intervalo"})
+            continue
+        trecho = " ".join(tokens[i:i + n])
+        if c.get("de") and alinhar.tokenizar(c["de"]) != alinhar.tokenizar(trecho):
+            ignoradas.append({**c, "motivo": f"âncora não bate: {trecho!r}"})
+            continue
+        tokens[i:i + n] = alinhar.tokenizar(c["para"])
+        aplicadas.append(c)
+    return tokens, aplicadas, ignoradas
+
+
 # ------------------------------------------------------------------ cenários
 
 def scribe(video: Path, trabalho: Path) -> Saida:
@@ -189,22 +229,7 @@ def whisper_mais_gemini(base: Saida, video: Path, trabalho: Path, *,
         via = "llm_gateway (sessao web)"
     dt = time.perf_counter() - t0
 
-    tokens = [p.texto for p in base.palavras]
-    aplicadas, ignoradas = [], []
-    for c in sorted(correcoes, key=lambda c: int(c["indice"]), reverse=True):
-        i, n = int(c["indice"]), int(c.get("n", 1))
-        if i < 0 or i + n > len(tokens):
-            ignoradas.append({**c, "motivo": "índice fora do intervalo"})
-            continue
-        trecho = " ".join(tokens[i:i + n])
-        # Âncora: se o texto no índice não bate, o Gemini errou a conta e
-        # aplicar corromperia OUTRA palavra. Descartar é o lado seguro.
-        if c.get("de") and alinhar.tokenizar(c["de"]) != alinhar.tokenizar(trecho):
-            ignoradas.append({**c, "motivo": f"âncora não bate: {trecho!r}"})
-            continue
-        tokens[i:i + n] = alinhar.tokenizar(c["para"])
-        aplicadas.append(c)
-
+    tokens, aplicadas, ignoradas = aplicar_correcoes(base.palavras, correcoes)
     r = alinhar.aplicar(base.palavras, tokens)
     return Saida(
         motor=nome, palavras=r.palavras,
