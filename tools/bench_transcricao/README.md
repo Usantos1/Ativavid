@@ -87,9 +87,22 @@ Whisper como correta — o que favorece B, D e E.
 cp tools/bench_transcricao/corpus.exemplo.json corpus.json   # preencha
 python tools/bench_transcricao/preflight.py --corpus corpus.json   # confere tudo antes
 python tools/bench_transcricao/rodar.py --corpus corpus.json --saida bench/ --cortes
+python tools/bench_transcricao/preliminar.py --saida bench/        # já dá resultado
 # abra bench/validacao/validar_v01.html, marque, salve o JSON na mesma pasta
 python tools/bench_transcricao/relatorio.py --saida bench/
 ```
+
+**Se a rodada cair, rode o mesmo comando de novo.** Ela retoma de onde parou:
+cada cenário já concluído é reaproveitado do disco. `--refazer` força repetir.
+Isto importa porque o cache de transcrição fica DESLIGADO durante o benchmark
+(medição a frio), então sem retomada a repetição seria integral — horas de GPU
+e cota paga de API outra vez.
+
+O `preliminar.py` dá resultado no minuto em que a rodada termina, sem esperar
+validação humana: concordância entre motores, quanto ouvido humano falta, e as
+duas coisas que se verificam sozinhas — se o cenário D respeitou o tempo do
+Whisper (se não respeitou, perdeu, com WER nenhum) e quanto a produção teve de
+reparar cada legenda.
 
 O `preflight.py` existe porque a rodada leva horas de GPU e cota de API, e
 descobrir no vídeo 6 que faltava uma chave é caro. Ele confere FFmpeg, GPU,
@@ -97,6 +110,10 @@ faster-whisper, modelo já baixado, as duas chaves, sessão de IA, cada arquivo
 do corpus, a cobertura de situações e o `custos.json` — em segundos, dizendo o
 conserto de cada item. Sai com 2 se nem o cenário local roda, 1 se dá para
 rodar parte.
+
+Ele também **prevê o gasto e o tempo** a partir da duração real do corpus.
+Cota de API se gasta uma vez: ver o número antes é a diferença entre decidir
+rodar 8 vídeos e descobrir depois que deu para 3.
 
 Para exercitar o encanamento antes de gastar os vídeos reais:
 
@@ -157,9 +174,10 @@ python -m pytest pipeline/test_bench_alinhamento.py \
 
 ```bash
 python -m pytest pipeline/test_bench_contrato.py pipeline/test_bench_impacto.py -q
+# ou todos: python -m pytest pipeline/test_bench_*.py -q
 ```
 
-47 testes. Os de alinhamento cobrem divisão, fusão, remoção, inserção recusada,
+50 testes. Os de alinhamento cobrem divisão, fusão, remoção, inserção recusada,
 intervalo apertado e o freio de retranscrição — cada um conferindo que a linha
 do tempo do Whisper sobreviveu. Os de contrato usam os tipos e a conversão
 REAIS do projeto: se o schema mudar, isto falha antes de alguém gastar uma

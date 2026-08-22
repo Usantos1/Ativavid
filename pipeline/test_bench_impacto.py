@@ -120,3 +120,43 @@ def test_o_cenario_D_nao_pode_criar_reparo():
                                               "beleza"]).palavras))
     assert antes.intacto and depois.intacto
     assert depois.deslocamento_total_ms == antes.deslocamento_total_ms == 0.0
+
+
+# --------------------------------------------------------------- retomada
+
+def test_retomada_reaproveita_rodada_anterior(tmp_path):
+    """Uma rodada leva horas de GPU e queima cota paga. Morrer no vídeo 6 não
+    pode obrigar a refazer os cinco primeiros — ainda mais com o cache de
+    transcrição desligado de propósito, para medir a frio."""
+    from tools.bench_transcricao.rodar import _ja_feito
+
+    p = tmp_path / "scribe.json"
+    assert _ja_feito(p) is None                      # não existe
+    S([P("oi", 0.0, 0.3)]).salvar(p)
+    r = _ja_feito(p)
+    assert r is not None and [x.texto for x in r.palavras] == ["oi"]
+
+
+def test_retomada_ignora_resultado_abortado(tmp_path):
+    """Arquivo escrito por uma rodada que morreu no meio não é resultado."""
+    import json
+
+    from tools.bench_transcricao.rodar import _ja_feito
+
+    p = tmp_path / "gemini_audio.json"
+    S([]).salvar(p)
+    assert _ja_feito(p) is None                      # sem palavra e sem texto
+
+    p.write_text("{ isto não é json", encoding="utf-8")
+    assert _ja_feito(p) is None                      # corrompido
+
+
+def test_retomada_aceita_motor_sem_palavra_mas_com_texto(tmp_path):
+    """O Gemini pode entregar só frase: tem texto, não tem palavra. É
+    resultado legítimo e não pode ser refeito à toa."""
+    from tools.bench_transcricao.rodar import _ja_feito
+
+    p = tmp_path / "gemini_audio.json"
+    Saida(motor="gemini_audio", palavras=[], granularidade="frase",
+          texto="eu vendi quinze mil").salvar(p)
+    assert _ja_feito(p) is not None

@@ -26,6 +26,7 @@ if str(RAIZ) not in sys.path:
     sys.path.insert(0, str(RAIZ))
 
 from tools.bench_transcricao import motores, validar          # noqa: E402
+from tools.bench_transcricao.motores import Saida             # noqa: E402
 from tools.bench_transcricao.discordancia import encontrar    # noqa: E402
 from tools.bench_transcricao.motores import MotorIndisponivel  # noqa: E402
 
@@ -56,8 +57,27 @@ def _planejar_cortes(prontos: dict, video: Path, destino: Path) -> dict:
     return saida_json
 
 
+def _ja_feito(caminho: Path) -> Saida | None:
+    """Resultado válido de uma rodada anterior, se houver.
+
+    Uma rodada completa leva horas de GPU e queima cota paga de API. Morrer no
+    vídeo 6 e ter de refazer os cinco primeiros é caro o bastante para valer
+    esta checagem — e o cache de transcrição está DESLIGADO de propósito
+    (medição a frio), então sem isto a repetição seria integral.
+    """
+    if not caminho.is_file():
+        return None
+    try:
+        r = Saida.de_json(json.loads(caminho.read_text(encoding="utf-8")))
+    except (ValueError, KeyError):
+        return None
+    # Motor sem palavra e sem texto é rodada abortada, não resultado.
+    return r if (r.palavras or r.texto.strip()) else None
+
+
 def _um_video(item: dict, saida: Path, so: list[str] | None,
-              modelo: str, cortes: bool = False) -> dict:
+              modelo: str, cortes: bool = False,
+              refazer: bool = False) -> dict:
     vid = item["id"]
     video = Path(item["video"]).expanduser()
     destino = saida / vid
@@ -72,6 +92,13 @@ def _um_video(item: dict, saida: Path, so: list[str] | None,
         if so and nome not in so:
             estado[nome] = "pulado"
             return None
+        if not refazer:
+            anterior = _ja_feito(destino / f"{nome}.json")
+            if anterior is not None:
+                prontos[nome] = anterior
+                estado[nome] = (f"reaproveitado  {len(anterior.palavras)} "
+                                f"palavras (use --refazer para repetir)")
+                return anterior
         try:
             r = fn()
             r.salvar(destino / f"{nome}.json")
@@ -144,6 +171,8 @@ def main() -> int:
     ap.add_argument("--modelo", default="medium", help="modelo do cenário B")
     ap.add_argument("--so", nargs="*", choices=CENARIOS,
                     help="rodar só estes cenários")
+    ap.add_argument("--refazer", action="store_true",
+                    help="ignorar resultados de rodadas anteriores")
     ap.add_argument("--cortes", action="store_true",
                     help="planejar cortes a partir de cada transcript "
                          "(exige sessão de IA ativa)")
@@ -162,7 +191,7 @@ def main() -> int:
 
     for item in corpus["videos"]:
         print(f"\n== {item['id']}  {item.get('tags', '')}")
-        estado = _um_video(item, saida, a.so, a.modelo, a.cortes)
+        estado = _um_video(item, saida, a.so, a.modelo, a.cortes, a.refazer)
         relatorio[item["id"]] = estado
         for k, v in estado.items():
             print(f"   {k:22s} {v}")
@@ -172,7 +201,9 @@ def main() -> int:
         json.dumps(relatorio, ensure_ascii=False, indent=2), encoding="utf-8")
 
     ok = sum(1 for m in relatorio.values()
-             for k, v in m.items() if not k.startswith("_") and v.startswith("ok"))
+             for k, v in m.items()
+             if not k.startswith("_")
+             and (v.startswith("ok") or v.startswith("reaproveitado")))
     alvo = sum(1 for m in relatorio.values()
                for k in m if not k.startswith("_"))
     print(f"\n{ok} de {alvo} execuções bem-sucedidas.")

@@ -194,9 +194,52 @@ def _corpus(r: Relato, caminho: Path) -> None:
             except (ValueError, subprocess.SubprocessError):
                 pass
     if duracao:
-        r.add(OK, "duração total", f"{duracao / 60:.1f} min de áudio",
-              f"estimativa grosseira: cenário B ~{duracao / 60 / 2.7:.0f} min "
-              f"em GPU; A, C e D somam upload + espera de API")
+        r.add(OK, "duração total", f"{duracao / 60:.1f} min de áudio")
+        _previsao(r, duracao / 60)
+
+
+def _previsao(r: Relato, minutos: float) -> None:
+    """Quanto a rodada vai custar e demorar, ANTES de começar.
+
+    Cota de API se gasta uma vez. Ver o número antes é a diferença entre
+    decidir rodar 8 vídeos e descobrir depois que deu para 3.
+    """
+    if minutos <= 0:
+        return
+    p = Path(__file__).resolve().parent / "custos.json"
+    precos = json.loads(p.read_text(encoding="utf-8")) if p.is_file() else {}
+
+    total, sem_preco = 0.0, []
+    # A e C pagam pelo áudio uma vez; D paga o áudio de novo na revisão.
+    for motor in ("scribe", "gemini_audio", "whisper_gemini"):
+        v = (precos.get(motor) or {}).get("usd_por_minuto_de_audio")
+        if v is None:
+            sem_preco.append(motor)
+        else:
+            total += float(v) * minutos
+
+    if sem_preco:
+        r.add(AVISO, "gasto previsto",
+              f"não dá para calcular: sem preço de {', '.join(sem_preco)}",
+              "preencha custos.json — a rodada gasta cota de verdade e vale "
+              "saber quanto antes")
+    else:
+        r.add(OK, "gasto previsto",
+              f"~US$ {total:.2f} para {minutos:.1f} min de áudio "
+              f"(A + C + D somados)")
+
+    # Tempo: B é medido (2,7x tempo real em GPU, ~1x em CPU); nuvem varia.
+    try:
+        from app.transcricao.plataforma import detectar
+
+        fator = 2.7 if detectar().backend == "cuda" else 0.9
+    except Exception:  # noqa: BLE001
+        fator = 0.9
+    r.add(OK, "tempo previsto",
+          f"cenário B ~{minutos / fator:.0f} min; A, C e D somam upload e "
+          f"espera de API por cima",
+          "a rodada retoma de onde parou — se cair, rode o mesmo comando de "
+          "novo sem --refazer")
 
 
 def _custos(r: Relato) -> None:
