@@ -1,5 +1,43 @@
 # Changelog
 
+## 2.60
+
+- **A legenda passou a ser revisada antes de ir para a tela.** Depois de
+  transcrever no seu computador, o app manda só o TEXTO para o Gemini, que
+  aponta palavras que provavelmente saíram erradas — nomes de marca, números,
+  palavras técnicas. Num vídeo real de teste, *"perícula"* apareceu nove vezes
+  e virou *"película"* nas nove. Comparado com a transcrição sem revisão em
+  quatro vídeos conferidos de ouvido: o erro de palavra caiu de **22,7% para
+  21,3%**, o de número foi de **82,7% para 85,1% de acerto**, e sobraram
+  **menos correções para você fazer à mão** (7,9 em vez de 8,7 a cada 100
+  palavras)
+
+- **O karaokê não sai do lugar.** O tempo de cada palavra continua sendo o que
+  o seu computador mediu — o Gemini não encosta nele. Medido nos 12 vídeos do
+  teste: **zero milissegundo** de diferença. Quando uma palavra é separada em
+  duas (*"PrimeCamp"* virando *"Prime Camp"*), as duas metades dividem
+  exatamente o tempo que a palavra original ocupava, sem sobrar nem faltar
+
+- **Não custa nada e o áudio não sai do seu computador.** A revisão usa a
+  sessão do navegador que você já capturou pela extensão — sem chave de API,
+  sem cobrança. Só o texto é enviado; o áudio nunca sai da máquina
+
+- **Cada vídeo demora de 16 a 40 segundos a mais.** É o tempo de ida e volta
+  até o Gemini, e ele quase não depende do tamanho do vídeo: no teste, um
+  clipe de 12 segundos levou 26s e um de 90 segundos levou 16s
+
+- **Se o Gemini estiver fora do ar, a legenda sai assim mesmo.** Sessão
+  expirada, sem internet, resposta quebrada: o app entrega a transcrição do
+  seu computador, do mesmo jeito que na 2.59, e diz no diagnóstico que a
+  revisão não aconteceu. **Nunca cai sozinho para um serviço pago** — e na
+  próxima vez tenta revisar de novo, sem transcrever tudo outra vez
+
+- Importar de novo um vídeo já revisado continua instantâneo, e as duas
+  versões (revisada e sem revisão) convivem no cache
+
+- Para desligar à mão: variável de ambiente `ATIVAVID_REVISAO=off`. O efeito é
+  imediato no próximo vídeo, sem reinstalar e sem apagar arquivo nenhum
+
 ## 2.59
 
 - **As telas voltam a usar o monitor inteiro.** Em Marca e Integrações os
