@@ -41,6 +41,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+from ffprobe_util import entrada_nvdec
+
 # TV-range anchors, normalized 0..1
 TV_BLACK = 16 / 255
 TV_WHITE = 235 / 255
@@ -98,7 +100,7 @@ def _sample_stats(video: Path, n: int = 24) -> dict[str, float] | None:
         # O `fps` so filtra DEPOIS do decode, entao amostrar 8 quadros de uma
         # 4K60 custa decodificar os 4.900. Nao da para filtrar antes; da para
         # decodificar na GPU, que entrega os MESMOS quadros.
-        hw = ["-hwaccel", "cuda"] if hwaccel else []
+        hw = entrada_nvdec(video) if hwaccel else []
         return ["ffmpeg", "-y", "-hide_banner", "-nostats", *hw, "-i", str(video),
                 "-vf", f"fps={fps:.3f},signalstats,metadata=print:file=meta.txt",
                 "-an", "-f", "null", "-"]

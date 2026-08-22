@@ -59,6 +59,50 @@ def stream_fields(
     return streams[0] if streams else {}
 
 
+# `-hwaccel cuda` e um PEDIDO, nao uma exigencia: quando o ffmpeg nao consegue
+# usar o NVDEC para aquele fluxo ele decodifica na CPU e nao avisa. Pedir o
+# decodificador pelo nome tira a ambiguidade -- se ele nao servir, o comando
+# FALHA, e a queda para a CPU vira decisao explicita de quem chama.
+#
+# Medido em fonte 4K60 HEVC 10-bit real do usuario, 20s de decode puro, 7
+# voltas intercaladas, maquina livre (22/08/2026):
+#
+#   -hwaccel cuda   mediana 59,5s   faixa 42,2-84,6s
+#   hevc_cuvid      mediana 39,4s   faixa 32,5-60,8s
+#
+# A mediana do cuvid fica ABAIXO da melhor volta do -hwaccel: e isso que faz o
+# ganho sobreviver a variancia desta maquina, que chega a 2,3x no mesmo
+# trabalho. E a imagem e a mesma: PSNR infinito na cadeia real do prep, com a
+# rotacao do iPhone preservada (1080x1920 dos dois lados).
+#
+# Cuidado que motivou a nota: `-hwaccel_output_format cuda` (manter o quadro na
+# GPU) NAO serve aqui. O ffmpeg nao auto-rotaciona quadro de GPU, e a fonte do
+# iPhone tem rotation=-90 -- o video sai deitado, em silencio. Medido: 1920x1080
+# onde o caminho certo da 1920x3414.
+_CUVID = {"hevc": "hevc_cuvid", "h264": "h264_cuvid",
+          "vp9": "vp9_cuvid", "av1": "av1_cuvid"}
+
+
+def entrada_nvdec(path: Path | str, *, exe: str | None = None,
+                  runner: Callable[[Sequence[str]], str] | None = None) -> list[str]:
+    """Argumentos de ENTRADA do ffmpeg para decodificar na GPU.
+
+    Devolve `-c:v <codec>_cuvid` quando o codec e conhecido; senao o
+    `-hwaccel cuda` generico, que e o comportamento antigo.
+
+    `ATIVAVID_CUVID=0` volta tudo ao generico -- escape se a maquina de alguem
+    reagir mal, no mesmo estilo de `ATIVAVID_PREP_SOURCE=0`.
+    """
+    import os
+
+    if os.environ.get("ATIVAVID_CUVID", "").strip() == "0":
+        return ["-hwaccel", "cuda"]
+    codec = str(stream_fields(path, ["codec_name"], exe=exe, runner=runner)
+                .get("codec_name") or "").strip().lower()
+    dec = _CUVID.get(codec)
+    return ["-c:v", dec] if dec else ["-hwaccel", "cuda"]
+
+
 def fps_of(path: Path | str, *, default: float = 0.0, exe: str | None = None,
            runner: Callable[[Sequence[str]], str] | None = None) -> float:
     """Quadros por segundo do vídeo. `default` quando não dá para saber."""
