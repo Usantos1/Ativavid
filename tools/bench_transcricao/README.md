@@ -96,8 +96,13 @@ Whisper como correta — o que favorece B, D e E.
 ## Rodar — uma operação só
 
 ```bash
-python tools/bench_transcricao/benchmark.py --corpus corpus.json
+uv run python tools/bench_transcricao/benchmark.py --corpus corpus.json
 ```
+
+O `uv run` não é opcional: o projeto instala tudo no `.venv` do `uv`, e um
+`python` pelado no Windows cai no alias da Microsoft Store e falha com
+"Python não foi encontrado". No Windows há o atalho
+`tools\bench_transcricao\benchmark.cmd`, que já faz isso.
 
 Encadeia preflight → benchmark → preliminar → **para na validação humana** →
 relatório final. Não reimplementa nada: chama o `main()` de cada etapa. Depois
@@ -112,11 +117,11 @@ passada) ou 2 (preflight barrou).
 
 ```bash
 cp tools/bench_transcricao/corpus.exemplo.json corpus.json   # preencha
-python tools/bench_transcricao/preflight.py --corpus corpus.json   # confere tudo antes
-python tools/bench_transcricao/rodar.py --corpus corpus.json --saida bench/ --cortes
-python tools/bench_transcricao/preliminar.py --saida bench/        # já dá resultado
+uv run python tools/bench_transcricao/preflight.py --corpus corpus.json   # confere tudo antes
+uv run python tools/bench_transcricao/rodar.py --corpus corpus.json --saida bench/ --cortes
+uv run python tools/bench_transcricao/preliminar.py --saida bench/        # já dá resultado
 # abra bench/validacao/validar_v01.html, marque, salve o JSON na mesma pasta
-python tools/bench_transcricao/relatorio.py --saida bench/
+uv run python tools/bench_transcricao/relatorio.py --saida bench/
 ```
 
 **Se a rodada cair, rode o mesmo comando de novo.** Ela retoma de onde parou:
@@ -145,8 +150,8 @@ rodar 8 vídeos e descobrir depois que deu para 3.
 Para exercitar o encanamento antes de gastar os vídeos reais:
 
 ```bash
-python tools/bench_transcricao/corpus_sintetico.py --saida bench/sintetico
-python tools/bench_transcricao/rodar.py --corpus bench/sintetico/corpus.json \
+uv run python tools/bench_transcricao/corpus_sintetico.py --saida bench/sintetico
+uv run python tools/bench_transcricao/rodar.py --corpus bench/sintetico/corpus.json \
        --saida bench/sintetico/bench --so whisper_local
 ```
 
@@ -194,13 +199,13 @@ com amostra ≥ 20, a revisão inteira volta atrás).
 ## Testes
 
 ```bash
-python -m pytest pipeline/test_bench_alinhamento.py \
+uv run python -m pytest pipeline/test_bench_alinhamento.py \
                  pipeline/test_bench_metricas.py \
                  pipeline/test_bench_discordancia.py -q
 ```
 
 ```bash
-python -m pytest pipeline/test_bench_contrato.py pipeline/test_bench_impacto.py -q
+uv run python -m pytest pipeline/test_bench_contrato.py pipeline/test_bench_impacto.py -q
 # ou todos: python -m pytest pipeline/test_bench_*.py -q
 ```
 
