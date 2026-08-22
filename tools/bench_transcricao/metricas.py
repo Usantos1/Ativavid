@@ -180,24 +180,50 @@ def score_entities(ref_text: str, hyp_text: str,
 
 # --------------------------------------------------------- retrabalho manual
 
-def manual_edits_per_100w(counts: EditCounts) -> float:
-    """Correcoes humanas necessarias por 100 palavras.
-
-    Definicao operacional do benchmark: cada substituicao, delecao ou insercao
-    e uma acao de edicao que uma pessoa precisa fazer antes de publicar.
-    Deliberadamente igual ao numerador do WER, so que por 100 palavras - o
-    ponto e expressar a mesma verdade na unidade que o usuario do ATIVAVID
-    sente (quantas vezes ele vai ter que parar e digitar).
-    """
+def operacoes_100w(counts: EditCounts) -> float:
+    """Operações de edição por 100 palavras — o numerador do WER na unidade
+    do produto. Sobe junto com o WER por construção; existe para comparar."""
     n = counts.ref_len
     return 100.0 * (counts.sub + counts.dele + counts.ins) / n if n else 0.0
+
+
+def correcoes_humanas(ops: list[tuple], ref_len: int) -> tuple[int, float]:
+    """Quantas vezes uma pessoa precisa PARAR E DIGITAR, por 100 palavras.
+
+    Não é o WER em outra unidade — e a diferença importa. Quem conserta
+    "na praimcamp ontem" seleciona o trecho e digita UMA vez; o WER conta três
+    operações. Um motor que erra três palavras seguidas incomoda menos que um
+    que erra três palavras espalhadas pelo vídeo, porque o segundo obriga a
+    parar três vezes e a achar cada ponto.
+
+    Então a conta é por CORRIDA de erro: sequências vizinhas de troca, omissão
+    ou invenção viram uma correção só. É esta a métrica que responde a
+    pergunta do produto — quanto trabalho manual cada motor gera.
+
+    Devolve (número de correções, correções por 100 palavras).
+    """
+    corridas = 0
+    dentro = False
+    for op, _i, _j in ops:
+        if op == "eq":
+            dentro = False
+        elif not dentro:
+            corridas += 1
+            dentro = True
+    return corridas, (100.0 * corridas / ref_len if ref_len else 0.0)
+
+
+# Nome antigo, mantido para não quebrar quem já importava.
+manual_edits_per_100w = operacoes_100w
 
 
 @dataclass
 class TextReport:
     counts: EditCounts
     cer: float
-    edits_100w: float
+    edits_100w: float        # operações por 100 palavras (segue o WER)
+    correcoes: int           # vezes que a pessoa para e digita
+    correcoes_100w: float    # o mesmo, por 100 palavras
     entities: CategoryScore
     numbers: CategoryScore
     colloquial: CategoryScore
@@ -208,10 +234,13 @@ def evaluate_text(ref_text: str, hyp_text: str,
     ref = tokens(ref_text)
     hyp = tokens(hyp_text)
     counts, ops = levenshtein_ops(ref, hyp)
+    n_corr, corr_100 = correcoes_humanas(ops, counts.ref_len)
     return TextReport(
         counts=counts,
         cer=cer(ref_text, hyp_text),
-        edits_100w=manual_edits_per_100w(counts),
+        edits_100w=operacoes_100w(counts),
+        correcoes=n_corr,
+        correcoes_100w=corr_100,
         entities=score_entities(ref_text, hyp_text, entities),
         numbers=score_category(ref, ops, hyp, is_number_token),
         colloquial=score_category(ref, ops, hyp, is_colloquial_token),

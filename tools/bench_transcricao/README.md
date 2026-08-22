@@ -177,7 +177,7 @@ python -m pytest pipeline/test_bench_contrato.py pipeline/test_bench_impacto.py 
 # ou todos: python -m pytest pipeline/test_bench_*.py -q
 ```
 
-62 testes. Os de alinhamento cobrem divisão, fusão, remoção, inserção recusada,
+65 testes. Os de alinhamento cobrem divisão, fusão, remoção, inserção recusada,
 intervalo apertado e o freio de retranscrição — cada um conferindo que a linha
 do tempo do Whisper sobreviveu. Os de contrato usam os tipos e a conversão
 REAIS do projeto: se o schema mudar, isto falha antes de alguém gastar uma

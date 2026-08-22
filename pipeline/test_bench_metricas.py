@@ -14,8 +14,8 @@ if str(RAIZ) not in sys.path:
     sys.path.insert(0, str(RAIZ))
 
 from tools.bench_transcricao.metricas import (
-    cer, evaluate_text, is_colloquial_token, is_number_token,
-    manual_edits_per_100w, wer)
+    cer, correcoes_humanas, evaluate_text, is_colloquial_token,
+    is_number_token, levenshtein_ops, operacoes_100w, tokens, wer)
 
 
 def test_wer_zero_quando_igual():
@@ -43,9 +43,39 @@ def test_cer_e_mais_fino_que_wer():
     assert 0 < cer("primecamp", "primecmp") < wer("primecamp", "primecmp").wer
 
 
-def test_correcoes_por_100_palavras():
+def test_operacoes_por_100_palavras_segue_o_wer():
     c = wer(" ".join(["x"] * 100), " ".join(["x"] * 97 + ["y", "y", "y"]))
-    assert abs(manual_edits_per_100w(c) - 3.0) < 1e-9
+    assert abs(operacoes_100w(c) - 3.0) < 1e-9
+
+
+def _corr(ref, hip):
+    c, ops = levenshtein_ops(tokens(ref), tokens(hip))
+    return correcoes_humanas(ops, c.ref_len)
+
+
+def test_erro_agrupado_custa_uma_correcao_so():
+    """Quem conserta três palavras seguidas seleciona o trecho e digita UMA
+    vez. O WER conta três; quem edita, não."""
+    ref = "eu vendi quinze mil na PrimeCamp ontem à noite pra dois clientes"
+    grudados = "eu vendi quinze mil no prime camp ontem à noite pra dois clientes"
+    espalhados = "eu vendo quinze mil na PrimeCamp ontem à noites pra dois cliente"
+
+    assert wer(ref, grudados).wer == wer(ref, espalhados).wer   # WER não separa
+    assert _corr(ref, grudados)[0] == 1
+    assert _corr(ref, espalhados)[0] == 3
+
+
+def test_transcricao_perfeita_nao_pede_correcao():
+    assert _corr("cê tá ligado", "cê tá ligado") == (0, 0.0)
+
+
+def test_formalizar_a_fala_espalha_correcoes():
+    """O padrão que separa os motores: quem normaliza erra em cada gíria, e
+    cada uma obriga a parar num ponto diferente do vídeo."""
+    ref = "cê vai lá e tá tudo certo pra gente né mano"
+    formal = "você vai lá e está tudo certo para gente não é mano"
+    n, _ = _corr(ref, formal)
+    assert n >= 3
 
 
 def test_deteccao_de_coloquial_e_numero():

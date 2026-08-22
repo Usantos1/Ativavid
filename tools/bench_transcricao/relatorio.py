@@ -121,7 +121,8 @@ def avaliar(saida: Path) -> dict:
             linha = {
                 "wer": m.counts.wer, "cer": m.cer,
                 "acertos": m.counts.accuracy,
-                "correcoes_100": m.edits_100w,
+                "correcoes_100": m.correcoes_100w,
+                "operacoes_100": m.edits_100w,
                 "trocas": m.counts.sub, "omitidas": m.counts.dele,
                 "inventadas": m.counts.ins,
                 "nomes_proprios": m.entities.rate,
@@ -227,6 +228,8 @@ def matriz(ag: dict, custos: dict | None) -> str:
         linha("CER", lambda a, c: _p(a.get("cer"))),
         linha("correções humanas/100 palavras",
               lambda a, c: _n(a.get("correcoes_100"))),
+        linha("  (operações/100, = WER)",
+              lambda a, c: _n(a.get("operacoes_100"))),
         linha("nomes próprios", lambda a, c: _p(a.get("nomes_proprios"))),
         linha("números", lambda a, c: _p(a.get("numeros"))),
         linha("gírias/coloquial", lambda a, c: _p(a.get("coloquial"))),
