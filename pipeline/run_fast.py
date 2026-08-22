@@ -457,6 +457,14 @@ _MARCADORES_TRANSCRICAO = (
     "WHISPER_ACELERACAO_FALHOU",
     "ELEVENLABS_FALHOU",
     "Whisper backend:",
+    # Revisao textual do Gemini sobre o transcript local. As tres linhas sao
+    # o unico sinal que sai dela, e as tres tem de aparecer: a que diz que
+    # deu certo, a que diz que foi pulada por politica e a que diz que caiu
+    # para o Whisper puro. Revisao que falha em silencio vira suspeita de
+    # regressao de qualidade sem nada no log para conferir.
+    "REVISAO_GEMINI",
+    "REVISAO_GEMINI_PULADA",
+    "REVISAO_GEMINI_FALHOU",
 )
 
 

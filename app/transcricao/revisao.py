@@ -126,6 +126,24 @@ def sufixo_desejado() -> str:
     return SUFIXO if ligada() else ""
 
 
+def palavras_do_schema(payload: dict) -> list[Palavra]:
+    """Lê o schema do Scribe de volta para `Palavra`.
+
+    A revisão trabalha sobre o payload já convertido, e não sobre o
+    `ResultadoDeTranscricao`, por dois motivos. O prático: quando o transcript
+    do Whisper vem do cache entre projetos, o objeto não existe mais — só o
+    JSON. O de fidelidade: foi assim que o benchmark mediu o cenário E, lendo
+    o schema, e `para_schema_scribe` não emite `confidence`. Ler daqui
+    reproduz exatamente aquele caminho em vez de um parecido.
+    """
+    return [Palavra(texto=(w.get("text") or "").strip(),
+                    inicio=float(w["start"]), fim=float(w["end"]),
+                    confianca=w.get("confidence"))
+            for w in (payload.get("words") or [])
+            if w.get("type", "word") == "word" and w.get("start") is not None
+            and (w.get("text") or "").strip()]
+
+
 # --------------------------------------------------------------- o prompt
 
 PROMPT = """\

@@ -682,13 +682,103 @@ def signature_path(transcripts_dir: Path, stem: str) -> Path:
     return Path(transcripts_dir) / f"{stem}.srcsig"
 
 
-def write_source_signature(transcripts_dir: Path, video: Path) -> None:
+def _revisao():
+    """O módulo de revisão textual, ou `None` se não der para importar.
+
+    `transcribe.py` roda como script solto (`uv run python helpers/...`), e
+    aí a raiz do repo não está no `sys.path`. Devolver `None` em vez de
+    levantar mantém o helper funcionando exatamente como antes da revisão
+    existir — que é o comportamento certo quando ela não está disponível.
+    """
+    try:
+        raiz = Path(__file__).resolve().parent.parent
+        if str(raiz) not in sys.path:
+            sys.path.insert(0, str(raiz))
+        from app.transcricao import revisao
+
+        return revisao
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def marca_da_assinatura(transcripts_dir: Path, stem: str) -> str | None:
+    """A marca gravada no `.srcsig`, ou `None` se o arquivo não tem uma.
+
+    `None` é assinatura LEGADA — escrita antes de a marca existir. Não é o
+    mesmo que marca vazia, e a diferença importa: legado é tratado como está
+    hoje, sem invalidar nada.
+    """
+    try:
+        linhas = signature_path(transcripts_dir, stem).read_text(
+            encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    for linha in linhas[1:]:
+        if linha.startswith("marca="):
+            return linha[len("marca="):].strip()
+    return None
+
+
+def write_source_signature(transcripts_dir: Path, video: Path,
+                           marca: str = "") -> None:
+    """Grava a assinatura da fonte e, quando dada, a marca do transcript.
+
+    Linha 1 é o que sempre foi: `tamanho:mtime`. Linha 2, opcional, é
+    `marca=<backend>-<modelo>[+rev1]` — o processo que produziu ESTE arquivo.
+    Formato de duas linhas para que uma assinatura nova continue legível por
+    qualquer código que só olhe a primeira.
+    """
     path = signature_path(transcripts_dir, Path(video).stem)
-    path.write_text(source_signature(video), encoding="utf-8")
+    texto = source_signature(video)
+    if marca:
+        texto += f"\nmarca={marca}"
+    path.write_text(texto, encoding="utf-8")
+
+
+def _variante_compativel(gravada: str | None) -> bool:
+    """O transcript gravado passou pelo mesmo processo que está pedido agora?
+
+    Existe para uma coisa só: `ATIVAVID_REVISAO=off` tem de ser rollback de
+    verdade. Sem isto, um transcript revisado já gravado em
+    `transcripts/*.json` continuaria dando cache hit e voltaria a ser servido
+    como se fosse Whisper puro — e o rollback exigiria apagar arquivo de cada
+    projeto na mão.
+
+    A comparação é DELIBERADAMENTE estreita, e só olha o sufixo de revisão de
+    transcript LOCAL:
+
+      assinatura legada (`None`)   nunca invalida. Foi escrita antes de a
+                                   revisão existir, então é Whisper puro, e
+                                   invalidar em massa retranscreveria a base
+                                   inteira do usuário para não corrigir nada.
+
+      marca de outro backend       nunca invalida. Um transcript do Scribe
+                                   custou dinheiro; jogá-lo fora porque um
+                                   interruptor do motor local mudou seria
+                                   cobrar do usuário por uma decisão que não
+                                   é sobre ele.
+
+      marca local com sufixo       compara `+rev1` contra o que está pedido.
+                                   Diferente → miss.
+
+    Um miss aqui quase nunca custa transcrição: `_transcrever_local` procura
+    a versão pura no cache entre projetos antes de acordar o Whisper.
+    """
+    if gravada is None or not gravada.startswith("local-"):
+        return True
+    rev = _revisao()
+    if rev is None:
+        return True
+    tem = rev.SUFIXO if gravada.endswith(rev.SUFIXO) else ""
+    return tem == rev.sufixo_desejado()
 
 
 def transcript_cache_hit(out_path: Path, video: Path) -> bool:
-    """Reusa transcrição só se o arquivo fonte tem o mesmo tamanho e mtime."""
+    """Reusa transcrição só se o arquivo fonte tem o mesmo tamanho e mtime.
+
+    E, desde a revisão textual, só se o transcript gravado passou pelo mesmo
+    processo que está pedido agora — ver `_variante_compativel`.
+    """
     if not out_path.exists():
         return False
     sig_path = signature_path(out_path.parent, Path(video).stem)
@@ -696,10 +786,13 @@ def transcript_cache_hit(out_path: Path, video: Path) -> bool:
     have = ""
     if sig_path.exists():
         try:
-            have = sig_path.read_text(encoding="utf-8").strip()
-        except OSError:
+            have = sig_path.read_text(encoding="utf-8").splitlines()[0].strip()
+        except (OSError, IndexError):
             have = ""
     if have and have != wanted:
+        return False
+    if not _variante_compativel(marca_da_assinatura(out_path.parent,
+                                                    Path(video).stem)):
         return False
     if not have:
         # Transcript legado (pré-assinatura). Fontes nunca mudam depois do
@@ -808,6 +901,77 @@ def guardar_no_cache(video: Path, backend: str, modelo: str, payload: dict) -> N
         pass
 
 
+def _telemetria_da_revisao(meta: dict) -> dict:
+    """Os campos da revisão para a linha de telemetria. Vazio quando não houve."""
+    if not meta:
+        return {}
+    return {
+        "revisao": "ok" if meta.get("revisado") else "nao",
+        "revisao_motivo": (meta.get("motivo") or "")[:160] or None,
+        "revisao_seg": meta.get("seg"),
+        "revisao_propostas": meta.get("propostas"),
+        "revisao_aplicadas": meta.get("aplicadas"),
+        "revisao_ignoradas": meta.get("ignoradas"),
+        "revisao_ts_preservados": meta.get("ts_preservados"),
+    }
+
+
+def _revisar_payload(rev, payload: dict, marca: str, marca_revisada: str
+                     ) -> tuple[dict, str, dict]:
+    """Revisa o texto do payload. Devolve `(payload, marca, meta)`.
+
+    A marca devolvida é a REGRA do rollback, e é por isso que ela sai daqui
+    em vez de ser decidida pelo chamador:
+
+        revisão concluída e `conferir()` passou → `marca_revisada`
+        qualquer outra coisa                    → `marca`, sem sufixo
+
+    Gravar um Whisper puro como se fosse revisado envenenaria o cache: uma
+    queda de rede de dez segundos marcaria aquele vídeo como já processado, e
+    a próxima chance de revisá-lo só voltaria quando a versão virasse `rev2`.
+    Marcando pelo que de fato aconteceu, a falha é temporária de verdade — a
+    próxima passada tenta de novo, e sem retranscrever, porque o Whisper puro
+    já está no cache entre projetos.
+
+    Nunca levanta. `rev.revisar` já devolve as palavras do Whisper intactas
+    quando algo dá errado, e o que sobra aqui é escolher a marca e falar.
+    """
+    palavras = rev.palavras_do_schema(payload)
+    revisadas, meta = rev.revisar(palavras, str(payload.get("text") or ""))
+    if not meta.get("revisado"):
+        # `REVISAO_GEMINI_PULADA` é decisão de política (fonte longa);
+        # `REVISAO_GEMINI_FALHOU` é o Gemini ou o gate. Marcadores separados
+        # porque um deles não é problema e o outro pode ser.
+        rotulo = ("REVISAO_GEMINI_PULADA" if meta.get("pulada")
+                  else "REVISAO_GEMINI_FALHOU")
+        print(f"{rotulo} {meta.get('motivo') or 'sem motivo'} "
+              f"— seguindo com o Whisper puro", flush=True)
+        return payload, marca, meta
+
+    from app.transcricao import schema_scribe
+
+    novo = schema_scribe(
+        revisadas, " ".join(p.texto for p in revisadas),
+        idioma=str(payload.get("language_code") or ""),
+        motor=str(payload.get("_motor") or ""),
+        modelo=str(payload.get("_modelo") or ""),
+        backend=str(payload.get("_backend") or ""),
+    )
+    # Campos que não pertencem ao schema mas o projeto usa. Preservados um a
+    # um de propósito: um `update` cego devolveria `words` e `text` velhos.
+    for extra in ("_seg_transcricao",):
+        if extra in payload:
+            novo[extra] = payload[extra]
+    novo["_revisao"] = rev.VERSAO
+    novo["_revisao_aplicadas"] = meta.get("aplicadas")
+
+    print(f"REVISAO_GEMINI ok correcoes={meta.get('aplicadas')}/"
+          f"{meta.get('propostas')} ignoradas={meta.get('ignoradas')} "
+          f"ts_preservados={meta.get('ts_preservados')} "
+          f"seg={meta.get('seg')}", flush=True)
+    return novo, marca_revisada, meta
+
+
 def _transcrever_local(
     video: Path,
     transcripts_dir: Path,
@@ -855,13 +1019,21 @@ def _transcrever_local(
     if not ok:
         raise RuntimeError(motivo)
 
+    rev = _revisao()
+    quer_revisar = bool(rev and rev.ligada())
     marca = f"local-{motor.modelo.chave}"
+    marca_revisada = f"{marca}{rev.SUFIXO}" if rev else marca
+    # A variante PEDIDA. E so ela: servir um transcript revisado para quem
+    # desligou a revisao -- ou o contrario -- e o que faz `ATIVAVID_REVISAO`
+    # deixar de ser rollback.
+    marca_pedida = marca_revisada if quer_revisar else marca
+
     t_cache = time.time()
-    guardado = buscar_no_cache(video, marca, motor.modelo.chave)
+    guardado = buscar_no_cache(video, marca_pedida, motor.modelo.chave)
     if guardado is not None:
         out_path.write_text(json.dumps(guardado, indent=2), encoding="utf-8")
         try:
-            write_source_signature(transcripts_dir, video)
+            write_source_signature(transcripts_dir, video, marca_pedida)
         except OSError:
             pass
         # Marcador explicito: o tempo economizado e a diferenca entre o que
@@ -873,34 +1045,75 @@ def _transcrever_local(
             modelo=motor.modelo.chave, cache="HIT", seg_total=round(gasto, 3),
             palavras=sum(1 for w in guardado.get("words") or []
                          if w.get("type") == "word"))
-        print(f"TRANSCRIPTION CACHE HIT {video.name} motor=whisper-local "
+        print(f"TRANSCRIPTION CACHE HIT {video.name} motor={marca_pedida} "
               f"modelo={motor.modelo.chave} custou={gasto:.2f}s "
               f"economizou~{max(0.0, float(guardado.get('_seg_transcricao') or 0) - gasto):.1f}s",
               flush=True)
         return out_path
 
     t0 = time.time()
-    with tempfile.TemporaryDirectory() as tmp:
-        # WAV mono 16 kHz PCM: e o que o Whisper consome nativamente. Passar
-        # o mp4 direto tambem funciona, mas ai o decode acontece dentro do
-        # motor e some da medicao -- e este projeto mede fase por fase.
-        audio = Path(tmp) / f"{video.stem}.wav"
-        t_audio = time.time()
-        _extrair_wav16k(video, audio)
-        t_audio = time.time() - t_audio
-        resultado = motor.transcrever(audio, idioma=language,
-                                      fonte_original=video)
 
-    payload = resultado.para_schema_scribe()
-    payload["_seg_transcricao"] = round(
-        float(resultado.tempos.get("transcrever") or 0.0) + t_audio, 3)
+    # Revisao ligada e o Whisper PURO ja esta no cache entre projetos? Entao
+    # o que falta e so a revisao. Nao acordar a GPU para refazer trabalho que
+    # ja esta no disco e o que torna barato ligar a revisao numa base ja
+    # transcrita -- e, no caminho inverso, ter tentado revisar e falhado.
+    base = buscar_no_cache(video, marca, motor.modelo.chave) if quer_revisar else None
+    resultado = None
+    t_audio = 0.0
+
+    if base is not None:
+        payload = base
+        print(f"TRANSCRIPTION CACHE HIT {video.name} motor={marca} "
+              f"modelo={motor.modelo.chave} — falta so a revisao", flush=True)
+    else:
+        with tempfile.TemporaryDirectory() as tmp:
+            # WAV mono 16 kHz PCM: e o que o Whisper consome nativamente. Passar
+            # o mp4 direto tambem funciona, mas ai o decode acontece dentro do
+            # motor e some da medicao -- e este projeto mede fase por fase.
+            audio = Path(tmp) / f"{video.stem}.wav"
+            t_audio = time.time()
+            _extrair_wav16k(video, audio)
+            t_audio = time.time() - t_audio
+            resultado = motor.transcrever(audio, idioma=language,
+                                          fonte_original=video)
+
+        payload = resultado.para_schema_scribe()
+        payload["_seg_transcricao"] = round(
+            float(resultado.tempos.get("transcrever") or 0.0) + t_audio, 3)
+        # O Whisper puro vai para o cache ANTES da revisao, e sempre. Ele
+        # custou GPU; a revisao pode falhar, e se falhar nao pode levar junto
+        # a transcricao que ja esta pronta.
+        guardar_no_cache(video, marca, motor.modelo.chave, payload)
+
+    marca_final = marca
+    meta_revisao: dict = {}
+    if quer_revisar:
+        payload, marca_final, meta_revisao = _revisar_payload(
+            rev, payload, marca, marca_revisada)
+        if marca_final == marca_revisada:
+            guardar_no_cache(video, marca_revisada, motor.modelo.chave, payload)
+
     out_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False),
                         encoding="utf-8")
     try:
-        write_source_signature(transcripts_dir, video)
+        write_source_signature(transcripts_dir, video, marca_final)
     except OSError:
         pass
-    guardar_no_cache(video, marca, motor.modelo.chave, payload)
+
+    if resultado is None:
+        # Veio do cache puro e so foi revisado: nao ha medicao de motor para
+        # registrar, e inventar uma sujaria a telemetria de velocidade.
+        telemetria.registrar(
+            video=telemetria.identificador(video), motor="whisper-local",
+            modelo=motor.modelo.chave, cache="HIT-REVISADO",
+            seg_total=round(time.time() - t0, 3),
+            palavras=sum(1 for w in payload.get("words") or []
+                         if w.get("type") == "word"),
+            **_telemetria_da_revisao(meta_revisao))
+        if verbose:
+            print(f"  saved: {out_path.name} "
+                  f"({out_path.stat().st_size / 1024:.1f} KB)")
+        return out_path
 
     tempos = dict(resultado.tempos)
     tempos["extrair_audio"] = round(t_audio, 3)
@@ -920,6 +1133,7 @@ def _transcrever_local(
         palavras=palavras,
         guarda_acionada=bool(resultado.tempos.get("_guarda_cortou")),
         queda=(resultado.backend != detectar_backend_pedido()),
+        **_telemetria_da_revisao(meta_revisao),
     )
     if verbose:
         print(f"  saved: {out_path.name} "

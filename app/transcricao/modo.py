@@ -27,6 +27,26 @@ Quem quiser o Scribe pede por ele — por configuração ou por
 
 Ordem de precedência: variável de ambiente (teste e benchmark), depois a
 configuração gravada, depois o padrão.
+
+## A revisão textual é outra chave
+
+`ATIVAVID_REVISAO` (ver `app/transcricao/revisao.py`) liga a revisão do
+Gemini sobre o resultado do motor LOCAL. Ela é **ortogonal** a este arquivo,
+e de propósito: não existe um quarto modo `local+gemini`. O que este módulo
+devolve é o que vai em `--backend` do `transcribe.py`, e um quarto valor
+teria de ser traduzido de volta em todo lugar que compara com `elevenlabs`.
+A revisão é um pós-processo do motor local, não um motor.
+
+A tabela acima continua valendo inteira depois da revisão. Ela ganha uma
+linha, com a mesma resposta das outras:
+
+| por que a revisão falhou | o Scribe resolveria? |
+|---|---|
+| sessão web não capturada | não — e cair nele gastaria cota sem ninguém pedir |
+| Gemini fora do ar | não — a transcrição local já está pronta e correta |
+| JSON quebrado ou gate reprovou | não — o Whisper puro é o resultado bom |
+
+Revisão que falha entrega Whisper puro. Nunca Scribe.
 """
 from __future__ import annotations
 
