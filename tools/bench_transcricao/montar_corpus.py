@@ -40,6 +40,10 @@ if str(RAIZ_REPO) not in sys.path:
 
 # Derivados do pipeline. A fonte fica na raiz do projeto; `edit\` é saída.
 DERIVADOS = {"cut.mp4", "base.mp4", "cut_proxy.mp4", "final.mp4"}
+# O ATIVAVID grava um preparado ao lado da fonte, com o nome dela mais
+# `.prep.mp4` (`IMG_4007.MOV.prep.mp4`). É derivado: entra no corpus como se
+# fosse fonte, duplica o vídeo e mede o mesmo material duas vezes.
+SUFIXO_PREPARADO = ".prep.mp4"
 EXTENSOES = {".mp4", ".mov", ".m4v", ".mkv", ".avi", ".webm"}
 
 COLOQUIAIS = re.compile(
@@ -106,7 +110,8 @@ def descobrir(raiz: Path) -> list[dict]:
     for projeto in sorted(p for p in raiz.iterdir() if p.is_dir()):
         for arq in sorted(projeto.iterdir()):
             if (not arq.is_file() or arq.suffix.lower() not in EXTENSOES
-                    or arq.name.lower() in DERIVADOS):
+                    or arq.name.lower() in DERIVADOS
+                    or arq.name.lower().endswith(SUFIXO_PREPARADO)):
                 continue
             texto = transcript_existente(projeto, arq)
             achados.append({

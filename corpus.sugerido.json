@@ -1,0 +1,106 @@
+{
+  "_leia": "Corpus sugerido a partir dos trechos de transcript reais dos seus projetos. Renomeie para corpus.json. CONFIRA os dois pontos marcados em _confirmar antes de rodar.",
+  "_confirmar": {
+    "marca_da_loja": "Os transcripts existentes escrevem de 15 jeitos diferentes: 'Prime Camp', 'PrimeCamp', 'Prime Cup', 'MeCamp', 'PremiCamp', 'Prêmica', 'Pram Camp', 'Paramilkamp'... Qual é a grafia CORRETA? Ela está em entidades.marcas de quase todo vídeo e é a entidade mais importante do benchmark.",
+    "nome_do_atendente": "Aparece como 'Victor' e como 'Vitor'. Qual é o correto?"
+  },
+  "_nao_preenchido": "As tags acústicas (ruido, musica_fundo, fala_baixa, pausas) NÃO foram atribuídas: não dá para determiná-las lendo texto. Ouça e acrescente onde valer.",
+  "videos": [
+    {
+      "id": "v01",
+      "video": "C:/Users/Uander/ATIVAVID/Projetos/20260813-224806_copy_954E4282-1A65-459C-AFB7-D6FA5A128B83_926c47a111/copy_954E4282-1A65-459C-AFB7-D6FA5A128B83.mov",
+      "duracao_s": 54,
+      "tags": ["uma_pessoa", "marcas", "coloquial_br"],
+      "entidades": {"marcas": ["Prime Camp"], "pessoas": [], "lugares": []},
+      "notas": "Monólogo para a câmera: 'Fala meu povo... Sejam bem-vindos a Prime Camp... tá?'"
+    },
+    {
+      "id": "v02",
+      "video": "C:/Users/Uander/ATIVAVID/Projetos/20260814-171748_IMG_3867_e1d59a80b1/IMG_3867.MOV",
+      "duracao_s": 84,
+      "tags": ["duas_ou_mais", "nomes_proprios", "numeros", "coloquial_br", "girias"],
+      "entidades": {"marcas": [], "pessoas": ["Kevin"], "lugares": []},
+      "notas": "'Eu troquei com o Kevin aqui... pra ver se ele tá sabendo mesmo, né Kevin?'"
+    },
+    {
+      "id": "v03",
+      "video": "C:/Users/Uander/ATIVAVID/Projetos/20260814-171755_Parte_1_x2_c65e8614af/Parte_1.mov",
+      "duracao_s": 42,
+      "tags": ["duas_ou_mais", "fala_rapida", "interrupcoes", "girias", "numeros"],
+      "entidades": {"marcas": [], "pessoas": ["Kevin"], "lugares": []},
+      "notas": "Transcript sai corrido e sem pontuação — sinal de fala rápida com interrupção. 'bora 32 vai tudo bem moça...'"
+    },
+    {
+      "id": "v04",
+      "video": "C:/Users/Uander/ATIVAVID/Projetos/20260814-205037_Nao_usar_celular_5cb37951f7/Nao_usar_celular.MOV",
+      "duracao_s": 48,
+      "tags": ["duas_ou_mais", "conversa_rapida", "interrupcoes", "nomes_proprios"],
+      "entidades": {"marcas": [], "pessoas": ["Vitor"], "lugares": []},
+      "notas": "Cena dramática, fala sobreposta: 'Mãe, mãe, acorda... Liga pro Samu.' SAMU é sigla, confirme se quer como entidade."
+    },
+    {
+      "id": "v05",
+      "video": "C:/Users/Uander/ATIVAVID/Projetos/20260815-215212_IMG_1652_742e73b169/IMG_1652.MOV",
+      "duracao_s": 48,
+      "tags": ["uma_pessoa", "nomes_proprios", "marcas"],
+      "entidades": {"marcas": ["Prime Camp"], "pessoas": ["William"], "lugares": []},
+      "notas": "Depoimento de cliente: 'meu nome é William, estou aqui na Prime Camp'"
+    },
+    {
+      "id": "v06",
+      "video": "C:/Users/Uander/ATIVAVID/Projetos/20260816-005026_IMG_1642_2c6042e496/IMG_1642.MOV",
+      "duracao_s": 90,
+      "tags": ["duas_ou_mais", "numeros", "marcas", "fala_rapida", "coloquial_br"],
+      "entidades": {"marcas": ["iPhone", "TikTok Shop"], "pessoas": [], "lugares": []},
+      "notas": "Números densos: '16 pro max', '8 mil reais', 'paguei 7 no tiktok shop'. Transcript sem pontuação."
+    },
+    {
+      "id": "v07",
+      "video": "C:/Users/Uander/ATIVAVID/Projetos/20260817-195836_IMG_3925_67246b8e8f/IMG_3925.MOV",
+      "duracao_s": 168,
+      "tags": ["uma_pessoa", "marcas", "numeros", "coloquial_br"],
+      "entidades": {"marcas": ["Prime Camp", "iPhone"], "pessoas": [], "lugares": []},
+      "notas": "IMPORTANTE: o transcript atual escreve 'Prime Cup' onde deveria ser a marca. Caso de erro de marca já confirmado."
+    },
+    {
+      "id": "v08",
+      "video": "C:/Users/Uander/ATIVAVID/Projetos/20260818-224039_IMG_3989_b1d60a469d/IMG_3989.MOV",
+      "duracao_s": 144,
+      "tags": ["duas_ou_mais", "coloquial_br", "girias", "numeros"],
+      "entidades": {"marcas": ["Prime Camp"], "pessoas": [], "lugares": []},
+      "notas": "Diálogo longo, gíria: 'Caraca', 'Deu pra entender, né?'"
+    },
+    {
+      "id": "v09",
+      "video": "C:/Users/Uander/ATIVAVID/Projetos/20260820-074232_Cliente_x2_193d45e616/IMG_4046.MOV",
+      "duracao_s": 120,
+      "tags": ["duas_ou_mais", "interrupcoes", "nomes_proprios", "coloquial_br"],
+      "entidades": {"marcas": [], "pessoas": ["Vitor"], "lugares": []},
+      "notas": "'Moça, eu queria falar com o gerente' — reclamação, troca rápida de turno."
+    },
+    {
+      "id": "v10",
+      "video": "C:/Users/Uander/ATIVAVID/Projetos/20260820-113537_IMG_4038_091714904f/IMG_4038.MOV",
+      "duracao_s": 138,
+      "tags": ["duas_ou_mais", "fala_rapida", "coloquial_br", "girias", "numeros"],
+      "entidades": {"marcas": [], "pessoas": [], "lugares": []},
+      "notas": "Transcript inteiro sem pontuação: 'oi moço nossa tudo bem mais ou menos né bem bem não tá né'. Coloquial forte."
+    },
+    {
+      "id": "v11",
+      "video": "C:/Users/Uander/ATIVAVID/Projetos/20260821-110723_A001_08201016_C005_9eb8139e17/A001_08201016_C005.mov",
+      "duracao_s": 66,
+      "tags": ["duas_ou_mais", "nomes_proprios", "numeros", "interrupcoes"],
+      "entidades": {"marcas": ["iPhone"], "pessoas": ["Bolsonaro"], "lugares": []},
+      "notas": "'É Bolsonaro, Bolsonaro, Bolsonaro. Ah, mas eu vou...' — nome próprio muito citado, com interrupção."
+    },
+    {
+      "id": "v12",
+      "video": "C:/Users/Uander/ATIVAVID/Projetos/20260821-223020_A001_08211315_C011_5bfe926aa0/A001_08211315_C011.mov",
+      "duracao_s": 12,
+      "tags": ["uma_pessoa", "numeros", "marcas"],
+      "entidades": {"marcas": ["PrimeCamp", "Power Bank"], "pessoas": [], "lugares": []},
+      "notas": "Curto e denso em número: '10.000 mAh e de 20.000 mAh'. Aqui o transcript escreve a marca JUNTA ('PrimeCamp')."
+    }
+  ]
+}
