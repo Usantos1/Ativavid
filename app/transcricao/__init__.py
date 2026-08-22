@@ -63,33 +63,56 @@ class ResultadoDeTranscricao:
         return [p for s in self.segmentos for p in s.palavras]
 
     def para_schema_scribe(self) -> dict[str, Any]:
-        """Converte para o formato que o resto do ATIVAVID já consome.
+        """Converte para o formato que o resto do ATIVAVID já consome."""
+        return schema_scribe(
+            self.palavras(), self.texto, idioma=self.idioma,
+            motor=self.motor, modelo=self.modelo, backend=self.backend,
+        )
 
-        Emite as entradas `spacing` entre palavras porque `pack_transcripts` e
-        `timeline_view` as usam para detectar silêncio — um transcript sem
-        elas passa nos testes e degrada a detecção de pausa.
-        """
-        saida: list[dict[str, Any]] = []
-        anterior_fim: float | None = None
-        for p in self.palavras():
-            if anterior_fim is not None and p.inicio > anterior_fim + 1e-6:
-                saida.append({
-                    "text": " ", "start": anterior_fim, "end": p.inicio,
-                    "type": "spacing", "speaker_id": "speaker_0",
-                })
+
+def schema_scribe(
+    palavras: list[Palavra],
+    texto: str,
+    *,
+    idioma: str = "",
+    motor: str = "",
+    modelo: str = "",
+    backend: str = "",
+) -> dict[str, Any]:
+    """O schema do Scribe a partir de uma lista de palavras.
+
+    Extraída de `ResultadoDeTranscricao.para_schema_scribe`, que agora delega
+    para cá. Existe como função de módulo porque a revisão textual
+    (`app/transcricao/revisao.py`) devolve palavras — não um
+    `ResultadoDeTranscricao` — e precisa reemitir o payload com ESTA lógica em
+    vez de uma cópia dela. Duas cópias divergiriam, e a que divergisse
+    silenciosamente é a do `spacing`.
+
+    Emite as entradas `spacing` entre palavras porque `pack_transcripts` e
+    `timeline_view` as usam para detectar silêncio — um transcript sem elas
+    passa nos testes e degrada a detecção de pausa.
+    """
+    saida: list[dict[str, Any]] = []
+    anterior_fim: float | None = None
+    for p in palavras:
+        if anterior_fim is not None and p.inicio > anterior_fim + 1e-6:
             saida.append({
-                "text": p.texto, "start": p.inicio, "end": p.fim,
-                "type": "word", "speaker_id": "speaker_0",
+                "text": " ", "start": anterior_fim, "end": p.inicio,
+                "type": "spacing", "speaker_id": "speaker_0",
             })
-            anterior_fim = p.fim
-        return {
-            "words": saida,
-            "text": self.texto,
-            "language_code": self.idioma or "por",
-            "_motor": self.motor,
-            "_modelo": self.modelo,
-            "_backend": self.backend,
-        }
+        saida.append({
+            "text": p.texto, "start": p.inicio, "end": p.fim,
+            "type": "word", "speaker_id": "speaker_0",
+        })
+        anterior_fim = p.fim
+    return {
+        "words": saida,
+        "text": texto,
+        "language_code": idioma or "por",
+        "_motor": motor,
+        "_modelo": modelo,
+        "_backend": backend,
+    }
 
 
 class Cancelado(RuntimeError):
