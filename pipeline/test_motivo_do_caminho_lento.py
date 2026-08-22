@@ -32,7 +32,7 @@ from pipeline.leitura_de_codigo import apenas_codigo  # noqa: E402
 PORTAS = {
     "longform": "vídeo longo não tenta o caminho rápido",
     "desligado": "o motor rápido está desligado neste install",
-    "vaga_ocupada": "outro job estava com a vaga — a causa provável dos 32",
+    "vaga_ocupada_apos_espera": "esperou a vaga até o teto e desistiu",
     "recurso:": "o vídeo usa recurso que exige o Remotion",
 }
 
@@ -51,10 +51,10 @@ def test_o_motivo_chega_ao_timing_json(tmp_path):
     rf._TIMING.clear()
     rf._RENDER_META.clear()
     rf._TIMING["CUT"] = 12.0
-    rf._RENDER_META["overlaySkip"] = "vaga_ocupada"
+    rf._RENDER_META["overlaySkip"] = "vaga_ocupada_apos_espera"
     rf.write_timing(tmp_path)
     d = json.loads((tmp_path / "timing.json").read_text(encoding="utf-8"))
-    assert d.get("overlaySkip") == "vaga_ocupada"
+    assert d.get("overlaySkip") == "vaga_ocupada_apos_espera"
 
 
 def test_sem_motivo_o_campo_nao_aparece(tmp_path):

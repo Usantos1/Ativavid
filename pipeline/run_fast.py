@@ -3272,13 +3272,14 @@ def run(
                     try_acquire_overlay_slot,
                 )
 
+                # Espera a vaga (padrao 180s) em vez de desistir na hora. A
+                # vaga fica ocupada por 26% do job, e cair custa +294s contra
+                # ~75s de espera media. So depois do teto e que vai para o
+                # caminho lento.
                 slot = try_acquire_overlay_slot()
                 if slot is None:
                     print("OVERLAY_SKIP slot busy — FULL", flush=True)
-                    # A vaga do caminho rapido e uma so. Com dois jobs em
-                    # paralelo, o segundo cai no Remotion inteiro -- e isso
-                    # nunca ficou registrado em lugar nenhum.
-                    _RENDER_META["overlaySkip"] = "vaga_ocupada"
+                    _RENDER_META["overlaySkip"] = "vaga_ocupada_apos_espera"
                 else:
                     print("OVERLAY_SLOT acquired", flush=True)
                     from app.overlay_path import overlay_rollout as _ov_roll
