@@ -18,7 +18,7 @@ if str(RAIZ) not in sys.path:
 
 from app.transcricao import Palavra
 from tools.bench_transcricao.impacto import (
-    Cortes, conferir_karaoke, cues_de, sobreposicao_de_planos)
+    Cortes, conferir_karaoke, cues_de, divergencia_do_plano)
 from tools.bench_transcricao.motores import Saida
 
 
@@ -82,13 +82,14 @@ def test_divisao_do_cenario_D_nao_quebra_o_karaoke():
     assert k.aprovado and k.cues == 3 and k.sobreposicoes == 0
 
 
-def test_sobreposicao_de_planos_mede_influencia_do_transcript():
+def test_divergencia_do_plano_mede_influencia_nao_qualidade():
+    """0.0 = mesmo vídeo, 1.0 = nenhum segundo em comum. Não diz qual é melhor."""
     a = Cortes(n=2, trechos=[(0.0, 10.0), (20.0, 30.0)])
-    assert sobreposicao_de_planos(a, a) == 1.0
+    assert divergencia_do_plano(a, a) == 0.0
     b = Cortes(n=1, trechos=[(0.0, 10.0)])
-    assert abs(sobreposicao_de_planos(a, b) - 0.5) < 1e-9
+    assert abs(divergencia_do_plano(a, b) - 0.5) < 1e-9
     c = Cortes(n=1, trechos=[(50.0, 60.0)])
-    assert sobreposicao_de_planos(a, c) == 0.0
+    assert divergencia_do_plano(a, c) == 1.0
 
 
 def test_o_reparo_da_producao_e_medido_nao_escondido():
@@ -102,6 +103,10 @@ def test_o_reparo_da_producao_e_medido_nao_escondido():
     assert not k.intacto
     assert k.palavras_reparadas >= 1
     assert k.deslocamento_maximo_ms > 100      # "b" foi empurrado ~700 ms
+    assert k.deslocamento_mediano_ms > 0
+    assert k.deslocamento_p95_ms >= k.deslocamento_mediano_ms
+    assert k.deslocamento_maximo_ms >= k.deslocamento_p95_ms
+    assert any("DEFEITO TEMPORAL" in x for x in k.problemas)
 
 
 def test_transcript_sadio_nao_precisa_de_reparo():

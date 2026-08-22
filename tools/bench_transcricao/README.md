@@ -81,7 +81,22 @@ relatório informa quantas palavras vieram de cada origem, e **avisa** quando
 sobrou divergência sem validar, porque nesses pontos ele trata a versão do
 Whisper como correta — o que favorece B, D e E.
 
-## Rodar
+## Rodar — uma operação só
+
+```bash
+python tools/bench_transcricao/benchmark.py --corpus corpus.json
+```
+
+Encadeia preflight → benchmark → preliminar → **para na validação humana** →
+relatório final. Não reimplementa nada: chama o `main()` de cada etapa. Depois
+de validar, rode o mesmo comando: o que já foi feito é reaproveitado e ele
+segue direto para a matriz. No Windows há o atalho
+`tools\bench_transcricao\benchmark.cmd`.
+
+Sai com 0 (matriz impressa), 1 (parou na validação — esperado na primeira
+passada) ou 2 (preflight barrou).
+
+## Etapas separadas
 
 ```bash
 cp tools/bench_transcricao/corpus.exemplo.json corpus.json   # preencha
@@ -177,7 +192,7 @@ python -m pytest pipeline/test_bench_contrato.py pipeline/test_bench_impacto.py 
 # ou todos: python -m pytest pipeline/test_bench_*.py -q
 ```
 
-65 testes. Os de alinhamento cobrem divisão, fusão, remoção, inserção recusada,
+76 testes. Os de alinhamento cobrem divisão, fusão, remoção, inserção recusada,
 intervalo apertado e o freio de retranscrição — cada um conferindo que a linha
 do tempo do Whisper sobreviveu. Os de contrato usam os tipos e a conversão
 REAIS do projeto: se o schema mudar, isto falha antes de alguém gastar uma
@@ -186,29 +201,56 @@ horas encontra de verdade: JSON em cerca de código, prosa em volta, índice
 errado, correções sobrepostas — nada disso pode derrubar o vídeo 7 nem, pior,
 corromper a palavra errada em silêncio.
 
-## Karaokê: a métrica certa não é "quebrou?"
+## Defeito temporal — o reparo automático não é sucesso
 
 `helpers/captions_for_remotion.py::_word_items` **não quebra** com transcript
 ruim — ele REPARA. Força `start` crescente (+1 ms) e duração mínima de 40 ms,
 porque 133 dos 178 transcripts do usuário tinham palavra voltando no tempo.
 
-Então a pergunta não é se o karaokê quebra, e sim **quanto a produção teve de
-mexer**. Cada milissegundo de reparo é uma palavra saindo de cima do áudio: na
-tela continua bonito, e acende fora da hora. `impacto.py` mede isso —
-`palavras_reparadas`, `deslocamento_total_ms`, `pior_deslocamento_ms` — usando
-as cues geradas pelo módulo de produção, e cobrando os mesmos invariantes que
-o `tools/conferir_legendas.py` cobra dos projetos reais.
+A produção conseguir consertar **não torna o timestamp bom**: o reparo só troca
+"legenda quebrada" por "legenda dessincronizada". Cada palavra movida é uma
+palavra que o motor entregou fora do lugar. Por isso entra na matriz como
+defeito do transcript original, com a distribuição inteira:
 
-É por aí que o cenário D se prova: revisar texto não pode criar reparo nenhum.
+    palavras_reparadas
+    deslocamento_total_ms
+    deslocamento_mediano_ms
+    p95_deslocamento_ms
+    pior_deslocamento_ms
+
+As cues saem do módulo de produção e os invariantes são os mesmos que
+`tools/conferir_legendas.py` cobra dos projetos reais. É por aí que o cenário D
+se prova: revisar texto não pode criar defeito temporal nenhum.
 
 ## Impacto nos cortes
 
 `rodar.py --cortes` roda `helpers/pack_transcripts.py` →
-`helpers/llm_cut_plan.py` — o planejador de produção — sobre CADA transcript, e
-registra nº de cortes, duração final e a **sobreposição** com o plano do
-Whisper. Não se espera plano idêntico; 1.0 seria o mesmo vídeo, 0.0 seria outro
-vídeo inteiro. Precisa de sessão de IA ativa; sem ela a linha sai como
-`sem dado`.
+`helpers/llm_cut_plan.py` — o planejador de produção — sobre CADA transcript e
+registra nº de cortes, duração final e a **`divergência_do_plano`**: 0.0 = mesmo
+vídeo, 1.0 = nenhum segundo em comum.
+
+O nome é assim de propósito. **Não é medida de qualidade.** Um plano divergente
+pode ser melhor ou pior; a conta só mostra quanto o transcript influencia a
+edição. O plano do Whisper é o ponto de comparação por ser o que o produto usa
+hoje, não por ser o certo — julgar qual edição ficou boa exige validação humana
+separada, fora deste benchmark. Precisa de sessão de IA ativa; sem ela a linha
+sai como `sem dado`.
+
+## Brutos preservados
+
+Cada motor grava em `<vídeo>/trabalho/bruto/` o que devolveu, antes de qualquer
+normalização, alinhamento ou reparo: o payload do `transcribe.py` para A e B, o
+texto verbatim da resposta do Gemini em C, e em D/E a lista de correções mais o
+transcript-base antes do alinhamento. Nenhuma etapa lê de volta daqui — existe
+só para auditar depois se um número estranho veio do motor ou de nós.
+
+## O corpus sintético não pontua
+
+`corpus_sintetico.py` marca o corpus e cada clipe com `sintetico: true`, o
+`rodar.py` carimba a saída e o `relatorio.py` **recusa** (sai com 3) aquela
+pasta. Voz de espeak não tem prosódia, hesitação, sobreposição de locutor nem
+acústica de gravação: valida o encanamento e não decide arquitetura. A matriz
+final usa somente vídeo real do ATIVAVID.
 
 ## O que ainda precisa da máquina real
 

@@ -49,6 +49,9 @@ _MODELO = """<!doctype html>
 Escreva exatamente como foi dito: se ela falou "cê", marque "cê", não "você".
 Se nenhuma opção estiver certa, use <b>Outro</b>. Se não der para entender,
 use <b>[inaudível]</b> — não adivinhe.</p>
+<p class="ctx">Esta página cronometra quanto tempo você leva em cada trecho.
+É a medida de <b>retrabalho real</b> do benchmark — trabalhe no ritmo normal,
+sem pressa e sem pular.</p>
 <audio id="a" src="{audio}" preload="auto"></audio>
 <div id="barra"><span id="cont"></span> &nbsp; <button onclick="baixar()">Baixar decisões</button></div>
 <div id="lista"></div>
@@ -87,8 +90,10 @@ function baixar() {{
 
 function render() {{
   const feitos = PONTOS.filter(p => dec[p.carimbo] !== undefined).length;
+  const ms = Object.values(tel).reduce((s, t) => s + (t.ms || 0), 0);
   document.getElementById('cont').textContent =
-    feitos + ' de ' + PONTOS.length + ' trechos marcados';
+    feitos + ' de ' + PONTOS.length + ' trechos marcados · ' +
+    (ms / 60000).toFixed(1) + ' min de trabalho';
   document.getElementById('lista').innerHTML = PONTOS.map(p => {{
     const esc = s => s.replace(/[&<>"]/g, c =>
       ({{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}})[c]);
@@ -98,7 +103,7 @@ function render() {{
         onchange="marcar('${{p.carimbo}}', ${{JSON.stringify(c).replace(/"/g, '&quot;')}})">
         ${{esc(c)}}</label>`).join('');
     return `<div class="p ${{sel !== undefined ? 'ok' : ''}}">
-      <button onclick="tocar(${{p.inicio}}, ${{p.fim}})">▶ ouvir</button>
+      <button onclick="tocar(${{p.inicio}}, ${{p.fim}}, '${{p.carimbo}}')">▶ ouvir</button>
       <span class="t">${{p.carimbo}}</span>
       <div class="ctx">…${{esc(p.contexto_antes)}} <b>[ ? ]</b> ${{esc(p.contexto_depois)}}…</div>
       ${{ops}}

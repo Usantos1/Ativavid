@@ -37,11 +37,15 @@ CENARIOS = ["scribe", "whisper_local", "gemini_audio", "whisper_gemini",
 def _planejar_cortes(prontos: dict, video: Path, destino: Path) -> dict:
     """Roda o planejador de produção sobre CADA transcript.
 
-    Não se espera plano idêntico entre motores — a pergunta do benchmark é
-    quanto o transcript influencia a edição final. `sobreposicao` responde
-    isso: 1.0 seria o mesmo vídeo, 0.0 seria outro vídeo inteiro.
+    Não se espera plano idêntico entre motores — a pergunta é quanto o
+    transcript influencia a edição final. `divergencia` responde isso: 0.0
+    seria o mesmo vídeo, 1.0 seria nenhum segundo em comum.
+
+    NÃO diz qual edição é melhor. O plano do Whisper é só o ponto de
+    comparação, por ser o que o produto usa hoje; julgar qualidade de corte
+    exige validação humana separada, fora deste benchmark.
     """
-    from tools.bench_transcricao.impacto import planejar, sobreposicao_de_planos
+    from tools.bench_transcricao.impacto import divergencia_do_plano, planejar
 
     planos, saida_json = {}, {}
     for nome, r in prontos.items():
@@ -53,7 +57,7 @@ def _planejar_cortes(prontos: dict, video: Path, destino: Path) -> dict:
     if base is not None and not base.erro:
         for nome, c in planos.items():
             if not c.erro:
-                saida_json[nome]["sobreposicao"] = sobreposicao_de_planos(c, base)
+                saida_json[nome]["divergencia"] = divergencia_do_plano(c, base)
     return saida_json
 
 
@@ -187,6 +191,12 @@ def main() -> int:
 
     corpus = json.loads(corpus_p.read_text(encoding="utf-8"))
     saida = Path(a.saida)
+    sintetico = bool(corpus.get("sintetico")) or any(
+        v.get("sintetico") for v in corpus["videos"])
+    if sintetico:
+        print("CORPUS SINTÉTICO: serve para validar o harness. O relatório "
+              "final vai RECUSAR este material — a matriz que decide produção "
+              "usa só vídeo real do ATIVAVID.\n")
     relatorio: dict[str, dict] = {}
 
     for item in corpus["videos"]:
@@ -197,8 +207,9 @@ def main() -> int:
             print(f"   {k:22s} {v}")
 
     saida.mkdir(parents=True, exist_ok=True)
-    (saida / "estado.json").write_text(
-        json.dumps(relatorio, ensure_ascii=False, indent=2), encoding="utf-8")
+    (saida / "estado.json").write_text(json.dumps(
+        {"_sintetico": sintetico, "videos": relatorio},
+        ensure_ascii=False, indent=2), encoding="utf-8")
 
     ok = sum(1 for m in relatorio.values()
              for k, v in m.items()

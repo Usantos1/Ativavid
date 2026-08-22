@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import sys
+import statistics
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -32,6 +33,15 @@ for extra in (RAIZ, RAIZ / "helpers"):
         sys.path.insert(0, str(extra))
 
 from app.transcricao import Palavra          # noqa: E402
+
+
+def _percentil(ordenados: list[float], q: float) -> float:
+    if not ordenados:
+        return 0.0
+    k = (len(ordenados) - 1) * q
+    lo = int(k)
+    hi = min(lo + 1, len(ordenados) - 1)
+    return ordenados[lo] + (ordenados[hi] - ordenados[lo]) * (k - lo)
 from tools.bench_transcricao.motores import Saida   # noqa: E402
 
 
@@ -60,15 +70,19 @@ class Karaoke:
     vazias: int = 0
     palavra_curta: int = 0
     sobreposicoes: int = 0
-    # Quanto a produção teve de deslocar para a legenda ficar renderizável.
+    # DEFEITO TEMPORAL do transcript original. A produção conseguir consertar
+    # não torna o timestamp bom: cada palavra movida é uma palavra que o motor
+    # entregou fora do lugar, e que acende fora da hora na tela.
     palavras_reparadas: int = 0
     deslocamento_total_ms: float = 0.0
+    deslocamento_mediano_ms: float = 0.0
+    deslocamento_p95_ms: float = 0.0
     deslocamento_maximo_ms: float = 0.0
     problemas: list[str] = field(default_factory=list)
 
     @property
     def intacto(self) -> bool:
-        """A produção não precisou mexer em nada."""
+        """Nenhum defeito temporal: a produção não precisou mover nada."""
         return self.palavras_reparadas == 0
 
     @property
@@ -124,17 +138,30 @@ def conferir_karaoke(saida: Saida) -> Karaoke:
             k.palavra_curta += 1
         anterior = p
 
-    # 2. Quanto a produção teve de reparar.
+    # 2. Defeito temporal: quanto a produção teve de MOVER.
+    #
+    # Isto NÃO é sucesso. `_word_items` conserta a timeline para o render não
+    # falhar, e o efeito colateral é a palavra deixar de coincidir com o áudio.
+    # Um transcript que precisa de reparo entregou timestamp errado — o reparo
+    # só troca "legenda quebrada" por "legenda dessincronizada".
+    deslocamentos: list[float] = []
     for p, c in zip(saida.palavras, cues_de(saida)):
         d = abs(c["startMs"] - p.inicio * 1000)
         if d > 0.5:                      # meio ms: ruído de arredondamento
-            k.palavras_reparadas += 1
-            k.deslocamento_total_ms += d
-            k.deslocamento_maximo_ms = max(k.deslocamento_maximo_ms, d)
-    if k.palavras_reparadas:
+            deslocamentos.append(d)
+
+    if deslocamentos:
+        deslocamentos.sort()
+        k.palavras_reparadas = len(deslocamentos)
+        k.deslocamento_total_ms = sum(deslocamentos)
+        k.deslocamento_mediano_ms = statistics.median(deslocamentos)
+        k.deslocamento_p95_ms = _percentil(deslocamentos, 0.95)
+        k.deslocamento_maximo_ms = deslocamentos[-1]
         k.problemas.append(
-            f"a produção deslocou {k.palavras_reparadas} palavra(s) para a "
-            f"legenda ficar renderizável (pior: "
+            f"DEFEITO TEMPORAL: {k.palavras_reparadas} palavra(s) que o motor "
+            f"entregou fora do lugar; a produção teve de movê-las para a "
+            f"timeline fechar (mediana {k.deslocamento_mediano_ms:.0f} ms, "
+            f"p95 {k.deslocamento_p95_ms:.0f} ms, pior "
             f"{k.deslocamento_maximo_ms:.0f} ms fora do áudio)")
     return k
 
@@ -193,11 +220,15 @@ def planejar(saida: Saida, video: Path, destino: Path,
                   trechos=faixas)
 
 
-def sobreposicao_de_planos(a: Cortes, b: Cortes) -> float:
-    """Fração do tempo do plano A que também está no plano B.
+def divergencia_do_plano(a: Cortes, b: Cortes) -> float:
+    """Quanto o plano A difere do plano B, em fração de tempo.
 
-    1.0 = os dois transcripts levaram ao MESMO vídeo. É a medida que responde
-    "quanto o transcript influencia a edição final" sem exigir que sejam iguais.
+    0.0 = mesmo vídeo. 1.0 = nenhum segundo em comum.
+
+    NÃO é medida de qualidade, e o nome é assim de propósito. Um plano
+    divergente pode ser melhor OU pior que o outro; esta conta só mostra
+    quanto o transcript influencia a edição final. Dizer qual edição ficou boa
+    exige validação humana separada, que este benchmark não faz.
     """
     if not a.trechos or not b.trechos:
         return float("nan")
@@ -208,4 +239,4 @@ def sobreposicao_de_planos(a: Cortes, b: Cortes) -> float:
     for x, y in a.trechos:
         for u, v in b.trechos:
             comum += max(0.0, min(y, v) - max(x, u))
-    return min(comum / total, 1.0)
+    return 1.0 - min(comum / total, 1.0)

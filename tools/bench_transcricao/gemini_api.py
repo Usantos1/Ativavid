@@ -217,7 +217,11 @@ def transcrever(audio: Path, modelo: str = MODELO_PADRAO) -> Transcricao:
     texto = d.get("texto") or " ".join(
         (s.get("texto") or "") for s in d.get("segmentos", []))
 
-    meta = {"modelo": modelo, "granularidade_declarada": d.get("granularidade")}
+    meta = {"modelo": modelo, "granularidade_declarada": d.get("granularidade"),
+            # Consumido por `motores.gemini_audio`, que grava em bruto/ e tira
+            # daqui — o texto cru não pertence ao resultado, pertence à
+            # auditoria.
+            "_resposta": resp.text or ""}
     if gran != "palavra":
         meta["nota_timestamp"] = (
             f"O Gemini declarou granularidade '{gran}'. As métricas de "

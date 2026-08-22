@@ -24,7 +24,7 @@ from tools.bench_transcricao.alinhar import chave              # noqa: E402
 from tools.bench_transcricao.discordancia import (              # noqa: E402
     encontrar, referencia_por_consenso)
 from tools.bench_transcricao.metricas import (                  # noqa: E402
-    evaluate_text, levenshtein_ops)
+    evaluate_text, levenshtein_ops, tokens)
 from tools.bench_transcricao.impacto import conferir_karaoke    # noqa: E402
 from tools.bench_transcricao.motores import Saida               # noqa: E402
 
@@ -80,6 +80,59 @@ def _cortes_do_video(saida: Path, vid: str) -> dict:
     return json.loads(p.read_text(encoding="utf-8"))
 
 
+def tempo_humano_por_motor(saida: Path, vid: str) -> dict[str, dict]:
+    """Quanto trabalho humano CADA motor teria custado, medido no relógio.
+
+    A terceira medida do benchmark, e a única que não é proxy:
+
+        WER              precisão textual
+        corridas de erro concentração dos erros
+        tempo humano     retrabalho real
+
+    Não se misturam. A atribuição é direta: num trecho divergente, o motor que
+    propôs o que a pessoa confirmou não teria gerado trabalho nenhum ali; os
+    outros teriam custado aquele trecho inteiro — o tempo cronometrado na
+    página, e uma intervenção.
+
+    `trocas` e `digitou` vêm da telemetria da página: são intervenção humana
+    de verdade, não estimativa.
+    """
+    dec_p = saida / "validacao" / f"validacao_{vid}.json"
+    props_p = saida / "validacao" / f"propostas_{vid}.json"
+    if not (dec_p.is_file() and props_p.is_file()):
+        return {}
+
+    d = json.loads(dec_p.read_text(encoding="utf-8"))
+    decisoes = d.get("decisoes", {})
+    tel = d.get("telemetria", {})
+    propostas = json.loads(props_p.read_text(encoding="utf-8"))
+
+    out: dict[str, dict] = {}
+    for carimbo, por_motor in propostas.items():
+        verdade = decisoes.get(carimbo)
+        if verdade is None:
+            continue                     # não validado: não conta para ninguém
+        t = tel.get(carimbo) or {}
+        ms = float(t.get("ms") or 0.0)
+        for motor, dito in por_motor.items():
+            reg = out.setdefault(motor, {"ms": 0.0, "intervencoes": 0,
+                                         "pontos": 0, "digitou": 0})
+            reg["pontos"] += 1
+            if _mesmo(dito, verdade):
+                continue                 # acertou: não custaria nada aqui
+            reg["ms"] += ms
+            reg["intervencoes"] += 1
+            if t.get("digitou"):
+                reg["digitou"] += 1
+    return out
+
+
+def _mesmo(a: str, b: str) -> bool:
+    from tools.bench_transcricao.metricas import tokens as _tk
+
+    return _tk(a or "") == _tk(b or "")
+
+
 def _referencia(saida: Path, vid: str, motores_: dict[str, Saida]
                 ) -> tuple[str, dict] | None:
     """A referência humana: consenso onde todos concordam, ouvido onde não."""
@@ -114,6 +167,7 @@ def avaliar(saida: Path) -> dict:
         ref_texto, cobertura = ref
         base = motores_.get("whisper_local")
         cortes = _cortes_do_video(saida, vid)
+        humano = tempo_humano_por_motor(saida, vid)
 
         linhas: dict[str, dict] = {"_cobertura": cobertura}
         for nome, s in motores_.items():
@@ -140,7 +194,9 @@ def avaliar(saida: Path) -> dict:
                     "fora_de_ordem": k.fora_de_ordem,
                     "sobreposicoes": k.sobreposicoes,
                     "reparadas": k.palavras_reparadas,
-                    "deslocamento_ms": k.deslocamento_total_ms,
+                    "deslocamento_total_ms": k.deslocamento_total_ms,
+                    "deslocamento_mediano_ms": k.deslocamento_mediano_ms,
+                    "deslocamento_p95_ms": k.deslocamento_p95_ms,
                     "pior_deslocamento_ms": k.deslocamento_maximo_ms,
                     "intacto": float(k.intacto),
                 }
@@ -153,11 +209,19 @@ def avaliar(saida: Path) -> dict:
             else:
                 linha["nota_timestamp"] = s.meta.get(
                     "nota_timestamp", f"granularidade '{s.granularidade}'")
+            h = humano.get(nome)
+            if h and h["pontos"]:
+                palavras = max(len(tokens(ref_texto)), 1)
+                linha["humano_s_100w"] = 100.0 * (h["ms"] / 1000.0) / palavras
+                linha["humano_intervencoes"] = h["intervencoes"]
+                linha["humano_intervencoes_100w"] = \
+                    100.0 * h["intervencoes"] / palavras
+                linha["humano_digitou"] = h["digitou"]
             c = cortes.get(nome)
             if c and not c.get("erro"):
                 linha["cortes_n"] = c["n"]
                 linha["cortes_duracao_s"] = c["duracao_s"]
-                linha["cortes_sobreposicao_com_whisper"] = c.get("sobreposicao")
+                linha["cortes_divergencia"] = c.get("divergencia")
             linhas[nome] = linha
 
         # Erro de timestamp: contra o motor que o produto usa hoje como
@@ -226,10 +290,16 @@ def matriz(ag: dict, custos: dict | None) -> str:
     return "\n".join([cab, sep,
         linha("WER", lambda a, c: _p(a.get("wer"))),
         linha("CER", lambda a, c: _p(a.get("cer"))),
-        linha("correções humanas/100 palavras",
+        linha("— precisão textual —", lambda a, c: ""),
+        linha("operações de edição/100", lambda a, c: _n(a.get("operacoes_100"))),
+        linha("— concentração do erro —", lambda a, c: ""),
+        linha("corridas de erro/100 (proxy)",
               lambda a, c: _n(a.get("correcoes_100"))),
-        linha("  (operações/100, = WER)",
-              lambda a, c: _n(a.get("operacoes_100"))),
+        linha("— retrabalho real (relógio) —", lambda a, c: ""),
+        linha("tempo humano s/100 palavras",
+              lambda a, c: _n(a.get("humano_s_100w"), 1, "s")),
+        linha("intervenções humanas/100",
+              lambda a, c: _n(a.get("humano_intervencoes_100w"))),
         linha("nomes próprios", lambda a, c: _p(a.get("nomes_proprios"))),
         linha("números", lambda a, c: _p(a.get("numeros"))),
         linha("gírias/coloquial", lambda a, c: _p(a.get("coloquial"))),
@@ -241,19 +311,23 @@ def matriz(ag: dict, custos: dict | None) -> str:
               "referência" if c == "whisper_local" else ts(a, "p90")),
         linha("p95", lambda a, c:
               "referência" if c == "whisper_local" else ts(a, "p95")),
-        linha("karaoke: intacto (sem reparo)",
+        linha("— defeito temporal do transcript —", lambda a, c: ""),
+        linha("sem defeito (nada movido)",
               lambda a, c: _p(a.get("karaoke_intacto"), 0)),
-        linha("karaoke: palavras reparadas",
+        linha("palavras_reparadas",
               lambda a, c: _n(a.get("karaoke_reparadas"))),
-        linha("karaoke: pior deslocamento",
-              lambda a, c: SD if a.get("karaoke_pior_deslocamento_ms") is None
+        linha("deslocamento_total_ms", lambda a, c: _mms(a, "total")),
+        linha("deslocamento_mediano_ms", lambda a, c: _mms(a, "mediano")),
+        linha("p95_deslocamento_ms", lambda a, c: _mms(a, "p95")),
+        linha("pior_deslocamento_ms", lambda a, c:
+              SD if a.get("karaoke_pior_deslocamento_ms") is None
               else f"{a['karaoke_pior_deslocamento_ms']:.0f} ms"),
         linha("cortes (n)", lambda a, c: _n(a.get("cortes_n"))),
         linha("cortes: duração final",
               lambda a, c: _n(a.get("cortes_duracao_s"), 1, "s")),
-        linha("cortes: igual ao Whisper", lambda a, c:
-              "referência" if c == "whisper_local"
-              else _p(a.get("cortes_sobreposicao_com_whisper"))),
+        linha("cortes: divergência do plano", lambda a, c:
+              "base" if c == "whisper_local"
+              else _p(a.get("cortes_divergencia"))),
         linha("tempo (s/vídeo)", lambda a, c: _n(a.get("tempo_s"))),
         linha("custo (US$/hora de áudio)",
               lambda a, c: _custo(custos, c)),
@@ -261,6 +335,13 @@ def matriz(ag: dict, custos: dict | None) -> str:
         linha("privacidade", lambda a, c:
               "local" if c == "whisper_local" else "áudio → nuvem"),
     ])
+
+
+def _mms(a: dict, campo: str) -> str:
+    """Deslocamento que a produção teve de aplicar. Não é sucesso: é a
+    medida do defeito temporal que o motor entregou."""
+    v = a.get(f"karaoke_deslocamento_{campo}_ms")
+    return SD if v is None else f"{v:.0f} ms"
 
 
 def _custo(custos: dict | None, motor: str) -> str:
@@ -287,6 +368,24 @@ def main() -> int:
     if not saida.is_dir():
         print(f"não existe: {saida}. Rode rodar.py antes.", file=sys.stderr)
         return 2
+
+    # Corpus sintético não pontua e não escolhe vencedor. Voz de espeak não
+    # tem prosódia, hesitação, sobreposição de locutor nem acústica de
+    # gravação: um número tirado dali não diz nada sobre o material real, e
+    # publicado numa matriz decidiria arquitetura de produção pelo motivo
+    # errado. O harness aceita esse corpus para se testar; o relatório, não.
+    estado_p = saida / "estado.json"
+    if estado_p.is_file():
+        try:
+            if json.loads(estado_p.read_text(encoding="utf-8")).get("_sintetico"):
+                print("RECUSADO: esta pasta veio de corpus SINTÉTICO.\n"
+                      "A matriz final usa somente vídeo real do ATIVAVID — "
+                      "espeak valida o encanamento, não decide arquitetura.\n"
+                      "Rode o benchmark com corpus.json de vídeos reais.",
+                      file=sys.stderr)
+                return 3
+        except ValueError:
+            pass
 
     r = avaliar(saida)
     medidos = {k: v for k, v in r["por_video"].items()

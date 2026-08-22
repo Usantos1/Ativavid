@@ -94,6 +94,9 @@ def gerar(saida: Path, wpm: int = 150) -> Path:
             _ffmpeg(wav, destino, filtros)
             videos.append({
                 "id": vid, "video": str(destino.resolve()),
+                # Marca que o relatório final usa para RECUSAR este material.
+                # Voz de espeak não decide arquitetura de produção.
+                "sintetico": True,
                 "tags": tags + ([] if var == "limpo" else [var]),
                 "referencia": texto,
                 "notas": f"sintético espeak-ng pt-br, variação '{var}'",
@@ -103,6 +106,7 @@ def gerar(saida: Path, wpm: int = 150) -> Path:
     corpus.write_text(json.dumps({
         "_leia": "CORPUS SINTÉTICO — valida o harness, NÃO julga motor. "
                  "Voz de espeak-ng não representa o material real do usuário.",
+        "sintetico": True,
         "videos": videos,
     }, ensure_ascii=False, indent=2), encoding="utf-8")
 

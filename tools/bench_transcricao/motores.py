@@ -82,6 +82,25 @@ class Saida:
                                       indent=2), encoding="utf-8")
 
 
+def guardar_bruto(trabalho: Path, nome: str, conteudo, ext: str = "json") -> Path:
+    """Grava o que o motor devolveu, ANTES de qualquer coisa nossa.
+
+    Sem isto, um resultado estranho na matriz não tem como ser auditado: não
+    dá para saber se o defeito veio do motor, da normalização, do alinhamento
+    ou do reparo da legenda. O bruto fica intocado ao lado do resultado, e
+    nenhuma etapa do benchmark lê de volta daqui — é só para auditoria.
+    """
+    d = trabalho / "bruto"
+    d.mkdir(parents=True, exist_ok=True)
+    alvo = d / f"{nome}.{ext}"
+    if ext == "json":
+        alvo.write_text(json.dumps(conteudo, ensure_ascii=False, indent=2),
+                        encoding="utf-8")
+    else:
+        alvo.write_text(str(conteudo), encoding="utf-8")
+    return alvo
+
+
 def _palavras_do_schema(bruto: dict) -> list[Palavra]:
     """Lê o schema do Scribe — o formato que o ATIVAVID inteiro consome."""
     return [Palavra(texto=(w.get("text") or "").strip(),
@@ -165,6 +184,7 @@ def scribe(video: Path, trabalho: Path) -> Saida:
     if not os.environ.get("ELEVENLABS_API_KEY"):
         raise MotorIndisponivel("ELEVENLABS_API_KEY ausente")
     bruto, dt = _rodar_transcribe(video, trabalho, "elevenlabs")
+    guardar_bruto(trabalho, "scribe", bruto)
     palavras = _palavras_do_schema(bruto)
     return Saida(motor="scribe", palavras=palavras,
                  texto=bruto.get("text") or " ".join(p.texto for p in palavras),
@@ -180,6 +200,7 @@ def whisper_local(video: Path, trabalho: Path, modelo: str = "medium") -> Saida:
     CPU e o schema atual.
     """
     bruto, dt = _rodar_transcribe(video, trabalho, "local", modelo)
+    guardar_bruto(trabalho, "whisper_local", bruto)
     palavras = _palavras_do_schema(bruto)
     return Saida(motor="whisper_local", palavras=palavras,
                  texto=bruto.get("text") or " ".join(p.texto for p in palavras),
@@ -197,6 +218,8 @@ def gemini_audio(video: Path, trabalho: Path) -> Saida:
     t0 = time.perf_counter()
     r = gemini_api.transcrever(audio)
     dt = time.perf_counter() - t0
+    guardar_bruto(trabalho, "gemini_audio_resposta", r.meta.pop("_resposta", ""),
+                  ext="txt")
     return Saida(motor="gemini_audio", palavras=r.palavras, texto=r.texto,
                  granularidade=r.granularidade,
                  tempos={"total": round(dt, 3), **r.tempos},
@@ -229,6 +252,10 @@ def whisper_mais_gemini(base: Saida, video: Path, trabalho: Path, *,
         via = "llm_gateway (sessao web)"
     dt = time.perf_counter() - t0
 
+    guardar_bruto(trabalho, f"{nome}_correcoes", correcoes)
+    guardar_bruto(trabalho, f"{nome}_base_antes_do_alinhamento",
+                  [{"i": i, "texto": p.texto, "inicio": p.inicio, "fim": p.fim}
+                   for i, p in enumerate(base.palavras)])
     tokens, aplicadas, ignoradas = aplicar_correcoes(base.palavras, correcoes)
     r = alinhar.aplicar(base.palavras, tokens)
     return Saida(
