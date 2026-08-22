@@ -33,6 +33,51 @@ PACOTES_CUDA = ("nvidia-cublas-cu12", "nvidia-cudnn-cu12")
 MB_CUDA = 1986        # medido nesta máquina
 
 
+# O motor em si. Fica FORA das dependências base do app de propósito: quem
+# transcreve pela nuvem não precisa dele. O instalador já o traz
+# (`uv sync --extra transcricao`), e isto aqui é a rede para quem ATUALIZA de
+# uma versão antiga sem passar pelo instalador — nesse caminho o `uv sync`
+# não roda e o motor não apareceria sozinho.
+PACOTES_MOTOR = ("faster-whisper>=1.2",)
+MB_MOTOR = 241        # medido num ambiente limpo
+
+
+def motor_presente() -> bool:
+    try:
+        import faster_whisper  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
+def garantir_motor(
+    *,
+    progresso: Callable[[float, str], None] | None = None,
+    cancelar: threading.Event | None = None,
+) -> tuple[bool, str]:
+    """(conseguiu?, motivo). Idempotente. Nunca levanta.
+
+    Sem o motor a transcrição local não acontece de jeito nenhum — então este
+    é o único componente cuja ausência é falha de verdade. CUDA e modelo têm
+    saída (CPU, modelo menor); este não tem.
+    """
+    if motor_presente():
+        return True, "já instalado"
+    if cancelar is not None and cancelar.is_set():
+        return False, "cancelado"
+    if progresso:
+        progresso(0.0, "Preparando transcrição…")
+    ok, motivo = _instalar(PACOTES_MOTOR)
+    if not ok:
+        return False, motivo
+    if progresso:
+        progresso(1.0, "Preparando transcrição…")
+    if not motor_presente():
+        return False, "instalado mas não importou"
+    return True, "instalado agora"
+
+
 def cuda_presente() -> bool:
     """As DLLs estão no disco e o carregador as encontra?"""
     return bool(registrar_dlls_cuda())
@@ -42,6 +87,25 @@ def _uv() -> str | None:
     import shutil
 
     return shutil.which("uv")
+
+
+def _instalar(pacotes: tuple[str, ...]) -> tuple[bool, str]:
+    """Busca pacotes NESTE ambiente. Um caminho so, usado por motor e CUDA.
+
+    `--python sys.executable` de proposito: o app roda de um venv proprio, e
+    sem isso o uv instalaria no que ele adivinhar.
+    """
+    uv = _uv()
+    if not uv:
+        return False, "uv nao encontrado — sem como buscar o componente"
+    cmd = [uv, "pip", "install", "--python", sys.executable, *pacotes]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+    except (OSError, subprocess.SubprocessError) as e:
+        return False, f"falhou ao buscar: {type(e).__name__}: {e}"
+    if proc.returncode != 0:
+        return False, f"falhou ao buscar: {(proc.stderr or '')[-160:]}"
+    return True, "ok"
 
 
 def garantir_cuda(
@@ -61,21 +125,11 @@ def garantir_cuda(
     if cancelar is not None and cancelar.is_set():
         return False, "cancelado"
 
-    uv = _uv()
-    if not uv:
-        return False, "uv não encontrado — sem como buscar o componente"
-
     if progresso:
         progresso(0.0, "Preparando a aceleração…")
-    # `--python sys.executable` para instalar NESTE ambiente, e não no que o
-    # uv adivinhar: o app roda de um venv próprio.
-    cmd = [uv, "pip", "install", "--python", sys.executable, *PACOTES_CUDA]
-    try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
-    except (OSError, subprocess.SubprocessError) as e:
-        return False, f"falhou ao buscar: {type(e).__name__}: {e}"
-    if proc.returncode != 0:
-        return False, f"falhou ao buscar: {(proc.stderr or '')[-160:]}"
+    ok, motivo = _instalar(PACOTES_CUDA)
+    if not ok:
+        return False, motivo
 
     if progresso:
         progresso(1.0, "Preparando a aceleração…")

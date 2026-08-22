@@ -276,3 +276,58 @@ def test_o_scribe_continua_existindo():
     codigo = apenas_codigo(REPO / "helpers" / "transcribe.py")
     assert "def call_elevenlabs(" in codigo
     assert "def call_groq(" in codigo
+
+
+# --- o motor precisa CHEGAR na maquina nova --------------------------------
+
+def test_o_instalador_traz_o_motor():
+    """Ele estava fora: `uv sync` sem extras não traz o `faster-whisper`.
+
+    O efeito era o pior possível — numa máquina nova o padrão é local, então a
+    primeira transcrição baixaria 3,4 GB de aceleração e modelo e SÓ ENTÃO
+    falharia, porque o motor em si nunca tinha sido instalado.
+    """
+    setup = (REPO / "installer" / "setup.ps1").read_text(
+        encoding="utf-8", errors="replace")
+    linhas = [x.strip() for x in setup.splitlines()
+              if x.strip().startswith("uv sync")]
+    assert linhas, "o instalador deixou de sincronizar as dependências"
+    for linha in linhas:
+        assert "--extra transcricao" in linha, (
+            "instalação nova ficaria sem o motor local: " + linha)
+
+
+def test_o_preparo_instala_o_motor_ANTES_de_baixar_o_resto(monkeypatch):
+    """A ordem importa: baixar 3,4 GB para depois descobrir que falta o motor
+    é o pior resultado possível."""
+    import app.transcricao.primeiro_uso as pu
+
+    ordem = []
+
+    monkeypatch.setattr(pu, "_motor_instalado", lambda: False)
+    monkeypatch.setattr(pu.componentes, "cuda_presente", lambda: False)
+    monkeypatch.setattr(pu.modelos, "instalado", lambda m: False)
+    monkeypatch.setattr(pu.componentes, "garantir_motor",
+                        lambda **k: (ordem.append("motor"), (True, "ok"))[1])
+    monkeypatch.setattr(pu.componentes, "garantir_cuda",
+                        lambda **k: (ordem.append("cuda"), (True, "ok"))[1])
+    monkeypatch.setattr(pu.modelos, "garantir",
+                        lambda m, **k: ordem.append("modelo"))
+    monkeypatch.setattr(pu, "planejar", lambda: pu.Plano(241, 1986, 1458,
+                                                         "medium", "cuda"))
+    pu.preparar()
+    assert ordem[0] == "motor", f"ordem errada: {ordem}"
+    assert ordem == ["motor", "cuda", "modelo"]
+
+
+def test_sem_o_motor_o_preparo_falha_em_vez_de_seguir(monkeypatch):
+    """Aceleração e modelo têm saída (CPU, modelo menor). O motor não tem:
+    sem ele a transcrição local não acontece de jeito nenhum."""
+    import app.transcricao.primeiro_uso as pu
+
+    monkeypatch.setattr(pu, "planejar", lambda: pu.Plano(241, 0, 0,
+                                                         "small", "cpu"))
+    monkeypatch.setattr(pu.componentes, "garantir_motor",
+                        lambda **k: (False, "sem rede"))
+    with pytest.raises(RuntimeError, match="transcricao local"):
+        pu.preparar()

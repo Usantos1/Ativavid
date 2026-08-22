@@ -67,12 +67,7 @@ PACOTES_MB = 241
 
 
 def _motor_instalado() -> bool:
-    try:
-        import faster_whisper  # noqa: F401
-
-        return True
-    except ImportError:
-        return False
+    return componentes.motor_presente()
 
 
 def planejar() -> Plano:
@@ -128,6 +123,20 @@ def preparar(
 
     if cancelar is not None and cancelar.is_set():
         raise Cancelado("cancelado antes de preparar")
+
+    # O MOTOR primeiro. Sem ele nada mais adianta -- e baixar 3,4 GB de
+    # aceleracao e modelo para so entao descobrir que o motor nao esta la e o
+    # pior resultado possivel. Era exatamente o que acontecia: o instalador
+    # roda `uv sync` sem extras, entao numa maquina nova o motor nao vinha.
+    if plano.pacotes_mb:
+        ok, motivo = componentes.garantir_motor(
+            progresso=parcial(plano.pacotes_mb), cancelar=cancelar)
+        print(f"PRIMEIRO_USO motor={'ok' if ok else 'FALHOU'} ({motivo})",
+              flush=True)
+        if not ok:
+            raise RuntimeError(
+                f"nao deu para preparar a transcricao local: {motivo}")
+        feito += plano.pacotes_mb
 
     if plano.aceleracao_mb:
         ok, motivo = componentes.garantir_cuda(progresso=parcial(plano.aceleracao_mb),

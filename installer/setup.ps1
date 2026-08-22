@@ -116,7 +116,7 @@ if (-not (Test-Cmd "uv")) {
 }
 
 Write-Step "uv sync (dependencias Python)"
-uv sync --directory $Repo
+uv sync --extra transcricao --directory $Repo
 
 $Projects = Join-Path $env:USERPROFILE "ATIVAVID\Projetos"
 New-Item -ItemType Directory -Force -Path $Projects | Out-Null
