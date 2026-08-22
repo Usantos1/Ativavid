@@ -199,6 +199,13 @@ def write_timing(edit_dir: Path) -> dict:
     # a decisao, nao sobre a classificacao.
     if _RENDER_META.get("overlaySkip"):
         payload["overlaySkip"] = _RENDER_META["overlaySkip"]
+    # Qual motor desenhou o overlay, e o motivo quando o proprio ficou de fora.
+    # O motor proprio desenha sem abrir o Chrome e e 3,3x mais rapido; ele se
+    # desliga sozinho quando encontra recurso de template que nao suporta, e ate
+    # aqui isso so aparecia num print do pipeline -- que nao e guardado.
+    for campo in ("overlayEngine", "overlayEngineSkip"):
+        if _RENDER_META.get(campo):
+            payload[campo] = _RENDER_META[campo]
     try:
         (edit_dir / "timing.json").write_text(
             json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8"
@@ -3304,6 +3311,8 @@ def run(
                         if bad:
                             raise RuntimeError(bad)
                         _RENDER_META["renderPath"] = "OVERLAY"
+                        _RENDER_META["overlayEngine"] = (ov_result or {}).get("engine")
+                        _RENDER_META["overlayEngineSkip"] = (ov_result or {}).get("engineSkip")
                         _RENDER_META["overlaySec"] = (ov_result or {}).get("remotionSec")
                         _RENDER_META["composeSec"] = (ov_result or {}).get("composeSec")
                         _RENDER_META["timeline"] = (ov_result or {}).get("timeline")

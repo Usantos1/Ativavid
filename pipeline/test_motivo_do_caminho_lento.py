@@ -67,3 +67,50 @@ def test_sem_motivo_o_campo_nao_aparece(tmp_path):
     rf.write_timing(tmp_path)
     d = json.loads((tmp_path / "timing.json").read_text(encoding="utf-8"))
     assert "overlaySkip" not in d
+
+
+# --- qual motor desenhou o overlay ----------------------------------------
+#
+# O renderizador próprio desenha sem abrir o Chrome e é 3,3x mais rápido, mas
+# ele se desliga sozinho quando encontra recurso de template que não suporta —
+# e até aqui isso só aparecia num `print` do pipeline, que não é guardado.
+#
+# Conferido nos projetos reais em 22/08: 140 de 140 cobertos, nenhum pulado. O
+# campo existe para o dia em que isso deixar de ser verdade, que é justamente o
+# dia em que ninguém vai notar sozinho.
+
+
+def test_o_motor_do_overlay_chega_ao_timing_json(tmp_path):
+    import pipeline.run_fast as rf
+
+    rf._TIMING.clear()
+    rf._RENDER_META.clear()
+    rf._TIMING["CUT"] = 9.0
+    rf._RENDER_META["overlayEngine"] = "remotion"
+    rf._RENDER_META["overlayEngineSkip"] = "legenda estilo-novo nao suportado"
+    rf.write_timing(tmp_path)
+    d = json.loads((tmp_path / "timing.json").read_text(encoding="utf-8"))
+    assert d.get("overlayEngine") == "remotion"
+    assert "estilo-novo" in str(d.get("overlayEngineSkip"))
+
+
+def test_motor_proprio_nao_grava_motivo_de_pulo(tmp_path):
+    """Quando ele desenhou, não há o que explicar."""
+    import pipeline.run_fast as rf
+
+    rf._TIMING.clear()
+    rf._RENDER_META.clear()
+    rf._TIMING["CUT"] = 9.0
+    rf._RENDER_META["overlayEngine"] = "proprio"
+    rf._RENDER_META["overlayEngineSkip"] = None
+    rf.write_timing(tmp_path)
+    d = json.loads((tmp_path / "timing.json").read_text(encoding="utf-8"))
+    assert d.get("overlayEngine") == "proprio"
+    assert "overlayEngineSkip" not in d
+
+
+def test_o_resultado_do_overlay_carrega_o_motor():
+    """Gravar em run_fast não basta: quem sabe o motor é o overlay_path."""
+    codigo = apenas_codigo(RAIZ / "app" / "overlay_path.py")
+    assert '"engine"' in codigo, "o resultado do overlay não diz qual motor desenhou"
+    assert '"engineSkip"' in codigo, "o motivo de pular o motor próprio não sai do módulo"
