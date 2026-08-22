@@ -40,6 +40,16 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent.parent
 SAIDA = REPO / "tools" / "render_benchmark" / "results"
 
+# O console do Windows entrega cp1252 quando a saída é capturada, e uma seta
+# no meio de um print derrubava a medição inteira DEPOIS de 13 min esperando a
+# fila esvaziar. Texto de relatório não pode custar a corrida.
+for _fluxo in (sys.stdout, sys.stderr):
+    if hasattr(_fluxo, "reconfigure"):
+        try:
+            _fluxo.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:  # noqa: BLE001
+            pass
+
 ALTURA = 1920           # entrega vertical
 NPL_ATUAL = 100         # o que o app usa hoje (helpers/render.py:471)
 NPL_BT2408 = 203        # recomendação BT.2408 para HLG
