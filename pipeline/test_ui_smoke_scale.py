@@ -206,9 +206,24 @@ def test_ia_e_integracoes_usam_a_largura_do_monitor():
     # IA: passo a passo de um lado, o que se opera do outro
     assert '"steps form"' in bloco
     assert ".keys-block--session > .keys-form" in bloco
-    # Integracoes: os servicos lado a lado
+    # Integracoes: os servicos lado a lado, dividindo a largura de verdade.
+    # Era grid com auto-fit, mas o `grid-column: 1 / -1` do botao Salvar
+    # mantinha viva a coluna que o auto-fit teria colapsado: os tres cartoes
+    # ficavam com 377px num form de 1548 e sobravam 377px de tela vazia.
+    # No flex eles dividem a linha (507px cada, medido).
     assert ".keys-block--apis .keys-form" in bloco
-    assert "minmax(min(360px, 100%), 1fr)" in bloco
+    i_form = bloco.index(".keys-block--apis .keys-form")
+    regra = bloco[i_form:bloco.index("}", i_form)]
+    assert "flex" in regra and "wrap" in regra, "voltou a esticar so ate a coluna"
+    assert "flex: 1 1 360px" in bloco, "cartao sem base para dividir a linha"
+    # `1 / -1` é legítimo em grid de colunas explícitas (a tela de IA usa);
+    # o que não pode voltar é ele junto de auto-fit AQUI, onde ressuscita a
+    # coluna fantasma.
+    i_apis = bloco.index(".keys-block--apis")
+    trecho_apis = bloco[i_apis:]
+    assert "grid-column: 1 / -1" not in trecho_apis, (
+        "a coluna fantasma voltou: os cartoes param no meio da tela"
+    )
 
 
 if __name__ == "__main__":

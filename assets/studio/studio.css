@@ -3248,12 +3248,17 @@ body.home-working .hero-import .hero-inner { padding: 10px 0; }
   .keys-block--session > .keys-steps { grid-area: steps; margin: 0; }
   .keys-block--session > .keys-form { grid-area: form; }
 
-  /* Integracoes: os servicos lado a lado; sao cartoes independentes. */
+  /* Integracoes: os servicos lado a lado; sao cartoes independentes.
+     Flex, e nao grid: com grid, o `grid-column: 1 / -1` do botao Salvar
+     referenciava a ultima track e MANTINHA VIVA a coluna que o auto-fit teria
+     colapsado. Os tres cartoes ficavam com 377px cada e sobravam 377px de
+     tela vazia a direita. No flex eles simplesmente dividem a linha. */
   .keys-block--apis .keys-form {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr));
+    display: flex;
+    flex-wrap: wrap;
     gap: 14px;
-    align-items: start;
+    align-items: flex-start;
   }
-  .keys-block--apis .keys-actions { grid-column: 1 / -1; }
+  .keys-block--apis .keys-api-card { flex: 1 1 360px; min-width: 0; }
+  .keys-block--apis .keys-actions { flex: 1 0 100%; }
 }

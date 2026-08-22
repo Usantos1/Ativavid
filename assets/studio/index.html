@@ -290,8 +290,14 @@
                 <button type="button" class="ghost-btn" id="btnBrandSave">Criar com o estilo atual</button>
               </div>
             </section>
+          </div>
 
-            <section class="pane-card pane-card--wide">
+          <!-- Fora do .pane-grid de propósito: com `grid-column: 1 / -1` este
+               card mantinha vivas as 4 colunas que o auto-fit havia criado,
+               então os dois cards de cima ficavam presos em duas delas e
+               metade da largura da tela sobrava vazia. Como irmão, o grid volta
+               a ter só dois itens e eles dividem a linha inteira. -->
+          <section class="pane-card pane-card--wide">
               <header class="pane-card-head">
                 <h4>Identidade visual</h4>
                 <p class="hint">Os três primeiros abrem já na seção certa do editor de estilo; o logo fica na Biblioteca.</p>
@@ -321,8 +327,7 @@
                   <span class="ident-val">Na biblioteca</span>
                 </button>
               </div>
-            </section>
-          </div>
+          </section>
         </section>
 
         <!-- BIBLIOTECA — arquivos reutilizáveis (hoje: imagens de b-roll) -->
