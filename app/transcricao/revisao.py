@@ -89,7 +89,7 @@ MODELO = "gemini-web/pro"
 MAXIMO_DE_PALAVRAS = 3000
 
 LIGADA, DESLIGADA = "gemini", "off"
-PADRAO = DESLIGADA
+PADRAO = LIGADA
 
 
 def modo() -> str:
