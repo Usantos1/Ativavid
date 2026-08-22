@@ -1225,6 +1225,19 @@ body.view-estilo-on .ws-head {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+/* Tom de atencao, nao de erro: o video existe e esta assistivel -- o que
+ * mudou foi a qualidade do titulo. Vermelho aqui mandaria a pessoa jogar fora
+ * um arquivo que serve. */
+.pc-aviso-ia {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--warn);
+  background: rgba(245, 185, 66, 0.1);
+  border-left: 2px solid var(--warn);
+  border-radius: 0 6px 6px 0;
+  padding: 6px 8px;
+}
 .pc-detail-btn {
   appearance: none;
   border: 0;

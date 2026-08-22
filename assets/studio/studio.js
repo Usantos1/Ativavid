@@ -439,6 +439,16 @@ function duracoesLabel(j) {
  *  — original, editado, formato, estilo, inicio e fim, cada um com o seu
  *  rotulo. Antes tudo isso era uma linha so ("1:07 → 52s · 9:16") mais um
  *  "Video concluido" que nao dizia nada que o selo ja nao dissesse. */
+/* O card precisa dizer quando o video saiu SEM o planejamento por IA.
+ * Sem isto o unico sinal era uma linha no log do pipeline, que ninguem abre --
+ * e por dois dias os videos sairam com o titulo tirado das primeiras palavras
+ * da fala sem nada na tela indicar a diferenca. */
+function avisoIaHtml(j) {
+  const t = String(j.iaAviso || "").trim();
+  if (!t) return "";
+  return `<p class="pc-aviso-ia">${escapeHtml(t)}</p>`;
+}
+
 function fichaHtml(j) {
   const linhas = [];
   const orig = fmtDuracao(j.sourceDurationSec);
@@ -480,6 +490,7 @@ function cardSig(j, opts) {
     j.id, j.status, j.title || j.name, Math.round(Number(j.progress) || 0), j.hasFinal, j.hasThumb, j.finishedAt, j.finishedAtLabel,
     j.startedAtLabel || "", j.durationSec || "", j.sourceDurationSec || "", j.legenda ? "L" : "",
     j.styleLabel || "",
+    j.iaAviso || "",
     j.stage, j.message, j.reason || "", j.localPoster || j.thumbUrl, links.editor, links.estilo, links.final,
     opts && opts.compact ? "1" : "0",
     qa.status || "", qa.stage || "", qa.elapsedLabel || "", qa.etaLabel || "", qa.stageLabel || "",
@@ -679,6 +690,7 @@ function cardHtml(j, opts) {
       </div>
       ${pronto ? "" : (headline ? `<div class="pc-msg">${escapeHtml(headline)}</div>` : "")}
       ${pronto ? fichaHtml(j) : ""}
+      ${avisoIaHtml(j)}
       ${progress}
       <div class="pc-actions">
         ${primary}
