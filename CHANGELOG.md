@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.61
+
+- **Arrastar um vídeo não trava mais na tela "Solte para importar".** Soltar em
+  cima do banner *Importar e editar com IA* — o alvo mais óbvio da tela —
+  deixava aquela faixa tracejada presa por cima de tudo. O app não estava
+  travado de verdade: os cliques atravessavam a camada, só que ela não saía
+  mais da frente
+
+- **A janela de importação abre mesmo com vídeo do iPhone.** O app tentava ler
+  a duração do arquivo para sugerir um preset, e um `.MOV` gravado em HDR pelo
+  iPhone não responde nem com sucesso nem com erro — a leitura ficava esperando
+  para sempre e a janela nunca aparecia. Agora ele desiste em 4 segundos e abre
+  do mesmo jeito; a duração só servia para escolher a sugestão
+
+
 ## 2.60
 
 - **A legenda passou a ser revisada antes de ir para a tela.** Depois de
