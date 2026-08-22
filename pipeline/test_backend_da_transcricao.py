@@ -88,16 +88,30 @@ def test_a_resolucao_nunca_devolve_auto_nem_groq(monkeypatch):
         assert backend_para_o_pipeline() in (LOCAL, SCRIBE)
 
 
-def test_auto_ainda_nao_vira_a_chave_sozinho():
-    """Enquanto a decisão entre local e nuvem não está tomada, `AUTO` não pode
-    mudar o resultado dos vídeos do usuário por conta própria."""
-    from app.transcricao.modo import AUTO_RESOLVE_PARA, SCRIBE
+def test_auto_resolve_para_o_motor_local():
+    """A chave virou em 21/08/2026, com a decisão tomada sobre os benchmarks.
 
-    assert AUTO_RESOLVE_PARA == SCRIBE
+    Este teste existia ao contrário — travando `AUTO` no Scribe — enquanto a
+    decisão não estava tomada. Agora ele trava o novo padrão: `AUTO` não pode
+    voltar a mandar transcrição para serviço pago sem alguém decidir isso.
+    """
+    from app.transcricao.modo import AUTO_RESOLVE_PARA, LOCAL
+
+    assert AUTO_RESOLVE_PARA == LOCAL
 
 
-def test_local_indisponivel_nao_derruba_o_job(monkeypatch):
-    """O usuário quer o vídeo, não uma aula sobre backends."""
+def test_local_indisponivel_nao_manda_para_o_servico_pago(monkeypatch):
+    """A queda automática para o Scribe foi RETIRADA de propósito.
+
+    Ela existia enquanto o local era experimental. Com o local como padrão,
+    cair no Scribe sozinho gastaria a cota de um serviço pago sem o usuário
+    pedir — e nenhum motivo de o local faltar se resolve com ele: componentes
+    não baixados e download falhado precisam da mesma rede que o Scribe
+    precisaria; GPU indisponível já cai para CPU dentro do motor.
+
+    Quando falta componente, quem resolve é o preparo do primeiro uso; se nem
+    isso der, o job falha com mensagem em vez de gerar cobrança silenciosa.
+    """
     import app.transcricao.modo as modo
 
     monkeypatch.setenv("ATIVAVID_TRANSCRICAO", modo.LOCAL)
@@ -108,7 +122,8 @@ def test_local_indisponivel_nao_derruba_o_job(monkeypatch):
 
     import app.transcricao.whisper_local as wl
     monkeypatch.setattr(wl, "MotorWhisperLocal", lambda *a, **k: Quebrado())
-    assert modo.backend_para_o_pipeline() == modo.SCRIBE
+    assert modo.backend_para_o_pipeline() == modo.LOCAL, (
+        "voltou a mandar para o serviço pago por conta própria")
 
 
 def test_o_limiar_do_auto_esta_acima_das_fontes_do_usuario():

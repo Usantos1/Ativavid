@@ -53,20 +53,39 @@ CATALOGO = {
                        "não cabe em placa de 4 GB junto com o render"),
 }
 
-# O padrão. `medium` foi o mais próximo da precisão atual (98% contra 100% do
-# serviço em nuvem) e cabe na placa de 4 GB do usuário com folga para o
-# encoder. `small` fica como saída para máquina apertada.
+# `medium` chegou a 96,6% das palavras no lugar certo contra 99,7% do serviço
+# em nuvem, e cabe na placa de 4 GB do usuário com folga para o encoder de
+# vídeo. `small` é a saída para máquina apertada — e o padrão na CPU, onde o
+# `medium` seria lento demais para ser usável.
 PADRAO = "medium"
 RESERVA = "small"
 
+# Quanto de VRAM deixar livre para o encoder de vídeo, que divide a mesma
+# placa neste app. Medido: o render usa a GPU ao mesmo tempo que nada mais.
+FOLGA_PARA_O_ENCODER_MB = 900
 
-def escolher_modelo(vram_mb: int = 0, forcado: str | None = None) -> Modelo:
-    """Qual modelo usar nesta máquina. Nunca pede nada ao usuário."""
+
+def escolher_modelo(vram_mb: int = 0, forcado: str | None = None,
+                    backend: str = "") -> Modelo:
+    """Qual modelo usar nesta máquina. O usuário nunca escolhe.
+
+    A regra inteira mora aqui, e em nenhum outro lugar:
+
+        NVIDIA com VRAM sobrando   -> medium
+        NVIDIA apertada            -> small
+        sem GPU (CPU)              -> small
+
+    A CPU recebe `small` não por memória, mas por TEMPO: medido, `small` na
+    CPU roda a 1,1x tempo real — uma fonte de 3 min leva quase 3 min. Com
+    `medium` a espera seria inaceitável, e um vídeo que demora demais é um
+    vídeo que o usuário não faz.
+    """
     pedido = (forcado or os.environ.get("ATIVAVID_WHISPER_MODEL") or "").strip()
     if pedido in CATALOGO:
         return CATALOGO[pedido]
-    if vram_mb and CATALOGO[PADRAO].vram_mb > vram_mb - 900:
-        # -900: o encoder de vídeo divide a mesma placa neste app.
+    if backend and backend != "cuda":
+        return CATALOGO[RESERVA]
+    if vram_mb and CATALOGO[PADRAO].vram_mb > vram_mb - FOLGA_PARA_O_ENCODER_MB:
         return CATALOGO[RESERVA]
     return CATALOGO[PADRAO]
 

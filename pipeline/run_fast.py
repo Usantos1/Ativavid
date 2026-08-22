@@ -448,7 +448,10 @@ def _uv_python(*args: str, cwd: Path | None = None, check: bool = True) -> subpr
 # eles morrem no subprocesso -- e o usuario nunca ve o cache agindo nem a
 # guarda descartando texto inventado.
 _MARCADORES_TRANSCRICAO = (
+    "TRANSCRIPTION ENGINE",
     "TRANSCRIPTION CACHE HIT",
+    "PRIMEIRO_USO",
+    "Preparando transcri",
     "WHISPER_GUARDA",
     "WHISPER_COMPONENTE_CUDA",
     "WHISPER_ACELERACAO_FALHOU",

@@ -1,19 +1,32 @@
 # -*- coding: utf-8 -*-
 """Qual motor transcreve. Um lugar só, para virar a chave num arquivo só.
 
-Três modos internos. O usuário final não escolhe nada disto — para ele a tela
-diz "Transcrevendo áudio…" e pronto.
+O padrão é **LOCAL**: o ATIVAVID transcreve na própria máquina, sem conta, sem
+chave e sem internet depois que os componentes estiverem no disco. O usuário
+final não escolhe nada disto — para ele a tela diz "Transcrevendo áudio…".
 
-    LOCAL   faster-whisper nesta máquina: sem conta, sem chave, sem internet
-    SCRIBE  ElevenLabs Scribe, o que o app usa hoje
-    AUTO    hoje resolve para SCRIBE
+    LOCAL   faster-whisper nesta máquina  ← padrão
+    SCRIBE  ElevenLabs Scribe, mantido como alternativa para comparação
+    AUTO    resolve para LOCAL
 
-`AUTO` NÃO é "o melhor disponível" ainda, de propósito: enquanto a decisão
-entre local e nuvem não estiver tomada, mudar o padrão por conta própria
-mudaria o resultado dos vídeos do usuário sem ninguém pedir.
+**Não há queda automática para o Scribe.** Ela existiu enquanto o local era
+experimental e foi retirada de propósito: o Scribe é um serviço pago, e cair
+nele sozinho gastaria a cota do usuário sem ele pedir — justamente o que a
+migração veio evitar. Auditados os motivos pelos quais o local pode faltar,
+nenhum se resolve com o Scribe:
 
-Ordem de precedência: variável de ambiente (para teste e para o benchmark),
-depois a configuração gravada, depois o padrão.
+| por que o local falhou | o Scribe resolveria? |
+|---|---|
+| componentes ainda não baixados | não — ele também precisa de rede, e a resposta certa é baixar |
+| download falhou (sem rede) | não — o Scribe precisa da mesma rede |
+| GPU indisponível | não — o motor local já cai para CPU sozinho |
+| modelo corrompido | não — a resposta é rebaixar o modelo |
+
+Quem quiser o Scribe pede por ele — por configuração ou por
+`ATIVAVID_TRANSCRICAO=elevenlabs`. Aí é escolha, não surpresa na fatura.
+
+Ordem de precedência: variável de ambiente (teste e benchmark), depois a
+configuração gravada, depois o padrão.
 """
 from __future__ import annotations
 
@@ -23,9 +36,11 @@ LOCAL = "local"
 SCRIBE = "elevenlabs"
 AUTO = "auto"
 
-# Enquanto a decisão não está tomada. Trocar para LOCAL vira a chave do
-# produto inteiro -- e é a única linha que precisa mudar.
-AUTO_RESOLVE_PARA = SCRIBE
+# O padrão do produto. Mudou de SCRIBE para LOCAL em 21/08/2026, depois dos
+# benchmarks: 96,6% das palavras no lugar certo contra 99,7% do Scribe, tempo
+# total do job indistinguível (mediana -1,8s em 3 rodadas) e a guarda contra
+# alucinação sem perder nenhuma das 1.055 palavras reais medidas.
+AUTO_RESOLVE_PARA = LOCAL
 
 
 def modo_configurado() -> str:
@@ -47,23 +62,10 @@ def modo_configurado() -> str:
 def backend_para_o_pipeline() -> str:
     """O que passar em `--backend` do `transcribe.py`.
 
-    Se o modo é LOCAL mas o motor não está instalado, cai para o Scribe em vez
-    de derrubar o job: o usuário quer o vídeo, não uma aula sobre backends.
+    Devolve o que foi pedido, sem trocar por baixo do pano. Se o local não
+    puder rodar, quem descobre é o próprio `transcribe.py` — que tenta
+    preparar os componentes antes de desistir, e falha com mensagem em vez de
+    gastar cota de um serviço pago sem ninguém pedir.
     """
     modo = modo_configurado()
-    if modo == AUTO:
-        modo = AUTO_RESOLVE_PARA
-    if modo == LOCAL:
-        try:
-            from app.transcricao.whisper_local import MotorWhisperLocal
-
-            ok, motivo = MotorWhisperLocal().disponivel()
-            if not ok:
-                print(f"TRANSCRICAO_LOCAL_INDISPONIVEL {motivo} — usando Scribe",
-                      flush=True)
-                return SCRIBE
-        except Exception as e:  # noqa: BLE001
-            print(f"TRANSCRICAO_LOCAL_INDISPONIVEL {type(e).__name__}: "
-                  f"{str(e)[:120]} — usando Scribe", flush=True)
-            return SCRIBE
-    return modo
+    return AUTO_RESOLVE_PARA if modo == AUTO else modo

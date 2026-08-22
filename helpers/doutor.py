@@ -110,25 +110,19 @@ def checar_chaves() -> None:
         if os.environ.get(k):
             valores.setdefault(k, os.environ[k])
 
-    # transcricao e a base de TUDO: os cortes saem do texto falado, e as
-    # legendas tambem. Sem nenhuma das duas chaves nao ha por onde comecar.
-    tem_groq = bool(valores.get("GROQ_API_KEY"))
+    # A transcricao NAO depende mais de chave nenhuma: ela roda na propria
+    # maquina (faster-whisper local, padrao desde 21/08/2026). Cobrar chave
+    # aqui virou aviso falso -- e bloqueio falso e pior que nenhum, porque
+    # ensina a ignorar o relatorio.
     tem_eleven = bool(valores.get("ELEVENLABS_API_KEY"))
-    if tem_groq or tem_eleven:
-        quais = " e ".join([n for n, t in (("Groq", tem_groq), ("ElevenLabs", tem_eleven)) if t])
-        diz(OK, f"Chave de transcricao presente ({quais})")
-    else:
-        diz(BLOQUEIO, "Nenhuma chave de transcricao",
-            "O corte e feito a partir do que e FALADO no video, e as legendas "
-            "tambem saem dai. Sem transcrever, nao da pra comecar.",
-            f"Abra {env} e escreva a linha:\n"
-            "ELEVENLABS_API_KEY=sua_chave_aqui\n"
-            "(pegue em elevenlabs.io/app/settings/api-keys)")
+    diz(OK, "Transcricao roda nesta maquina",
+        "Nao precisa de conta, chave nem internet depois que os componentes "
+        "locais estiverem instalados.")
 
     if not tem_eleven:
         diz(AVISO, "Sem chave da ElevenLabs",
-            "A trilha sonora por IA e a transcricao de videos longos (mais de "
-            "5 min) usam essa chave.",
+            "So afeta a trilha sonora por IA e a voz. A transcricao nao usa "
+            "essa chave.",
             "Escreva ELEVENLABS_API_KEY=... no arquivo .env")
     if not valores.get("PEXELS_API_KEY"):
         diz(AVISO, "Sem chave da Pexels",

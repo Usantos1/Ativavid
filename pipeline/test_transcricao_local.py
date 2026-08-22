@@ -224,7 +224,10 @@ def test_ninguem_chama_faster_whisper_direto():
     chamadas espalhadas pelo projeto."""
     from pipeline.leitura_de_codigo import apenas_codigo
 
-    permitido = {Path("app/transcricao/whisper_local.py")}
+    # `primeiro_uso` PERGUNTA se o motor está instalado para montar o plano de
+    # download — é dentro da camada, e não uma chamada de fora dela.
+    permitido = {Path("app/transcricao/whisper_local.py"),
+                 Path("app/transcricao/primeiro_uso.py")}
     achados = []
     for pasta in ("app", "helpers", "pipeline"):
         for f in (REPO / pasta).rglob("*.py"):

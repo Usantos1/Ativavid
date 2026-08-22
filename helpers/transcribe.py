@@ -834,6 +834,22 @@ def _transcrever_local(
         _sys.path.insert(0, str(raiz))
     from app.transcricao.whisper_local import MotorWhisperLocal
 
+    from app.transcricao import primeiro_uso, telemetria
+
+    # Primeira vez nesta maquina: baixar o que falta antes de qualquer coisa.
+    # Depois disso `ja_pronto()` responde em milissegundos e nada acontece.
+    if not primeiro_uso.ja_pronto():
+        plano = primeiro_uso.planejar()
+        print(f"{primeiro_uso.TITULO}: {primeiro_uso.BAIXANDO} "
+              f"({plano.humano()})", flush=True)
+
+        def _andar(fracao: float, rotulo: str) -> None:
+            print(f"PRIMEIRO_USO {fracao * 100:.0f}% {rotulo} "
+                  f"({plano.total_mb * fracao / 1024:.1f} GB de "
+                  f"{plano.total_mb / 1024:.1f} GB)", flush=True)
+
+        primeiro_uso.preparar(progresso=_andar)
+
     motor = MotorWhisperLocal(modelo)
     ok, motivo = motor.disponivel()
     if not ok:
@@ -852,6 +868,11 @@ def _transcrever_local(
         # a transcricao custou quando foi feita (gravado no proprio cache) e
         # os milissegundos de agora.
         gasto = time.time() - t_cache
+        telemetria.registrar(
+            video=telemetria.identificador(video), motor="whisper-local",
+            modelo=motor.modelo.chave, cache="HIT", seg_total=round(gasto, 3),
+            palavras=sum(1 for w in guardado.get("words") or []
+                         if w.get("type") == "word"))
         print(f"TRANSCRIPTION CACHE HIT {video.name} motor=whisper-local "
               f"modelo={motor.modelo.chave} custou={gasto:.2f}s "
               f"economizou~{max(0.0, float(guardado.get('_seg_transcricao') or 0) - gasto):.1f}s",
@@ -884,12 +905,38 @@ def _transcrever_local(
     tempos = dict(resultado.tempos)
     tempos["extrair_audio"] = round(t_audio, 3)
     tempos["total"] = round(time.time() - t0, 3)
+    seg_tr = float(resultado.tempos.get("transcrever") or 0.0)
+    palavras = sum(1 for w in payload["words"] if w.get("type") == "word")
+    telemetria.registrar(
+        video=telemetria.identificador(video),
+        motor=resultado.motor, modelo=resultado.modelo,
+        device=resultado.backend, cache="MISS",
+        seg_audio=round(resultado.duracao, 2),
+        seg_transcricao=round(seg_tr, 3),
+        seg_carregar_modelo=resultado.tempos.get("carregar_modelo"),
+        seg_extrair_audio=round(t_audio, 3),
+        seg_total=tempos["total"],
+        realtime=(round(resultado.duracao / seg_tr, 2) if seg_tr > 0 else None),
+        palavras=palavras,
+        guarda_acionada=bool(resultado.tempos.get("_guarda_cortou")),
+        queda=(resultado.backend != detectar_backend_pedido()),
+    )
     if verbose:
         print(f"  saved: {out_path.name} "
               f"({out_path.stat().st_size / 1024:.1f} KB)")
         print(f"    words: {sum(1 for w in payload['words'] if w.get('type') == 'word')}")
         print("    tempos: " + "  ".join(f"{k}={v}s" for k, v in tempos.items()))
     return out_path
+
+
+def detectar_backend_pedido() -> str:
+    """O backend que a maquina anunciaria SEM queda. So para a telemetria."""
+    try:
+        from app.transcricao.plataforma import detectar
+
+        return detectar().backend
+    except Exception:  # noqa: BLE001
+        return ""
 
 
 def _extrair_wav16k(video: Path, dest: Path) -> None:

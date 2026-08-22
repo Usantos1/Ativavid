@@ -64,8 +64,11 @@ class MotorWhisperLocal:
     nome = "whisper-local"
 
     def __init__(self, modelo: str | None = None) -> None:
+        self._anunciado: tuple[str, str] = ("", "")
+        self._pedido = modelo
         self._maquina = detectar()
-        self._modelo = cat.escolher_modelo(self._maquina.vram_mb, modelo)
+        self._modelo = cat.escolher_modelo(
+            self._maquina.vram_mb, modelo, backend=self._maquina.backend)
 
     @property
     def modelo(self) -> cat.Modelo:
@@ -104,6 +107,10 @@ class MotorWhisperLocal:
                 self._maquina = dataclasses.replace(
                     self._maquina, backend="cpu",
                     motivo=f"sem componente CUDA ({motivo})")
+                # Sem GPU o modelo muda: `medium` na CPU roda a menos de 1x
+                # tempo real. A regra e uma so, e mora em `modelos`.
+                self._modelo = cat.escolher_modelo(
+                    self._maquina.vram_mb, self._pedido, backend="cpu")
                 chave = (self._modelo.chave, "cpu")
 
         pasta = cat.garantir(self._modelo, progresso=progresso, cancelar=cancelar)
@@ -127,6 +134,10 @@ class MotorWhisperLocal:
 
             self._maquina = dataclasses.replace(
                 self._maquina, backend="cpu", motivo="queda da aceleração")
+            self._modelo = cat.escolher_modelo(
+                self._maquina.vram_mb, self._pedido, backend="cpu")
+            pasta = cat.garantir(self._modelo, progresso=progresso,
+                                 cancelar=cancelar)
             m = WhisperModel(str(pasta), device="cpu", compute_type="int8")
             chave = (self._modelo.chave, "cpu")
         dt = time.perf_counter() - t0
@@ -146,9 +157,18 @@ class MotorWhisperLocal:
         ok, motivo = self.disponivel()
         if not ok:
             raise RuntimeError(motivo)
+        # A linha que o log tecnico usa para acompanhar os primeiros usos.
+        self._anunciado = (self._maquina.backend, self._modelo.chave)
+        print(f"TRANSCRIPTION ENGINE local model={self._modelo.chave} "
+              f"device={self._maquina.backend}", flush=True)
         print(resumo_tecnico(), flush=True)
 
         modelo, t_carga = self._carregar(progresso, cancelar)
+        # Reconfere: `_carregar` pode ter caido para CPU, e ai o modelo certo
+        # e o `small`. A linha de log acima seria mentira sem isto.
+        if (self._maquina.backend, self._modelo.chave) != self._anunciado:
+            print(f"TRANSCRIPTION ENGINE local model={self._modelo.chave} "
+                  f"device={self._maquina.backend} (revisto)", flush=True)
         if cancelar is not None and cancelar.is_set():
             raise Cancelado("cancelado antes de transcrever")
 
@@ -213,6 +233,8 @@ class MotorWhisperLocal:
         limpo, veredito = guarda.aplicar(bruto, no_speech=nao_fala,
                                          regioes=regioes)
         limpo.tempos["guarda"] = round(time.perf_counter() - t_g, 3)
+        # Marcador para a telemetria: a guarda entrou em acao neste video?
+        limpo.tempos["_guarda_cortou"] = float(veredito.entrou != veredito.saiu)
         if veredito.entrou != veredito.saiu:
             print(f"WHISPER_GUARDA {veredito.entrou} -> {veredito.saiu} palavras "
                   f"({veredito.motivo})", flush=True)
