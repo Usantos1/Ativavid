@@ -15,6 +15,14 @@ supabase/.temp/
 # legado). É estado local, e commitar acabaria vazando chave um dia.
 .ativavid-settings.json
 
+# Vídeos de trabalho do benchmark de render: masters sem perda e variantes
+# passam de 500 MB. O que sustenta a conclusão — os .json e os mosaicos PNG —
+# fica versionado; os intermediários, não.
+tools/render_benchmark/results/_camada1/
+tools/render_benchmark/results/_ig_tmp/
+tools/render_benchmark/results/_npl_multi/
+tools/render_benchmark/results/_prep_npl/
+
 # Runtime state, not source: the preview server rewrites this on every
 # "Salvar como padrão" click in the Estilo tab, so tracking it would turn one
 # machine's house style into a diff on every other machine.

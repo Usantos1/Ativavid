@@ -38,6 +38,25 @@ for _f in (sys.stdout, sys.stderr):
 
 import render as R  # noqa: E402  (helpers/render.py — o modulo de producao)
 
+
+def _camada1():
+    """Carrega camada1_master.py por CAMINHO.
+
+    `tools/render_benchmark` nao e pacote (sem __init__.py), entao
+    `from tools.render_benchmark...` depende de namespace package e do cwd —
+    e falhou exatamente assim ao rodar por wrapper de outro diretorio.
+    """
+    import importlib.util
+
+    alvo = Path(__file__).with_name("camada1_master.py")
+    spec = importlib.util.spec_from_file_location("camada1_master", alvo)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+_C1 = _camada1()
+
 SAIDA = REPO / "tools" / "render_benchmark" / "results"
 TRABALHO = SAIDA / "_prep_npl"
 FONTE = Path(r"E:\ATIVAVID\Projetos\20260814-221753_IMG_1631_b572dfbd8e\IMG_1631.MOV")
@@ -82,8 +101,7 @@ class Amostrador(threading.Thread):
 
 def stats_de_luz(arq: Path) -> dict:
     """Reusa a analise da camada 1 para provar que a cor saiu como previsto."""
-    from tools.render_benchmark.camada1_master import estatisticas_de_luz
-    return estatisticas_de_luz(arq)
+    return _C1.estatisticas_de_luz(arq)
 
 
 def mede(npl: int, rodadas: int, scale: str, grade: str) -> dict:
@@ -148,8 +166,7 @@ def main() -> int:
     ap.add_argument("--forcar", action="store_true")
     args = ap.parse_args()
 
-    from tools.render_benchmark.camada1_master import maquina_ocupada
-    ocupada = [p for p in maquina_ocupada() if "prep_npl" not in p.lower()]
+    ocupada = [p for p in _C1.maquina_ocupada() if "prep_npl" not in p.lower()]
     if ocupada and not args.forcar:
         print("MAQUINA OCUPADA - medir agora da numero inflado. Rodando:")
         for p in ocupada[:6]:

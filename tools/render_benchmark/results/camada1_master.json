@@ -1,0 +1,229 @@
+{
+  "fonte": "E:\\ATIVAVID\\Projetos\\20260814-170620_IMG_3873_2fdb180d23\\IMG_3873.MOV",
+  "inicio": 8.0,
+  "dur": 8.0,
+  "referencia": "tonemap na resolucao cheia (npl=203) + lanczos, sem perda",
+  "nota_npl": "npl não tem vencedor por métrica: decide olhando os quadros",
+  "resultados": {
+    "scaler": [
+      {
+        "vmaf": 99.604,
+        "vmaf_min": 95.95,
+        "ssim": 0.999,
+        "psnr": 48.621,
+        "variante": "bicubic",
+        "segundos": 61.1,
+        "mb": 21.2
+      },
+      {
+        "vmaf": 98.121,
+        "vmaf_min": 89.335,
+        "ssim": 0.999,
+        "psnr": 46.894,
+        "variante": "bilinear",
+        "segundos": 50.9,
+        "mb": 19.0
+      },
+      {
+        "vmaf": 99.66,
+        "vmaf_min": 96.393,
+        "ssim": 0.999,
+        "psnr": 48.958,
+        "variante": "lanczos",
+        "segundos": 55.6,
+        "mb": 22.0
+      },
+      {
+        "vmaf": 99.58,
+        "vmaf_min": 95.812,
+        "ssim": 0.999,
+        "psnr": 48.75,
+        "variante": "spline",
+        "segundos": 75.0,
+        "mb": 21.6
+      }
+    ],
+    "ordem": [
+      {
+        "vmaf": 99.567,
+        "vmaf_min": 95.754,
+        "ssim": 0.999,
+        "psnr": 48.51,
+        "variante": "tonemap_depois_do_scale (o app faz assim hoje)",
+        "segundos": 37.9
+      },
+      {
+        "vmaf": 99.66,
+        "vmaf_min": 96.393,
+        "ssim": 0.999,
+        "psnr": 48.958,
+        "variante": "scale_depois_do_tonemap (correto)",
+        "segundos": 77.6
+      }
+    ],
+    "npl": [
+      {
+        "luma_media": 148.32,
+        "percentis": {
+          "p1": 9.6,
+          "p5": 31.8,
+          "p25": 100.1,
+          "p50": 158.6,
+          "p75": 206.6,
+          "p90": 222.8,
+          "p95": 231.0,
+          "p99": 244.4
+        },
+        "frac_clip_alto_230": 0.05282,
+        "frac_clip_teto_235": 0.04222,
+        "frac_esmagado_16": 0.01876,
+        "histograma_16": [
+          0.0187,
+          0.0315,
+          0.0398,
+          0.0515,
+          0.046,
+          0.048,
+          0.0675,
+          0.0747,
+          0.0619,
+          0.0641,
+          0.0707,
+          0.0784,
+          0.1021,
+          0.1483,
+          0.0664,
+          0.0304
+        ],
+        "variante": "npl=100 (o app usa hoje)",
+        "npl": 100,
+        "segundos": 67.3
+      },
+      {
+        "luma_media": 134.04,
+        "percentis": {
+          "p1": 8.0,
+          "p5": 26.4,
+          "p25": 86.6,
+          "p50": 142.9,
+          "p75": 188.5,
+          "p90": 206.8,
+          "p95": 215.9,
+          "p99": 231.1
+        },
+        "frac_clip_alto_230": 0.0156,
+        "frac_clip_teto_235": 0.00145,
+        "frac_esmagado_16": 0.02319,
+        "histograma_16": [
+          0.0232,
+          0.0405,
+          0.0533,
+          0.0567,
+          0.0502,
+          0.0711,
+          0.0845,
+          0.0584,
+          0.0649,
+          0.0738,
+          0.0914,
+          0.0943,
+          0.1423,
+          0.0608,
+          0.0343,
+          0.0003
+        ],
+        "variante": "npl=150",
+        "npl": 150,
+        "segundos": 72.3
+      },
+      {
+        "luma_media": 123.2,
+        "percentis": {
+          "p1": 7.0,
+          "p5": 23.5,
+          "p25": 77.5,
+          "p50": 130.1,
+          "p75": 174.5,
+          "p90": 193.3,
+          "p95": 203.0,
+          "p99": 219.6
+        },
+        "frac_clip_alto_230": 0.00023,
+        "frac_clip_teto_235": 0.0,
+        "frac_esmagado_16": 0.02756,
+        "histograma_16": [
+          0.0275,
+          0.0493,
+          0.0678,
+          0.0531,
+          0.064,
+          0.0934,
+          0.0691,
+          0.0622,
+          0.0724,
+          0.0945,
+          0.1026,
+          0.1228,
+          0.0786,
+          0.0413,
+          0.0015,
+          0.0
+        ],
+        "variante": "npl=203 (BT.2408)",
+        "npl": 203,
+        "segundos": 62.1
+      },
+      {
+        "luma_media": 115.76,
+        "percentis": {
+          "p1": 5.7,
+          "p5": 21.9,
+          "p25": 71.3,
+          "p50": 122.0,
+          "p75": 165.0,
+          "p90": 183.9,
+          "p95": 193.9,
+          "p99": 209.9
+        },
+        "frac_clip_alto_230": 0.0,
+        "frac_clip_teto_235": 0.0,
+        "frac_esmagado_16": 0.03146,
+        "histograma_16": [
+          0.0314,
+          0.0559,
+          0.0747,
+          0.0549,
+          0.0789,
+          0.093,
+          0.067,
+          0.0688,
+          0.0877,
+          0.104,
+          0.1079,
+          0.119,
+          0.0352,
+          0.0216,
+          0.0,
+          0.0
+        ],
+        "variante": "npl=250",
+        "npl": 250,
+        "segundos": 62.0
+      }
+    ],
+    "regioes_crop": {
+      "luz_forte": [
+        368,
+        944
+      ],
+      "area_clara": [
+        176,
+        368
+      ],
+      "pele": [
+        760,
+        1600
+      ]
+    }
+  }
+}
