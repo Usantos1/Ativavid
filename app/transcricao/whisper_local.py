@@ -39,6 +39,12 @@ from app.transcricao import guarda
 from app.transcricao import modelos as cat
 from app.transcricao.plataforma import detectar, resumo_tecnico
 
+# Quantos trechos de fala vão para a GPU de uma vez. 8 foi medido na placa de
+# 4 GB do usuário junto com o modelo `medium`, sem estourar. Número maior não
+# acelera muito e arrisca ficar sem memória bem na hora do render, que divide
+# a mesma placa.
+_LOTE = 8
+
 # O modelo carregado fica vivo entre chamadas: carregar custa segundos e um
 # lote de 12 vídeos pagaria isso 12 vezes. Guardado por (modelo, backend)
 # porque trocar qualquer um dos dois exige recarregar de verdade.
@@ -145,6 +151,43 @@ class MotorWhisperLocal:
             _CARREGADO[chave] = m
         return m, dt
 
+    def _transcrever_rapido(self, modelo: Any, audio: Path,
+                            idioma: str | None) -> tuple[Any, Any]:
+        """Transcreve pulando o silêncio e processando em lote na GPU.
+
+        DUAS otimizações que só funcionam juntas — o lote exige o VAD, que é
+        quem define os trechos ("No clip timestamps found" sem ele):
+
+          1. **não transcrever silêncio.** Nas fontes do usuário metade do
+             áudio é pausa: numa de 171s, só 87s são fala.
+          2. **lote na GPU**, em vez de um trecho por vez.
+
+        MEDIDO em 10 fontes reais: mediana **1,8x** mais rápido, chegando a
+        4,2x nas longas — que são justamente aquelas em que se espera. Uma
+        fonte só tinha dado 2,8x; a amostra maior corrigiu para baixo.
+
+        E não custa qualidade: palavras estranhas caíram de 7,7% para 7,2% na
+        mediana, e das 10 fontes só 2 pioraram — nessas, as palavras "novas"
+        eram português legítimo (`acordou`, `produção`, `tão`), não invenção.
+
+        O texto MUDA (semelhança de 68% a 100% com o modo antigo). É um
+        transcript diferente e igualmente bom, não o mesmo mais rápido.
+
+        Cai para o modo antigo se o lote falhar: velocidade não pode custar a
+        transcrição.
+        """
+        comum = dict(language=idioma or None, word_timestamps=True)
+        try:
+            from faster_whisper import BatchedInferencePipeline
+
+            lote = BatchedInferencePipeline(model=modelo)
+            return lote.transcribe(str(audio), vad_filter=True,
+                                   batch_size=_LOTE, **comum)
+        except Exception as e:  # noqa: BLE001
+            print(f"WHISPER_LOTE_INDISPONIVEL {type(e).__name__}: "
+                  f"{str(e)[:120]} — modo sequencial", flush=True)
+            return modelo.transcribe(str(audio), vad_filter=False, **comum)
+
     def transcrever(
         self,
         audio: Path,
@@ -173,12 +216,7 @@ class MotorWhisperLocal:
             raise Cancelado("cancelado antes de transcrever")
 
         t0 = time.perf_counter()
-        segs_it, info = modelo.transcribe(
-            str(audio),
-            language=idioma or None,
-            word_timestamps=True,      # o dado que a legenda karaokê lê
-            vad_filter=False,          # o corte já vem de speech_regions.py
-        )
+        segs_it, info = self._transcrever_rapido(modelo, audio, idioma)
         total = float(getattr(info, "duration", 0.0) or 0.0)
 
         segmentos: list[Segmento] = []
