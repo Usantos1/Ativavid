@@ -2920,15 +2920,9 @@ function applyAccountChrome(st) {
   const logged = !!st?.loggedIn;
   const email = st?.email || "";
   renderWorkspaceCard();
-  // Para admin o "Avançado" abre sozinho: é onde ele mexe de verdade, e
-  // fechado deixava metade da tela de Configurações vazia. Para o cliente
-  // continua recolhido — ali só tem jargão que não é da conta dele.
-  const adv = $("#sysSupport");
-  if (adv && !adv.dataset.tocado) adv.open = !!st?.isAdmin;
-  if (adv && !adv.dataset.wired) {
-    adv.dataset.wired = "1";
-    adv.addEventListener("toggle", () => { adv.dataset.tocado = "1"; });
-  }
+  // O "Avançado" fica RECOLHIDO, inclusive para admin. Eu o abria sozinho para
+  // preencher a tela — mas encher espaço não é motivo para escancarar chave de
+  // API e jargão de diagnóstico toda vez que se abre Configurações.
   const openBtn = $("#btnOpenLogin");
   const logoutBtn = $("#btnAuthLogout");
   if (openBtn) openBtn.hidden = logged;
