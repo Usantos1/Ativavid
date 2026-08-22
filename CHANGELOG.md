@@ -1,5 +1,30 @@
 # Changelog
 
+## 2.59
+
+- **As telas voltam a usar o monitor inteiro.** Em Marca e Integrações os
+  cartões paravam no meio da largura e o resto da tela ficava vazio — não era
+  falta de conteúdo, era uma coluna invisível que o layout mantinha viva sem
+  motivo. Os três cartões de Integrações passaram de 377 para 507 pixels de
+  largura, e os dois de Marca agora dividem a linha inteira
+
+- **Configurações ficou mais direta.** O topo repetia "Perfil" e "Cache" logo
+  acima dos cartões que já diziam a mesma coisa, e "Aceleração" era um cartão
+  com uma frase só ao lado de outro cheio — viraram um. O Diagnóstico saiu de
+  dentro do "Avançado", que é onde ninguém achava, e para quem é admin o
+  "Avançado" já abre aberto
+
+- **Licença mostra até quando cada aparelho vale.** Antes a lista dizia "SEM
+  ACESSO" em vermelho para um computador com licença ativa, contradizendo o
+  aviso no alto da própria tela
+
+- **Liberar um cliente ficou um passo.** Ele lê o ID do aparelho na tela de
+  Licença e te manda; você cola em "Liberar dispositivo", escolhe os dias e
+  pronto. Sem criar conta, sem ele digitar chave nenhuma
+
+- Espaçamento dos cartões emparelhado: dentro do mesmo cartão as distâncias
+  variavam entre 8 e 35 pixels
+
 ## 2.58
 
 - **Correção importante: a placa de vídeo não estava sendo usada na legenda.**
