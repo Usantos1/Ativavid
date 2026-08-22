@@ -1,0 +1,26 @@
+{
+  "_leia": "PREENCHA com os preços vigentes na SUA conta antes de publicar custo. Os nulos são de propósito: o relatório prefere 'sem dado' a um número errado.",
+  "scribe": {
+    "usd_por_minuto_de_audio": null,
+    "fonte": "elevenlabs.io/pricing — preencher"
+  },
+  "whisper_local": {
+    "usd_por_minuto_de_audio": 0.0,
+    "usd_por_minuto_gpu_local": null,
+    "fonte": "API = zero. Indireto = (W da placa × tarifa kWh / 60) ÷ fator de tempo real + amortização. O whisper_local.py mede 2,7× tempo real no medium com pico de 2.661 MiB — dá para calcular com a tarifa local."
+  },
+  "gemini_audio": {
+    "usd_por_minuto_de_audio": null,
+    "fonte": "ai.google.dev/pricing — áudio entra como tokens (~32/s) + tokens de saída. Preencher."
+  },
+  "whisper_gemini": {
+    "usd_por_minuto_de_audio": null,
+    "usd_por_minuto_gpu_local": null,
+    "fonte": "GPU local do Whisper + a chamada de revisão (áudio + transcript na entrada, correções na saída). Preencher."
+  },
+  "whisper_gemini_texto": {
+    "usd_por_minuto_de_audio": 0.0,
+    "usd_por_minuto_gpu_local": null,
+    "fonte": "Sessão web do usuário: sem custo de API. Só o custo local do Whisper."
+  }
+}

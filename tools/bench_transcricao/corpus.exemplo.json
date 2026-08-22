@@ -1,0 +1,18 @@
+{
+  "_leia": "Copie para corpus.json e preencha com os vídeos reais. Mínimo de 8. Se houver corpus de benchmark anterior, use os mesmos IDs para manter histórico comparável.",
+  "_tags": ["uma_pessoa", "duas_ou_mais", "conversa_rapida", "interrupcoes",
+            "girias", "nomes_proprios", "marcas", "numeros", "ruido",
+            "musica_fundo", "fala_baixa", "fala_rapida", "pausas",
+            "coloquial_br"],
+  "videos": [
+    {"id": "v01", "video": "C:/Users/você/ATIVAVID/Projetos/.../fonte.mp4",
+     "tags": ["uma_pessoa", "coloquial_br", "girias"], "notas": ""},
+    {"id": "v02", "video": "", "tags": ["duas_ou_mais", "interrupcoes", "conversa_rapida"], "notas": ""},
+    {"id": "v03", "video": "", "tags": ["marcas", "nomes_proprios", "numeros"], "notas": ""},
+    {"id": "v04", "video": "", "tags": ["ruido", "fala_baixa"], "notas": ""},
+    {"id": "v05", "video": "", "tags": ["musica_fundo"], "notas": ""},
+    {"id": "v06", "video": "", "tags": ["fala_rapida", "girias"], "notas": ""},
+    {"id": "v07", "video": "", "tags": ["pausas", "uma_pessoa"], "notas": ""},
+    {"id": "v08", "video": "", "tags": ["numeros", "nomes_proprios", "coloquial_br"], "notas": ""}
+  ]
+}
