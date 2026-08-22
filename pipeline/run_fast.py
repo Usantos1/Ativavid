@@ -192,6 +192,13 @@ def write_timing(edit_dir: Path) -> dict:
             )
     except Exception as e:  # noqa: BLE001
         print(f"[warn] classify render path: {e}", flush=True)
+    # Por que o caminho rapido nao foi usado. Sem isto, "FULL" no timing.json
+    # nao distingue "o video precisa do Remotion" de "outro job estava com a
+    # vaga" -- e a segunda hipotese custa 2,4x. Fica FORA do bloco acima de
+    # proposito: aquele depende do edit-data.json existir, e este dado e sobre
+    # a decisao, nao sobre a classificacao.
+    if _RENDER_META.get("overlaySkip"):
+        payload["overlaySkip"] = _RENDER_META["overlaySkip"]
     try:
         (edit_dir / "timing.json").write_text(
             json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8"
@@ -3233,12 +3240,16 @@ def run(
     _helper("check_template_integrity.py", str(remotion), "--track", track)
 
     overlay_final = False
+    if is_longform:
+        _RENDER_META["overlaySkip"] = "longform"
     if (not is_longform):
         try:
             from app.overlay_path import overlay_on, try_overlay_final
         except Exception:
             overlay_on = lambda: False  # noqa: E731
             try_overlay_final = None  # type: ignore
+        if not (overlay_on() and try_overlay_final):
+            _RENDER_META["overlaySkip"] = "desligado"
         if overlay_on() and try_overlay_final:
             from app.render_path import classify_render_path
 
@@ -3250,6 +3261,8 @@ def run(
                     f"OVERLAY_SKIP ineligible reasons={cls.get('fullReasons')}",
                     flush=True,
                 )
+                _RENDER_META["overlaySkip"] = (
+                    "recurso:" + ",".join(cls.get("fullReasons") or ["?"]))
             else:
                 from app.overlay_canary import (
                     begin_overlay_attempt,
@@ -3262,6 +3275,10 @@ def run(
                 slot = try_acquire_overlay_slot()
                 if slot is None:
                     print("OVERLAY_SKIP slot busy — FULL", flush=True)
+                    # A vaga do caminho rapido e uma so. Com dois jobs em
+                    # paralelo, o segundo cai no Remotion inteiro -- e isso
+                    # nunca ficou registrado em lugar nenhum.
+                    _RENDER_META["overlaySkip"] = "vaga_ocupada"
                 else:
                     print("OVERLAY_SLOT acquired", flush=True)
                     from app.overlay_path import overlay_rollout as _ov_roll
