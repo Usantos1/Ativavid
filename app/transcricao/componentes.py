@@ -1,0 +1,99 @@
+# -*- coding: utf-8 -*-
+"""Peças pesadas que NÃO vão no instalador: baixadas quando fizerem falta.
+
+O instalador principal tem 10 MB. As bibliotecas de CUDA pesam **1.986 MB**
+(medido: cuBLAS, cuDNN e nvRTC) e o modelo mais 462 ou 1.458 MB. Embutir isso
+multiplicaria o instalador por duas ordens de grandeza, e faria todo mundo —
+inclusive quem já tem tudo — rebaixar em cada atualização do app.
+
+Então: o app instala leve, e na primeira vez que a transcrição local precisar
+de aceleração, o componente é buscado. Depois disso funciona offline, e
+atualizar o app não baixa nada de novo.
+
+Quem não tem GPU NVIDIA nunca vê isto. Quem tem, mas onde o download falha,
+transcreve na CPU — mais devagar, mas transcreve.
+
+O usuário nunca instala CUDA Toolkit à mão: estas bibliotecas vêm como pacotes
+Python normais (`nvidia-cublas-cu12`, `nvidia-cudnn-cu12`), que trazem as DLLs
+já compiladas.
+"""
+from __future__ import annotations
+
+import subprocess
+import sys
+import threading
+from pathlib import Path
+from typing import Callable
+
+from app.transcricao.plataforma import _DLLS_CUDA, registrar_dlls_cuda
+
+# Os pacotes que trazem as DLLs. `nvidia-cuda-nvrtc-cu12` entra de carona como
+# dependência do cuDNN; não precisa ser pedido.
+PACOTES_CUDA = ("nvidia-cublas-cu12", "nvidia-cudnn-cu12")
+MB_CUDA = 1986        # medido nesta máquina
+
+
+def cuda_presente() -> bool:
+    """As DLLs estão no disco e o carregador as encontra?"""
+    return bool(registrar_dlls_cuda())
+
+
+def _uv() -> str | None:
+    import shutil
+
+    return shutil.which("uv")
+
+
+def garantir_cuda(
+    *,
+    progresso: Callable[[float, str], None] | None = None,
+    cancelar: threading.Event | None = None,
+) -> tuple[bool, str]:
+    """(conseguiu?, motivo). NUNCA levanta: sem CUDA a CPU transcreve.
+
+    Idempotente — depois da primeira vez sai na hora.
+    """
+    if cuda_presente():
+        return True, "já instalado"
+    if sys.platform != "win32":
+        # Em Linux/macOS o wheel do CTranslate2 resolve sozinho pelo RPATH.
+        return False, "só o Windows precisa deste componente"
+    if cancelar is not None and cancelar.is_set():
+        return False, "cancelado"
+
+    uv = _uv()
+    if not uv:
+        return False, "uv não encontrado — sem como buscar o componente"
+
+    if progresso:
+        progresso(0.0, "Preparando a aceleração…")
+    # `--python sys.executable` para instalar NESTE ambiente, e não no que o
+    # uv adivinhar: o app roda de um venv próprio.
+    cmd = [uv, "pip", "install", "--python", sys.executable, *PACOTES_CUDA]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+    except (OSError, subprocess.SubprocessError) as e:
+        return False, f"falhou ao buscar: {type(e).__name__}: {e}"
+    if proc.returncode != 0:
+        return False, f"falhou ao buscar: {(proc.stderr or '')[-160:]}"
+
+    if progresso:
+        progresso(1.0, "Preparando a aceleração…")
+    # Confere de verdade em vez de confiar no código de saída: pacote
+    # instalado com DLL faltando levaria o motor a falhar depois, longe daqui.
+    if not cuda_presente():
+        return False, "componente instalado mas as bibliotecas não apareceram"
+    return True, "instalado agora"
+
+
+def estado() -> dict[str, object]:
+    """O que existe no disco, para o log técnico e para o relatório."""
+    achados = []
+    for base in {Path(p) for p in sys.path if p}:
+        for sub in _DLLS_CUDA:
+            d = base / Path(sub)
+            if d.is_dir():
+                mb = sum(f.stat().st_size for f in d.glob("*") if f.is_file())
+                achados.append({"onde": sub, "mb": round(mb / 1e6)})
+    return {"cuda_presente": bool(achados), "diretorios": achados,
+            "mb_declarado": MB_CUDA}

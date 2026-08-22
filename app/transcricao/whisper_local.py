@@ -88,6 +88,24 @@ class MotorWhisperLocal:
         if pronto is not None:
             return pronto, 0.0
 
+        # A aceleracao e um COMPONENTE, nao parte do instalador: 1.986 MB de
+        # DLLs de CUDA sao buscados aqui, na primeira vez que fazem falta. Se
+        # nao der, a CPU transcreve -- mais devagar, mas transcreve.
+        if self._maquina.backend == "cuda":
+            from app.transcricao import componentes
+
+            ok, motivo = componentes.garantir_cuda(progresso=progresso,
+                                                   cancelar=cancelar)
+            print(f"WHISPER_COMPONENTE_CUDA {'ok' if ok else 'indisponivel'}: "
+                  f"{motivo}", flush=True)
+            if not ok:
+                import dataclasses
+
+                self._maquina = dataclasses.replace(
+                    self._maquina, backend="cpu",
+                    motivo=f"sem componente CUDA ({motivo})")
+                chave = (self._modelo.chave, "cpu")
+
         pasta = cat.garantir(self._modelo, progresso=progresso, cancelar=cancelar)
         from faster_whisper import WhisperModel
 

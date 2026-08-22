@@ -840,6 +840,7 @@ def _transcrever_local(
         raise RuntimeError(motivo)
 
     marca = f"local-{motor.modelo.chave}"
+    t_cache = time.time()
     guardado = buscar_no_cache(video, marca, motor.modelo.chave)
     if guardado is not None:
         out_path.write_text(json.dumps(guardado, indent=2), encoding="utf-8")
@@ -847,9 +848,14 @@ def _transcrever_local(
             write_source_signature(transcripts_dir, video)
         except OSError:
             pass
-        if verbose:
-            print(f"  reaproveitado de outra importacao: {video.name} "
-                  f"(Whisper local) -- sem transcrever de novo", flush=True)
+        # Marcador explicito: o tempo economizado e a diferenca entre o que
+        # a transcricao custou quando foi feita (gravado no proprio cache) e
+        # os milissegundos de agora.
+        gasto = time.time() - t_cache
+        print(f"TRANSCRIPTION CACHE HIT {video.name} motor=whisper-local "
+              f"modelo={motor.modelo.chave} custou={gasto:.2f}s "
+              f"economizou~{max(0.0, float(guardado.get('_seg_transcricao') or 0) - gasto):.1f}s",
+              flush=True)
         return out_path
 
     t0 = time.time()
@@ -865,6 +871,8 @@ def _transcrever_local(
                                       fonte_original=video)
 
     payload = resultado.para_schema_scribe()
+    payload["_seg_transcricao"] = round(
+        float(resultado.tempos.get("transcrever") or 0.0) + t_audio, 3)
     out_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False),
                         encoding="utf-8")
     try:
@@ -980,9 +988,8 @@ def transcribe_one(
             write_source_signature(transcripts_dir, video)
         except OSError:
             pass
-        if verbose:
-            print(f"  reaproveitado de outra importação: {video.name} "
-                  f"({backend_label}) — sem chamar a API", flush=True)
+        print(f"TRANSCRIPTION CACHE HIT {video.name} motor={resolved} "
+              f"modelo={active_model} — sem chamar a API", flush=True)
         return out_path
 
     if verbose:

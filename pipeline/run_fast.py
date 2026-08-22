@@ -443,6 +443,31 @@ def _uv_python(*args: str, cwd: Path | None = None, check: bool = True) -> subpr
     return proc
 
 
+# Marcadores que o helper de transcricao imprime e que PRECISAM aparecer no
+# log do job. `_uv_python` roda com `capture_output=True`, entao sem este eco
+# eles morrem no subprocesso -- e o usuario nunca ve o cache agindo nem a
+# guarda descartando texto inventado.
+_MARCADORES_TRANSCRICAO = (
+    "TRANSCRIPTION CACHE HIT",
+    "WHISPER_GUARDA",
+    "WHISPER_COMPONENTE_CUDA",
+    "WHISPER_ACELERACAO_FALHOU",
+    "ELEVENLABS_FALHOU",
+    "Whisper backend:",
+)
+
+
+def _ecoar_transcricao(proc: subprocess.CompletedProcess | None) -> None:
+    """Repassa so as linhas de marcador. O resto da saida do helper e ruido."""
+    if proc is None:
+        return
+    for fluxo in (getattr(proc, "stdout", "") or "", getattr(proc, "stderr", "") or ""):
+        for linha in fluxo.splitlines():
+            if any(linha.startswith(m) or m in linha
+                   for m in _MARCADORES_TRANSCRICAO):
+                print(linha.rstrip(), flush=True)
+
+
 @lru_cache(maxsize=1)
 def _backend_transcricao() -> str:
     """Qual motor transcreve neste job. Decidido em `app/transcricao/modo`.
@@ -2478,7 +2503,7 @@ def run(
                 "--edit-dir", str(edit_dir), "--json",
             )
             _f_color = _an_ex.submit(_helper, "detect_color.py", str(src), "--json")
-            _f_tr.result()
+            _ecoar_transcricao(_f_tr.result())
             sr = _f_sr.result()
             vl = _f_vl.result()
             _color_proc = _f_color.result()
@@ -2861,8 +2886,9 @@ def run(
     _t_phase = time.perf_counter()
     if is_longform:
         # Longform gera .srt/chapters do transcript do corte — precisa transcrever.
-        _helper("transcribe.py", str(cut_path), "--edit-dir", str(edit_dir),
-                "--language", language, "--backend", _backend_transcricao())
+        _ecoar_transcricao(_helper(
+            "transcribe.py", str(cut_path), "--edit-dir", str(edit_dir),
+            "--language", language, "--backend", _backend_transcricao()))
         cut_spoken = transcript_text(edit_dir, "cut") or spoken
     else:
         # Shortform: as palavras da fonte já foram transcritas na fase 1 e o
@@ -2966,8 +2992,9 @@ def run(
             if joined:
                 cut_spoken = joined
         else:
-            _helper("transcribe.py", str(cut_path), "--edit-dir", str(edit_dir),
-                "--language", language, "--backend", _backend_transcricao())
+            _ecoar_transcricao(_helper(
+            "transcribe.py", str(cut_path), "--edit-dir", str(edit_dir),
+            "--language", language, "--backend", _backend_transcricao()))
             cut_spoken = transcript_text(edit_dir, "cut") or spoken
             # Groq/Whisper often stretches OR truncates word times vs the real
             # cut — either breaks full-video karaoke. Prefer EDL remap then.
