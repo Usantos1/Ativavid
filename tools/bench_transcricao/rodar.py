@@ -155,8 +155,18 @@ def _um_video(item: dict, saida: Path, so: list[str] | None,
 
             try:
                 audio = extrair_audio(video, trabalho / "audio")
-            except Exception:  # noqa: BLE001
-                audio = video          # o player abre o vídeo direto
+            except Exception as e:  # noqa: BLE001
+                # Cair para o vídeo original em SILÊNCIO era o pior defeito
+                # possível aqui: a página abre normal, o botão "ouvir" não dá
+                # som nenhum (o navegador não toca .MOV/HEVC), e a pessoa fica
+                # olhando para uma tela que parece funcionar. Sem áudio não há
+                # validação, e sem validação não há benchmark.
+                audio = video
+                estado["_audio"] = (
+                    f"AVISO: não deu para extrair o áudio "
+                    f"({type(e).__name__}: {e}). A página vai apontar para o "
+                    f"vídeo original e o navegador pode não tocar — se o "
+                    f"botão ouvir ficar mudo, é isto.")
             pagina = validar.gerar(vid, audio.resolve(), pontos,
                                    saida / "validacao")
             total = sum(len(p.indices) for p in pontos)
