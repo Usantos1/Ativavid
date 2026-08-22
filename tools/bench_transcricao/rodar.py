@@ -33,8 +33,31 @@ CENARIOS = ["scribe", "whisper_local", "gemini_audio", "whisper_gemini",
             "whisper_gemini_texto"]
 
 
+def _planejar_cortes(prontos: dict, video: Path, destino: Path) -> dict:
+    """Roda o planejador de produção sobre CADA transcript.
+
+    Não se espera plano idêntico entre motores — a pergunta do benchmark é
+    quanto o transcript influencia a edição final. `sobreposicao` responde
+    isso: 1.0 seria o mesmo vídeo, 0.0 seria outro vídeo inteiro.
+    """
+    from tools.bench_transcricao.impacto import planejar, sobreposicao_de_planos
+
+    planos, saida_json = {}, {}
+    for nome, r in prontos.items():
+        c = planejar(r, video, destino / "cortes" / nome)
+        planos[nome] = c
+        saida_json[nome] = {"n": c.n, "duracao_s": c.duracao_s,
+                            "trechos": c.trechos, "erro": c.erro}
+    base = planos.get("whisper_local")
+    if base is not None and not base.erro:
+        for nome, c in planos.items():
+            if not c.erro:
+                saida_json[nome]["sobreposicao"] = sobreposicao_de_planos(c, base)
+    return saida_json
+
+
 def _um_video(item: dict, saida: Path, so: list[str] | None,
-              modelo: str) -> dict:
+              modelo: str, cortes: bool = False) -> dict:
     vid = item["id"]
     video = Path(item["video"]).expanduser()
     destino = saida / vid
@@ -80,6 +103,18 @@ def _um_video(item: dict, saida: Path, so: list[str] | None,
         for n in ("whisper_gemini", "whisper_gemini_texto"):
             estado[n] = "BLOQUEADO: depende do cenário B"
 
+    if cortes and prontos:
+        try:
+            planos = _planejar_cortes(prontos, video, trabalho)
+            (destino / "_cortes.json").write_text(
+                json.dumps(planos, ensure_ascii=False, indent=2),
+                encoding="utf-8")
+            estado["_cortes"] = "  ".join(
+                f"{n}={p['n']}" for n, p in planos.items() if not p.get("erro")
+            ) or "nenhum plano (sem sessão de IA?)"
+        except Exception as e:  # noqa: BLE001
+            estado["_cortes"] = f"ERRO: {type(e).__name__}: {e}"
+
     # Pontos de divergência + página de validação humana.
     if "whisper_local" in prontos:
         pontos = encontrar({n: r.palavras for n, r in prontos.items()
@@ -109,6 +144,9 @@ def main() -> int:
     ap.add_argument("--modelo", default="medium", help="modelo do cenário B")
     ap.add_argument("--so", nargs="*", choices=CENARIOS,
                     help="rodar só estes cenários")
+    ap.add_argument("--cortes", action="store_true",
+                    help="planejar cortes a partir de cada transcript "
+                         "(exige sessão de IA ativa)")
     a = ap.parse_args()
 
     corpus_p = Path(a.corpus)
@@ -124,7 +162,7 @@ def main() -> int:
 
     for item in corpus["videos"]:
         print(f"\n== {item['id']}  {item.get('tags', '')}")
-        estado = _um_video(item, saida, a.so, a.modelo)
+        estado = _um_video(item, saida, a.so, a.modelo, a.cortes)
         relatorio[item["id"]] = estado
         for k, v in estado.items():
             print(f"   {k:22s} {v}")

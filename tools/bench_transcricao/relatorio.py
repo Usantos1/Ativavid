@@ -25,6 +25,7 @@ from tools.bench_transcricao.discordancia import (              # noqa: E402
     encontrar, referencia_por_consenso)
 from tools.bench_transcricao.metricas import (                  # noqa: E402
     evaluate_text, levenshtein_ops)
+from tools.bench_transcricao.impacto import conferir_karaoke    # noqa: E402
 from tools.bench_transcricao.motores import Saida               # noqa: E402
 
 COLUNAS = ["scribe", "whisper_local", "gemini_audio", "whisper_gemini"]
@@ -71,21 +72,12 @@ def erro_de_timestamp(ref: list[Palavra], hip: list[Palavra]) -> dict | None:
             "ate_200ms": sum(e <= .200 for e in erros) / n}
 
 
-def karaoke(palavras: list[Palavra]) -> dict:
-    """Riscos visuais, com os mesmos limiares que `conferir_legendas` usa.
-
-    Duração <= 0 é o que aquele conferidor reprova. Palavra curta demais e
-    sobreposição não reprovam nada hoje, mas são o que faz o realce piscar.
-    """
-    r = {"duracao_invalida": 0, "palavra_curta": 0, "sobreposicao": 0}
-    for i, p in enumerate(palavras):
-        if p.fim - p.inicio <= 0:
-            r["duracao_invalida"] += 1
-        elif p.fim - p.inicio < 0.12:
-            r["palavra_curta"] += 1
-        if i + 1 < len(palavras) and palavras[i + 1].inicio < p.fim - 1e-6:
-            r["sobreposicao"] += 1
-    return r
+def _cortes_do_video(saida: Path, vid: str) -> dict:
+    """Planos de corte gravados pelo rodar.py --cortes, se existirem."""
+    p = saida / vid / "_cortes.json"
+    if not p.is_file():
+        return {}
+    return json.loads(p.read_text(encoding="utf-8"))
 
 
 def _referencia(saida: Path, vid: str, motores_: dict[str, Saida]
@@ -121,6 +113,7 @@ def avaliar(saida: Path) -> dict:
             continue
         ref_texto, cobertura = ref
         base = motores_.get("whisper_local")
+        cortes = _cortes_do_video(saida, vid)
 
         linhas: dict[str, dict] = {"_cobertura": cobertura}
         for nome, s in motores_.items():
@@ -138,7 +131,19 @@ def avaliar(saida: Path) -> dict:
                 "granularidade": s.granularidade,
             }
             if s.granularidade == "palavra" and s.palavras:
-                linha["karaoke"] = karaoke(s.palavras)
+                k = conferir_karaoke(s)
+                linha["karaoke"] = {
+                    "duracao_invalida": k.duracao_invalida,
+                    "palavra_curta": k.palavra_curta,
+                    "duplicadas": k.duplicadas,
+                    "fora_de_ordem": k.fora_de_ordem,
+                    "sobreposicoes": k.sobreposicoes,
+                    "reparadas": k.palavras_reparadas,
+                    "deslocamento_ms": k.deslocamento_total_ms,
+                    "pior_deslocamento_ms": k.deslocamento_maximo_ms,
+                    "intacto": float(k.intacto),
+                }
+                linha["_karaoke_problemas"] = k.problemas[:5]
                 if base is not None and nome.startswith("whisper_gemini"):
                     linha["linha_do_tempo_preservada"] = \
                         s.meta.get("linha_do_tempo_preservada")
@@ -147,6 +152,11 @@ def avaliar(saida: Path) -> dict:
             else:
                 linha["nota_timestamp"] = s.meta.get(
                     "nota_timestamp", f"granularidade '{s.granularidade}'")
+            c = cortes.get(nome)
+            if c and not c.get("erro"):
+                linha["cortes_n"] = c["n"]
+                linha["cortes_duracao_s"] = c["duracao_s"]
+                linha["cortes_sobreposicao_com_whisper"] = c.get("sobreposicao")
             linhas[nome] = linha
 
         # Erro de timestamp: contra o motor que o produto usa hoje como
@@ -228,10 +238,19 @@ def matriz(ag: dict, custos: dict | None) -> str:
               "referência" if c == "whisper_local" else ts(a, "p90")),
         linha("p95", lambda a, c:
               "referência" if c == "whisper_local" else ts(a, "p95")),
-        linha("karaoke: duração inválida",
-              lambda a, c: _n(a.get("karaoke_duracao_invalida"))),
-        linha("karaoke: palavra curta",
-              lambda a, c: _n(a.get("karaoke_palavra_curta"))),
+        linha("karaoke: intacto (sem reparo)",
+              lambda a, c: _p(a.get("karaoke_intacto"), 0)),
+        linha("karaoke: palavras reparadas",
+              lambda a, c: _n(a.get("karaoke_reparadas"))),
+        linha("karaoke: pior deslocamento",
+              lambda a, c: SD if a.get("karaoke_pior_deslocamento_ms") is None
+              else f"{a['karaoke_pior_deslocamento_ms']:.0f} ms"),
+        linha("cortes (n)", lambda a, c: _n(a.get("cortes_n"))),
+        linha("cortes: duração final",
+              lambda a, c: _n(a.get("cortes_duracao_s"), 1, "s")),
+        linha("cortes: igual ao Whisper", lambda a, c:
+              "referência" if c == "whisper_local"
+              else _p(a.get("cortes_sobreposicao_com_whisper"))),
         linha("tempo (s/vídeo)", lambda a, c: _n(a.get("tempo_s"))),
         linha("custo (US$/hora de áudio)",
               lambda a, c: _custo(custos, c)),

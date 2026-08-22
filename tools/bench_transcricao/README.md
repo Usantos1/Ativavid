@@ -85,10 +85,31 @@ Whisper como correta — o que favorece B, D e E.
 
 ```bash
 cp tools/bench_transcricao/corpus.exemplo.json corpus.json   # preencha
-python tools/bench_transcricao/rodar.py --corpus corpus.json --saida bench/
+python tools/bench_transcricao/preflight.py --corpus corpus.json   # confere tudo antes
+python tools/bench_transcricao/rodar.py --corpus corpus.json --saida bench/ --cortes
 # abra bench/validacao/validar_v01.html, marque, salve o JSON na mesma pasta
 python tools/bench_transcricao/relatorio.py --saida bench/
 ```
+
+O `preflight.py` existe porque a rodada leva horas de GPU e cota de API, e
+descobrir no vídeo 6 que faltava uma chave é caro. Ele confere FFmpeg, GPU,
+faster-whisper, modelo já baixado, as duas chaves, sessão de IA, cada arquivo
+do corpus, a cobertura de situações e o `custos.json` — em segundos, dizendo o
+conserto de cada item. Sai com 2 se nem o cenário local roda, 1 se dá para
+rodar parte.
+
+Para exercitar o encanamento antes de gastar os vídeos reais:
+
+```bash
+python tools/bench_transcricao/corpus_sintetico.py --saida bench/sintetico
+python tools/bench_transcricao/rodar.py --corpus bench/sintetico/corpus.json \
+       --saida bench/sintetico/bench --so whisper_local
+```
+
+Gera fala pt-BR com `espeak-ng` cobrindo gírias, marcas e números, com o texto
+exato conhecido. Serve para ver o harness rodar inteiro — **não** para julgar
+motor: voz sintética não tem prosódia, hesitação nem a acústica de uma gravação
+de celular.
 
 ## A regra do cenário D
 
@@ -134,22 +155,50 @@ python -m pytest pipeline/test_bench_alinhamento.py \
                  pipeline/test_bench_discordancia.py -q
 ```
 
-30 testes. Os de alinhamento cobrem divisão, fusão, remoção, inserção
-recusada, intervalo apertado e o freio de retranscrição — cada um conferindo
-que a linha do tempo do Whisper sobreviveu.
+```bash
+python -m pytest pipeline/test_bench_contrato.py pipeline/test_bench_impacto.py -q
+```
 
-## O que ainda depende de rodar na máquina real
+47 testes. Os de alinhamento cobrem divisão, fusão, remoção, inserção recusada,
+intervalo apertado e o freio de retranscrição — cada um conferindo que a linha
+do tempo do Whisper sobreviveu. Os de contrato usam os tipos e a conversão
+REAIS do projeto: se o schema mudar, isto falha antes de alguém gastar uma
+noite de GPU.
 
-Este contêiner Linux não tem GPU, FFmpeg, chaves nem os vídeos — e
-`tools/render_benchmark/bench_lib.py` aponta para `E:\`, a máquina Windows
-onde os benchmarks anteriores rodaram. O harness está pronto e testado; os
-números precisam sair de lá.
+## Karaokê: a métrica certa não é "quebrou?"
 
-Duas medições do pedido ainda não estão automatizadas, por dependerem de
-render e do planejador com sessão de IA ativa:
+`helpers/captions_for_remotion.py::_word_items` **não quebra** com transcript
+ruim — ele REPARA. Força `start` crescente (+1 ms) e duração mínima de 40 ms,
+porque 133 dos 178 transcripts do usuário tinham palavra voltando no tempo.
 
-- **karaokê renderizado** — `relatorio.py` mede a geometria dos tempos, que é
-  o que decide se o realce quebra. O render em si sai por
-  `helpers/captions_for_remotion.py` + `tools/conferir_legendas.py`.
-- **impacto nos cortes** — os cinco transcripts ficam salvos no schema do
-  Scribe, prontos para `helpers/pack_transcripts.py` → `helpers/llm_cut_plan.py`.
+Então a pergunta não é se o karaokê quebra, e sim **quanto a produção teve de
+mexer**. Cada milissegundo de reparo é uma palavra saindo de cima do áudio: na
+tela continua bonito, e acende fora da hora. `impacto.py` mede isso —
+`palavras_reparadas`, `deslocamento_total_ms`, `pior_deslocamento_ms` — usando
+as cues geradas pelo módulo de produção, e cobrando os mesmos invariantes que
+o `tools/conferir_legendas.py` cobra dos projetos reais.
+
+É por aí que o cenário D se prova: revisar texto não pode criar reparo nenhum.
+
+## Impacto nos cortes
+
+`rodar.py --cortes` roda `helpers/pack_transcripts.py` →
+`helpers/llm_cut_plan.py` — o planejador de produção — sobre CADA transcript, e
+registra nº de cortes, duração final e a **sobreposição** com o plano do
+Whisper. Não se espera plano idêntico; 1.0 seria o mesmo vídeo, 0.0 seria outro
+vídeo inteiro. Precisa de sessão de IA ativa; sem ela a linha sai como
+`sem dado`.
+
+## O que ainda precisa da máquina real
+
+Este contêiner Linux não tem GPU nem os vídeos, e o download dos pesos do
+modelo (Systran/faster-whisper-* no HuggingFace) está bloqueado pelo proxy —
+então nenhum motor de ASR roda aqui. `tools/render_benchmark/bench_lib.py`
+aponta para `E:\`, a máquina Windows onde os benchmarks anteriores rodaram: é
+de lá que os números têm de sair.
+
+O que FOI verificado aqui, sem os pesos: o adaptador chega ao código de
+produção real (a falha de download veio de dentro de
+`_transcrever_local` → `primeiro_uso.preparar`, provando o caminho), e o
+contrato de schema entre `ResultadoDeTranscricao.para_schema_scribe()` e o
+adaptador está coberto por teste com os tipos reais do projeto.
