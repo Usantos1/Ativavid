@@ -258,16 +258,18 @@ def ancoras_de_headline() -> dict[str, dict[str, object]]:
     return out
 
 
-# O karaoke no motor rapido: implementado, medido, e DESLIGADO ate o usuario
-# aprovar o que ve. `ATIVAVID_KARAOKE_PROPRIO=1` liga.
+# O karaoke no motor rapido. Aprovado pelo usuario em 22/08/2026, depois da
+# comparacao quadro a quadro (deslocamento 0-1px, tinta 1,000, sombra
+# equivalente, entrada dentro de 0,2 quadro) e de um end-to-end de producao.
 #
-# Ele nao esta atras desta chave por duvida tecnica -- a comparacao quadro a
-# quadro contra o Remotion deu deslocamento de 0 a 1px, tinta 1,000 e a mesma
-# curva de entrada dentro de 0,2 quadro. Esta porque mudar a aparencia de um
-# video e decisao de quem faz o video.
+# `ATIVAVID_KARAOKE_PROPRIO=0` DESLIGA -- e o interruptor de emergencia, no
+# mesmo estilo de `ATIVAVID_RENDER_PROPRIO=0` e `ATIVAVID_PREP_SOURCE=0`. Com
+# ele desligado o karaoke volta pelo Remotion e o motivo fica gravado em
+# `overlayEngineSkip`, como qualquer outra recusa. O Remotion nao sai: ele
+# continua sendo a queda das janelas de posicao e de tudo que o gate recusar.
 def karaoke_aprovado() -> bool:
     return (os.environ.get("ATIVAVID_KARAOKE_PROPRIO", "").strip()
-            in ("1", "true", "yes", "on"))
+            not in ("0", "false", "no", "off"))
 
 
 def motivo_nao_suportado(edit_data: dict[str, Any], public: Path) -> str | None:
@@ -293,11 +295,7 @@ def motivo_nao_suportado(edit_data: dict[str, Any], public: Path) -> str | None:
     if caps.get("enabled", True):
         if estilo == "karaoke":
             if not karaoke_aprovado():
-                # O desenho esta pronto e conferido quadro a quadro, mas quem
-                # aprova a aparencia e o dono do visual, nao a medicao. Ate la
-                # o karaoke segue pelo Remotion, e o motivo fica gravado em
-                # `overlayEngineSkip` como qualquer outra recusa.
-                return "karaoke aguardando aprovacao visual"
+                return "karaoke desligado por ATIVAVID_KARAOKE_PROPRIO=0"
             if caps.get("windows") or []:
                 # As janelas movem a legenda NO MEIO da linha e o template
                 # resolve isso POR QUADRO (`CaptionShell` procura a janela em

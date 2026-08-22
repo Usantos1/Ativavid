@@ -1054,25 +1054,25 @@ def _palavras(pub: Path, ws) -> None:
         encoding="utf-8")
 
 
-def test_karaoke_espera_aprovacao_por_padrao(tmp_path):
-    """Implementado e medido, mas quem aprova a aparencia e o dono do visual.
-    Ate la o karaoke segue pelo Remotion, com o motivo gravado."""
-    ed = _ed(captions=_cap_karaoke())
-    motivo = motivo_nao_suportado(ed, _public(tmp_path))
-    assert motivo and "aprovacao" in motivo
-
-
-def test_karaoke_e_suportado_com_a_chave_ligada(tmp_path, monkeypatch):
-    monkeypatch.setenv("ATIVAVID_KARAOKE_PROPRIO", "1")
+def test_karaoke_e_o_padrao(tmp_path):
+    """Aprovado em 22/08/2026: o motor rapido desenha o karaoke por padrao."""
     ed = _ed(captions=_cap_karaoke())
     assert motivo_nao_suportado(ed, _public(tmp_path)) is None
 
 
-def test_karaoke_com_janela_cai_para_o_remotion(tmp_path, monkeypatch):
+def test_kill_switch_do_karaoke_devolve_ao_remotion(tmp_path, monkeypatch):
+    """O interruptor de emergencia, para o caso visual que os testes nao
+    cobrirem. O Remotion continua no lugar."""
+    monkeypatch.setenv("ATIVAVID_KARAOKE_PROPRIO", "0")
+    ed = _ed(captions=_cap_karaoke())
+    motivo = motivo_nao_suportado(ed, _public(tmp_path))
+    assert motivo and "ATIVAVID_KARAOKE_PROPRIO" in motivo
+
+
+def test_karaoke_com_janela_cai_para_o_remotion(tmp_path):
     """As janelas movem a legenda NO MEIO da linha e o template resolve isso
-    por quadro; aqui a posicao e fixa por palavra. Recusa explicita, mesmo
-    com o karaoke ja aprovado."""
-    monkeypatch.setenv("ATIVAVID_KARAOKE_PROPRIO", "1")
+    por quadro; aqui a posicao e fixa por palavra. Recusa explicita, mesmo com
+    o karaoke ja sendo o padrao."""
     ed = _ed(captions=_cap_karaoke(
         windows=[{"start": 1.0, "end": 2.0, "paddingBottom": 900}]))
     motivo = motivo_nao_suportado(ed, _public(tmp_path))
