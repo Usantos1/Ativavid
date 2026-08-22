@@ -151,7 +151,7 @@ def _um_video(item: dict, saida: Path, so: list[str] | None,
         pontos = encontrar({n: r.palavras for n, r in prontos.items()
                             if r.palavras})
         if pontos:
-            from tools.bench_transcricao.gemini_api import extrair_audio
+            from tools.bench_transcricao.gemini_sessao import extrair_audio
 
             try:
                 audio = extrair_audio(video, trabalho / "audio")

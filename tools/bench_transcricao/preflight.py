@@ -110,36 +110,47 @@ def _chaves(r: Relato) -> None:
         r.add(FALTA, "ELEVENLABS_API_KEY", "ausente — cenário A não roda",
               "set ELEVENLABS_API_KEY=...")
 
-    if os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"):
-        r.add(OK, "GEMINI_API_KEY", "definida (cenários C e D)")
-    else:
-        r.add(FALTA, "GEMINI_API_KEY", "ausente — cenários C e D não rodam",
-              "set GEMINI_API_KEY=...  (o gateway de sessão web do projeto "
-              "não envia áudio, por isso C e D precisam da API)")
-
-    try:
-        import google.genai  # noqa: F401
-
-        r.add(OK, "google-genai", "instalado")
-    except ImportError:
-        r.add(FALTA, "google-genai", "não instalado — cenários C e D não rodam",
-              "uv pip install google-genai")
-
-
-def _sessao_ia(r: Relato) -> None:
-    """Cenário E e o planejador de cortes usam a sessão web que já existe."""
+    # Gemini: sessão web por cookies, sem chave e sem custo de API. É o que o
+    # projeto usa, e o benchmark não introduz caminho pago.
     try:
         from app.llm_gateway import status
 
         st = status()
-        if st.get("ok"):
-            r.add(OK, "sessão IA", f"{st.get('backend')} — cenário E e --cortes")
+        if st.get("hasGemini"):
+            r.add(OK, "sessão Gemini",
+                  f"capturada · {st.get('backend')} (cenário E, sem custo)")
+        elif st.get("ok"):
+            r.add(AVISO, "sessão Gemini",
+                  f"sem Gemini; há {st.get('backend')} — o cenário E rodaria "
+                  f"por outro modelo",
+                  "capture a sessão do Gemini na extensão para o cenário E "
+                  "medir o que o produto usa de verdade")
         else:
-            r.add(AVISO, "sessão IA", st.get("message") or "sem sessão",
-                  "capture na extensão; sem isso o cenário E e o --cortes "
-                  "ficam de fora, mas A–D seguem")
+            r.add(FALTA, "sessão Gemini",
+                  st.get("message") or "não capturada — cenário E não roda",
+                  "abra gemini.google.com logado e capture na extensão")
     except Exception as e:  # noqa: BLE001
-        r.add(AVISO, "sessão IA", f"{type(e).__name__}: {e}")
+        r.add(FALTA, "sessão Gemini", f"{type(e).__name__}: {e}",
+              "o cenário E depende de app/llm_gateway.py")
+
+    r.add(AVISO, "cenários C e D", "indisponíveis com a integração atual",
+          "a sessão web envia só texto (app/llm_session.py:245 monta o pedido "
+          "como uma string). Ouvir o áudio exigiria API paga ou mexer em "
+          "produção — fora do escopo. A matriz mostra a lacuna.")
+
+
+def _sessao_ia(r: Relato) -> None:
+    """O planejador de cortes usa a mesma sessão web."""
+    try:
+        from app.llm_gateway import status
+
+        if status().get("ok"):
+            r.add(OK, "planejador (--cortes)", "sessão pronta")
+        else:
+            r.add(AVISO, "planejador (--cortes)", "sem sessão",
+                  "a linha de divergência do plano sai como 'sem dado'")
+    except Exception as e:  # noqa: BLE001
+        r.add(AVISO, "planejador (--cortes)", f"{type(e).__name__}: {e}")
 
 
 def _corpus(r: Relato, caminho: Path) -> None:
@@ -210,8 +221,9 @@ def _previsao(r: Relato, minutos: float) -> None:
     precos = json.loads(p.read_text(encoding="utf-8")) if p.is_file() else {}
 
     total, sem_preco = 0.0, []
-    # A e C pagam pelo áudio uma vez; D paga o áudio de novo na revisão.
-    for motor in ("scribe", "gemini_audio", "whisper_gemini"):
+    # Só o Scribe cobra por API neste benchmark: o Gemini roda pela sessão web
+    # do usuário, e o Whisper é local. C e D estão indisponíveis.
+    for motor in ("scribe",):
         v = (precos.get(motor) or {}).get("usd_por_minuto_de_audio")
         if v is None:
             sem_preco.append(motor)
@@ -226,7 +238,8 @@ def _previsao(r: Relato, minutos: float) -> None:
     else:
         r.add(OK, "gasto previsto",
               f"~US$ {total:.2f} para {minutos:.1f} min de áudio "
-              f"(A + C + D somados)")
+              f"(só o Scribe cobra; Gemini via sessão web e Whisper local "
+              f"não geram custo de API)")
 
     # Tempo: B é medido (2,7x tempo real em GPU, ~1x em CPU); nuvem varia.
     try:
@@ -236,8 +249,8 @@ def _previsao(r: Relato, minutos: float) -> None:
     except Exception:  # noqa: BLE001
         fator = 0.9
     r.add(OK, "tempo previsto",
-          f"cenário B ~{minutos / fator:.0f} min; A, C e D somam upload e "
-          f"espera de API por cima",
+          f"cenário B ~{minutos / fator:.0f} min; A soma upload e espera do "
+          f"Scribe, E soma a ida ao Gemini por cima",
           "a rodada retoma de onde parou — se cair, rode o mesmo comando de "
           "novo sem --refazer")
 

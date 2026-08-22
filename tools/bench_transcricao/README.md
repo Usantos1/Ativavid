@@ -7,9 +7,12 @@ produção que já existe. Não toca no pipeline: mede-o.
 | --- | --- | --- |
 | A | Scribe | `helpers/transcribe.py` com `backend="elevenlabs"` |
 | B | Whisper local | `helpers/transcribe.py` com `backend="local"` → `MotorWhisperLocal` |
-| C | Gemini áudio | `gemini_api.py` — única integração nova |
-| D | Whisper + Gemini | B, depois o Gemini revisa o texto **ouvindo** o áudio |
-| E | Gemini só texto | B, depois revisão pelo `app/llm_gateway.py` que já existe |
+| C | Gemini áudio | **indisponível** — ver abaixo |
+| D | Whisper + Gemini ouvindo | **indisponível** — mesmo motivo |
+| E | Whisper + Gemini só texto | B, depois revisão pelo `app/llm_gateway.py` que já existe |
+
+Nenhuma chave de API do Gemini, nenhum custo de API do Gemini: o cenário E usa
+a sessão web por cookies que o projeto já tem.
 
 ## O que o benchmark NÃO reimplementa
 
@@ -23,24 +26,33 @@ Para cronometrar **a frio**, cada rodada aponta `ATIVAVID_TRANSCRIPT_CACHE`
 para uma pasta descartável. A variável já existia; nenhuma linha de produção
 mudou para isso.
 
-## A única integração nova, e por quê
+## Por que C e D estão indisponíveis
 
-O Gemini do ATIVAVID (`app/llm_gateway.py` → `app/llm_session.py`) fala com o
-gemini.google.com por **cookies** capturados pela extensão, e achata
-`messages` numa string de texto. Não há upload de arquivo nem `inline_data`:
-**não existe caminho de áudio ali**. Como C e D exigem que o Gemini ouça, o
-`gemini_api.py` acrescenta a Gemini API oficial — isolada, sem nenhum módulo
-do app importando dela. Se C e D perderem, apagar aquele arquivo não deixa
-rastro.
+Ambos exigem que o Gemini **ouça** o áudio. A integração do projeto
+(`app/llm_gateway.py` → `app/llm_session.py`) fala com o gemini.google.com por
+cookies capturados pela extensão, e envia **só texto**. Verificado no código,
+não presumido — `app/llm_session.py:245` monta o pedido como:
 
-O cenário E não usa a API: ele passa pelo gateway existente, de propósito, para
-medir o que dá para ter **hoje** sem integração nova.
+```python
+inner[0] = [prompt, 0, None, None, None, None, 0]
+```
+
+Uma string de prompt. Busca por `upload`, `push.clients6`, `multipart`,
+`inline_data`, `attach`, `audio` e `file_data` no arquivo inteiro volta vazia.
+Anexar arquivo no Gemini web exige um upload separado para
+`push.clients6.google.com/upload/` e referenciar o identificador no payload.
+
+Fazer C e D rodarem significaria uma de duas coisas, ambas fora do escopo:
+introduzir a API paga do Gemini só para o teste, ou mexer no `llm_session.py`,
+que é produção. Então os dois são registrados como **indisponíveis com a
+integração atual** e o benchmark segue com A, B e E. A matriz mostra a lacuna
+em vez de escondê-la, e `test_bench_ajustes.py` tem um teste que falha se algum
+módulo do benchmark voltar a referenciar `google.genai` ou `GEMINI_API_KEY`.
 
 ```
-GEMINI_API_KEY=...            liga C e D
-ELEVENLABS_API_KEY=...        liga A
+ELEVENLABS_API_KEY=...              liga A
 uv sync --extra transcricao-cuda    # B
-uv pip install google-genai         # C e D
+sessão Gemini capturada na extensão # E (sem chave, sem custo)
 ```
 
 ## Ground truth sem transcrever tudo à mão
@@ -192,7 +204,7 @@ python -m pytest pipeline/test_bench_contrato.py pipeline/test_bench_impacto.py 
 # ou todos: python -m pytest pipeline/test_bench_*.py -q
 ```
 
-76 testes. Os de alinhamento cobrem divisão, fusão, remoção, inserção recusada,
+79 testes. Os de alinhamento cobrem divisão, fusão, remoção, inserção recusada,
 intervalo apertado e o freio de retranscrição — cada um conferindo que a linha
 do tempo do Whisper sobreviveu. Os de contrato usam os tipos e a conversão
 REAIS do projeto: se o schema mudar, isto falha antes de alguém gastar uma

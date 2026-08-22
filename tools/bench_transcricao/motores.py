@@ -8,9 +8,13 @@ local, com a guarda e a queda para CPU. Este arquivo só **chama** e cronometra.
 
     A  scribe                  helpers/transcribe.py backend="elevenlabs"
     B  whisper_local           helpers/transcribe.py backend="local"
-    C  gemini_audio            gemini_api.py  (única integração nova)
-    D  whisper_gemini          B + revisão do Gemini OUVINDO o áudio
-    E  whisper_gemini_texto    B + revisão do Gemini SEM o áudio
+    C  gemini_audio            INDISPONÍVEL — ver gemini_sessao.SEM_AUDIO
+    D  whisper_gemini          INDISPONÍVEL — mesmo motivo
+    E  whisper_gemini_texto    B + revisão pela sessão web do projeto
+
+C e D exigem que o Gemini ouça o áudio, e a integração do projeto é por sessão
+web e só envia texto. Não há API paga aqui e produção não foi tocada: os dois
+cenários são registrados como indisponíveis e o benchmark segue com A, B e E.
 
 MEDIÇÃO A FRIO: o cache entre projetos é ótimo para o produto e péssimo para
 cronometrar. `ATIVAVID_TRANSCRIPT_CACHE` já existe e aponta a pasta do cache,
@@ -211,19 +215,10 @@ def whisper_local(video: Path, trabalho: Path, modelo: str = "medium") -> Saida:
 
 
 def gemini_audio(video: Path, trabalho: Path) -> Saida:
-    """C — áudio original direto para o Gemini, sem transcrição prévia."""
-    from tools.bench_transcricao import gemini_api
+    """C — áudio original direto para o Gemini. INDISPONÍVEL."""
+    from tools.bench_transcricao.gemini_sessao import SEM_AUDIO
 
-    audio = gemini_api.extrair_audio(video, trabalho / "audio")
-    t0 = time.perf_counter()
-    r = gemini_api.transcrever(audio)
-    dt = time.perf_counter() - t0
-    guardar_bruto(trabalho, "gemini_audio_resposta", r.meta.pop("_resposta", ""),
-                  ext="txt")
-    return Saida(motor="gemini_audio", palavras=r.palavras, texto=r.texto,
-                 granularidade=r.granularidade,
-                 tempos={"total": round(dt, 3), **r.tempos},
-                 meta={**r.meta, "nuvem": True, "offline": False})
+    raise MotorIndisponivel(f"cenário C não roda: {SEM_AUDIO}")
 
 
 def whisper_mais_gemini(base: Saida, video: Path, trabalho: Path, *,
@@ -234,22 +229,19 @@ def whisper_mais_gemini(base: Saida, video: Path, trabalho: Path, *,
     levanta se algum tempo escapar, então um erro aqui derruba a rodada em vez
     de virar legenda dessincronizada.
     """
-    from tools.bench_transcricao import gemini_api
+    from tools.bench_transcricao import gemini_sessao
 
     nome = "whisper_gemini" if ouvindo else "whisper_gemini_texto"
+    if ouvindo:
+        raise MotorIndisponivel(
+            f"cenário D não roda: {gemini_sessao.SEM_AUDIO}")
     if not base.palavras:
         raise MotorIndisponivel(f"{nome} depende do cenário B, que não rodou")
 
-    # E vai pelo gateway que o projeto JA TEM (sessao web, so texto): ele
-    # mede o que da para ter hoje sem integracao nova. So D precisa da API.
+    # Sessão web do projeto: sem chave e sem custo de API.
     t0 = time.perf_counter()
-    if ouvindo:
-        audio = gemini_api.extrair_audio(video, trabalho / "audio")
-        correcoes = gemini_api.revisar(base.palavras, base.texto, audio=audio)
-        via = "gemini-api"
-    else:
-        correcoes = gemini_api.revisar_pelo_gateway(base.palavras, base.texto)
-        via = "llm_gateway (sessao web)"
+    correcoes = gemini_sessao.revisar_pelo_gateway(base.palavras, base.texto)
+    via = "llm_gateway (sessão web, sem custo de API)"
     dt = time.perf_counter() - t0
 
     guardar_bruto(trabalho, f"{nome}_correcoes", correcoes)
@@ -264,7 +256,7 @@ def whisper_mais_gemini(base: Saida, video: Path, trabalho: Path, *,
         tempos={"whisper": base.tempos.get("total", 0.0),
                 "revisao": round(dt, 3),
                 "total": round(base.tempos.get("total", 0.0) + dt, 3)},
-        meta={"nuvem": True, "offline": False, "ouviu_o_audio": ouvindo,
+        meta={"nuvem": True, "offline": False, "ouviu_o_audio": False,
               "via": via,
               "correcoes_propostas": len(correcoes),
               "correcoes_aplicadas": len(aplicadas),

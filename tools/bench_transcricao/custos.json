@@ -1,5 +1,5 @@
 {
-  "_leia": "PREENCHA com os preços vigentes na SUA conta antes de publicar custo. Os nulos são de propósito: o relatório prefere 'sem dado' a um número errado.",
+  "_leia": "PREENCHA o preço do Scribe antes de publicar custo. O Gemini roda pela sessão web do usuário (cookies), sem chave e sem custo de API; o Whisper é local. Os nulos são de propósito: o relatório prefere 'sem dado' a um número errado.",
   "scribe": {
     "usd_por_minuto_de_audio": null,
     "fonte": "elevenlabs.io/pricing — preencher"
@@ -11,16 +11,16 @@
   },
   "gemini_audio": {
     "usd_por_minuto_de_audio": null,
-    "fonte": "ai.google.dev/pricing — áudio entra como tokens (~32/s) + tokens de saída. Preencher."
+    "fonte": "INDISPONÍVEL: a sessão web do projeto não envia áudio."
   },
   "whisper_gemini": {
     "usd_por_minuto_de_audio": null,
     "usd_por_minuto_gpu_local": null,
-    "fonte": "GPU local do Whisper + a chamada de revisão (áudio + transcript na entrada, correções na saída). Preencher."
+    "fonte": "INDISPONÍVEL: mesmo motivo do cenário C."
   },
   "whisper_gemini_texto": {
     "usd_por_minuto_de_audio": 0.0,
     "usd_por_minuto_gpu_local": null,
-    "fonte": "Sessão web do usuário: sem custo de API. Só o custo local do Whisper."
+    "fonte": "Sessão web do usuário: zero custo de API. Só o custo local do Whisper."
   }
 }

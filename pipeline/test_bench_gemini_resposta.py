@@ -18,7 +18,7 @@ if str(RAIZ) not in sys.path:
     sys.path.insert(0, str(RAIZ))
 
 from app.transcricao import Palavra
-from tools.bench_transcricao.gemini_api import _json_da_resposta
+from tools.bench_transcricao.gemini_sessao import _json_da_resposta
 
 
 def P(t, i, f):

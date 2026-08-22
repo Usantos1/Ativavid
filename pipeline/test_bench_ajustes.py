@@ -96,7 +96,7 @@ def test_bruto_e_gravado_intocado(tmp_path):
 
 
 def test_bruto_aceita_texto_cru(tmp_path):
-    """A resposta do Gemini vai verbatim: cerca de código, prosa e tudo."""
+    """Resposta de modelo vai verbatim: cerca de código, prosa e tudo."""
     cru = '```json\n{"correcoes": []}\n```\nEspero ter ajudado!'
     p = guardar_bruto(tmp_path, "gemini_audio_resposta", cru, ext="txt")
     assert p.read_text(encoding="utf-8") == cru
@@ -149,3 +149,43 @@ def test_as_tres_medidas_nao_se_confundem():
     assert a.counts.wer == b.counts.wer           # precisão textual: igual
     assert a.edits_100w == b.edits_100w           # operações: igual
     assert a.correcoes_100w < b.correcoes_100w    # concentração: diferente
+
+
+# ------------------------------------- C e D indisponíveis, sem API paga
+def test_cenario_C_recusa_sem_inventar_api(tmp_path):
+    """A integração do projeto não envia áudio. Não se inventa API paga:
+    registra-se a indisponibilidade e o benchmark segue."""
+    from tools.bench_transcricao.motores import MotorIndisponivel, gemini_audio
+
+    try:
+        gemini_audio(tmp_path / "v.mp4", tmp_path)
+    except MotorIndisponivel as e:
+        assert "cenário C não roda" in str(e)
+        assert "sessão web" in str(e) and "texto" in str(e)
+    else:
+        raise AssertionError("cenário C deveria estar indisponível")
+
+
+def test_cenario_D_recusa_pelo_mesmo_motivo(tmp_path):
+    from tools.bench_transcricao.motores import (MotorIndisponivel,
+                                                 whisper_mais_gemini)
+
+    base = Saida(motor="whisper_local", palavras=[P("oi", 0.0, 0.3)], texto="oi")
+    try:
+        whisper_mais_gemini(base, tmp_path / "v.mp4", tmp_path, ouvindo=True)
+    except MotorIndisponivel as e:
+        assert "cenário D não roda" in str(e)
+    else:
+        raise AssertionError("cenário D deveria estar indisponível")
+
+
+def test_o_benchmark_nao_importa_api_paga():
+    """Nenhum módulo do benchmark pode falar com a API cobrada do Gemini."""
+    import pathlib
+
+    raiz = pathlib.Path(__file__).resolve().parent.parent / "tools" / "bench_transcricao"
+    for f in raiz.glob("*.py"):
+        texto = f.read_text(encoding="utf-8")
+        for proibido in ("google.genai", "from google import genai",
+                         "GEMINI_API_KEY", "GOOGLE_API_KEY"):
+            assert proibido not in texto, f"{f.name} referencia {proibido}"
