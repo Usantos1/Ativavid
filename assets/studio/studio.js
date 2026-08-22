@@ -1471,24 +1471,37 @@ function applyIntentDefaults(mode, recommended) {
   if (mode === "viral" && $("#importContentType")) $("#importContentType").value = "viral";
 }
 
+// A duracao so serve para RECOMENDAR um preset (>=90s vira "complete"), entao
+// desistir e barato. Sem o prazo, porem, nao era: um .MOV que o webview nao
+// sabe decodificar — HEVC/HLG do iPhone, que e a maior parte do material real —
+// nao dispara `loadedmetadata` NEM `error`, a promessa nunca assentava e o
+// `await` em openImportDialog segurava o dialogo para sempre. O usuario via o
+// overlay de arraste na tela e nada acontecia.
+const PRAZO_DURACAO_MS = 4000;
+
 function probeVideoDuration(file) {
   return new Promise((resolve) => {
+    let pronto = false;
+    let url = null;
+    const encerrar = (valor) => {
+      if (pronto) return;
+      pronto = true;
+      if (url) URL.revokeObjectURL(url);
+      resolve(valor);
+    };
     try {
-      const url = URL.createObjectURL(file);
+      url = URL.createObjectURL(file);
       const v = document.createElement("video");
       v.preload = "metadata";
       v.onloadedmetadata = () => {
         const d = Number(v.duration);
-        URL.revokeObjectURL(url);
-        resolve(Number.isFinite(d) ? d : null);
+        encerrar(Number.isFinite(d) ? d : null);
       };
-      v.onerror = () => {
-        URL.revokeObjectURL(url);
-        resolve(null);
-      };
+      v.onerror = () => encerrar(null);
+      setTimeout(() => encerrar(null), PRAZO_DURACAO_MS);
       v.src = url;
     } catch {
-      resolve(null);
+      encerrar(null);
     }
   });
 }
@@ -2031,6 +2044,20 @@ function wireDrop() {
     if (e.target.closest("button")) return;
     input.click();
   });
+  // Quem fecha o overlay de arraste precisa ser alcancavel dos DOIS lados.
+  // Ele so era escondido pelo handler de `drop` da `window`; mas o drop na
+  // propria zona chama stopPropagation() logo abaixo — de proposito, para a
+  // pasta nao ser varrida duas vezes — entao aquele handler nunca rodava e o
+  // "Solte para importar" ficava na tela para sempre. Como a zona e o banner
+  // inteiro e o overlay tem pointer-events:none, soltar no alvo obvio caia
+  // sempre nesse caminho.
+  const overlayArraste = $("#dropAnywhere");
+  let dragDepth = 0;
+  const fecharArraste = () => {
+    dragDepth = 0;
+    overlayArraste?.classList.add("hidden");
+  };
+
   ["dragenter", "dragover"].forEach((ev) =>
     zone.addEventListener(ev, (e) => {
       e.preventDefault();
@@ -2051,6 +2078,7 @@ function wireDrop() {
     // com essa lista menor. Era o caminho para "arrastei a pasta e so vieram
     // os videos soltos".
     e.stopPropagation();
+    fecharArraste();
     collectDroppedFiles(e.dataTransfer)
       .then((files) => openImportDialog(files))
       .catch((err) => toast(err.message));
@@ -2075,9 +2103,8 @@ function wireDrop() {
   }
   // Arrastar arquivo para QUALQUER lugar da janela abre a importação — o
   // overlay dá o alvo gigante; sem ele o usuário tinha que acertar o card.
-  const anywhere = $("#dropAnywhere");
+  const anywhere = overlayArraste;
   if (anywhere) {
-    let dragDepth = 0;
     window.addEventListener("dragenter", (e) => {
       const types = (e.dataTransfer && e.dataTransfer.types) || [];
       if (![...types].includes("Files")) return;
@@ -2091,8 +2118,7 @@ function wireDrop() {
     window.addEventListener("dragover", (e) => e.preventDefault());
     window.addEventListener("drop", (e) => {
       e.preventDefault();
-      dragDepth = 0;
-      anywhere.classList.add("hidden");
+      fecharArraste();
       if (!e.dataTransfer) return;
       collectDroppedFiles(e.dataTransfer)
         .then((files) => { if (files && files.length) openImportDialog(files); })
