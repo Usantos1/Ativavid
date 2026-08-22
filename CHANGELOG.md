@@ -1,5 +1,36 @@
 # Changelog
 
+## 2.57
+
+- **As legendas agora são feitas no seu próprio computador.** Nada de conta,
+  chave ou mensalidade para transcrever — e depois da primeira vez, nem
+  internet. Na prática você não vê diferença: a tela continua dizendo
+  "Transcrevendo áudio…" e o vídeo sai igual. Comparado no mesmo vídeo, o
+  novo motor acerta a posição de **96,6% das palavras** contra 99,7% do
+  serviço em nuvem, e **87% delas caem dentro de 100 ms** uma da outra — a
+  legenda karaokê continua no lugar
+
+- **Na primeira transcrição o app se prepara sozinho.** Ele olha o seu
+  computador, calcula o que precisa e baixa, mostrando o progresso e o tamanho.
+  Com placa de vídeo NVIDIA são cerca de 3,6 GB; sem placa, 703 MB. Depois
+  disso nunca mais aparece, e atualizar o ATIVAVID não baixa nada de novo
+
+- **O app não trava mais quando o áudio não tem fala.** Num trecho só com
+  música ou silêncio, o motor às vezes inventava frases — agora nada é
+  escrito. E fala baixinha, pausas longas e palavras no começo de uma frase
+  continuam intactas: testado em 1.055 palavras faladas de verdade, sem
+  perder nenhuma
+
+- **Importar de novo um vídeo já transcrito continua instantâneo**, e mudar
+  headline, estilo, fonte, cor ou b-roll não refaz a transcrição
+
+- **A chave do ElevenLabs virou opcional.** Ela ainda é usada pela trilha
+  sonora e pela voz, mas não faz mais falta para legendar — e o app parou de
+  avisar sobre isso
+
+- Telas de Configurações e Licença usando a largura toda, e o instalador já
+  sai com o nome que você recebe
+
 ## 2.56
 
 - **As legendas agora saem do ElevenLabs, o serviço que você assina.** O app
