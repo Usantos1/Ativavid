@@ -22,6 +22,7 @@ tools/render_benchmark/results/_camada1/
 tools/render_benchmark/results/_ig_tmp/
 tools/render_benchmark/results/_npl_multi/
 tools/render_benchmark/results/_prep_npl/
+tools/render_benchmark/results/_confirma/
 
 # Runtime state, not source: the preview server rewrites this on every
 # "Salvar como padrão" click in the Estilo tab, so tracking it would turn one

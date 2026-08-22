@@ -468,8 +468,30 @@ def probe_duration(video: Path) -> float:
 
 HDR_TRANSFERS = {"smpte2084", "arib-std-b67"}  # PQ (HDR10) and HLG
 
+# npl = pico de luminância que o tonemapper assume no display de destino.
+#
+# Estava em 100 e ESTOURAVA highlight: medido em 4 cenas HLG do material real
+# (loja, porta para a rua, close de pele, vitrine contra interior escuro), o
+# npl=100 deixava de 3,4% a 5,7% dos pixels colados no teto do limited range —
+# detalhe que nenhum bitrate recupera depois. Em 150 isso cai para 0,13% a
+# 0,95%; em 203 (BT.2408) zera, mas custa outros ~10 pontos de luma média sem
+# ganho visível nos recortes. 150 é onde a curva vira.
+#
+# Custo assumido: a imagem escurece ~13 pontos de luma média. É escolha
+# consciente, não regressão — nenhuma compensação de grade foi feita junto,
+# para o efeito do npl ficar isolado e mensurável.
+#
+# Sem penalidade de tempo: no prep real (3 rodadas, cache limpo) as execuções
+# mais rápidas empataram (167,1 s com npl=100 contra 160,4 s com 150).
+#
+# Trocar este valor invalida o cache do prepared_source de propósito — a chave
+# em _prep_key inclui esta cadeia. Fontes antigas reprocessam, o que é melhor
+# que reaproveitar master com outra cor.
+#
+# Vale para o material HLG de INTERIOR que o app recebe hoje. Se entrar muito
+# externo com céu aberto, reabrir o benchmark (tools/render_benchmark/).
 TONEMAP_CHAIN = (
-    "zscale=t=linear:npl=100,"
+    "zscale=t=linear:npl=150,"
     "format=gbrpf32le,"
     "zscale=p=bt709,"
     "tonemap=tonemap=hable:desat=0,"
