@@ -3,7 +3,6 @@
 Decisão (2026-08-15): SEEK_EXTRACT / CURRENT CPU é o baseline.
 Não implementar Working Master, Single-pass nem NVDEC no CURRENT.
 Não altera produção.
-"""
 
     python pipeline/cut_arch_audit.py
 
