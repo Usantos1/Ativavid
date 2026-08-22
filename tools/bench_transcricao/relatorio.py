@@ -28,11 +28,17 @@ from tools.bench_transcricao.metricas import (                  # noqa: E402
 from tools.bench_transcricao.impacto import conferir_karaoke    # noqa: E402
 from tools.bench_transcricao.motores import Saida               # noqa: E402
 
-COLUNAS = ["scribe", "whisper_local", "gemini_audio", "whisper_gemini"]
+# TODOS os cenários viram coluna, inclusive os que não rodaram. O leitor
+# precisa ver a lacuna (C e D) do lado dos que rodaram, e o E deixou de ser
+# "experimento adicional" no momento em que virou um dos três executados —
+# esconder a coluna dele tornava o critério principal (tempo humano)
+# ilegível justamente para o cenário que disputa a vitória.
+COLUNAS = ["scribe", "whisper_local", "gemini_audio", "whisper_gemini",
+           "whisper_gemini_texto"]
 EXTRA = "whisper_gemini_texto"
-ROTULO = {"scribe": "Scribe", "whisper_local": "Whisper", 
-          "gemini_audio": "Gemini áudio", "whisper_gemini": "Whisper + Gemini",
-          EXTRA: "Whisper + Gemini (só texto)"}
+ROTULO = {"scribe": "A Scribe", "whisper_local": "B Whisper",
+          "gemini_audio": "C Gem.áudio", "whisper_gemini": "D W+Gem.áudio",
+          EXTRA: "E W+Gem.texto"}
 SD = "sem dado"
 
 
@@ -333,7 +339,8 @@ def matriz(ag: dict, custos: dict | None) -> str:
               lambda a, c: _custo(custos, c)),
         linha("offline", lambda a, c: "sim" if c == "whisper_local" else "não"),
         linha("privacidade", lambda a, c:
-              "local" if c == "whisper_local" else "áudio → nuvem"),
+              "local" if c == "whisper_local"
+              else ("texto → nuvem" if c == EXTRA else "áudio → nuvem")),
     ])
 
 
@@ -423,11 +430,9 @@ def main() -> int:
               f"retenção de fronteiras "
               f"{100 * (d.get('retencao_de_fronteiras') or 0):.1f}%.")
 
-    e = r["agregado"].get(EXTRA)
-    if e:
-        print(f"\nExperimento E (revisão sem ouvir o áudio): "
-              f"WER {_p(e.get('wer'))}, "
-              f"correções/100 {_n(e.get('correcoes_100'))}.")
+    print("\nC e D não rodaram: a integração Gemini do projeto envia só "
+          "texto.\nE é a revisão do Gemini SEM ouvir o áudio — é o que dá "
+          "para ter hoje.")
 
     (saida / "relatorio.json").write_text(
         json.dumps(r, ensure_ascii=False, indent=2, default=str),
