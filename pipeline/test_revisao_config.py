@@ -60,19 +60,25 @@ def test_configuracao_ilegivel_nao_derruba_nada(monkeypatch):
     assert revisao.modo() == revisao.PADRAO
 
 
-def test_o_padrao_de_hoje_e_desligado():
-    """Guarda do commit separado.
+def test_o_padrao_de_hoje_e_ligado():
+    """O padrão declarado, trancado no código.
 
-    Os commits estruturais entram com a revisão dormindo. Ligar o padrão é um
-    commit de uma linha, depois do canário — e é o único que muda
-    comportamento em produção. Se este teste falhar sem que o padrão tenha
-    sido virado de propósito, alguém ligou a revisão de carona num commit que
-    dizia não mexer em nada.
+    Nasceu ao contrário. Enquanto os commits estruturais entravam com a
+    revisão dormindo, este teste cobrava `PADRAO = DESLIGADA` — para que
+    ninguém ligasse a revisão de carona num commit que dizia não mexer em
+    nada. Ele cumpriu o papel: falhou no instante em que o padrão virou, e
+    virou de propósito, depois do canário de 49 PASS na máquina real.
+
+    Agora guarda o outro lado. O padrão é `LIGADA`, e desligar a revisão em
+    produção NÃO se faz editando esta constante: `ATIVAVID_REVISAO=off` já é
+    rollback imediato, sem deploy e sem apagar arquivo (ver
+    `test_revisao_cache.py`). Uma mudança aqui é decisão de produto e tem de
+    ser deliberada, não efeito colateral de outro commit.
     """
     from pipeline.leitura_de_codigo import apenas_codigo
 
     codigo = apenas_codigo(REPO / "app" / "transcricao" / "revisao.py")
-    assert "PADRAO = DESLIGADA" in codigo
+    assert "PADRAO = LIGADA" in codigo
 
 
 # ------------------------------------- não é um backend, e não pode virar um
