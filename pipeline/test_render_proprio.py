@@ -996,3 +996,30 @@ def test_a_headline_nao_usa_a_curva_da_legenda(tmp_path):
     assert leg.palavras, "a headline tem de desenhar"
     assert all(p.ease == "cubic" for p in leg.palavras), \
         [p.ease for p in leg.palavras]
+
+
+# --- legenda desligada não pode derrubar o motor rápido --------------------
+#
+# Descoberto rodando um job de verdade: o pipeline grava `style="karaoke"` fixo
+# quando a legenda está desligada (`captions if cap_enabled else "karaoke"`), e
+# karaoke é o único estilo do template que o motor próprio não desenha. Ou
+# seja: desligar a legenda custava 3,3x no render, por causa de uma legenda que
+# não aparece no vídeo.
+
+
+def test_legenda_desligada_nao_derruba_o_motor(tmp_path):
+    ed = _ed(captions={"enabled": False, "style": "karaoke"})
+    assert motivo_nao_suportado(ed, _public(tmp_path)) is None
+
+
+def test_legenda_ligada_com_estilo_de_fora_ainda_derruba(tmp_path):
+    """A guarda continua valendo para o que VAI ser desenhado."""
+    ed = _ed(captions={"enabled": True, "style": "karaoke"})
+    assert "karaoke" in str(motivo_nao_suportado(ed, _public(tmp_path)))
+
+
+def test_sem_o_campo_enabled_a_guarda_continua_valendo(tmp_path):
+    """Na dúvida, o erro barato: perder o motor rápido custa tempo; desenhar um
+    estilo que o motor não sabe custa um vídeo errado."""
+    ed = _ed(captions={"style": "karaoke"})
+    assert "karaoke" in str(motivo_nao_suportado(ed, _public(tmp_path)))

@@ -270,7 +270,16 @@ def motivo_nao_suportado(edit_data: dict[str, Any], public: Path) -> str | None:
     estilo = caps.get("style") or "stacked"
     permitidos = {"stacked", "impacto", "scatter",
                   "simples", "serifada", "classica", "bloco", "recorte"}
-    if estilo not in permitidos:
+    # So importa o estilo de uma legenda que vai ser DESENHADA. Com a legenda
+    # desligada o pipeline grava `style="karaoke"` fixo (run_fast: `captions if
+    # cap_enabled else "karaoke"`), e karaoke e justamente o unico estilo fora
+    # da lista -- entao o job perdia o motor rapido, e ficava 3,3x mais lento,
+    # por causa de uma legenda que nao aparece no video.
+    # `enabled` AUSENTE conta como ligada, de proposito: dizer "suportado" por
+    # engano faz o motor desenhar um estilo que ele nao sabe, e o video sai
+    # errado. Dizer "nao suportado" por engano so custa tempo. Na duvida, o
+    # erro barato.
+    if caps.get("enabled", True) and estilo not in permitidos:
         return f"estilo de legenda '{caps.get('style')}'"
     hook = edit_data.get("hook") or {}
     if hook.get("enabled"):
