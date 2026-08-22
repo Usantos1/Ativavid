@@ -43,6 +43,7 @@ if str(RAIZ) not in sys.path:
     sys.path.insert(0, str(RAIZ))
 
 from app.transcricao import Palavra                       # noqa: E402
+from app.transcricao import revisao                       # noqa: E402
 
 # Motivo único, para a matriz e o log dizerem a mesma coisa.
 SEM_AUDIO = (
@@ -74,69 +75,21 @@ def extrair_audio(video: Path, destino_dir: Path) -> Path:
     return destino
 
 
-REVISAR_SO_TEXTO = """\
-Você é um REVISOR de transcrição, não um transcritor.
-
-Você recebe APENAS a transcrição de um modelo local (Whisper), palavra por
-palavra, indexada. Você NÃO tem acesso ao áudio.
-
-Sua função é APENAS apontar palavras provavelmente transcritas de forma
-incorreta, usando só coerência de contexto, gramática e conhecimento de marcas
-e nomes próprios.
-
-Como não pode ouvir, seja MAIS conservador: só corrija quando o contexto
-tornar o erro evidente.
-
-Foque em: nomes próprios, empresas, marcas, produtos, palavras incomuns ou
-técnicas, gírias, contrações, números, valores, datas, lugares, e palavras
-que não fazem sentido no contexto.
-
-Proibições absolutas:
-- NÃO retranscreva do zero.
-- NÃO reescreva frases que já estão corretas.
-- NÃO formalize a fala. "cê", "tá", "tô", "né", "pra" e gírias ficam como
-  estão. Trocar "cê" por "você" é ERRO, não correção.
-- NÃO resuma, NÃO corte, NÃO acrescente palavras que não foram faladas.
-- NÃO mexa em pontuação por estilo.
-
-Responda SOMENTE com JSON válido:
-{
-  "correcoes": [
-    {"indice": 42, "n": 1, "de": "praimcamp", "para": "PrimeCamp",
-     "motivo": "marca", "confianca": 0.93}
-  ]
-}
-- "indice": índice da PRIMEIRA palavra do trecho no array do Whisper.
-- "n": quantas palavras do Whisper o trecho cobre (n>1 para juntar palavras).
-- "para": pode conter mais de uma palavra (para separar uma em duas).
-- "confianca": 0 a 1. Na dúvida, não corrija.
-Se nada precisar mudar, devolva {"correcoes": []}.
-"""
-
-
-def _json_da_resposta(texto: str) -> dict:
-    """Extrai JSON mesmo com cerca de código ou prosa em volta."""
-    m = re.search(r"\{.*\}", texto or "", re.S)
-    if not m:
-        raise ValueError(f"resposta do Gemini sem JSON: {(texto or '')[:400]}")
-    return json.loads(m.group(0))
+# O prompt e o parser de JSON moraram aqui enquanto o cenário E era
+# experimento. Viraram produção em `app/transcricao/revisao.py`; o harness
+# passou a importar de lá para medir o mesmo texto que roda no pipeline.
+REVISAR_SO_TEXTO = revisao.PROMPT
+_json_da_resposta = revisao._json_da_resposta
 
 
 def revisar_pelo_gateway(palavras: list[Palavra], texto: str) -> list[dict]:
-    """Cenário E, pelo caminho que o ATIVAVID já tem. Sem chave, sem custo."""
-    from app.llm_gateway import chat_completions
+    """Cenário E, pelo caminho que o ATIVAVID já tem. Sem chave, sem custo.
 
-    indexado = "\n".join(f"{i}\t{p.texto}\t{p.inicio:.2f}-{p.fim:.2f}"
-                         for i, p in enumerate(palavras))
-    codigo, resp = chat_completions({
-        "model": "gemini-web/pro",
-        "messages": [{"role": "user", "content":
-                      f"{REVISAR_SO_TEXTO}\n\nTEXTO COMPLETO DO WHISPER:\n"
-                      f"{texto}\n\nPALAVRAS DO WHISPER (índice, palavra, "
-                      f"tempo):\n{indexado}\n"}],
-    })
-    if codigo != 200:
-        raise GeminiIndisponivel(
-            f"gateway do projeto: {(resp.get('error') or {}).get('message', resp)}")
-    return _json_da_resposta(
-        resp["choices"][0]["message"]["content"]).get("correcoes", [])
+    Invocador fino de `app.transcricao.revisao.pedir_correcoes`. A troca do
+    tipo de exceção mantém o contrato antigo do harness: quem chama aqui
+    espera `GeminiIndisponivel`.
+    """
+    try:
+        return revisao.pedir_correcoes(palavras, texto)
+    except revisao.RevisaoIndisponivel as e:
+        raise GeminiIndisponivel(str(e)) from e

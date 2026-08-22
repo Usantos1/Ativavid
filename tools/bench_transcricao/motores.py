@@ -143,42 +143,15 @@ def _rodar_transcribe(video: Path, trabalho: Path, backend: str,
 
 def aplicar_correcoes(palavras: list[Palavra], correcoes: list[dict]
                       ) -> tuple[list[str], list[dict], list[dict]]:
-    """Aplica as correções do Gemini sobre os tokens do Whisper.
+    """Invocador de `app.transcricao.revisao.aplicar_correcoes`.
 
-    Devolve (tokens, aplicadas, ignoradas). Não toca em tempo: quem reconcilia
-    a linha do tempo depois é `alinhar.aplicar`.
-
-    DE TRÁS PARA FRENTE, sempre: aplicar em ordem crescente faria a segunda
-    correção errar o alvo assim que a primeira mudasse a quantidade de
-    palavras (uma divisão desloca todo o resto do array).
-
-    Duas proteções contra o modelo errar a conta:
-
-      **índice fora do intervalo** — descartado.
-
-      **âncora** — a correção declara `de`, e se o texto naquele índice não
-      bate, ela é descartada. Este é o erro mais perigoso do conjunto: o
-      modelo acerta QUAL palavra está errada e erra ONDE ela está. Sem a
-      âncora, "praimcamp → PrimeCamp" no índice 0 sobrescreveria "eu".
-      De quebra, resolve correções sobrepostas: a primeira aplicada muda o
-      texto, a âncora da segunda deixa de bater e ela cai sozinha em vez de
-      sobrescrever o que já foi corrigido.
+    A guarda de âncora morava aqui enquanto o cenário E era experimento.
+    Virou produção; o harness passou a chamar de lá para que os testes que
+    exercitam "a função REAL" exercitem a que roda no pipeline.
     """
-    tokens = [p.texto for p in palavras]
-    aplicadas: list[dict] = []
-    ignoradas: list[dict] = []
-    for c in sorted(correcoes, key=lambda c: int(c["indice"]), reverse=True):
-        i, n = int(c["indice"]), int(c.get("n", 1))
-        if i < 0 or n < 1 or i + n > len(tokens):
-            ignoradas.append({**c, "motivo": "índice fora do intervalo"})
-            continue
-        trecho = " ".join(tokens[i:i + n])
-        if c.get("de") and alinhar.tokenizar(c["de"]) != alinhar.tokenizar(trecho):
-            ignoradas.append({**c, "motivo": f"âncora não bate: {trecho!r}"})
-            continue
-        tokens[i:i + n] = alinhar.tokenizar(c["para"])
-        aplicadas.append(c)
-    return tokens, aplicadas, ignoradas
+    from app.transcricao import revisao
+
+    return revisao.aplicar_correcoes(palavras, correcoes)
 
 
 # ------------------------------------------------------------------ cenários
