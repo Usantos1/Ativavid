@@ -149,32 +149,130 @@ def mede_contra(dis: Path, ref: Path) -> dict:
             "ssim": m("float_ssim"), "psnr": m("psnr_y") or m("psnr")}
 
 
-def estatisticas_de_luz(arq: Path) -> dict:
-    """Luminância e clipping — o que decide npl, já que VMAF não decide.
+AMOSTRAS = 12          # quadros analisados por variante
+BLOCO = 96             # lado do bloco ao procurar regiões de interesse
+CROP = 320             # lado do recorte exportado
 
-    YAVG diz se escureceu. YMAX perto de 235 (limited) com muitos quadros
-    significa highlight estourado: detalhe que não volta.
+
+def _quadros_np(arq: Path, quantos: int = AMOSTRAS):
+    """Amostra quadros espalhados e devolve como array RGB (numpy)."""
+    import numpy as np
+    from PIL import Image
+
+    dur = float(subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+         "-of", "csv=p=0", str(arq)],
+        capture_output=True, text=True).stdout.strip() or 1.0)
+    saida = []
+    for i in range(quantos):
+        t = dur * (i + 0.5) / quantos
+        png = arq.with_name(f"{arq.stem}_amostra{i}.png")
+        roda(["-ss", f"{t:.3f}", "-i", str(arq), "-frames:v", "1", str(png)])
+        saida.append((t, np.asarray(Image.open(png).convert("RGB"), dtype="float32")))
+        png.unlink(missing_ok=True)
+    return saida
+
+
+def _luma(rgb):
+    """Rec.709 — a mesma matriz que o pipeline usa."""
+    return 0.2126 * rgb[..., 0] + 0.7152 * rgb[..., 1] + 0.0722 * rgb[..., 2]
+
+
+def estatisticas_de_luz(arq: Path) -> dict:
+    """O que decide npl, já que VMAF não decide.
+
+    Percentis dizem para onde a imagem inteira andou (não só a média, que
+    esconde o caso em que sombra sobe e highlight desce ao mesmo tempo).
+    Clipping diz quanto detalhe de highlight foi embora de vez — 235 é o teto
+    do limited range; acima disso não há informação, só branco.
     """
-    _, err = roda(["-i", str(arq), "-vf",
-                   "signalstats,metadata=print:key=lavfi.signalstats.YAVG:file=-",
-                   "-f", "null", "-"])
-    yavg = [float(m) for m in re.findall(r"YAVG=([0-9.]+)", err)]
-    _, err2 = roda(["-i", str(arq), "-vf",
-                    "signalstats,metadata=print:key=lavfi.signalstats.YMAX:file=-",
-                    "-f", "null", "-"])
-    ymax = [float(m) for m in re.findall(r"YMAX=([0-9.]+)", err2)]
-    # fração de quadros cujo pico encosta no teto do limited range
-    estourados = sum(1 for v in ymax if v >= 234) / len(ymax) if ymax else None
+    import numpy as np
+
+    quadros = _quadros_np(arq)
+    lumas = np.concatenate([_luma(f).ravel() for _, f in quadros])
+    pcts = {f"p{p}": round(float(np.percentile(lumas, p)), 1)
+            for p in (1, 5, 25, 50, 75, 90, 95, 99)}
+
+    # clipping: quanto da imagem está encostado ou colado no teto
+    total = lumas.size
+    quase = float((lumas >= 230).sum()) / total
+    teto = float((lumas >= 235).sum()) / total
+    # e quanto está esmagado embaixo
+    piso = float((lumas <= 16).sum()) / total
+
+    # histograma em 16 faixas, para ver a forma da distribuição
+    hist, _ = np.histogram(lumas, bins=16, range=(0, 255))
+    hist = [round(float(h) / total, 4) for h in hist]
+
     return {
-        "luma_media": round(statistics.mean(yavg), 2) if yavg else None,
-        "luma_mediana": round(statistics.median(yavg), 2) if yavg else None,
-        "pico_medio": round(statistics.mean(ymax), 2) if ymax else None,
-        "frac_quadros_no_teto": round(estourados, 3) if estourados is not None else None,
+        "luma_media": round(float(lumas.mean()), 2),
+        "percentis": pcts,
+        "frac_clip_alto_230": round(quase, 5),
+        "frac_clip_teto_235": round(teto, 5),
+        "frac_esmagado_16": round(piso, 5),
+        "histograma_16": hist,
     }
 
 
-def quadro(arq: Path, seg: float, dest: Path) -> None:
-    roda(["-ss", str(seg), "-i", str(arq), "-frames:v", "1", "-q:v", "2", str(dest)])
+def acha_regioes(arq: Path, seg: float) -> dict[str, tuple[int, int]]:
+    """Escolhe UMA vez onde recortar, para os crops serem comparáveis.
+
+    As coordenadas saem de um quadro só e depois são aplicadas iguais a todas
+    as variantes — recortar "a região mais clara de cada uma" compararia
+    lugares diferentes da cena e não diria nada sobre npl.
+    """
+    import numpy as np
+    from PIL import Image
+
+    png = arq.with_name("_ref_regiao.png")
+    roda(["-ss", f"{seg:.3f}", "-i", str(arq), "-frames:v", "1", str(png)])
+    rgb = np.asarray(Image.open(png).convert("RGB"), dtype="float32")
+    png.unlink(missing_ok=True)
+    h, w, _ = rgb.shape
+    luma = _luma(rgb)
+
+    r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+    # regra clássica de tom de pele em RGB; grosseira, mas suficiente para
+    # escolher ONDE olhar — quem julga a pele é você, no recorte.
+    pele = ((r > 95) & (g > 40) & (b > 20) & (r > g) & (r > b) &
+            (np.abs(r - g) > 15)).astype("float32")
+
+    def varre(mapa, modo: str):
+        melhor, coord = None, (0, 0)
+        for y in range(0, h - BLOCO, BLOCO):
+            for x in range(0, w - BLOCO, BLOCO):
+                v = float(mapa[y:y + BLOCO, x:x + BLOCO].mean())
+                if melhor is None or (v > melhor if modo == "max" else v < melhor):
+                    melhor, coord = v, (x, y)
+        return coord, melhor
+
+    (xl, yl), _ = varre(luma, "max")                       # luz forte / céu
+    (xp, yp), score = varre(pele, "max")                   # pele
+    # "área clara" sem ser o extremo: o bloco mais próximo do p85 da cena
+    alvo = float(np.percentile(luma, 85))
+    dist = np.abs(luma - alvo)
+    (xc, yc), _ = varre(dist, "min")
+
+    def ajusta(x, y):
+        return (max(0, min(x + BLOCO // 2 - CROP // 2, w - CROP)),
+                max(0, min(y + BLOCO // 2 - CROP // 2, h - CROP)))
+
+    regioes = {"luz_forte": ajusta(xl, yl), "area_clara": ajusta(xc, yc)}
+    if score and score > 0.15:
+        regioes["pele"] = ajusta(xp, yp)
+    return regioes
+
+
+def quadro(arq: Path, seg: float, dest: Path,
+           regioes: dict[str, tuple[int, int]] | None = None) -> None:
+    """PNG do quadro inteiro e, se houver regiões, um PNG por recorte."""
+    roda(["-ss", f"{seg:.3f}", "-i", str(arq), "-frames:v", "1",
+          "-compression_level", "0", str(dest)])
+    for nome, (x, y) in (regioes or {}).items():
+        roda(["-ss", f"{seg:.3f}", "-i", str(arq), "-frames:v", "1",
+              "-vf", f"crop={CROP}:{CROP}:{x}:{y}",
+              "-compression_level", "0",
+              str(dest.with_name(f"{dest.stem}__{nome}.png"))])
 
 
 def main() -> int:
@@ -209,7 +307,7 @@ def main() -> int:
     print(f"trecho: {args.inicio}s + {args.dur}s\n")
 
     # ---- referência: tonemap em resolução cheia + lanczos, sem perda -----
-    print("referência (tonemap full-res → lanczos, sem perda)…")
+    print("referencia (tonemap na resolucao cheia + lanczos, sem perda)...")
     ref = tmp / "REF.mp4"
     t_ref = gera(fonte, args.inicio, args.dur,
                  vf_tonemap_depois(NPL_BT2408, "lanczos"), ref, sem_perda=True)
@@ -243,30 +341,43 @@ def main() -> int:
         print(f"  {nome[:44]:44} VMAF {m['vmaf']:>7} | {t:.1f}s")
 
     # ---- GRUPO C: npl (sem referência — medidas absolutas) --------------
-    print("\nGRUPO C — npl (lanczos, tonemap→scale). Sem VMAF: veja os quadros.")
-    for npl in (NPL_ATUAL, NPL_BT2408, 250):
+    # Nenhum valor é favorito: 203 entra como candidato, não como resposta.
+    print("\nGRUPO C - npl (lanczos, tonemap antes do scale). Sem VMAF: decide olhando.")
+    rotulos = {NPL_ATUAL: " (o app usa hoje)", NPL_BT2408: " (BT.2408)"}
+    arquivos_npl: dict[int, Path] = {}
+    for npl in (NPL_ATUAL, 150, NPL_BT2408, 250):
         arq = tmp / f"npl_{npl}.mp4"
         t = gera(fonte, args.inicio, args.dur,
                  vf_tonemap_depois(npl, "lanczos"), arq, sem_perda=False)
+        arquivos_npl[npl] = arq
         luz = estatisticas_de_luz(arq)
-        luz.update({"variante": f"npl={npl}" + (" (atual)" if npl == NPL_ATUAL else
-                                                " (BT.2408)" if npl == NPL_BT2408 else ""),
+        luz.update({"variante": f"npl={npl}{rotulos.get(npl, '')}",
                     "npl": npl, "segundos": round(t, 1)})
         resultados["npl"].append(luz)
-        quadro(arq, meio, tmp / f"quadro_npl_{npl}.jpg")
-        print(f"  npl={npl:<4} luma média {luz['luma_media']:>6} | pico {luz['pico_medio']:>6}"
-              f" | quadros no teto {luz['frac_quadros_no_teto']}")
+        p = luz["percentis"]
+        print(f"  npl={npl:<4} luma {luz['luma_media']:>6} | p50 {p['p50']:>5} | p95 {p['p95']:>5}"
+              f" | clip>=235 {luz['frac_clip_teto_235']:.4f} | escuro<=16 {luz['frac_esmagado_16']:.4f}")
+
+    # recortes comparáveis: as MESMAS coordenadas em todas as variantes
+    print("\n  recortes (mesmas coordenadas em todos os npl):")
+    regioes = acha_regioes(arquivos_npl[NPL_BT2408], meio)
+    for nome, (x, y) in regioes.items():
+        print(f"    {nome:12} em ({x},{y}) {CROP}x{CROP}")
+    for npl, arq in arquivos_npl.items():
+        quadro(arq, meio, tmp / f"quadro_npl_{npl}.png", regioes)
+    resultados["regioes_crop"] = {k: list(v) for k, v in regioes.items()}
 
     rel = SAIDA / "camada1_master.json"
     rel.write_text(json.dumps({
         "fonte": str(fonte), "inicio": args.inicio, "dur": args.dur,
-        "referencia": "tonemap full-res (npl=203) → lanczos, sem perda",
+        "referencia": "tonemap na resolucao cheia (npl=203) + lanczos, sem perda",
         "nota_npl": "npl não tem vencedor por métrica: decide olhando os quadros",
         "resultados": resultados,
     }, indent=2, ensure_ascii=False), encoding="utf-8")
 
-    print(f"\nrelatório: {rel}")
-    print(f"quadros para comparar: {tmp}\\quadro_npl_*.jpg")
+    print(f"\nrelatorio: {rel}")
+    print(f"quadros PNG: {tmp}\\quadro_npl_*.png")
+    print("recortes   : quadro_npl_*__luz_forte.png / __area_clara.png / __pele.png")
     return 0
 
 
