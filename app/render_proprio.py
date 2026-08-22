@@ -258,6 +258,18 @@ def ancoras_de_headline() -> dict[str, dict[str, object]]:
     return out
 
 
+# O karaoke no motor rapido: implementado, medido, e DESLIGADO ate o usuario
+# aprovar o que ve. `ATIVAVID_KARAOKE_PROPRIO=1` liga.
+#
+# Ele nao esta atras desta chave por duvida tecnica -- a comparacao quadro a
+# quadro contra o Remotion deu deslocamento de 0 a 1px, tinta 1,000 e a mesma
+# curva de entrada dentro de 0,2 quadro. Esta porque mudar a aparencia de um
+# video e decisao de quem faz o video.
+def karaoke_aprovado() -> bool:
+    return (os.environ.get("ATIVAVID_KARAOKE_PROPRIO", "").strip()
+            in ("1", "true", "yes", "on"))
+
+
 def motivo_nao_suportado(edit_data: dict[str, Any], public: Path) -> str | None:
     """None = o renderizador próprio cobre este projeto; senão o motivo."""
     if (os.environ.get("ATIVAVID_RENDER_PROPRIO") or "").strip() == "0":
@@ -268,19 +280,33 @@ def motivo_nao_suportado(edit_data: dict[str, Any], public: Path) -> str | None:
     #   serifada 1,009 · recorte 1,014 · scatter 1,024 · bloco 1,033
     #   classica 1,036 · simples 1,059 · impacto 1,094
     estilo = caps.get("style") or "stacked"
-    permitidos = {"stacked", "impacto", "scatter",
+    permitidos = {"stacked", "impacto", "scatter", "karaoke",
                   "simples", "serifada", "classica", "bloco", "recorte"}
-    # So importa o estilo de uma legenda que vai ser DESENHADA. Com a legenda
+    # Tudo daqui para baixo so importa se a legenda VAI ser desenhada. Com ela
     # desligada o pipeline grava `style="karaoke"` fixo (run_fast: `captions if
-    # cap_enabled else "karaoke"`), e karaoke e justamente o unico estilo fora
-    # da lista -- entao o job perdia o motor rapido, e ficava 3,3x mais lento,
-    # por causa de uma legenda que nao aparece no video.
+    # cap_enabled else "karaoke"`), e sem esta guarda o job perderia o motor
+    # rapido por causa de uma legenda que nao aparece no video.
+    #
     # `enabled` AUSENTE conta como ligada, de proposito: dizer "suportado" por
-    # engano faz o motor desenhar um estilo que ele nao sabe, e o video sai
-    # errado. Dizer "nao suportado" por engano so custa tempo. Na duvida, o
-    # erro barato.
-    if caps.get("enabled", True) and estilo not in permitidos:
-        return f"estilo de legenda '{caps.get('style')}'"
+    # engano faz o motor desenhar um estilo que ele nao sabe e o video sai
+    # errado; dizer "nao suportado" por engano so custa tempo.
+    if caps.get("enabled", True):
+        if estilo == "karaoke":
+            if not karaoke_aprovado():
+                # O desenho esta pronto e conferido quadro a quadro, mas quem
+                # aprova a aparencia e o dono do visual, nao a medicao. Ate la
+                # o karaoke segue pelo Remotion, e o motivo fica gravado em
+                # `overlayEngineSkip` como qualquer outra recusa.
+                return "karaoke aguardando aprovacao visual"
+            if caps.get("windows") or []:
+                # As janelas movem a legenda NO MEIO da linha e o template
+                # resolve isso POR QUADRO (`CaptionShell` procura a janela em
+                # `fromFrame + local`). Aqui cada palavra tem posicao fixa,
+                # entao uma linha que atravessasse a borda de uma janela
+                # ficaria parada onde o template a moveria.
+                return "karaoke com janelas de posicao"
+        if estilo not in permitidos:
+            return f"estilo de legenda '{caps.get('style')}'"
     hook = edit_data.get("hook") or {}
     if hook.get("enabled"):
         if (hook.get("style") or "outline") not in Renderizador.HL_STYLES:
@@ -646,16 +672,72 @@ class Renderizador:
         h = hexa.lstrip("#")
         return np.array([int(h[i:i + 2], 16) for i in (0, 2, 4)], dtype=np.float32)
 
-    def _sombra_de(self, mask: np.ndarray, especs, k: float = BLUR_K) -> np.ndarray:
+    @staticmethod
+    def _uma_caixa(a: np.ndarray, larg: int, desl: int, eixo: int) -> np.ndarray:
+        """Media movel de `larg` amostras, com o zero de fora contando.
+
+        `desl` diz quantas amostras da janela ficam ANTES do pixel. Com janela
+        par nao existe centro, e e por isso que o Skia alterna o lado entre as
+        passadas -- somadas, as tres ficam centradas.
+        """
+        if larg <= 1:
+            return a
+        n = a.shape[eixo]
+        pad = [(0, 0), (0, 0)]
+        pad[eixo] = (larg, larg)
+        b = np.pad(a, pad, mode="constant")
+        cum = np.cumsum(b, axis=eixo)
+        zero = [(0, 0), (0, 0)]
+        zero[eixo] = (1, 0)
+        cum = np.pad(cum, zero, mode="constant")
+        lo = np.arange(n) + larg - desl
+        hi = lo + larg
+        if eixo == 0:
+            return (cum[hi, :] - cum[lo, :]) / larg
+        return (cum[:, hi] - cum[:, lo]) / larg
+
+    @classmethod
+    def _borrao_caixa(cls, m: np.ndarray, sigma: float) -> np.ndarray:
+        """Tres passadas de caixa -- o borrao que o Chrome usa de verdade.
+
+        O Skia nao aplica uma Gaussiana em text-shadow: aplica tres box blurs,
+        que somados APROXIMAM uma Gaussiana mas tem suporte FINITO. A diferenca
+        esta na cauda, e ela e mensuravel: comparando o karaoke deste motor com
+        o do Remotion, o alcance da sombra deu 16px la e 18px aqui, com a faixa
+        de 10 a 20px pesando 12% a 23% a mais.
+
+        Janela como no Skia (`SkBlurMask::BoxBlur`):
+            d = floor(sigma * 3 * sqrt(2*pi) / 4 + 0.5)
+        Com `d` impar as tres passadas usam `d` centrado; com `d` par elas usam
+        d (encostada a esquerda), d (a direita) e d+1 (centrada).
+        """
+        d = int(np.floor(sigma * 3.0 * np.sqrt(2.0 * np.pi) / 4.0 + 0.5))
+        if d < 1:
+            return m.astype(np.float32).copy()
+        if d % 2 == 1:
+            passos = [(d, d // 2), (d, d // 2), (d, d // 2)]
+        else:
+            passos = [(d, d // 2), (d, d // 2 - 1), (d + 1, d // 2)]
+        out = m.astype(np.float32)
+        for larg, desl in passos:
+            for eixo in (0, 1):
+                out = cls._uma_caixa(out, larg, desl, eixo)
+        return out
+
+    def _sombra_de(self, mask: np.ndarray, especs, k: float = BLUR_K,
+                   caixa: bool = False) -> np.ndarray:
         """`k` e o fator sigma/raio. O padrao 1,05 vale para drop-shadow (o
         que o Chrome desenha, medido). Para text-shadow e box-shadow o sigma
         e raio/2 — passe k=0,5, senao o halo sai ~80% maior (medido no
         estilo `simples`: 44.930 contra 25.057 pixels de halo)."""
         out = np.zeros_like(mask)
         for dx, dy, blur, sa in especs:
-            b = np.asarray(Image.fromarray((mask * 255).astype(np.uint8))
-                           .filter(ImageFilter.GaussianBlur(blur * k)),
-                           dtype=np.float32) / 255.0
+            if caixa:
+                b = self._borrao_caixa(mask, blur * k)
+            else:
+                b = np.asarray(Image.fromarray((mask * 255).astype(np.uint8))
+                               .filter(ImageFilter.GaussianBlur(blur * k)),
+                               dtype=np.float32) / 255.0
             desl = np.zeros_like(b)
             desl[max(0, dy):, max(0, dx):] = b[:b.shape[0] - max(0, dy),
                                                :b.shape[1] - max(0, dx)]
@@ -675,6 +757,9 @@ class Renderizador:
             self.cues = []
         elif estilo == "scatter":
             self.camadas.extend(self._montar_scatter())
+            self.cues = []
+        elif estilo == "karaoke":
+            self.camadas.extend(self._montar_karaoke())
             self.cues = []
         elif estilo in self.SIMPLE_VARIANTES or estilo == "recorte":
             self.camadas.extend(self._montar_simple(
@@ -1988,6 +2073,198 @@ class Renderizador:
                     pass
             self._fontes[chave] = f
         return self._fontes[chave]
+
+    # ------------------------------------------------------------ karaoke --
+    #
+    # Portado de `Main.tsx` (Karaoke 382-427, Word 335-360, CaptionShell
+    # 362-380, buildLines 319-333). NAO existe "palavra acesa": a linha
+    # inteira tem uma cor so, e o que anima e a ENTRADA de cada palavra --
+    # opacidade 0->1 e subida de 34px, em 7 quadros, com Easing.out(cubic).
+    KAR_ENTER = 7           # Word: interpolate(frame, [start, start+7], [0,1])
+    KAR_SOBE = 34.0         # Word: translate 34px -> 0
+    KAR_MARGIN = 18.0       # Word: marginRight
+    KAR_LS = -1.0           # div: letterSpacing -1
+    KAR_SOMBRA = [(0, 4, 20, 0.55)]   # div: textShadow 0 4px 20px rgba(0,0,0,.55)
+
+    def _montar_karaoke(self):
+        """Uma Camada por LINHA, uma Palavra por palavra."""
+        import re
+
+        C = self.ed.get("captions") or {}
+        tam = int(C.get("fontSize") or 76)
+        max_p = max(1, int(C.get("maxWords") or 3))
+        safe_w = float(C.get("safeWidth") or 720)
+        pad_b = float(C.get("paddingBottom") or 420)
+        cor = C.get("accent") or "#ffffff"          # `C.accent ?? 'white'`
+        ls = self.KAR_LS
+
+        # `capWeight(900)` sobre `capFamily(Poppins)`: Poppins-Black e o 900
+        # upright do catalogo. A fonte da marca entra por `marca="cap"`, com o
+        # teto de peso que o proprio resolvedor aplica (sem negrito falso).
+        f = self.fonte(4, tam, 900, marca="cap")
+        asc, desc = f.getmetrics()
+
+        def limpar(t):                                   # cleanW
+            return re.sub(r"[.,!?\u2026]+$", "", str(t or ""))
+
+        def quebra(t):                                   # isBreak
+            return bool(re.search(r"[.,!?\u2026]$", str(t or "")))
+
+        raw = json.loads((self.public / "captions.json")
+                         .read_text(encoding="utf-8-sig"))
+        words = raw if isinstance(raw, list) else (raw.get("words") or [])
+
+        # buildLines: fecha em maxWords OU em pontuacao final
+        linhas, cur = [], []
+        for w in words:
+            cur.append(w)
+            if len(cur) >= max_p or quebra(w.get("text")):
+                linhas.append(cur)
+                cur = []
+        if cur:
+            linhas.append(cur)
+
+        def larg(t):
+            """Avanco + espacamento por letra, como o motor mede em todo lugar.
+
+            O `letter-spacing` do CSS soma DEPOIS de cada caractere, inclusive
+            o ultimo -- por isso `len(t)`, nao `len(t) - 1`.
+            """
+            return f.getlength(t) + ls * len(t)
+
+        camadas = []
+        for i, linha in enumerate(linhas):
+            ini_f = self._arredonda_js(linha[0]["startMs"] / 1000 * self.fps)
+            prox = (self._arredonda_js(linhas[i + 1][0]["startMs"] / 1000 * self.fps)
+                    if i + 1 < len(linhas) else self.frames)
+            dur = max(1, prox - ini_f)
+            fim_f = ini_f + dur - 1
+            if fim_f < 0 or ini_f >= self.frames:
+                continue
+
+            pares = [(w, limpar(w.get("text"))) for w in linha]
+            pares = [(w, t) for w, t in pares if t]
+            if not pares:
+                continue
+            textos = [t for _w, t in pares]
+
+            # DUAS larguras diferentes, de proposito:
+            #   fit    mede o texto juntado com ESPACO (`measureText` recebe
+            #          `line.map(cleanW).join(' ')`)
+            #   layout usa `marginRight: 18` e nenhum espaco
+            # Trocar uma pela outra desloca a linha inteira.
+            fit = min(1.0, safe_w / max(1e-6, larg(" ".join(textos))))
+            largs = [larg(t) for t in textos]
+            # A margem sobra na ULTIMA palavra e entra na largura da caixa --
+            # e por isso a linha centralizada fica meia margem a esquerda do
+            # centro real. Reproduzido, nao corrigido.
+            total = sum(largs) + self.KAR_MARGIN * len(largs)
+
+            leg = Camada(max(0, ini_f), min(self.frames - 1, fim_f))
+            leg.dur_f = leg.fim_f - leg.inicio_f + 1
+            leg.saida_f = 1e9        # some de uma vez quando a proxima entra
+
+            # `scale` do CSS reduz em torno do CENTRO da caixa.
+            cx, cy = self.w / 2.0, self.h - pad_b - tam / 2.0
+            # lineHeight 1 => a caixa tem `tam` de altura e `flex-end` poe a
+            # base dela em H - paddingBottom. Dentro dela, o Chrome centra
+            # ascendente+descendente (meia-entrelinha), e a mascara do motor
+            # comeca justamente na linha do ascendente.
+            y_asc = (self.h - pad_b - tam) + (tam - (asc + desc)) / 2.0
+            topo = cy + (y_asc - cy) * fit
+            esq = cx - total * fit / 2.0
+
+            self._karaoke_linha(leg, f, pares, largs, ls, cor,
+                                esq=esq, topo=topo, fit=fit, ini_f=ini_f)
+            if leg.palavras:
+                camadas.append(leg)
+        return camadas
+
+    # A sombra e da LINHA, nao de cada palavra.
+    #
+    # Desenhando uma sombra por palavra, onde as sombras de duas palavras
+    # vizinhas se cruzam o alfa ACUMULA: 0,55 + 0,55*(1-0,55) = 0,80. O Chrome
+    # pinta as palavras ja entradas na MESMA camada, entao a sombra da linha e
+    # uma so, com teto de 0,55. Medido contra o Remotion: a sombra por palavra
+    # saia com 12% de massa a mais, concentrada justamente nos vaos.
+    #
+    # Aqui a linha inteira e desenhada num canvas, borrada UMA vez, e cada
+    # palavra leva a fatia da sombra que cai na sua faixa -- as faixas se
+    # dividem no meio dos vaos, entao a soma delas reconstroi a sombra da linha
+    # sem contar nada duas vezes.
+    def _karaoke_linha(self, leg, f, pares, largs, ls, cor, *,
+                       esq, topo, fit, ini_f) -> None:
+        folga = 40
+        larg_total = int(round(sum(largs) + self.KAR_MARGIN * (len(largs) - 1)))
+        mascaras, cor_emojis, cursores = [], [], []
+        cur = 0.0
+        for (_w, t), wl in zip(pares, largs):
+            m, ce = self._mascara_cor(f, t, ls)
+            mascaras.append(m)
+            cor_emojis.append(ce)
+            cursores.append(cur)
+            cur += wl + self.KAR_MARGIN
+        alt = max(m.shape[0] for m in mascaras)
+        canvas = np.zeros((alt + 2 * folga, larg_total + 2 * folga),
+                          dtype=np.float32)
+        for m, c in zip(mascaras, cursores):
+            x0 = folga + int(round(c))
+            h_m, w_m = m.shape
+            fim_x = min(canvas.shape[1], x0 + w_m)
+            if fim_x > x0:
+                np.maximum(canvas[folga:folga + h_m, x0:fim_x],
+                           m[:, :fim_x - x0],
+                           out=canvas[folga:folga + h_m, x0:fim_x])
+        # `caixa=True`: o Chrome borra text-shadow com tres passadas de caixa,
+        # nao com Gaussiana. So o karaoke pede isso; os outros estilos deste
+        # motor ja foram validados com a Gaussiana e nao se mexe neles.
+        sombra_linha = self._sombra_de(canvas, self.KAR_SOMBRA, k=0.5, caixa=True)
+
+        # as faixas se dividem no MEIO de cada vao
+        bordas = [0]
+        for k in range(len(pares) - 1):
+            dir_k = cursores[k] + largs[k]
+            bordas.append(int(round(folga + dir_k + self.KAR_MARGIN / 2.0)))
+        bordas.append(canvas.shape[1])
+        bordas[0] = 0
+
+        for k, ((w, _t), m) in enumerate(zip(pares, mascaras)):
+            bx0, bx1 = bordas[k], bordas[k + 1]
+            if bx1 <= bx0:
+                continue
+            alpha = np.zeros((canvas.shape[0], bx1 - bx0), dtype=np.float32)
+            x0 = folga + int(round(cursores[k]))
+            h_m, w_m = m.shape
+            a0, a1 = max(bx0, x0), min(bx1, x0 + w_m)
+            if a1 > a0:
+                alpha[folga:folga + h_m, a0 - bx0:a1 - bx0] = m[:, a0 - x0:a1 - x0]
+            sombra = sombra_linha[:, bx0:bx1].copy()
+            rgb = np.broadcast_to(self._cor(cor), (*alpha.shape, 3)).copy()
+            # a mascara desta palavra comeca em `x0 - bx0` dentro da fatia,
+            # nao na folga -- o emoji tem de seguir a mesma origem
+            self._pintar_emoji(rgb, cor_emojis[k], x0 - bx0, folga)
+
+            if fit < 0.999:
+                novo = (max(1, int(round(alpha.shape[1] * fit))),
+                        max(1, int(round(alpha.shape[0] * fit))))
+
+                def _red(a):
+                    return np.asarray(
+                        Image.fromarray((np.clip(a, 0, 1) * 255).astype(np.uint8))
+                        .resize(novo, Image.LANCZOS), dtype=np.float32) / 255.0
+
+                alpha, sombra = _red(alpha), _red(sombra)
+                rgb = np.asarray(Image.fromarray(rgb.astype(np.uint8))
+                                 .resize(novo, Image.LANCZOS), dtype=np.float32)
+
+            leg.palavras.append(Palavra(
+                int(round(esq + (bx0 - folga) * fit)),
+                int(round(topo - folga * fit)),
+                rgb, alpha, sombra,
+                # `startLocal` do template, SEM arredondar: a interpolacao do
+                # Remotion aceita limite fracionario.
+                inicio_f=(w["startMs"] / 1000 * self.fps) - ini_f,
+                enter=self.KAR_ENTER, sobe=self.KAR_SOBE * fit, ease="cubic"))
 
     def _montar_simple(self, variante: str):
         """Cinco variantes ESTATICAS: o texto do cue aparece pronto e some no
