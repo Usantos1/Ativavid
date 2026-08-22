@@ -100,11 +100,12 @@ def maquina_ocupada() -> list[str]:
     return ruins
 
 
-def roda(args: list[str]) -> tuple[float, str]:
+def roda(args: list[str], cwd: Path | None = None) -> tuple[float, str]:
     t = time.perf_counter()
     r = subprocess.run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
                         "-stats_period", "9999", *args],
-                       capture_output=True, text=True)
+                       capture_output=True, text=True,
+                       cwd=str(cwd) if cwd else None)
     if r.returncode != 0:
         raise RuntimeError((r.stderr or "")[-700:])
     return time.perf_counter() - t, (r.stderr or "")
@@ -134,11 +135,19 @@ def gera(fonte: Path, inicio: float, dur: float, vf: str, dest: Path,
 
 
 def mede_contra(dis: Path, ref: Path) -> dict:
+    """VMAF/SSIM/PSNR do arquivo contra a referência.
+
+    O log vai por nome RELATIVO com cwd na pasta — caminho absoluto do Windows
+    tem o `:` do drive, que o parser de filtros do ffmpeg lê como separador de
+    opções e derruba o grafo. É o mesmo tropeço que `helpers/detect_color.py`
+    já tinha levado (e resolvido assim) com `metadata=print:file=`.
+    """
     log = dis.with_suffix(".vmaf.json")
     filtro = ("[0:v]setpts=PTS-STARTPTS[d];[1:v]setpts=PTS-STARTPTS[r];"
-              f"[d][r]libvmaf=log_fmt=json:log_path={log.as_posix()}:"
+              f"[d][r]libvmaf=log_fmt=json:log_path={log.name}:"
               "feature=name=psnr|name=float_ssim")
-    roda(["-i", str(dis), "-i", str(ref), "-lavfi", filtro, "-f", "null", "-"])
+    roda(["-i", str(dis), "-i", str(ref), "-lavfi", filtro, "-f", "null", "-"],
+         cwd=log.parent)
     pool = json.loads(log.read_text(encoding="utf-8")).get("pooled_metrics", {})
 
     def m(k, campo="mean"):
@@ -309,9 +318,18 @@ def main() -> int:
     # ---- referência: tonemap em resolução cheia + lanczos, sem perda -----
     print("referencia (tonemap na resolucao cheia + lanczos, sem perda)...")
     ref = tmp / "REF.mp4"
-    t_ref = gera(fonte, args.inicio, args.dur,
-                 vf_tonemap_depois(NPL_BT2408, "lanczos"), ref, sem_perda=True)
-    print(f"  {t_ref:.1f}s | {ref.stat().st_size/1048576:.1f} MB\n")
+    # A referência é sem perda e leva minutos: se já existe para ESTE recorte,
+    # reaproveita. A chave amarra fonte+trecho para não comparar contra a
+    # referência de outro vídeo sem perceber.
+    chave = f"{fonte.resolve()}|{args.inicio}|{args.dur}|{NPL_BT2408}|lanczos"
+    chave_arq = tmp / "REF.chave"
+    if ref.exists() and chave_arq.exists() and chave_arq.read_text(encoding="utf-8") == chave:
+        print(f"  reaproveitada | {ref.stat().st_size/1048576:.1f} MB\n")
+    else:
+        t_ref = gera(fonte, args.inicio, args.dur,
+                     vf_tonemap_depois(NPL_BT2408, "lanczos"), ref, sem_perda=True)
+        chave_arq.write_text(chave, encoding="utf-8")
+        print(f"  {t_ref:.1f}s | {ref.stat().st_size/1048576:.1f} MB\n")
 
     resultados: dict[str, list] = {"scaler": [], "ordem": [], "npl": []}
 
