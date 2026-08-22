@@ -334,7 +334,7 @@ def main() -> int:
     resultados: dict[str, list] = {"scaler": [], "ordem": [], "npl": []}
 
     # ---- GRUPO A: scaler (npl e ordem fixos) ----------------------------
-    print("GRUPO A — scaler (npl=203, tonemap→scale)")
+    print("GRUPO A - scaler (npl=203, tonemap antes do scale)")
     for flags in ("bicubic", "bilinear", "lanczos", "spline"):
         arq = tmp / f"scaler_{flags}.mp4"
         t = gera(fonte, args.inicio, args.dur,
