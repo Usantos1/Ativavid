@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.58
+
+- **Correção importante: a placa de vídeo não estava sendo usada na legenda.**
+  Se você viu erros de transcrição na 2.57, era isto. O app precisava baixar
+  um componente para usar a placa, mas por um erro meu ele nunca chegava a
+  baixar — e a legenda saía pelo modo lento e menos preciso. Na mesma fala, o
+  antes e o depois: *"trocar a **filha** do meu mouse"* virou *"trocar a
+  **pilha** do meu mouse"*, e *"quando que **quiser** pra consertar"* virou
+  *"quanto que **fica** pra consertar"*. De quebra ficou **5,7x mais rápido**
+  (11s em vez de 64s no mesmo vídeo)
+
+- Quem já usa a 2.57 não precisa fazer nada além de atualizar: o componente é
+  baixado sozinho na próxima transcrição, com o progresso na tela
+
 ## 2.57
 
 - **As legendas agora são feitas no seu próprio computador.** Nada de conta,
