@@ -47,8 +47,14 @@ class Maquina:
     apple_silicon: bool
     gpu_nome: str           # "" quando não há
     vram_mb: int            # 0 quando desconhecida
-    backend: str            # "cuda" | "metal" | "cpu"
+    backend: str            # "cuda" | "metal" | "cpu" -- o que dá para usar AGORA
     motivo: str             # por que este backend, para o log técnico
+    # O hardware SUPORTA aceleração, mesmo que as bibliotecas ainda não
+    # estejam no disco. Sem separar isto de `backend`, a busca das bibliotecas
+    # ficava circular: elas só eram baixadas se o backend já fosse "cuda", e o
+    # backend só virava "cuda" se elas já estivessem lá. Numa RTX 3050 real
+    # isso prendia a máquina em CPU + modelo pequeno para sempre.
+    cuda_possivel: bool = False
 
     @property
     def compute_type(self) -> str:
@@ -147,7 +153,8 @@ def detectar() -> Maquina:
         if forcado == "cuda":
             registrar_dlls_cuda()
         return Maquina(sistema, arq, apple, gpu, vram, forcado,
-                       f"forçado por ATIVAVID_WHISPER_BACKEND={forcado}")
+                       f"forçado por ATIVAVID_WHISPER_BACKEND={forcado}",
+                       cuda_possivel=(forcado == "cuda"))
 
     if sistema == "darwin":
         # Apple Silicon: o CTranslate2 ainda não usa Metal, então a CPU ARM
@@ -158,8 +165,21 @@ def detectar() -> Maquina:
 
     gpu, vram = _gpu_nvidia()
     ok, motivo = _cuda_utilizavel(vram)
+    # `cuda_possivel` olha SÓ o hardware: se há GPU NVIDIA com VRAM bastante.
+    # `backend` olha o que dá para rodar agora, que também depende das DLLs.
+    possivel = bool(gpu) and vram >= _VRAM_MINIMA_MB
     return Maquina(sistema, arq, apple, gpu, vram,
-                   "cuda" if ok else "cpu", motivo)
+                   "cuda" if ok else "cpu", motivo, cuda_possivel=possivel)
+
+
+def esquecer() -> None:
+    """Joga fora a detecção em cache.
+
+    Necessário depois de instalar as bibliotecas de CUDA: a detecção roda uma
+    vez por processo, e sem isto o mesmo processo continuaria acreditando que
+    está em CPU logo depois de ganhar a aceleração.
+    """
+    detectar.cache_clear()
 
 
 def pasta_de_modelos() -> Path:

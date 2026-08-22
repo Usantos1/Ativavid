@@ -29,6 +29,7 @@ from typing import Callable
 
 from app.transcricao import Cancelado
 from app.transcricao import componentes, modelos
+from app.transcricao import plataforma
 from app.transcricao.plataforma import detectar
 
 # O que o usuário lê. Sem jargão de propósito.
@@ -71,17 +72,30 @@ def _motor_instalado() -> bool:
 
 
 def planejar() -> Plano:
-    """O que ainda falta. Barato: só olha o disco e o `nvidia-smi`."""
+    """O que ainda falta. Barato: só olha o disco e o `nvidia-smi`.
+
+    Olha `cuda_possivel` (o HARDWARE suporta) e não `backend` (o que dá para
+    usar agora). A diferença era um defeito grave: `backend` só vira "cuda"
+    depois que as bibliotecas estão no disco, então perguntar por ele aqui
+    fazia o plano dizer "0 MB, já pronto" numa máquina com RTX 3050 que
+    precisava de 2 GB — e ela ficava presa em CPU + modelo pequeno para
+    sempre. Foi visto num vídeo real: "trocar a FILHA do meu mouse" em vez de
+    "a PILHA".
+
+    O modelo também é escolhido pelo backend que a máquina VAI ter depois de
+    preparada, senão o plano baixaria o `small` para quem vai rodar em GPU.
+    """
     maq = detectar()
-    modelo = modelos.escolher_modelo(maq.vram_mb, backend=maq.backend)
+    efetivo = "cuda" if maq.cuda_possivel else maq.backend
+    modelo = modelos.escolher_modelo(maq.vram_mb, backend=efetivo)
     return Plano(
         pacotes_mb=0 if _motor_instalado() else PACOTES_MB,
         aceleracao_mb=(componentes.MB_CUDA
-                       if maq.backend == "cuda" and not componentes.cuda_presente()
+                       if maq.cuda_possivel and not componentes.cuda_presente()
                        else 0),
         modelo_mb=0 if modelos.instalado(modelo) else modelo.mb,
         modelo=modelo.chave,
-        backend=maq.backend,
+        backend=efetivo,
     )
 
 
@@ -143,6 +157,10 @@ def preparar(
                                                cancelar=cancelar)
         print(f"PRIMEIRO_USO aceleracao={'ok' if ok else 'nao'} ({motivo})",
               flush=True)
+        # A detecção roda uma vez por processo. Sem esquecer, este mesmo
+        # processo continuaria acreditando que está em CPU logo depois de
+        # ganhar a aceleração — e escolheria o modelo pequeno.
+        plataforma.esquecer()
         # Sem aceleração NÃO é falha: a CPU transcreve. Mas o modelo muda —
         # `small` em vez de `medium` — e o plano precisa refletir isso.
         feito += plano.aceleracao_mb

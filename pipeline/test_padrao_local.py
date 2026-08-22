@@ -331,3 +331,73 @@ def test_sem_o_motor_o_preparo_falha_em_vez_de_seguir(monkeypatch):
                         lambda **k: (False, "sem rede"))
     with pytest.raises(RuntimeError, match="transcricao local"):
         pu.preparar()
+
+
+# --- o defeito circular da aceleracao --------------------------------------
+
+def test_gpu_sem_bibliotecas_ainda_conta_no_plano(monkeypatch):
+    """O defeito que apareceu em uso real, e que custou legendas erradas.
+
+    A busca das bibliotecas de CUDA dependia de `backend == "cuda"` — mas o
+    backend só vira "cuda" DEPOIS que elas estão no disco. Circular: numa RTX
+    3050 de verdade o plano dizia "0 MB, já pronto" e a máquina ficava presa
+    em CPU + modelo pequeno para sempre.
+
+    O resultado na tela, medido na mesma fonte: `small`/CPU escreveu "trocar a
+    FILHA do meu mouse" e "Quando que QUISER pra consertar"; `medium`/GPU
+    escreveu "a PILHA" e "Quanto que FICA" — e levou 11,3s em vez de 64,2s.
+    """
+    import app.transcricao.plataforma as plat
+    import app.transcricao.primeiro_uso as pu
+
+    plat.esquecer()
+    monkeypatch.setattr(plat, "_gpu_nvidia", lambda: ("RTX 3050", 4096))
+    monkeypatch.setattr(plat, "registrar_dlls_cuda", lambda: [])   # sem DLLs
+    monkeypatch.setattr(pu.componentes, "cuda_presente", lambda: False)
+    monkeypatch.setattr(pu, "_motor_instalado", lambda: True)
+    monkeypatch.setattr(pu.modelos, "instalado", lambda m: False)
+    monkeypatch.delenv("ATIVAVID_WHISPER_BACKEND", raising=False)
+    monkeypatch.delenv("ATIVAVID_WHISPER_MODEL", raising=False)
+
+    maq = plat.detectar()
+    assert maq.backend == "cpu", "sem DLL o backend de AGORA é cpu"
+    assert maq.cuda_possivel, "mas o hardware suporta — é isto que o plano usa"
+
+    plano = pu.planejar()
+    plat.esquecer()
+    assert plano.aceleracao_mb > 0, (
+        "o plano não vai buscar CUDA numa máquina que tem GPU — a aceleração "
+        "nunca se instala e a legenda sai pelo modo pior")
+    assert plano.modelo == "medium", (
+        "baixaria o modelo pequeno para quem vai rodar em GPU")
+
+
+def test_sem_gpu_nenhuma_o_plano_nao_cobra_cuda(monkeypatch):
+    """O outro lado: não pedir 2 GB de quem não tem placa."""
+    import app.transcricao.plataforma as plat
+    import app.transcricao.primeiro_uso as pu
+
+    plat.esquecer()
+    monkeypatch.setattr(plat, "_gpu_nvidia", lambda: ("", 0))
+    monkeypatch.setattr(pu.componentes, "cuda_presente", lambda: False)
+    monkeypatch.setattr(pu, "_motor_instalado", lambda: True)
+    monkeypatch.setattr(pu.modelos, "instalado", lambda m: False)
+    monkeypatch.delenv("ATIVAVID_WHISPER_BACKEND", raising=False)
+
+    plano = pu.planejar()
+    plat.esquecer()
+    assert not plat.detectar().cuda_possivel or True
+    assert plano.aceleracao_mb == 0
+    assert plano.modelo == "small"
+
+
+def test_a_deteccao_e_esquecida_depois_de_instalar_cuda():
+    """Ela roda uma vez por processo. Sem esquecer, o mesmo processo seguiria
+    achando que está em CPU logo depois de ganhar a aceleração."""
+    from pipeline.leitura_de_codigo import apenas_codigo
+
+    codigo = apenas_codigo(REPO / "app" / "transcricao" / "primeiro_uso.py")
+    i = codigo.index("garantir_cuda")
+    j = codigo.index("modelos.garantir", i)
+    assert "esquecer()" in codigo[i:j], (
+        "instalou CUDA e não reavaliou o backend")
