@@ -55,8 +55,17 @@ def _aviso_de_ia(job: dict, edit: Path) -> None:
     llm = r.get("llm")
     if not isinstance(llm, dict) or llm.get("ok"):
         return
-    job["iaAviso"] = ("Saiu sem IA: o título veio das primeiras palavras da "
-                      "fala. Reconecte em Chaves & IA e gere de novo.")
+    # O CONSELHO tem de seguir a causa. A primeira versao mandava "reconecte
+    # em Chaves & IA" em todo caso — e nos projetos reais 65 dos 67 avisos
+    # seriam por `KeyError: 'viral'`, um defeito de código já corrigido: a
+    # sessão estava boa e reconectar não resolveria nada. Mandar o usuário
+    # mexer na conexão para consertar um defeito meu é pior que não avisar.
+    motivo = str(llm.get("error") or "").lower()
+    de_sessao = any(x in motivo for x in ("sess", "captur", "extens", "login"))
+    job["iaAviso"] = (
+        "Saiu sem IA: o título veio das primeiras palavras da fala. "
+        + ("Reconecte em Chaves & IA e gere de novo."
+           if de_sessao else "Gere de novo para o título sair da IA."))
 
 
 def build(store: Any, projects_root: Path, *, com_links: bool = False) -> list[dict]:
