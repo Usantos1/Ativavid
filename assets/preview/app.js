@@ -3126,9 +3126,6 @@ $('setupGo').addEventListener('click', async () => {
       emphasisWords: S.style.emphasisWords || null,
     headlineDuration: S.style.headlineDuration || 'curta',
     headlineAnimation: S.style.headlineAnimation || 'padrao',
-      headlineDuration: S.style.headlineDuration || 'curta',
-    headlineAnimation: S.style.headlineAnimation || 'padrao',
-      headlineAnimation: S.style.headlineAnimation || 'padrao',
       exportPreset: S.style.exportPreset || 'reels',
       colorGrade: S.style.colorGrade || 'marca',
       endCardCopy: S.endCardCopy || null,
@@ -3226,6 +3223,20 @@ $('setupGo').addEventListener('click', async () => {
     headlineAnimation: S.style.headlineAnimation || 'padrao',
     exportPreset: S.style.exportPreset || 'reels',
     colorGrade: S.style.colorGrade || 'marca',
+    // TIPO DE CONTEUDO e o texto do CARD FINAL iam so no "Salvar como padrao".
+    // Quem trocasse o tipo na tela de Estilo e clicasse "Salvar e refazer a
+    // Fase 2" mandava tudo MENOS esses dois: o job seguia com o tipo antigo.
+    //
+    // E o efeito nao para no titulo. `contentType` e um dos knobs congelados
+    // em `edl.json.cutStyle`, e o pipeline so REPLANEJA o corte quando um
+    // deles muda. Nao chegando, o corte era considerado igual e reaproveitado
+    // — dai o "mandei refazer e veio a mesma minutagem".
+    //
+    // O servidor sempre aceitou os dois: estao em `brand_presets.STYLE_KEYS`,
+    // e `preset_from_style_payload` ignora `null`, entao mandar sem escolha
+    // nao apaga o que ja havia.
+    contentType: S.contentType || $('autoContentType')?.value || null,
+    endCardCopy: S.endCardCopy || null,
   };
   const res = await fetch(`${BASE}/api/save`, {
     method: 'POST',
