@@ -53,8 +53,12 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "Criar atalho na Area de Trabalho"; GroupDescription: "Atalhos:"
 
 [Files]
+; `results` e `bench` sao saida de MEDICAO, nao produto: 34 MB de PNG de
+; quadros que nao servem de nada na maquina de quem usa o app. Entraram no
+; instalador quando o benchmark de render foi commitado, porque o Source e
+; `..\*` recursivo.
 Source: "..\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; \
-  Excludes: "vendor\ffmpeg\*.exe,vendor\ffmpeg\*.dll,.git,.venv,node_modules,__pycache__,*.pyc,edit,cloud,installer\dist,.env,.ativavid-sessions.json,.pytest_cache,.ativavid-settings.json,ativa_vid.egg-info,Projetos"
+  Excludes: "vendor\ffmpeg\*.exe,vendor\ffmpeg\*.dll,.git,.venv,node_modules,__pycache__,*.pyc,edit,cloud,installer\dist,.env,.ativavid-sessions.json,.pytest_cache,.ativavid-settings.json,ativa_vid.egg-info,Projetos,tools\render_benchmark\results,bench"
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{sys}\wscript.exe"; Parameters: "//nologo ""{app}\{#MyAppExeName}"""; WorkingDir: "{app}"; IconFilename: "{app}\assets\preview\ativa-vid-icon.ico"
