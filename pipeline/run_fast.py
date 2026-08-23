@@ -1200,6 +1200,50 @@ def _seal_cover_head_splice(final: Path, cover: Path, edit_dir: Path) -> bool:
                 pass
 
 
+def headline_preservada(edit_dir: Path, llm_meta: dict) -> dict:
+    """A headline da IA sobrevive ao reprocesso.
+
+    Ela só chega em `llm_meta` quando o planejador roda. Reaproveitar o corte
+    — reaplicar do editor, `manual_edl`, modo leve, várias fontes — pula o
+    planejador de propósito, e aí o título caía para `hook_lines_from_text`,
+    que é literalmente as primeiras palavras da fala.
+
+    Medido nos 147 projetos do usuário: 37 tinham plano ok e nenhuma headline
+    (13/13 dos `manual_edl`, 4/4 dos `preview_edits`, 2/2 do modo leve). Num
+    vídeo reprocessado três vezes o título foi de "Chip e carregador potente
+    na loja" para "Meu filho, você tem chip aí nessa loja?".
+
+    Guarda num arquivo PRÓPRIO em vez de reler o `edit-data.json`: depois de um
+    reprocesso ruim o edit-data já carrega a fala crua no hook, e reler dali
+    perpetuaria o erro em vez de corrigi-lo.
+
+    Grava ANTES de reler — se fosse ao contrário, um plano novo seria
+    sobrescrito pelo antigo e a headline nunca mais mudaria.
+    """
+    caminho = edit_dir / "headline_ia.json"
+    nova = str((llm_meta or {}).get("headline") or "").strip()
+    if nova:
+        try:
+            caminho.write_text(json.dumps(
+                {"headline": nova, "backend": (llm_meta or {}).get("backend")},
+                ensure_ascii=False), encoding="utf-8")
+        except OSError:
+            pass
+        return llm_meta
+    try:
+        guardada = str(json.loads(
+            caminho.read_text(encoding="utf-8-sig")).get("headline") or "").strip()
+    except (OSError, json.JSONDecodeError, AttributeError):
+        return llm_meta
+    if not guardada:
+        return llm_meta
+    print(f"[ia] headline reaproveitada do render anterior: {guardada[:60]!r}",
+          flush=True)
+    fora = dict(llm_meta or {})
+    fora["headline"] = guardada
+    return fora
+
+
 def seal_delivery_cover(edit_dir: Path, final: Path) -> Path:
     """Capa = primeiro frame com imagem. Grava cover.jpg, thumb e embute no MP4.
 
@@ -3107,6 +3151,7 @@ def run(
         _text_fixes = load_stored_fixes(edit_dir)
         cut_spoken = apply_replacements_to_text(cut_spoken, _text_fixes)
         hook = hook_lines_from_text(cut_spoken)
+        llm_meta = headline_preservada(edit_dir, llm_meta)
         if llm_meta.get("headline"):
             preset = dict(preset)
             preset["aiHeadline"] = apply_replacements_to_text(str(llm_meta["headline"]), _text_fixes)
