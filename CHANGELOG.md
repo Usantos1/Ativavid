@@ -1,5 +1,50 @@
 # Changelog
 
+## 2.62
+
+- **O título do vídeo voltou a ser escrito pela IA.** Um defeito no tipo de
+  conteúdo *Viral* derrubava o planejamento inteiro, em silêncio: o app não
+  dava erro, só passava a usar as primeiras palavras da fala como título. Como
+  *Viral* é o tipo mais usado, isso pegou a maior parte dos vídeos das últimas
+  semanas — saíam com títulos como "Ô meu amigo, boa tarde pra você" no lugar
+  de uma manchete
+
+- **Trocar o tipo de conteúdo passou a valer.** Escolher outro tipo na tela de
+  Estilo e clicar em *Salvar e refazer a Fase 2* mandava tudo — ritmo,
+  legenda, headline, cores — menos o tipo de conteúdo. O vídeo continuava com
+  o tipo antigo, e como é ele que decide se o corte precisa ser refeito, o
+  vídeo também voltava com a mesma duração. O texto do card final tinha o
+  mesmo problema
+
+- **O título não se perde mais ao refazer o vídeo.** Reaplicar uma correção,
+  mexer no editor ou usar a edição leve reaproveita o corte de propósito — e
+  junto se perdia o título escrito pela IA, que era substituído pelas
+  primeiras palavras da fala. Um vídeo refeito três vezes ia de "Chip e
+  carregador potente na loja" até "Meu filho, você tem chip aí nessa loja?"
+
+- **A extensão do navegador voltou a entregar a sessão do Gemini.** A proteção
+  contra sites maliciosos estava recusando a própria extensão, sem avisar. Sem
+  a sessão, o app ficava sem IA para planejar o corte. Agora ela é aceita
+  apenas nas duas rotas de captura, e o resto do app continua fechado
+
+- **A Fila avisa quando um vídeo saiu sem IA.** Antes esse aviso existia só num
+  registro técnico que ninguém abre. O conselho segue a causa: quando foi a
+  conexão, pede para reconectar; quando foi outra coisa, pede só para gerar de
+  novo
+
+- **Render mais rápido no estilo de legenda em uma linha.** Ele era o único que
+  ainda abria o navegador para desenhar; agora usa o motor próprio, como os
+  outros. No teste de ponta a ponta o vídeo saiu idêntico e a fase de render
+  caiu de 283s para 70s
+
+- **O corte deixou de cair no caminho lento por disputa.** Quando dois vídeos
+  eram processados juntos, o segundo ia para o caminho antigo — cerca de 2,4x
+  mais lento — só por não conseguir a vez. Agora ele espera a vez, que custa
+  bem menos do que o desvio
+
+- **Legenda desligada não deixa mais o render lento.** Quem desligava a legenda
+  perdia o motor rápido por causa de um estilo que nem seria desenhado
+
 ## 2.61
 
 - **Arrastar um vídeo não trava mais na tela "Solte para importar".** Soltar em

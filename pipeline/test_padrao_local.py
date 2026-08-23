@@ -126,8 +126,22 @@ def test_a_regra_do_modelo_mora_num_lugar_so():
                 codigo = apenas_codigo(f)
             except Exception:  # noqa: BLE001
                 continue
-            # as constantes da regra só podem nascer no dono
-            if re.search(r"^\s*(PADRAO|RESERVA|FOLGA_PARA_O_ENCODER_MB)\s*=",
+            # As constantes da regra só podem nascer no dono — mas o que
+            # identifica a regra é o VALOR, não o nome.
+            #
+            # A versão anterior barrava `PADRAO` por nome e acusou o
+            # `revisao.py`, onde `PADRAO = LIGADA` é o liga/desliga da revisão
+            # textual: mesma palavra, decisão sem nenhuma relação. É a mesma
+            # armadilha que a docstring acima já descreve uma vez — cair nela
+            # de novo um nível acima custou uma suíte vermelha num merge.
+            #
+            # `RESERVA` e `FOLGA_PARA_O_ENCODER_MB` são específicos o bastante
+            # para valerem sozinhos. `PADRAO` só conta quando o valor é um
+            # modelo do catálogo.
+            if re.search(r"^\s*(RESERVA|FOLGA_PARA_O_ENCODER_MB)\s*=",
+                         codigo, re.M):
+                define.append(str(rel))
+            if re.search(r"^\s*PADRAO\s*=\s*[\"']?(tiny|base|small|medium|large)",
                          codigo, re.M):
                 define.append(str(rel))
             # e ninguém pode decidir modelo comparando VRAM por conta própria
