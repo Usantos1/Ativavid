@@ -132,6 +132,7 @@ def test_aviso_aparece_quando_a_ia_falhou(tmp_path):
                                 {"ok": False, "error": "sessão expirada"}))
     aviso = build(store, tmp_path)[0].get("iaAviso") or ""
     assert aviso, "vídeo sem IA e o card não avisou"
+    assert "Reconecte" in aviso, "foi a sessão: mandar reconectar está certo"
     # Sem jargão: nada de Gemini, sessão, backend ou cookie na tela.
     for termo in ("gemini", "chatgpt", "backend", "cookie", "sessão expirada"):
         assert termo not in aviso.lower(), f"jargão vazando no card: {termo}"
@@ -162,3 +163,25 @@ def test_result_corrompido_nao_derruba_a_fila(tmp_path):
     (Path(job["editDir"]) / "result.json").write_text("{ nao é json", encoding="utf-8")
     store.upsert(job)
     assert build(store, tmp_path)[0]["id"] == "j1"
+
+
+def test_defeito_de_codigo_nao_manda_mexer_na_conexao(tmp_path):
+    """65 dos 67 avisos nos projetos reais seriam por `KeyError: 'viral'` — um
+    defeito de código, já corrigido. Mandar reconectar ali é conselho errado:
+    a sessão estava boa e o que resolve é gerar de novo."""
+    store = SqliteJobStore(tmp_path)
+    store.upsert(_com_resultado(tmp_path, "j1", {"ok": False, "error": "'viral'"}))
+    aviso = build(store, tmp_path)[0].get("iaAviso") or ""
+    assert "Reconecte" not in aviso, aviso
+    assert "de novo" in aviso
+
+
+@pytest.mark.parametrize("erro", [
+    "Nenhuma sessão pronta. Em Chaves & IA: abra Gemini",
+    "Sessão Gemini incompleta",
+    "Capture a sessão com a extensão",
+])
+def test_falha_de_sessao_ainda_manda_reconectar(tmp_path, erro):
+    store = SqliteJobStore(tmp_path)
+    store.upsert(_com_resultado(tmp_path, "j1", {"ok": False, "error": erro}))
+    assert "Reconecte" in (build(store, tmp_path)[0].get("iaAviso") or "")
