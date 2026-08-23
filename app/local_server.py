@@ -1856,12 +1856,35 @@ class StudioHandler(BaseHTTPRequestHandler):
 
         self._json({"error": "unknown route"}, 404)
 
+    def _drenar_corpo(self) -> None:
+        """Le e joga fora o corpo antes de recusar.
+
+        Sem isto o corpo nao lido sobra no socket e, com conexao reaproveitada,
+        a requisicao SEGUINTE e interpretada a partir dele. Foi assim que um
+        "origem nao permitida" honesto virou
+
+            Unsupported method ('{"provider":"gemini-web",...}POST')
+
+        na tela do usuario -- mensagem que escondeu a causa por dois dias.
+        """
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+        except (TypeError, ValueError):
+            n = 0
+        restante = min(n, 8 * 1024 * 1024)
+        while restante > 0:
+            pedaco = self.rfile.read(min(65536, restante))
+            if not pedaco:
+                break
+            restante -= len(pedaco)
+
     def do_POST(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
         path = parsed.path
 
         # CSRF: um site aberto no navegador não pode mandar POST para o app.
-        if not guard.origin_allowed(self.headers):
+        if not guard.origin_allowed(self.headers, path=path):
+            self._drenar_corpo()
             self._json({"error": "forbidden_origin"}, 403)
             return
 
@@ -1871,6 +1894,7 @@ class StudioHandler(BaseHTTPRequestHandler):
 
         denied = lic.gate(path)
         if denied is not None:
+            self._drenar_corpo()
             self._json(denied, 403)
             return
 

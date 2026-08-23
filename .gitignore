@@ -11,6 +11,11 @@ license_config.json
 # Cache da CLI do Supabase
 supabase/.temp/
 
+# Vídeos de trabalho do benchmark (a REF sem perda sozinha tem 140 MB).
+# O que importa — números e quadros — fica no .json e nos PNG.
+tools/render_benchmark/results/_camada1/
+tools/render_benchmark/results/_ig_tmp/
+
 # Preferências desta máquina (o app grava supabaseUrl/anon aqui no caminho
 # legado). É estado local, e commitar acabaria vazando chave um dia.
 .ativavid-settings.json

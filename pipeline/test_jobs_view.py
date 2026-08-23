@@ -10,6 +10,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.job_store import SqliteJobStore  # noqa: E402
@@ -106,3 +108,57 @@ def test_projeto_com_pasta_sumida_nao_quebra(tmp_path):
 
 def test_fila_vazia(tmp_path):
     assert build(SqliteJobStore(tmp_path), tmp_path) == []
+
+
+# --- o card avisa quando o vídeo saiu sem IA -------------------------------
+#
+# Em 20 e 21/08 a extensão parou de entregar a sessão do Gemini, o corte caiu
+# para a heurística e o título passou a ser as primeiras palavras da fala. O
+# pipeline registrava isso, mas só no log. 50 vídeos saíram assim e a Fila não
+# dizia nada. O que estes testes travam é os dois lados: o aviso aparece na
+# falha de verdade, e NÃO aparece nos cortes que dispensam IA de propósito.
+
+
+def _com_resultado(root: Path, jid: str, llm: dict, **campos) -> dict:
+    job = _projeto(root, jid, **campos)
+    (Path(job["editDir"]) / "result.json").write_text(
+        json.dumps({"status": "done", "llm": llm}), encoding="utf-8")
+    return job
+
+
+def test_aviso_aparece_quando_a_ia_falhou(tmp_path):
+    store = SqliteJobStore(tmp_path)
+    store.upsert(_com_resultado(tmp_path, "j1",
+                                {"ok": False, "error": "sessão expirada"}))
+    aviso = build(store, tmp_path)[0].get("iaAviso") or ""
+    assert aviso, "vídeo sem IA e o card não avisou"
+    # Sem jargão: nada de Gemini, sessão, backend ou cookie na tela.
+    for termo in ("gemini", "chatgpt", "backend", "cookie", "sessão expirada"):
+        assert termo not in aviso.lower(), f"jargão vazando no card: {termo}"
+
+
+@pytest.mark.parametrize("backend", [
+    "gemini-web", "chatgpt-web",     # a IA respondeu
+    "preview_edits", "manual_edl",   # o corte é do próprio usuário
+    "heuristic_light",               # modo leve dispensa IA de propósito
+    "multi_take_concat",
+])
+def test_sem_aviso_quando_nao_houve_falha(tmp_path, backend):
+    store = SqliteJobStore(tmp_path)
+    store.upsert(_com_resultado(tmp_path, "j1", {"ok": True, "backend": backend}))
+    assert "iaAviso" not in build(store, tmp_path)[0]
+
+
+def test_video_ainda_processando_nao_recebe_aviso(tmp_path):
+    """O result.json de um render anterior não pode marcar o job em andamento."""
+    store = SqliteJobStore(tmp_path)
+    store.upsert(_com_resultado(tmp_path, "j1", {"ok": False}, status="processing"))
+    assert "iaAviso" not in build(store, tmp_path)[0]
+
+
+def test_result_corrompido_nao_derruba_a_fila(tmp_path):
+    store = SqliteJobStore(tmp_path)
+    job = _projeto(tmp_path, "j1")
+    (Path(job["editDir"]) / "result.json").write_text("{ nao é json", encoding="utf-8")
+    store.upsert(job)
+    assert build(store, tmp_path)[0]["id"] == "j1"

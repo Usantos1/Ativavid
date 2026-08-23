@@ -176,8 +176,80 @@ def record_canary_job(job: dict[str, Any]) -> None:
     save_state(st)
 
 
-def try_acquire_overlay_slot():
-    """Lock exclusivo não-bloqueante. None = outro OVERLAY pesado em curso."""
+# Quanto esperar pela vaga antes de desistir e ir pelo caminho lento.
+#
+# Medido nos projetos reais: a vaga cobre 150s de um job de 575s -- 26% dele.
+# Bate com os 28% de jobs que perderam a corrida e foram para o Remotion
+# inteiro. Como a espera maxima e o proprio tamanho da janela, o pior caso de
+# esperar (150s) e metade do que custa cair (+294s de mediana), e o caso medio
+# (~75s) e quatro vezes menor.
+#
+# O teto e generoso de proposito: se a espera estourar, o job segue pelo
+# caminho lento como antes -- perde-se o tempo esperado, nunca o job.
+ESPERA_MAXIMA_S = 180.0
+_INTERVALO_S = 2.0
+
+
+def _tentar_pegar(path: Path):
+    """Uma tentativa. Devolve o arquivo travado, ou None."""
+    fh = open(path, "a+b")
+    try:
+        if sys.platform == "win32":
+            import msvcrt
+
+            fh.seek(0, os.SEEK_END)
+            if fh.tell() == 0:
+                fh.write(b"\0")
+                fh.flush()
+            fh.seek(0)
+            msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fh.seek(0)
+        fh.truncate()
+        fh.write(f"pid={os.getpid()}\n".encode())
+        fh.flush()
+        return fh
+    except OSError:
+        try:
+            fh.close()
+        except OSError:
+            pass
+        return None
+
+
+def try_acquire_overlay_slot(espera_s: float = ESPERA_MAXIMA_S):
+    """Pega a vaga do OVERLAY, esperando ate `espera_s`. None = desistiu.
+
+    Era nao-bloqueante: quem perdesse a corrida ia direto para o Remotion
+    inteiro, que custa 1,91x contra 1,31x de rodar acompanhado. Como a vaga so
+    fica ocupada por 26% do job, esperar quase sempre e mais barato do que cair.
+
+    `espera_s=0` mantem o comportamento antigo, para teste.
+    """
+    path = LOCK_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fh = _tentar_pegar(path)
+    if fh is not None or espera_s <= 0:
+        return fh
+
+    t0 = time.monotonic()
+    print(f"OVERLAY_SLOT esperando vaga (ate {espera_s:.0f}s)", flush=True)
+    while time.monotonic() - t0 < espera_s:
+        time.sleep(_INTERVALO_S)
+        fh = _tentar_pegar(path)
+        if fh is not None:
+            print(f"OVERLAY_SLOT vaga liberada apos {time.monotonic() - t0:.0f}s",
+                  flush=True)
+            return fh
+    print(f"OVERLAY_SLOT desistiu apos {espera_s:.0f}s — FULL", flush=True)
+    return None
+
+
+def _try_acquire_overlay_slot_antigo():
+    """Versao original, sem espera — mantida so como referencia do teste."""
     path = LOCK_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
     fh = open(path, "a+b")

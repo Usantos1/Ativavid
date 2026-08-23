@@ -33,6 +33,32 @@ def _status_do_pipeline(job: dict, edit: Path) -> None:
         job["stage"] = job.get("status")
 
 
+# Backends que NAO sao falha: o corte veio do editor do proprio usuario, do
+# modo leve (que dispensa IA de proposito) ou da juncao de varios takes.
+# `ok: False` no result.json e so o caso ruim mesmo — a IA foi chamada e nao
+# respondeu.
+def _aviso_de_ia(job: dict, edit: Path) -> None:
+    """Marca o card quando o vídeo saiu sem o planejamento por IA.
+
+    Existe por causa de um prejuízo real: a extensão parou de entregar a sessão
+    e o planejamento caiu para o corte heurístico, que tira a headline das
+    primeiras palavras da fala. O pipeline avisava — em `[ia] fallback
+    heurístico` no log — mas o log não aparece na tela. Em 20 e 21/08 saíram
+    50 vídeos assim e nada na Fila dizia o que tinha mudado.
+    """
+    if job.get("status") != "done":
+        return
+    try:
+        r = json.loads((edit / "result.json").read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError):
+        return
+    llm = r.get("llm")
+    if not isinstance(llm, dict) or llm.get("ok"):
+        return
+    job["iaAviso"] = ("Saiu sem IA: o título veio das primeiras palavras da "
+                      "fala. Reconecte em Chaves & IA e gere de novo.")
+
+
 def build(store: Any, projects_root: Path, *, com_links: bool = False) -> list[dict]:
     """Cards prontos para a tela, do mais recente para o mais antigo."""
     from app.local_server import (  # import tardio: o local_server usa este módulo
@@ -62,6 +88,7 @@ def build(store: Any, projects_root: Path, *, com_links: bool = False) -> list[d
                 j["score"] = json.loads(score_path.read_text(encoding="utf-8-sig"))
             except (OSError, json.JSONDecodeError):
                 pass
+        _aviso_de_ia(j, edit)
         enrich_job_display(j, edit)
         if j.get("sourceDurationSec") in (None, "") and (j.get("sources") or j.get("source")):
             # Projeto de antes deste campo existir. A medicao vai para o fundo

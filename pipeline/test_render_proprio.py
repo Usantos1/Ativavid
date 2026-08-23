@@ -996,3 +996,188 @@ def test_a_headline_nao_usa_a_curva_da_legenda(tmp_path):
     assert leg.palavras, "a headline tem de desenhar"
     assert all(p.ease == "cubic" for p in leg.palavras), \
         [p.ease for p in leg.palavras]
+
+
+# --- legenda desligada não pode derrubar o motor rápido --------------------
+#
+# Descoberto rodando um job de verdade: o pipeline grava `style="karaoke"` fixo
+# quando a legenda está desligada (`captions if cap_enabled else "karaoke"`), e
+# karaoke é o único estilo do template que o motor próprio não desenha. Ou
+# seja: desligar a legenda custava 3,3x no render, por causa de uma legenda que
+# não aparece no vídeo.
+
+
+def test_legenda_desligada_nao_derruba_o_motor(tmp_path):
+    ed = _ed(captions={"enabled": False, "style": "karaoke"})
+    assert motivo_nao_suportado(ed, _public(tmp_path)) is None
+
+
+def test_legenda_ligada_com_estilo_de_fora_ainda_derruba(tmp_path):
+    """A guarda continua valendo para o que VAI ser desenhado.
+
+    O exemplo era `karaoke` ate ele ganhar suporte; agora precisa ser um
+    estilo que nao existe mesmo, senao o teste passa a nao testar nada.
+    """
+    ed = _ed(captions={"enabled": True, "style": "estilo_que_nao_existe"})
+    assert "estilo_que_nao_existe" in str(motivo_nao_suportado(ed, _public(tmp_path)))
+
+
+def test_sem_o_campo_enabled_a_guarda_continua_valendo(tmp_path):
+    """Na dúvida, o erro barato: perder o motor rápido custa tempo; desenhar um
+    estilo que o motor não sabe custa um vídeo errado."""
+    ed = _ed(captions={"style": "estilo_que_nao_existe"})
+    assert "estilo_que_nao_existe" in str(motivo_nao_suportado(ed, _public(tmp_path)))
+
+
+# --- karaoke ---------------------------------------------------------------
+#
+# O estilo `karaoke` e o unico do template que o motor rapido nao desenhava, e
+# tres dos doze modelos da tela usam ele -- quem escolhesse um deles pagava o
+# Remotion inteiro, 3,5x mais lento, em silencio.
+#
+# A implementacao foi portada de `Main.tsx` (Karaoke 382-427, Word 335-360,
+# CaptionShell 362-380, buildLines 319-333) e conferida quadro a quadro contra
+# o Remotion. Estes testes travam o que a comparacao visual nao alcanca: as
+# regras de agrupamento, o tempo, e a porta de recusa.
+
+
+def _cap_karaoke(**mud):
+    base = {"enabled": True, "style": "karaoke", "fontSize": 76,
+            "maxWords": 3, "safeWidth": 720, "paddingBottom": 420}
+    base.update(mud)
+    return base
+
+
+def _palavras(pub: Path, ws) -> None:
+    (pub / "captions.json").write_text(json.dumps(
+        [{"text": t, "startMs": a, "endMs": b} for t, a, b in ws]),
+        encoding="utf-8")
+
+
+def test_karaoke_e_o_padrao(tmp_path):
+    """Aprovado em 22/08/2026: o motor rapido desenha o karaoke por padrao."""
+    ed = _ed(captions=_cap_karaoke())
+    assert motivo_nao_suportado(ed, _public(tmp_path)) is None
+
+
+def test_kill_switch_do_karaoke_devolve_ao_remotion(tmp_path, monkeypatch):
+    """O interruptor de emergencia, para o caso visual que os testes nao
+    cobrirem. O Remotion continua no lugar."""
+    monkeypatch.setenv("ATIVAVID_KARAOKE_PROPRIO", "0")
+    ed = _ed(captions=_cap_karaoke())
+    motivo = motivo_nao_suportado(ed, _public(tmp_path))
+    assert motivo and "ATIVAVID_KARAOKE_PROPRIO" in motivo
+
+
+def test_karaoke_com_janela_cai_para_o_remotion(tmp_path):
+    """As janelas movem a legenda NO MEIO da linha e o template resolve isso
+    por quadro; aqui a posicao e fixa por palavra. Recusa explicita, mesmo com
+    o karaoke ja sendo o padrao."""
+    ed = _ed(captions=_cap_karaoke(
+        windows=[{"start": 1.0, "end": 2.0, "paddingBottom": 900}]))
+    motivo = motivo_nao_suportado(ed, _public(tmp_path))
+    assert motivo and "janela" in motivo
+
+
+def _montar(tmp_path, ws, **cap):
+    from app.render_proprio import Renderizador
+
+    pub = _public(tmp_path)
+    _palavras(pub, ws)
+    ed = _ed(captions=_cap_karaoke(**cap))
+    r = Renderizador(pub, ed, frames=300, fps=30, width=1080, height=1920)
+    return r._montar_karaoke()
+
+
+def test_agrupa_ate_maxwords(tmp_path):
+    ws = [(f"p{i}", i * 300, i * 300 + 250) for i in range(6)]
+    camadas = _montar(tmp_path, ws, maxWords=3)
+    assert len(camadas) == 2, "6 palavras com maxWords=3 sao 2 linhas"
+    assert [len(c.palavras) for c in camadas] == [3, 3]
+
+
+def test_pontuacao_fecha_a_linha_antes_do_limite(tmp_path):
+    """`isBreak` do template: a linha fecha na pontuacao mesmo com vaga."""
+    ws = [("oi.", 0, 200), ("tudo", 300, 500), ("bem", 600, 800)]
+    camadas = _montar(tmp_path, ws, maxWords=3)
+    assert len(camadas) == 2
+    assert len(camadas[0].palavras) == 1, "'oi.' tinha de fechar sozinha"
+
+
+def test_a_linha_dura_ate_a_proxima_comecar(tmp_path):
+    """No template a linha fica ate a SEGUINTE entrar, nao ate a fala acabar —
+    e por isso que ela nao pisca nas pausas."""
+    ws = [("um", 0, 100), ("dois", 2000, 2100)]
+    camadas = _montar(tmp_path, ws, maxWords=1)
+    assert len(camadas) == 2
+    # 2000ms a 30fps = quadro 60; a primeira linha vai ate o 59
+    assert camadas[0].inicio_f == 0
+    assert camadas[0].fim_f == 59
+
+
+def test_o_tempo_da_palavra_vem_do_timestamp_original(tmp_path):
+    """Sem arredondar: o template interpola com limite fracionario."""
+    ws = [("um", 0, 100), ("dois", 133, 250), ("tres", 266, 400)]
+    camadas = _montar(tmp_path, ws, maxWords=3)
+    ini = [p.inicio_f for p in camadas[0].palavras]
+    assert ini[0] == 0
+    assert abs(ini[1] - 133 / 1000 * 30) < 1e-6, ini
+    assert abs(ini[2] - 266 / 1000 * 30) < 1e-6, ini
+
+
+def test_entrada_de_7_quadros_com_subida_de_34(tmp_path):
+    ws = [("um", 0, 100), ("dois", 300, 400)]
+    p0 = _montar(tmp_path, ws, maxWords=2)[0].palavras[0]
+    assert p0.enter == 7
+    assert abs(p0.sobe - 34.0) < 1e-6
+    assert p0.ease == "cubic", "o karaoke usa Easing.out(cubic), nao a bezier"
+
+
+def test_pontuacao_final_nao_e_desenhada(tmp_path):
+    """`cleanW` tira `.,!?…` do texto mostrado — mas `isBreak` olha o original."""
+    from app.render_proprio import Renderizador
+
+    pub = _public(tmp_path)
+    _palavras(pub, [("fim.", 0, 300)])
+    ed = _ed(captions=_cap_karaoke())
+    r = Renderizador(pub, ed, frames=90, fps=30, width=1080, height=1920)
+    largura_com = r.fonte(4, 76, 900).getlength("fim.")
+    largura_sem = r.fonte(4, 76, 900).getlength("fim")
+    camada = r._montar_karaoke()[0]
+    assert len(camada.palavras) == 1
+    # a caixa desenhada tem de caber na largura SEM o ponto
+    desenhada = camada.palavras[0].alpha.shape[1]
+    assert desenhada < largura_com + 90, (desenhada, largura_com)
+    assert largura_sem < largura_com
+
+
+def test_linha_larga_demais_encolhe_e_nao_vaza(tmp_path):
+    """`fit = min(1, safeWidth/largura)`: reduz, nunca aumenta."""
+    ws = [("palavraenorme", 0, 300), ("outrapalavraenorme", 400, 700),
+          ("maisumagigante", 800, 1100)]
+    camadas = _montar(tmp_path, ws, maxWords=3, safeWidth=720)
+    ps = camadas[0].palavras
+    esq = min(p.x0 for p in ps)
+    dir_ = max(p.x0 + p.alpha.shape[1] for p in ps)
+    assert esq > -60, f"vazou pela esquerda: {esq}"
+    assert dir_ < 1080 + 60, f"vazou pela direita: {dir_}"
+
+
+def test_linha_curta_nao_e_esticada(tmp_path):
+    """Com `fit` limitado a 1, uma linha curta sai no tamanho natural."""
+    from app.render_proprio import Renderizador
+
+    pub = _public(tmp_path)
+    _palavras(pub, [("oi", 0, 300)])
+    ed = _ed(captions=_cap_karaoke())
+    r = Renderizador(pub, ed, frames=90, fps=30, width=1080, height=1920)
+    p0 = r._montar_karaoke()[0].palavras[0]
+    natural = r.fonte(4, 76, 900).getlength("oi")
+    assert p0.alpha.shape[1] < natural + 200, "a palavra curta foi esticada"
+
+
+def test_palavra_vazia_nao_derruba(tmp_path):
+    """Transcricao real traz token so de pontuacao; ele some no cleanW."""
+    ws = [("...", 0, 100), ("ok", 200, 400)]
+    camadas = _montar(tmp_path, ws, maxWords=3)
+    assert sum(len(c.palavras) for c in camadas) == 1

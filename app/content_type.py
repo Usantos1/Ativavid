@@ -51,6 +51,15 @@ _RULES = {
         "o último DEVE ser beat=CTA. Corte tudo que não sustenta um dos 4 blocos. "
         "Nunca termine sem o CTA — sem ação explícita não é anúncio."
     ),
+    "viral": (
+        "TIPO=viral.\n"
+        "O video inteiro serve ao comeco: a frase mais forte vai no primeiro "
+        "range (beat=HOOK), e ela precisa fazer sentido sozinha, sem nada antes. "
+        "Corte pausa, rodeio e preambulo -- 'oi gente', 'entao', 'deixa eu "
+        "explicar'. Mas NAO corte o que da sentido a frase forte: promessa sem "
+        "a entrega vira clickbait e o espectador sai nos primeiros segundos. "
+        "Prefira terminar num fecho seco a alongar ate esvaziar."
+    ),
     "review": (
         "TIPO=review.\n"
         "Preserve: produto → teste/opinião → conclusão. "
@@ -100,10 +109,22 @@ def label(raw: str | None) -> str:
 
 
 def prompt_rules(raw: str | None) -> str:
+    """Regra de prompt do tipo, ou "" se nao houver.
+
+    O acesso era direto (`_RULES[key]`) e um tipo sem regra derrubava o
+    planejamento inteiro. Foi o que aconteceu com "viral": ele estava na lista
+    oferecida na tela e nos rotulos, mas ficou sem regra. Como o pipeline
+    engole a excecao e cai na heuristica, o sintoma nao foi um erro na tela --
+    foi o titulo do video saindo torto. 65 videos entre 18 e 22/08.
+
+    Sem regra o corte fica generico, o que e ruim; com a excecao ele ficava
+    generico E calado, que e pior. O teste `todos_os_tipos_tem_regra` impede
+    que a lacuna volte.
+    """
     key = normalize_content_type(raw)
     if not key:
         return ""
-    return _RULES[key]
+    return _RULES.get(key, "")
 
 
 def choices() -> list[dict[str, str]]:

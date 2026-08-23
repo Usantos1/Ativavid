@@ -192,6 +192,20 @@ def write_timing(edit_dir: Path) -> dict:
             )
     except Exception as e:  # noqa: BLE001
         print(f"[warn] classify render path: {e}", flush=True)
+    # Por que o caminho rapido nao foi usado. Sem isto, "FULL" no timing.json
+    # nao distingue "o video precisa do Remotion" de "outro job estava com a
+    # vaga" -- e a segunda hipotese custa 2,4x. Fica FORA do bloco acima de
+    # proposito: aquele depende do edit-data.json existir, e este dado e sobre
+    # a decisao, nao sobre a classificacao.
+    if _RENDER_META.get("overlaySkip"):
+        payload["overlaySkip"] = _RENDER_META["overlaySkip"]
+    # Qual motor desenhou o overlay, e o motivo quando o proprio ficou de fora.
+    # O motor proprio desenha sem abrir o Chrome e e 3,3x mais rapido; ele se
+    # desliga sozinho quando encontra recurso de template que nao suporta, e ate
+    # aqui isso so aparecia num print do pipeline -- que nao e guardado.
+    for campo in ("overlayEngine", "overlayEngineSkip"):
+        if _RENDER_META.get(campo):
+            payload[campo] = _RENDER_META[campo]
     try:
         (edit_dir / "timing.json").write_text(
             json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8"
@@ -3241,12 +3255,16 @@ def run(
     _helper("check_template_integrity.py", str(remotion), "--track", track)
 
     overlay_final = False
+    if is_longform:
+        _RENDER_META["overlaySkip"] = "longform"
     if (not is_longform):
         try:
             from app.overlay_path import overlay_on, try_overlay_final
         except Exception:
             overlay_on = lambda: False  # noqa: E731
             try_overlay_final = None  # type: ignore
+        if not (overlay_on() and try_overlay_final):
+            _RENDER_META["overlaySkip"] = "desligado"
         if overlay_on() and try_overlay_final:
             from app.render_path import classify_render_path
 
@@ -3258,6 +3276,8 @@ def run(
                     f"OVERLAY_SKIP ineligible reasons={cls.get('fullReasons')}",
                     flush=True,
                 )
+                _RENDER_META["overlaySkip"] = (
+                    "recurso:" + ",".join(cls.get("fullReasons") or ["?"]))
             else:
                 from app.overlay_canary import (
                     begin_overlay_attempt,
@@ -3267,9 +3287,14 @@ def run(
                     try_acquire_overlay_slot,
                 )
 
+                # Espera a vaga (padrao 180s) em vez de desistir na hora. A
+                # vaga fica ocupada por 26% do job, e cair custa +294s contra
+                # ~75s de espera media. So depois do teto e que vai para o
+                # caminho lento.
                 slot = try_acquire_overlay_slot()
                 if slot is None:
                     print("OVERLAY_SKIP slot busy — FULL", flush=True)
+                    _RENDER_META["overlaySkip"] = "vaga_ocupada_apos_espera"
                 else:
                     print("OVERLAY_SLOT acquired", flush=True)
                     from app.overlay_path import overlay_rollout as _ov_roll
@@ -3294,6 +3319,8 @@ def run(
                         if bad:
                             raise RuntimeError(bad)
                         _RENDER_META["renderPath"] = "OVERLAY"
+                        _RENDER_META["overlayEngine"] = (ov_result or {}).get("engine")
+                        _RENDER_META["overlayEngineSkip"] = (ov_result or {}).get("engineSkip")
                         _RENDER_META["overlaySec"] = (ov_result or {}).get("remotionSec")
                         _RENDER_META["composeSec"] = (ov_result or {}).get("composeSec")
                         _RENDER_META["timeline"] = (ov_result or {}).get("timeline")

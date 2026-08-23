@@ -814,6 +814,12 @@ def try_overlay_final(
                         "overlay": None,
                         "alpha": {},   # o canário valida o FINAL; alpha é do intermediário
                         "mix": mix,
+                        # Qual motor desenhou. Sem isto nao havia como saber se
+                        # o renderizador proprio (3,3x mais rapido) estava sendo
+                        # usado ou se tinha parado de ser -- e ele para calado
+                        # quando um recurso novo do template nao e suportado.
+                        "engine": "proprio",
+                        "engineSkip": None,
                         "remotionSec": float(mix.get("renderSec") or 0),
                         "composeSec": float(mix.get("normSec") or 0),
                         "timeline": tl,
@@ -904,6 +910,9 @@ def try_overlay_final(
             "overlay": str(overlay),
             "alpha": alpha,
             "mix": mix,
+            "engine": snapshot.get("_engine") or "remotion",
+            "engineSkip": motivo_proprio,
+
             "remotionSec": round(render_sec, 3),
             "composeSec": round(compose_sec, 3),
             "timeline": tl,

@@ -844,6 +844,19 @@ def prepared_source(
         # NVDEC no decode do 4K HEVC 10-bit: medido bit-IDENTICO (PSNR inf)
         # e ~15% mais rapido que decodificar na CPU. So o decode — o tonemap
         # continua na CPU, que e quem garante a cor.
+        # JA MEDIDO, NAO VALE: trocar isto por `-c:v hevc_cuvid` (pedir o
+        # decodificador NVDEC pelo nome em vez do `-hwaccel` generico).
+        #
+        # Em decode ISOLADO (`-f null`, sem filtro) o cuvid deu 1,51x. Nas duas
+        # funcoes de verdade, na mesma fonte 4K60 HLG, nao deu nada:
+        #     detect_color   1,03x   (faixas sobrepostas)
+        #     prep           0,82x   (107-242s contra 114-259s)
+        # Foi commitado e revertido em 22/08/2026 (158b0ba, 72a2f60).
+        #
+        # A licao nao e sobre o cuvid: e que benchmark isolado desta area nao
+        # transfere. O decode isolado nao tem os filtros que dominam o custo
+        # real, e a variancia desta maquina engole diferencas de 15-30%.
+        # Medir NO LOCAL DE USO, sempre.
         hw = ["-hwaccel", "cuda"] if hwaccel else []
         return [
             "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",

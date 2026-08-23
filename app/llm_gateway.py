@@ -19,6 +19,17 @@ from typing import Any
 from app.llm_session import available_backends, chat as session_chat, status as session_status
 
 
+# O modelo do plano B. Estava fixo em tres lugares e a Groq o aposentou: a
+# chamada voltava HTTP 404 "model does not exist". Como a queda era silenciosa,
+# quando a sessao do Gemini expirou o app ficou sem IA nenhuma -- e a headline
+# virou um pedaco cru da transcricao. Em 20 e 21/08, 50 de 51 videos sairam
+# assim.
+#
+# `ATIVAVID_GROQ_MODEL` permite trocar sem esperar uma versao nova, que e
+# exatamente o que faltou desta vez.
+GROQ_MODELO = (os.environ.get("ATIVAVID_GROQ_MODEL") or "").strip() or "openai/gpt-oss-120b"
+
+
 def _groq_key() -> str:
     return (os.environ.get("GROQ_API_KEY") or "").strip()
 
@@ -61,7 +72,7 @@ def status() -> dict:
             "ok": True,
             "backend": "groq",
             "baseUrl": base,
-            "model": "llama-3.3-70b-versatile",
+            "model": GROQ_MODELO,
             "hasKey": True,
             "viaSession": False,
             "message": "Sem sessão web — usando Groq (fallback)",
@@ -85,7 +96,7 @@ def list_models() -> tuple[int, dict]:
         return 200, {
             "object": "list",
             "data": [{
-                "id": "llama-3.3-70b-versatile",
+                "id": GROQ_MODELO,
                 "object": "model",
                 "owned_by": "groq",
             }],
@@ -122,7 +133,7 @@ def _groq_chat(messages: list[dict], model: str | None) -> dict:
     key = _groq_key()
     if not key:
         raise RuntimeError("Sem sessão e sem GROQ_API_KEY")
-    mid = model or "llama-3.3-70b-versatile"
+    mid = model or GROQ_MODELO
     body = json.dumps({
         "model": mid,
         "messages": messages,

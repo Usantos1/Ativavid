@@ -22,15 +22,50 @@ def _host_is_local(netloc: str) -> bool:
     return host.strip("[]").lower() in {h.strip("[]") for h in _LOCAL_HOSTS}
 
 
-def origin_allowed(headers, *, host_header: str | None = None) -> bool:
-    """True se a requisição não veio de outro site."""
+# Rotas que a EXTENSÃO do navegador precisa alcançar. Ela posta com origem
+# `chrome-extension://<id>`, que a regra geral recusa — e recusava calada:
+# durante dois dias a sessão do Gemini nunca chegou ao app, a IA parou de
+# planejar o corte e a headline passou a ser um pedaço cru da transcrição
+# colado no vídeo. Em 20 e 21/08, 50 de 51 vídeos saíram sem IA.
+#
+# Abrir só estas rotas, e não a regra inteira, é o que mantém a proteção de
+# pé: o ataque que ela existe para barrar é um SITE aberto no navegador, e
+# site nenhum consegue forjar origem `chrome-extension://`. Sobra o risco de
+# outra extensão já instalada com permissão para localhost — real, mas de
+# outra ordem, e estas rotas só gravam uma captura de sessão.
+ROTAS_DA_EXTENSAO = frozenset({
+    "/api/llm-proxy/capture",
+    "/api/llm-proxy/status",
+})
+
+
+def _e_a_extensao(origin: str, caminho: str | None) -> bool:
+    if not caminho:
+        return False
+    return (origin.lower().startswith("chrome-extension://")
+            and caminho.split("?", 1)[0].rstrip("/") in
+            {r.rstrip("/") for r in ROTAS_DA_EXTENSAO})
+
+
+def origin_allowed(headers, *, host_header: str | None = None,
+                   path: str | None = None) -> bool:
+    """True se a requisição não veio de outro site.
+
+    `path` permite abrir as rotas da extensão sem afrouxar o resto.
+    """
     site = str(headers.get("Sec-Fetch-Site") or "").strip().lower()
     if site and site not in ("same-origin", "same-site", "none"):
-        return False
+        # A extensão manda `cross-site` em alguns navegadores; nas rotas dela
+        # isso é esperado.
+        if not _e_a_extensao(str(headers.get("Origin") or ""), path):
+            return False
 
     origin = str(headers.get("Origin") or "").strip()
     if not origin or origin.lower() == "null":
         # Sem Origin: não é navegador fazendo cross-site.
+        return True
+
+    if _e_a_extensao(origin, path):
         return True
 
     try:

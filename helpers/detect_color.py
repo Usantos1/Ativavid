@@ -98,6 +98,19 @@ def _sample_stats(video: Path, n: int = 24) -> dict[str, float] | None:
         # O `fps` so filtra DEPOIS do decode, entao amostrar 8 quadros de uma
         # 4K60 custa decodificar os 4.900. Nao da para filtrar antes; da para
         # decodificar na GPU, que entrega os MESMOS quadros.
+        # JA MEDIDO, NAO VALE: trocar isto por `-c:v hevc_cuvid` (pedir o
+        # decodificador NVDEC pelo nome em vez do `-hwaccel` generico).
+        #
+        # Em decode ISOLADO (`-f null`, sem filtro) o cuvid deu 1,51x. Nas duas
+        # funcoes de verdade, na mesma fonte 4K60 HLG, nao deu nada:
+        #     detect_color   1,03x   (faixas sobrepostas)
+        #     prep           0,82x   (107-242s contra 114-259s)
+        # Foi commitado e revertido em 22/08/2026 (158b0ba, 72a2f60).
+        #
+        # A licao nao e sobre o cuvid: e que benchmark isolado desta area nao
+        # transfere. O decode isolado nao tem os filtros que dominam o custo
+        # real, e a variancia desta maquina engole diferencas de 15-30%.
+        # Medir NO LOCAL DE USO, sempre.
         hw = ["-hwaccel", "cuda"] if hwaccel else []
         return ["ffmpeg", "-y", "-hide_banner", "-nostats", *hw, "-i", str(video),
                 "-vf", f"fps={fps:.3f},signalstats,metadata=print:file=meta.txt",
