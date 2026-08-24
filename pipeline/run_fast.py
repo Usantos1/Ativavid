@@ -3193,6 +3193,13 @@ def run(
                     llm_meta["headline"] = hl_av["headline"]
                     llm_meta["headlineAlts"] = hl_av.get("headlineAlts") or []
                     llm_meta["headlineBackend"] = hl_av.get("backend")
+                    # Grava o avulso na memoria do projeto. Sem isto o proximo
+                    # reprocesso chamaria a IA de novo -- e o titulo poderia
+                    # MUDAR entre reprocessos, que e justamente o que a
+                    # preservacao existe para impedir. Visto na validacao de
+                    # 24/08: o titulo saiu certo e o headline_ia.json ficou
+                    # vazio.
+                    llm_meta = headline_preservada(edit_dir, llm_meta)
             except Exception as e:  # noqa: BLE001
                 print(f"[ia] ultima rede do titulo indisponivel: {str(e)[:80]}",
                       flush=True)

@@ -96,3 +96,18 @@ def test_espaco_em_branco_nao_conta_como_headline(tmp_path):
     headline_preservada(tmp_path, {"ok": True, "headline": "boa"})
     fora = headline_preservada(tmp_path, {"ok": True, "headline": "   "})
     assert fora["headline"] == "boa", "espaco nao pode sobrescrever a guardada"
+
+
+def test_o_titulo_avulso_tambem_fica_guardado():
+    """A última rede pede o título quando nem o plano nem a memória têm — e o
+    resultado tem de ir para a memória, senão o próximo reprocesso chama a IA
+    de novo e o título pode MUDAR entre reprocessos. Visto na validação real
+    de 24/08: título certo, headline_ia.json vazio."""
+    from pipeline.leitura_de_codigo import apenas_codigo
+
+    codigo = apenas_codigo(Path(__file__).resolve().parents[1] / "pipeline" / "run_fast.py")
+    i = codigo.find("hl_av = headline_apenas(cut_spoken, preset)")
+    assert i > 0
+    trecho = codigo[i:i + 1400]
+    assert "headline_preservada(edit_dir, llm_meta)" in trecho, (
+        "o título avulso não é gravado na memória do projeto")
