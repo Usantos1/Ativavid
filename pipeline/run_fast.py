@@ -2735,6 +2735,21 @@ def run(
         llm_meta = {"ok": True, "backend": "multi_take_concat", "takes": len(sources)}
         print(f"[multi] {len(sources)} takes · {len(ranges)} ranges", flush=True)
         spoken = cut_spoken_join
+        # O caminho de varias fontes decide o corte sem IA (juncao dos takes)
+        # e por isso nunca teve titulo: 18 de 18 jobs sairam com as primeiras
+        # palavras da fala como nome. Pede-se SO a headline — o corte nao muda,
+        # e falha vira o comportamento antigo, nunca um render caido.
+        try:
+            sys.path.insert(0, str(HELPERS))
+            from llm_cut_plan import headline_apenas  # type: ignore
+
+            hl = headline_apenas(cut_spoken_join, preset)
+            if hl.get("headline"):
+                llm_meta["headline"] = hl["headline"]
+                llm_meta["headlineAlts"] = hl.get("headlineAlts") or []
+                llm_meta["headlineBackend"] = hl.get("backend")
+        except Exception as e:  # noqa: BLE001
+            print(f"[multi] headline avulsa indisponivel: {str(e)[:80]}", flush=True)
 
     if not ranges:
         raise NeedsReview("no_speech", "nenhum trecho de fala para cortar")

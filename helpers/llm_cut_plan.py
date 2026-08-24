@@ -455,6 +455,54 @@ def _chat_com_rede(messages: list[dict]) -> tuple[str, str]:
         return texto, "groq"
 
 
+def headline_apenas(texto_falado: str, preset: dict | None = None) -> dict:
+    """Pede SO o titulo a IA — para caminhos onde o corte ja esta decidido.
+
+    O video de varias fontes (`multi_take_concat`) nunca chamou o planejador:
+    o corte dele e a juncao dos takes, decidida sem IA. So que junto foi-se o
+    titulo — 18 dos 18 jobs desse caminho sairam com as primeiras palavras da
+    fala como nome. Este pedido nao toca o corte: uma chamada curta, mesma
+    rede do plano (sessao web → Groq), e a mesma queda de sempre se tudo
+    falhar.
+
+    Devolve {"headline": ..., "headlineAlts": [...], "backend": ...} ou {} —
+    nunca levanta: titulo e enfeite do fluxo, nao pode derrubar um render.
+    """
+    texto = " ".join(str(texto_falado or "").split())
+    if len(texto) < 20:
+        return {}
+    try:
+        extra = ""
+        try:
+            from app.content_type import prompt_rules
+
+            extra = prompt_rules((preset or {}).get("contentType")) or ""
+        except Exception:  # noqa: BLE001
+            pass
+        messages = [
+            {"role": "system", "content": (
+                "Você escreve TÍTULOS de Reels para uma assistência técnica de "
+                "celulares no Brasil. Dado o que foi falado no vídeo, devolva "
+                "APENAS JSON: {\"headline\": \"...\", \"headlineAlts\": "
+                "[\"...\", \"...\"]}. Título com ATÉ 8 palavras, concreto, "
+                "sem clickbait vazio, sem emoji, sem aspas dentro do texto.\n"
+                + extra)},
+            {"role": "user", "content": f"Fala do vídeo:\n{texto[:1800]}"},
+        ]
+        bruto, backend = _chat_com_rede(messages)
+        parsed = _extract_json(bruto)
+        hl = str((parsed or {}).get("headline") or "").strip()[:80]
+        if not hl:
+            return {}
+        alts = [str(x).strip()[:80] for x in ((parsed or {}).get("headlineAlts") or [])
+                if str(x or "").strip()][:3]
+        print(f"[ia] headline avulsa via {backend}: {hl[:60]!r}", flush=True)
+        return {"headline": hl, "headlineAlts": alts, "backend": backend}
+    except Exception as e:  # noqa: BLE001
+        print(f"[ia] headline avulsa falhou ({str(e)[:90]}) — seguindo sem", flush=True)
+        return {}
+
+
 def plan_cut(
     *,
     edit_dir: Path,

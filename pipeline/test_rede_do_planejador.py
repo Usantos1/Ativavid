@@ -88,3 +88,59 @@ def test_resposta_vazia_do_groq_nao_passa(monkeypatch):
                         lambda *a, **k: {"choices": [{"message": {"content": "  "}}]})
     with pytest.raises(RuntimeError, match="expiraram"):
         _chat_com_rede(MSGS)
+
+
+# --- headline avulsa: o titulo dos videos de varias fontes ------------------
+#
+# `multi_take_concat` decide o corte sem IA (juncao dos takes) e por isso
+# nunca teve titulo: 18 de 18 jobs desse caminho sairam com as primeiras
+# palavras da fala como nome. `headline_apenas` pede SO o titulo, pela mesma
+# rede do plano, e NUNCA levanta — titulo e enfeite, nao pode derrubar render.
+
+
+def test_headline_avulsa_sai_da_rede(monkeypatch):
+    import llm_cut_plan as lcp
+
+    monkeypatch.setattr(lcp, "_chat_com_rede",
+                        lambda m: ('{"headline": "Chip novo em 5 minutos", '
+                                   '"headlineAlts": ["Outro angulo"]}', "groq"))
+    r = lcp.headline_apenas("fala longa o bastante para valer uma chamada", {})
+    assert r["headline"] == "Chip novo em 5 minutos"
+    assert r["backend"] == "groq"
+    assert r["headlineAlts"] == ["Outro angulo"]
+
+
+def test_headline_avulsa_nunca_derruba_o_render(monkeypatch):
+    import llm_cut_plan as lcp
+
+    def explode(m):
+        raise RuntimeError("tudo fora do ar")
+    monkeypatch.setattr(lcp, "_chat_com_rede", explode)
+    assert lcp.headline_apenas("fala longa o bastante para valer uma chamada", {}) == {}
+
+
+def test_fala_curta_nao_gasta_chamada(monkeypatch):
+    import llm_cut_plan as lcp
+
+    def nunca(m):
+        raise AssertionError("IA chamada para fala de 2 palavras — custo a toa")
+    monkeypatch.setattr(lcp, "_chat_com_rede", nunca)
+    assert lcp.headline_apenas("oi gente", {}) == {}
+
+
+def test_resposta_sem_headline_devolve_vazio(monkeypatch):
+    import llm_cut_plan as lcp
+
+    monkeypatch.setattr(lcp, "_chat_com_rede", lambda m: ('{"headline": ""}', "groq"))
+    assert lcp.headline_apenas("fala longa o bastante para valer uma chamada", {}) == {}
+
+
+def test_o_multi_take_liga_a_headline_avulsa():
+    """O run_fast chama no ramo certo — sem isso a funcao existe e nada muda."""
+    from pipeline.leitura_de_codigo import apenas_codigo
+
+    codigo = apenas_codigo(Path(__file__).resolve().parents[1] / "pipeline" / "run_fast.py")
+    i = codigo.find('"backend": "multi_take_concat"')
+    assert i > 0
+    assert "headline_apenas" in codigo[i:i + 1500], (
+        "o ramo multi_take_concat nao pede a headline avulsa")

@@ -27,6 +27,11 @@
   a sessão, o app ficava sem IA para planejar o corte. Agora ela é aceita
   apenas nas duas rotas de captura, e o resto do app continua fechado
 
+- **Vídeo de várias fontes ganhou título escrito.** O modo que junta vários
+  takes decidia o corte sem IA — e junto ficava sem título: todos saíam com as
+  primeiras palavras da fala como nome. Agora o app pede só o título à IA
+  (sessão ou Groq), sem mexer no corte; se tudo falhar, segue como antes
+
 - **O plano do vídeo sai mesmo com as sessões de IA expiradas.** As sessões
   do Gemini e do ChatGPT expiram juntas de tempos em tempos, e o corte caía
   para o modo automático sem título. Agora, se as duas falharem e houver chave
