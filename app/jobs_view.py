@@ -37,6 +37,29 @@ def _status_do_pipeline(job: dict, edit: Path) -> None:
 # modo leve (que dispensa IA de proposito) ou da juncao de varios takes.
 # `ok: False` no result.json e so o caso ruim mesmo — a IA foi chamada e nao
 # respondeu.
+# Rotulos dos modos que MUDAM como o corte e feito. "dynamic" e o padrao e
+# fica implicito; os outros aparecem na ficha do card — sem isso o usuario
+# nao tem como ver que um video saiu da Edicao leve, e foi exatamente o que
+# escondeu a causa de "todo modo fica com a mesma minutagem" (24/08): tres
+# imports do mesmo video herdaram o modo leve em silencio e o corte
+# heuristico saiu identico tres vezes.
+_MODO_LABEL = {
+    "light": "Edição leve",
+    "complete": "Vídeo completo",
+    "shorts": "Reels / Shorts",
+}
+
+
+def _modo_de_edicao(job: dict, edit: Path) -> None:
+    try:
+        d = json.loads((edit / "job_intent.json").read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError):
+        return
+    rot = _MODO_LABEL.get(str(d.get("editingIntent") or ""))
+    if rot:
+        job["modoLabel"] = rot
+
+
 def _aviso_de_ia(job: dict, edit: Path) -> None:
     """Marca o card quando o vídeo saiu sem o planejamento por IA.
 
@@ -97,6 +120,7 @@ def build(store: Any, projects_root: Path, *, com_links: bool = False) -> list[d
                 j["score"] = json.loads(score_path.read_text(encoding="utf-8-sig"))
             except (OSError, json.JSONDecodeError):
                 pass
+        _modo_de_edicao(j, edit)
         _aviso_de_ia(j, edit)
         enrich_job_display(j, edit)
         if j.get("sourceDurationSec") in (None, "") and (j.get("sources") or j.get("source")):

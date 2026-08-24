@@ -71,3 +71,14 @@ def test_o_servidor_aceita_o_que_a_tela_manda():
                   if k not in STYLE_KEYS and k not in (
                       "elements", "note", "type", "rerender"))
     assert not fora, f"a tela manda knobs que o servidor descarta: {fora}"
+
+
+def test_dialogo_de_importar_reseta_o_modo():
+    """O destaque nunca era resetado e a importacao seguinte herdava o modo da
+    anterior em silencio — 3 imports reais sairam em Edicao leve sem o usuario
+    perceber (24/08). Cada abertura comeca no recomendado."""
+    s = APP_JS if False else (RAIZ / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
+    i = s.find("state.pendingRecommended = recommended;")
+    assert i > 0
+    assert "applyIntentDefaults(recommended" in s[i:i + 700], (
+        "o reset do modo sumiu do openImportDialog")

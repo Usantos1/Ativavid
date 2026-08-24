@@ -16,6 +16,12 @@
   vídeo também voltava com a mesma duração. O texto do card final tinha o
   mesmo problema
 
+- **A janela de importar não lembra mais o modo escondido.** Escolher
+  *Edição leve* uma vez deixava o modo marcado para as próximas importações,
+  em silêncio — dava para trocar o estilo e o corte sair sempre igual sem
+  nada explicar. Agora cada importação abre no modo recomendado, e o card do
+  vídeo passa a mostrar o modo usado (Edição leve, Vídeo completo, Reels)
+
 - **A edição leve também sai com título escrito.** O modo continua sem IA
   no corte, como promete — mas o título vinha das primeiras palavras da fala.
   Agora ele é pedido à parte, sem tocar no corte

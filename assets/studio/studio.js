@@ -461,6 +461,10 @@ function fichaHtml(j) {
     linhas.push(["Formato", fmt || "—"]);
     if (est) linhas.push(["Estilo", est]);
   }
+  // O modo de edicao muda o CORTE (leve = heuristico, sem IA) e era invisivel
+  // no card — o estilo aparecia, o modo nao, e "por que a minutagem nao muda"
+  // ficava sem resposta na tela.
+  if (j.modoLabel) linhas.push(["Modo", j.modoLabel]);
   const ini = String(j.startedAtLabel || j.createdAtLabel || "");
   const fin = String(j.finishedAtLabel || "");
   if (ini) linhas.push(["Início", ini]);
@@ -491,6 +495,7 @@ function cardSig(j, opts) {
     j.startedAtLabel || "", j.durationSec || "", j.sourceDurationSec || "", j.legenda ? "L" : "",
     j.styleLabel || "",
     j.iaAviso || "",
+    j.modoLabel || "",
     j.stage, j.message, j.reason || "", j.localPoster || j.thumbUrl, links.editor, links.estilo, links.final,
     opts && opts.compact ? "1" : "0",
     qa.status || "", qa.stage || "", qa.elapsedLabel || "", qa.etaLabel || "", qa.stageLabel || "",
@@ -1693,6 +1698,13 @@ async function openImportDialog(fileList) {
   state.pendingDuration = files.length === 1 ? await probeVideoDuration(files[0]) : null;
   const recommended = (state.pendingDuration || 0) >= 90 ? "complete" : "dynamic";
   state.pendingRecommended = recommended;
+  // O destaque NUNCA era resetado: a importacao seguinte herdava o modo da
+  // anterior, em silencio. Caso real (24/08): o usuario usou "Edicao leve"
+  // ao meio-dia e as importacoes da tarde herdaram o modo leve enquanto ele
+  // trocava o TIPO (Viral -> Educativo) esperando o corte mudar -- no modo
+  // leve o corte e heuristico e saiu identico tres vezes (70,4s). Cada
+  // abertura comeca no recomendado.
+  applyIntentDefaults(recommended, recommended);
   const groups = groupVideosByFolder(files);
   const folderGroups = groups.filter((g) => g.key);
   const fromFolder = folderGroups.length > 0;

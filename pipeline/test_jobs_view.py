@@ -185,3 +185,28 @@ def test_falha_de_sessao_ainda_manda_reconectar(tmp_path, erro):
     store = SqliteJobStore(tmp_path)
     store.upsert(_com_resultado(tmp_path, "j1", {"ok": False, "error": erro}))
     assert "Reconecte" in (build(store, tmp_path)[0].get("iaAviso") or "")
+
+
+# --- o modo de edicao aparece no card ---------------------------------------
+#
+# O modo muda o CORTE (leve = heuristico, sem IA) e era invisivel: em 24/08 o
+# usuario importou o mesmo video 3x trocando o TIPO e herdando o modo leve em
+# silencio — o corte saiu identico (70,4s) e nada na tela explicava.
+
+
+def test_modo_leve_aparece_na_ficha(tmp_path):
+    store = SqliteJobStore(tmp_path)
+    job = _projeto(tmp_path, "j1")
+    (Path(job["editDir"]) / "job_intent.json").write_text(
+        json.dumps({"editingIntent": "light"}), encoding="utf-8")
+    store.upsert(job)
+    assert build(store, tmp_path)[0].get("modoLabel") == "Edição leve"
+
+
+def test_modo_padrao_fica_implicito(tmp_path):
+    store = SqliteJobStore(tmp_path)
+    job = _projeto(tmp_path, "j1")
+    (Path(job["editDir"]) / "job_intent.json").write_text(
+        json.dumps({"editingIntent": "dynamic"}), encoding="utf-8")
+    store.upsert(job)
+    assert "modoLabel" not in build(store, tmp_path)[0]
