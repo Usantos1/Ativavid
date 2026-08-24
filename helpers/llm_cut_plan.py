@@ -425,40 +425,11 @@ def _normalize_ranges(
 
 
 def _chat_com_rede(messages: list[dict]) -> tuple[str, str]:
-    """Sessão web (Gemini/ChatGPT) e, se as duas falharem, o Groq.
+    """A rede mora no gateway (`llm_gateway.chat_com_rede`); este wrapper
+    existe porque os testes e o resto deste módulo já falam com este nome."""
+    from app import llm_gateway as gw
 
-    O gateway do editor sempre teve essa rede (sessão → `_groq_chat`); o
-    planejador chamava `llm_session.chat` direto e ficava sem nenhuma. Em
-    23/08 as DUAS sessões expiraram juntas e um vídeo real saiu com o título
-    cru — com a chave do Groq parada no .env o tempo todo.
-
-    O Groq cobra na conta do usuário, então a queda nunca é muda: sai
-    `[ia] plano via groq` no log e `backend="groq"` no result.json/edl.json.
-    Aprovada pelo usuário em 24/08, depois de mostrada — regra dele: fallback
-    que gera cobrança se mostra antes de existir.
-    """
-    from app.llm_session import chat
-
-    try:
-        return chat(messages, model="gemini-web/default")
-    except RuntimeError as erro_sessao:
-        from app import llm_gateway as gw
-
-        if not gw._groq_key():
-            raise
-        try:
-            # `json_object` garante JSON valido: sem ele o modelo devolveu um
-            # plano com virgula faltando e o parse caiu (visto num plano real).
-            resp = gw._groq_chat(messages, None,
-                                 extras={"response_format": {"type": "json_object"}})
-            texto = str(resp["choices"][0]["message"]["content"] or "")
-        except Exception as erro_groq:  # noqa: BLE001 - a mensagem une os dois
-            raise RuntimeError(
-                f"{erro_sessao} · plano B (Groq): {erro_groq}") from erro_groq
-        if not texto.strip():
-            raise erro_sessao
-        print(f"[ia] plano via groq ({str(erro_sessao)[:80]})", flush=True)
-        return texto, "groq"
+    return gw.chat_com_rede(messages, "gemini-web/default", json_no_groq=True)
 
 
 def headline_apenas(texto_falado: str, preset: dict | None = None) -> dict:

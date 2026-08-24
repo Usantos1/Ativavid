@@ -379,3 +379,45 @@ def test_uma_sessao_morta_nao_pede_as_duas():
     assert "gemini.google.com" in so_gem and "chatgpt.com" not in so_gem
     so_gpt = friendly_llm_error("chatgpt: ChatGPT sem accessToken — recapture")
     assert "chatgpt.com" in so_gpt and "gemini.google.com" not in so_gpt
+
+
+# --- Editar com IA tem a mesma rede do planejador ---------------------------
+#
+# `plan_from_prompt` chamava `llm_session.chat` direto: quando as duas sessões
+# expiravam juntas (como expiram — mesmo navegador, mesma extensão), o chat do
+# editor falhava mesmo com a chave do Groq no .env. Agora o default é
+# `llm_gateway.chat_com_rede`, o mesmo do planejador de corte.
+
+
+def test_editar_com_ia_cai_para_o_groq(monkeypatch):
+    import app.llm_gateway as gw
+    import app.llm_session as ls
+    from app.ai_actions import plan_from_prompt
+
+    def sessao_morta(*a, **k):
+        raise RuntimeError("As sessões Gemini e ChatGPT expiraram.")
+    monkeypatch.setattr(ls, "chat", sessao_morta)
+    monkeypatch.setattr(gw, "_groq_key", lambda: "chave")
+    monkeypatch.setattr(gw, "_groq_chat", lambda m, mod, extras=None: {
+        "choices": [{"message": {"content":
+            '{"actions": [{"action": "remove_range", "start": 1.0,'
+            ' "end": 2.0, "reason": "trecho pedido"}],'
+            ' "summary": "tirei 1s"}'}}]})
+    actions, summary, backend = plan_from_prompt(
+        "tira o trecho de 1s a 2s", duration=30.0, source_duration=30.0)
+    assert backend == "groq"
+    assert actions, summary
+
+
+def test_editar_com_ia_sem_chave_mantem_o_erro_de_sessao(monkeypatch):
+    import app.llm_gateway as gw
+    import app.llm_session as ls
+    import pytest as _pt
+    from app.ai_actions import plan_from_prompt
+
+    def sessao_morta(*a, **k):
+        raise RuntimeError("As sessões Gemini e ChatGPT expiraram.")
+    monkeypatch.setattr(ls, "chat", sessao_morta)
+    monkeypatch.setattr(gw, "_groq_key", lambda: "")
+    with _pt.raises(RuntimeError, match="expiraram"):
+        plan_from_prompt("tira a parte chata", duration=30.0)

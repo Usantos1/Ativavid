@@ -40,6 +40,10 @@
   primeiras palavras da fala como nome. Agora o app pede só o título à IA
   (sessão ou Groq), sem mexer no corte; se tudo falhar, segue como antes
 
+- **O "Editar com IA" também sobrevive às sessões expiradas.** O chat do
+  editor caía junto com as sessões do Gemini/ChatGPT; agora usa a mesma rede
+  do planejador e cai para o Groq quando as duas morrem
+
 - **O plano do vídeo sai mesmo com as sessões de IA expiradas.** As sessões
   do Gemini e do ChatGPT expiram juntas de tempos em tempos, e o corte caía
   para o modo automático sem título. Agora, se as duas falharem e houver chave

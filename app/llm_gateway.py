@@ -170,6 +170,40 @@ def _groq_chat(messages: list[dict], model: str | None,
         raise RuntimeError(f"Groq HTTP {e.code}: {detail}") from e
 
 
+def chat_com_rede(messages: list[dict], model: str | None = None, *,
+                  json_no_groq: bool = False) -> tuple[str, str]:
+    """Sessão web (Gemini/ChatGPT) e, se as duas falharem, o Groq.
+
+    Nasceu no planejador de corte (helpers/llm_cut_plan) depois que as duas
+    sessões expiraram JUNTAS e um vídeo real saiu com o título cru — com a
+    chave do Groq parada no .env. Subiu para cá porque o "Editar com IA" do
+    editor tinha a mesma doença: chamava a sessão direta e morria junto.
+
+    A queda nunca é muda: sai `[ia] plano via groq` no log e o backend
+    devolvido é "groq" — quem grava resultado registra a origem (e o custo).
+    `json_no_groq` liga `response_format json_object` na queda: sem isso o
+    modelo devolveu um plano com vírgula faltando e o parse caiu (plano real).
+    """
+    from app.llm_session import chat
+
+    try:
+        return chat(messages, model=model or "gemini-web/default")
+    except RuntimeError as erro_sessao:
+        if not _groq_key():
+            raise
+        extras = {"response_format": {"type": "json_object"}} if json_no_groq else None
+        try:
+            resp = _groq_chat(messages, None, extras=extras)
+            texto = str(resp["choices"][0]["message"]["content"] or "")
+        except Exception as erro_groq:  # noqa: BLE001 - a mensagem une os dois
+            raise RuntimeError(
+                f"{erro_sessao} · plano B (Groq): {erro_groq}") from erro_groq
+        if not texto.strip():
+            raise erro_sessao
+        print(f"[ia] plano via groq ({str(erro_sessao)[:80]})", flush=True)
+        return texto, "groq"
+
+
 def chat_completions(payload: dict[str, Any]) -> tuple[int, dict]:
     messages = payload.get("messages") or []
     if not isinstance(messages, list) or not messages:

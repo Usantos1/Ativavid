@@ -657,7 +657,14 @@ def plan_from_prompt(
         return det["actions"], det["summary"], "deterministic"
 
     if chat_fn is None:
-        from app.llm_session import chat as chat_fn
+        # A mesma rede do planejador: sessão web e, se as duas morrerem, o
+        # Groq. Antes era `llm_session.chat` direto — o "Editar com IA"
+        # falhava sempre que as sessões expiravam juntas, que é como elas
+        # expiram (mesmo navegador, mesma extensão).
+        from app.llm_gateway import chat_com_rede
+
+        def chat_fn(msgs, model=None):
+            return chat_com_rede(msgs, model, json_no_groq=True)
 
     orig = source_duration or duration
     cut_bits = []
