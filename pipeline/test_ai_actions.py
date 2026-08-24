@@ -352,3 +352,30 @@ if __name__ == "__main__":
         fn()
         print("ok", fn.__name__)
     print("ALL_OK")
+
+
+# --- a mensagem de sessão cobre TODAS as falhas ----------------------------
+#
+# `chat()` junta os erros num blob ("gemini: … · chatgpt: …") e o
+# friendly_llm_error testava padrões em ordem: o primeiro vencia e a metade do
+# ChatGPT sumia. As duas sessões expiram juntas (mesmo navegador), o usuário
+# recapturava só o Gemini como mandado, e a IA continuava morta pelo lado
+# escondido. Visto ao vivo em 23/08 num job real.
+
+
+def test_duas_sessoes_mortas_avisam_as_duas():
+    from app.llm_session import friendly_llm_error
+
+    m = friendly_llm_error(
+        "gemini: Token Gemini ausente — recapture · "
+        "chatgpt: ChatGPT sem accessToken — recapture")
+    assert "gemini.google.com" in m and "chatgpt.com" in m, m
+
+
+def test_uma_sessao_morta_nao_pede_as_duas():
+    from app.llm_session import friendly_llm_error
+
+    so_gem = friendly_llm_error("gemini: Token Gemini ausente — recapture")
+    assert "gemini.google.com" in so_gem and "chatgpt.com" not in so_gem
+    so_gpt = friendly_llm_error("chatgpt: ChatGPT sem accessToken — recapture")
+    assert "chatgpt.com" in so_gpt and "gemini.google.com" not in so_gpt

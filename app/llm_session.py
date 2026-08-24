@@ -70,6 +70,22 @@ def friendly_llm_error(err: str | BaseException) -> str:
     """Mensagem curta em PT para UI (sem jargão técnico)."""
     msg = str(err or "").strip()
     low = msg.lower()
+    # As DUAS sessões falharam. O `chat()` junta os erros num blob
+    # ("gemini: … · chatgpt: …"), e os padrões abaixo são testados em ordem —
+    # o primeiro vencia e a metade do ChatGPT sumia da mensagem. Na prática:
+    # as duas sessões expiram juntas (mesmo navegador, mesma extensão), o
+    # usuário recaptura só o Gemini como a mensagem manda, e a IA continua
+    # morta pelo lado que a mensagem escondeu. Visto ao vivo em 23/08: vídeo
+    # saiu sem headline com os dois tokens ausentes e o aviso só citava um.
+    gem_morto = "token gemini" in low or "snlm0e" in low or (
+        "psid" in low and "gemini" in low)
+    gpt_morto = "accesstoken" in low or ("chatgpt" in low and "session" in low)
+    if gem_morto and gpt_morto:
+        return (
+            "As sessões Gemini e ChatGPT expiraram. Abra gemini.google.com e "
+            "chatgpt.com já logados, deixe carregar e capture de novo na "
+            "extensão — depois Testar IA em Chaves & IA."
+        )
     if "token gemini" in low or "snlm0e" in low:
         return (
             "Sessão Gemini incompleta. Abra gemini.google.com já logado, "
