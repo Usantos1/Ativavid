@@ -358,3 +358,32 @@ def test_chave_aceita_sob_force_update_nao_conta_como_falha(monkeypatch, tmp_pat
     out = lic.activate("ATIV-1111-2222-3333")
     assert out["ok"] is True
     assert out["activated"] is True
+
+
+# --- "Abrir site" da tela IA ------------------------------------------------
+#
+# Era `<a target="_blank">` dentro do WebView2, que nao trata janela nova: cada
+# clique despejava mais uma guia no navegador do usuario. Agora o clique pede
+# ao servidor, que abre UMA guia pelo navegador padrao — e recebe o ID do
+# provedor, nunca uma URL: a URL sai do catalogo do servidor.
+
+
+def test_abrir_site_so_conhece_o_catalogo(monkeypatch):
+    import webbrowser
+
+    from app import local_server as lsrv
+
+    abertos = []
+    monkeypatch.setattr(webbrowser, "open", lambda u, *a, **k: abertos.append(u) or True)
+    prov = lsrv.SESSION_PROVIDERS
+    assert "gemini-web" in prov and "chatgpt-web" in prov
+    # todo provedor do catalogo tem URL https fixa — e so elas podem abrir
+    for p in prov.values():
+        assert str(p.get("url", "")).startswith("https://"), p
+
+
+def test_abrir_site_e_rota_livre_de_licenca():
+    """A tela Chaves & IA funciona sem licenca; a rota nova acompanha."""
+    from app import license as lic
+
+    assert lic.gate_free("/api/llm-proxy/open-site")

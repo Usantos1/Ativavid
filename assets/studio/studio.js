@@ -2565,6 +2565,26 @@ function fillModelSelect(selected, models) {
   sel.innerHTML = opts.join("");
 }
 
+// "Abrir site" era `<a target="_blank">` no WebView2, que nao trata janela
+// nova: cada clique despejava mais uma guia no navegador do usuario. Agora o
+// clique pede ao servidor, que abre UMA guia no navegador padrao; o botao
+// trava por 2s para o clique duplo nao abrir duas.
+document.addEventListener("click", async (e) => {
+  const btn = e.target.closest("[data-open-site]");
+  if (!btn || btn.disabled) return;
+  btn.disabled = true;
+  setTimeout(() => { btn.disabled = false; }, 2000);
+  try {
+    await api("/api/llm-proxy/open-site", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: btn.dataset.openSite }),
+    });
+  } catch (err) {
+    toast(`Não consegui abrir o site: ${err.message || err}`, 4000);
+  }
+});
+
 async function refreshProviders() {
   const data = await api("/api/llm-proxy/sessions");
   const providers = data.providers || [];
@@ -2578,7 +2598,7 @@ async function refreshProviders() {
         <div class="pc-name">${escapeHtml(p.name)}</div>
         <div class="pc-meta">${escapeHtml(meta)}</div>
         <div class="pc-actions-row">
-          <a class="chip-btn" href="${escapeHtml(p.url)}" target="_blank" rel="noopener">Abrir site</a>
+          <button type="button" class="chip-btn" data-open-site="${escapeHtml(p.id)}">Abrir site</button>
         </div>
       </article>`;
     })

@@ -450,6 +450,7 @@ class DesktopHandler(ps.Handler):
             "/api/llm-proxy",
             "/api/llm-proxy/test",
             "/api/llm-proxy/capture",
+            "/api/llm-proxy/open-site",
             "/api/llm-proxy/open-extension",
             "/api/license/refresh",
             "/api/license/activate",

@@ -44,6 +44,10 @@
   conexão, pede para reconectar; quando foi outra coisa, pede só para gerar de
   novo
 
+- **"Abrir site" na tela IA parou de acumular guias.** O botão abria uma
+  guia nova (às vezes duas) a cada clique. Agora abre o site uma única vez no
+  navegador padrão
+
 - **Render mais rápido no estilo de legenda em uma linha.** Ele era o único que
   ainda abria o navegador para desenhar; agora usa o motor próprio, como os
   outros. No teste de ponta a ponta o vídeo saiu idêntico e a fase de render

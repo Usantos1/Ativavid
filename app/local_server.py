@@ -2634,6 +2634,29 @@ class StudioHandler(BaseHTTPRequestHandler):
             self._json(result, 200 if result.get("ok") else 502)
             return
 
+        if path == "/api/llm-proxy/open-site":
+            # O "Abrir site" da tela IA era `<a target="_blank">` dentro do
+            # WebView2, que nao trata janela nova: cada clique despejava mais
+            # uma guia no navegador (as vezes duas). Agora o SERVIDOR abre,
+            # uma vez por clique, pelo navegador padrao.
+            #
+            # Recebe o ID do provedor e resolve a URL no catalogo — cliente
+            # nenhum manda URL para ca, entao nao existe abrir-URL-arbitraria.
+            body = self._read_json() or {}
+            prov = SESSION_PROVIDERS.get(str(body.get("provider") or ""))
+            if not prov:
+                self._json({"error": "provedor desconhecido"}, 400)
+                return
+            import webbrowser
+
+            try:
+                webbrowser.open(prov["url"])
+            except Exception as e:  # noqa: BLE001
+                self._json({"error": f"não consegui abrir o navegador: {e}"}, 500)
+                return
+            self._json({"ok": True, "url": prov["url"]})
+            return
+
         if path == "/api/llm-proxy/capture":
             # Browser extension posts cookies for the user's own web session
             body = self._read_json() or {}
