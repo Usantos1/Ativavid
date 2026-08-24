@@ -372,20 +372,35 @@ def emendar_legenda(
     frames: int, fps: float, width: int = 1080, height: int = 1920,
     dest: Path | None = None,
     motivo: list | None = None,
+    janelas_extra: list | None = None,
 ) -> Path | None:
-    """Refaz só a fatia mexida e emenda no final. `None` = siga o caminho normal."""
+    """Refaz só as fatias mexidas e emenda no final. `None` = caminho normal.
+
+    `janelas_extra`: fatias [ini_f, fim_f) que o chamador já conhece — a da
+    HEADLINE, por exemplo, que não sai de correção de legenda nenhuma. Com
+    `fixes` vazio e só extras, a emenda vira "redesenhe estes trechos".
+    """
     from app.overlay_compose import count_frames, video_info
 
     t0 = time.perf_counter()
     if not (final.is_file() and cut.is_file()):
         return None
-    janela = janela_das_correcoes(cues, fixes, fps=fps, frames=frames)
-    if janela is None:
-        print("EMENDA_PULADA nao localizei a fatia com seguranca", flush=True)
-        if motivo is not None:
-            motivo.append("nao localizei a fatia com seguranca")
+    janelas_brutas: list[tuple[int, int]] = []
+    if fixes:
+        janela = janela_das_correcoes(cues, fixes, fps=fps, frames=frames)
+        if janela is None:
+            print("EMENDA_PULADA nao localizei a fatia com seguranca", flush=True)
+            if motivo is not None:
+                motivo.append("nao localizei a fatia com seguranca")
+            return None
+        _ini_env, _fim_env, janelas_brutas = janela
+    for par in (janelas_extra or []):
+        ini_x, fim_x = int(par[0]), int(par[1])
+        if 0 <= ini_x < fim_x <= frames:
+            janelas_brutas.append((ini_x, fim_x))
+    if not janelas_brutas:
         return None
-    _ini_env, _fim_env, janelas_brutas = janela
+    janelas_brutas.sort()
     fracao = sum(f - i for i, f in janelas_brutas) / max(1, frames)
     def _pulada(msg: str) -> None:
         # O motivo ia so para o stdout do worker, que ninguem guarda -- e por

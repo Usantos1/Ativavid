@@ -143,7 +143,12 @@ def test_a_emenda_so_entra_quando_apenas_a_legenda_mudou():
     from app.apply_execute import _so_legenda_mudou
 
     assert _so_legenda_mudou({"mode": "REUSE_CUT", "dirty": {"captions": True}})
-    for extra in ("headline", "edl", "style"):
+    # headline entrou na emenda (fatia unica no comeco do video) — legenda,
+    # headline, ou as duas juntas passam; estilo e corte continuam recusando
+    assert _so_legenda_mudou({"mode": "REUSE_CUT", "dirty": {"headline": True}})
+    assert _so_legenda_mudou(
+        {"mode": "REUSE_CUT", "dirty": {"captions": True, "headline": True}})
+    for extra in ("edl", "style"):
         assert not _so_legenda_mudou(
             {"mode": "REUSE_CUT", "dirty": {"captions": True, extra: True}}
         ), f"{extra} sujo deveria recusar a emenda"
@@ -278,3 +283,77 @@ def test_fracao_e_a_soma_das_fatias_nao_a_envolvente():
     envolvente = (grupos[-1][1] - grupos[0][0]) / frames
     assert envolvente > FRACAO_MAXIMA, "o caso de teste perdeu a graca"
     assert soma < FRACAO_MAXIMA, soma
+
+
+# --- emenda de HEADLINE ------------------------------------------------------
+#
+# Trocar o titulo era o apply mais comum a pagar o render completo (~2 min) —
+# o editor oferece 3 opcoes de titulo justamente para trocar. A headline vive
+# nos primeiros segundos ([0, hook.endSec]), entao a troca e uma fatia unica.
+# Provado no projeto real: 120/1392 quadros em 15,1s (8,5x), titulo novo
+# desenhado no estilo certo, audio byte-identico.
+
+
+def test_headline_sozinha_gera_janela_extra(monkeypatch, tmp_path):
+    from app import apply_execute as ax
+
+    (tmp_path / "remotion" / "public").mkdir(parents=True)
+    (tmp_path / "remotion" / "public" / "edit-data.json").write_text(
+        '{"fps": 30, "width": 1080, "height": 1920,'
+        ' "hook": {"enabled": true, "endSec": 4.0}, "captions": {}}',
+        encoding="utf-8")
+    (tmp_path / "remotion" / "public" / "caption-cues.json").write_text(
+        '{"cues": []}', encoding="utf-8")
+    visto = {}
+
+    def falsa_emenda(*a, janelas_extra=None, **k):
+        visto["extra"] = janelas_extra
+        return None
+    import app.emenda_legenda as em
+    monkeypatch.setattr(em, "emendar_legenda", falsa_emenda)
+    import app.timeline as tl
+    monkeypatch.setattr(tl, "timeline_from_edit_data",
+                        lambda ed: {"durationInFrames": 900})
+    plan = {"mode": "REUSE_CUT", "rebuildCut": False, "remapCaptions": False,
+            "dirty": {"headline": True}}
+    ax._tentar_emenda(tmp_path, plan, cut=tmp_path / "c.mp4",
+                      dest=tmp_path / "s.mp4", log=lambda m: None)
+    # [0, endSec*fps + folga] = [0, 128]
+    assert visto["extra"] == [(0, 128)], visto
+
+
+def test_headline_pergunta_recusa_a_emenda(monkeypatch, tmp_path):
+    """No estilo pergunta a RESPOSTA aparece mais tarde, fora da janela do
+    hook — emendar so o comeco deixaria a resposta velha no video."""
+    from app import apply_execute as ax
+
+    (tmp_path / "remotion" / "public").mkdir(parents=True)
+    (tmp_path / "remotion" / "public" / "edit-data.json").write_text(
+        '{"fps": 30, "hook": {"enabled": true, "endSec": 4.0,'
+        ' "answerLines": ["resposta"]}, "captions": {}}', encoding="utf-8")
+    (tmp_path / "remotion" / "public" / "caption-cues.json").write_text(
+        '{"cues": []}', encoding="utf-8")
+
+    def nunca(*a, **k):
+        raise AssertionError("emendou com resposta fora da janela")
+    import app.emenda_legenda as em
+    monkeypatch.setattr(em, "emendar_legenda", nunca)
+    plan = {"mode": "REUSE_CUT", "rebuildCut": False, "remapCaptions": False,
+            "dirty": {"headline": True}}
+    ok = ax._tentar_emenda(tmp_path, plan, cut=tmp_path / "c.mp4",
+                           dest=tmp_path / "s.mp4", log=lambda m: None)
+    assert ok is False
+
+
+def test_hook_desligado_recusa_emenda_de_headline(monkeypatch, tmp_path):
+    from app import apply_execute as ax
+
+    (tmp_path / "remotion" / "public").mkdir(parents=True)
+    (tmp_path / "remotion" / "public" / "edit-data.json").write_text(
+        '{"fps": 30, "hook": {"enabled": false}, "captions": {}}', encoding="utf-8")
+    (tmp_path / "remotion" / "public" / "caption-cues.json").write_text(
+        '{"cues": []}', encoding="utf-8")
+    plan = {"mode": "REUSE_CUT", "rebuildCut": False, "remapCaptions": False,
+            "dirty": {"headline": True}}
+    assert ax._tentar_emenda(tmp_path, plan, cut=tmp_path / "c.mp4",
+                             dest=tmp_path / "s.mp4", log=lambda m: None) is False

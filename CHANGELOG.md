@@ -61,6 +61,12 @@
   outros. No teste de ponta a ponta o vídeo saiu idêntico e a fase de render
   caiu de 283s para 70s
 
+- **Trocar o título também ficou rápido.** Escolher outra opção de título
+  refazia o vídeo inteiro (~2 minutos); como o título vive nos primeiros
+  segundos, agora o app redesenha só o começo e emenda no vídeo pronto — no
+  teste real, 15 segundos. O estilo de título com pergunta e resposta continua
+  pelo caminho completo, porque a resposta aparece mais adiante no vídeo
+
 - **Corrigir legendas ficou mais rápido.** Trocar palavras da legenda
   redesenhava e reencodava o vídeo inteiro (~2 minutos). Agora o app refaz só
   os trechos corrigidos e emenda no vídeo pronto — o áudio e o resto dos

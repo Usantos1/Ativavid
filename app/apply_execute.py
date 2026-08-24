@@ -895,19 +895,22 @@ def _reembutir_capa(edit: Path, final: Path, log: Any) -> None:
 
 
 def _so_legenda_mudou(plan: dict[str, Any]) -> bool:
-    """True quando a UNICA coisa suja e o texto da legenda.
+    """True quando so ha mudanca LOCALIZAVEL: texto da legenda e/ou headline.
 
-    A emenda so vale ai: headline, estilo e corte mexem em quadros espalhados
-    (ou em todos), e ai nao ha fatia para emendar.
+    Estilo e corte mexem em quadros espalhados (ou em todos) — ai nao ha fatia
+    para emendar. A headline entrou depois: ela vive nos primeiros segundos do
+    video (janela [0, hook.endSec]), entao trocar o texto dela e uma fatia
+    unica no comeco — e era o apply mais comum a pagar o render completo, ja
+    que o editor oferece 3 opcoes de titulo justamente para trocar.
     """
     if str(plan.get("mode") or "") != "REUSE_CUT":
         return False
     if plan.get("rebuildCut") or plan.get("remapCaptions"):
         return False
     sujo = plan.get("dirty") or {}
-    return bool(sujo.get("captions")) and not any(
-        sujo.get(k) for k in ("headline", "edl", "style")
-    )
+    if any(sujo.get(k) for k in ("edl", "style")):
+        return False
+    return bool(sujo.get("captions") or sujo.get("headline"))
 
 
 def _tentar_emenda(edit: Path, plan: dict[str, Any], *, cut: Path, dest: Path,
@@ -930,9 +933,28 @@ def _tentar_emenda(edit: Path, plan: dict[str, Any], *, cut: Path, dest: Path,
         edit_data = _read_json(public / "edit-data.json", {})
         if not isinstance(edit_data, dict) or not edit_data:
             return False
+        sujo = plan.get("dirty") or {}
         cues = _read_json(public / "caption-cues.json", None)
-        fixes = load_stored_fixes(edit)
-        if not cues or not fixes:
+        fixes = load_stored_fixes(edit) if sujo.get("captions") else []
+        if sujo.get("captions") and (not cues or not fixes):
+            return False
+        janelas_extra: list[tuple[int, int]] = []
+        if sujo.get("headline"):
+            hook = edit_data.get("hook") or {}
+            if not hook.get("enabled"):
+                return False
+            # Headline em duas fases (pergunta -> resposta): a RESPOSTA
+            # aparece mais tarde, fora da janela do hook — emendar so o
+            # comeco deixaria a resposta velha no video. Caminho cheio.
+            if hook.get("answerLines"):
+                return False
+            fps_ed = float(edit_data.get("fps") or 30)
+            fim_hl = float(hook.get("endSec") or 4.0)
+            tl_tmp = timeline_from_edit_data(edit_data)
+            janelas_extra.append(
+                (0, min(int(tl_tmp["durationInFrames"]),
+                        int(round(fim_hl * fps_ed)) + 8)))
+        if not fixes and not janelas_extra:
             return False
         tl = timeline_from_edit_data(edit_data)
         final_atual = _current_final(edit)
@@ -951,6 +973,7 @@ def _tentar_emenda(edit: Path, plan: dict[str, Any], *, cut: Path, dest: Path,
             width=int(edit_data.get("width") or 1080),
             height=int(edit_data.get("height") or 1920),
             dest=dest,
+            janelas_extra=janelas_extra,
         )
     except Exception as e:  # noqa: BLE001
         log(f"QUICK_APPLY_EMENDA_ERRO {e}")
