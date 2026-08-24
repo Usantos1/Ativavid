@@ -16,6 +16,14 @@
   vídeo também voltava com a mesma duração. O texto do card final tinha o
   mesmo problema
 
+- **Projetos antigos também ganham título ao refazer.** Vídeos criados antes
+  desta versão nunca chegaram a guardar o título da IA; agora, ao refazer um
+  deles, o app pede só o título e o vídeo sai nomeado — sem mexer no corte
+
+- **Um caractere invisível não derruba mais o plano da IA.** Duas vezes o
+  Gemini devolveu o plano com uma quebra de linha crua dentro de uma frase, e
+  o vídeo inteiro caía para o corte automático por causa de um byte
+
 - **O título não se perde mais ao refazer o vídeo.** Reaplicar uma correção,
   mexer no editor ou usar a edição leve reaproveita o corte de propósito — e
   junto se perdia o título escrito pela IA, que era substituído pelas

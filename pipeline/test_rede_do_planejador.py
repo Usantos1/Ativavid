@@ -144,3 +144,41 @@ def test_o_multi_take_liga_a_headline_avulsa():
     assert i > 0
     assert "headline_apenas" in codigo[i:i + 1500], (
         "o ramo multi_take_concat nao pede a headline avulsa")
+
+
+# --- os dois gaps vistos nos jobs REAIS da 2.62 (24/08) ---------------------
+
+
+def test_control_char_no_plano_nao_derruba():
+    """O Gemini copiou uma quebra de linha crua para dentro do "quote" e o
+    parser estrito derrubou o plano inteiro por um byte — 2x nos jobs reais."""
+    from llm_cut_plan import _extract_json
+
+    ruim = '{"ranges": [{"quote": "linha um\nlinha dois", "start": 1}]}'
+    r = _extract_json(ruim)
+    assert r["ranges"][0]["start"] == 1
+
+
+def test_json_realmente_quebrado_ainda_levanta():
+    """Tolerancia é para control char, não para lixo qualquer."""
+    import pytest as _pt
+
+    from llm_cut_plan import _extract_json
+
+    with _pt.raises(Exception):
+        _extract_json("isto nao tem json nenhum")
+
+
+def test_ultima_rede_do_titulo_esta_ligada():
+    """Projeto de antes da 2.62 nunca gravou headline_ia.json (o 1o render
+    caiu no 'viral') — sem esta rede, o reprocesso sai cru PARA SEMPRE. Visto
+    em dois manual_edl reais de 24/08."""
+    from pipeline.leitura_de_codigo import apenas_codigo
+
+    codigo = apenas_codigo(Path(__file__).resolve().parents[1] / "pipeline" / "run_fast.py")
+    i = codigo.find("llm_meta = headline_preservada(edit_dir, llm_meta)")
+    assert i > 0
+    trecho = codigo[i:i + 1200]
+    assert "headline_apenas" in trecho, "a ultima rede do titulo sumiu"
+    assert '"heuristic_light"' in trecho, (
+        "o modo leve promete 'sem IA' na tela — tem de ficar fora da rede")

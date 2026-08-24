@@ -293,13 +293,19 @@ def _extract_json(text: str) -> dict | list:
     if raw.startswith("```"):
         raw = re.sub(r"^```(?:json)?\s*", "", raw)
         raw = re.sub(r"\s*```$", "", raw)
+    # `strict=False`: o Gemini as vezes copia um caractere de controle da
+    # propria fala para dentro da string (quebra de linha crua num "quote"), e
+    # o parser estrito derruba o plano INTEIRO por causa de um byte -- duas
+    # vezes nos jobs reais ("Invalid control character", 23-24/08). Tolerar na
+    # LEITURA nao muda o que se aceita do plano: a normalizacao dos ranges
+    # continua igual.
     try:
-        return json.loads(raw)
+        return json.loads(raw, strict=False)
     except json.JSONDecodeError:
         m = re.search(r"\{[\s\S]*\}|\[[\s\S]*\]", raw)
         if not m:
             raise
-        return json.loads(m.group(0))
+        return json.loads(m.group(0), strict=False)
 
 
 def _snap_to_regions(

@@ -3175,6 +3175,27 @@ def run(
         cut_spoken = apply_replacements_to_text(cut_spoken, _text_fixes)
         hook = hook_lines_from_text(cut_spoken)
         llm_meta = headline_preservada(edit_dir, llm_meta)
+        # Ultima rede do titulo. `headline_preservada` so reaproveita o que um
+        # render anterior GRAVOU -- e projeto de antes da 2.62 nunca gravou
+        # (o primeiro render caiu no KeyError 'viral'). Visto nos jobs reais
+        # de 24/08: dois `manual_edl` sairam com titulo cru mesmo com a
+        # preservacao no lugar, porque nao havia nada preservado. Pede-se so o
+        # titulo, pela mesma rede do plano; `headline_apenas` nunca levanta.
+        # O modo leve fica fora: ele promete "sem chamada de IA" na tela.
+        if (not llm_meta.get("headline")
+                and llm_meta.get("backend") != "heuristic_light"):
+            try:
+                from llm_cut_plan import headline_apenas  # type: ignore
+
+                hl_av = headline_apenas(cut_spoken, preset)
+                if hl_av.get("headline"):
+                    llm_meta = dict(llm_meta)
+                    llm_meta["headline"] = hl_av["headline"]
+                    llm_meta["headlineAlts"] = hl_av.get("headlineAlts") or []
+                    llm_meta["headlineBackend"] = hl_av.get("backend")
+            except Exception as e:  # noqa: BLE001
+                print(f"[ia] ultima rede do titulo indisponivel: {str(e)[:80]}",
+                      flush=True)
         if llm_meta.get("headline"):
             preset = dict(preset)
             preset["aiHeadline"] = apply_replacements_to_text(str(llm_meta["headline"]), _text_fixes)
