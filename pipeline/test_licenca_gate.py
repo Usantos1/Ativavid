@@ -387,3 +387,69 @@ def test_abrir_site_e_rota_livre_de_licenca():
     from app import license as lic
 
     assert lic.gate_free("/api/llm-proxy/open-site")
+
+
+# --- o cartao do provedor reflete a saude REAL ------------------------------
+#
+# Em 23-24/08 as duas sessoes expiraram e o painel seguiu dizendo "Pronto para
+# usar": `has_*_session` so olha a presenca dos cookies. A mentira custou uma
+# manha de diagnostico. Agora cada chamada real grava o resultado em
+# llm-health.json, e o cartao compara a falha com a hora da captura.
+
+
+def _sessao_gemini(tmp_path, captured_at):
+    import json
+
+    from app import local_server as lsrv
+
+    lsrv.USER_DIR = tmp_path
+    lsrv.SESSIONS_PATH = tmp_path / "sessions.json"
+    lsrv.SESSIONS_PATH.write_text(json.dumps({"providers": {"gemini-web": {
+        "id": "gemini-web", "cookieCount": 3, "capturedAt": captured_at,
+        "cookies": [{"name": "__Secure-1PSID", "value": "x",
+                     "domain": ".google.com"}],
+    }}}), encoding="utf-8")
+    return lsrv
+
+
+def test_falha_real_derruba_o_cartao(tmp_path):
+    import app.llm_session as ls
+
+    lsrv = _sessao_gemini(tmp_path, "2026-08-24T10:00:00Z")
+    ls._registrar_saude("gemini-web", "Token Gemini ausente — recapture")
+    card = {c["id"]: c for c in lsrv.sessions_public()}["gemini-web"]
+    assert card["ready"] is False
+    assert "recapture" in card["hint"]
+
+
+def test_recaptura_depois_da_falha_restaura(tmp_path):
+    import json
+
+    import app.llm_session as ls
+
+    lsrv = _sessao_gemini(tmp_path, "2026-08-24T10:00:00Z")
+    ls._registrar_saude("gemini-web", "Token Gemini ausente")
+    d = json.loads(lsrv.SESSIONS_PATH.read_text(encoding="utf-8"))
+    d["providers"]["gemini-web"]["capturedAt"] = "2026-08-24T23:00:00Z"
+    lsrv.SESSIONS_PATH.write_text(json.dumps(d), encoding="utf-8")
+    card = {c["id"]: c for c in lsrv.sessions_public()}["gemini-web"]
+    assert card["ready"] is True, card["hint"]
+
+
+def test_sucesso_real_tambem_restaura(tmp_path):
+    import app.llm_session as ls
+
+    lsrv = _sessao_gemini(tmp_path, "2026-08-24T10:00:00Z")
+    ls._registrar_saude("gemini-web", "Token Gemini ausente")
+    ls._registrar_saude("gemini-web", None)
+    card = {c["id"]: c for c in lsrv.sessions_public()}["gemini-web"]
+    assert card["ready"] is True
+
+
+def test_saude_corrompida_nao_derruba_o_painel(tmp_path):
+    import app.llm_session as ls
+
+    lsrv = _sessao_gemini(tmp_path, "2026-08-24T10:00:00Z")
+    ls._saude_path().write_text("{ nao e json", encoding="utf-8")
+    card = {c["id"]: c for c in lsrv.sessions_public()}["gemini-web"]
+    assert card["ready"] is True

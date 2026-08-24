@@ -40,6 +40,12 @@
   primeiras palavras da fala como nome. Agora o app pede só o título à IA
   (sessão ou Groq), sem mexer no corte; se tudo falhar, segue como antes
 
+- **O painel de IA parou de dizer "Pronto" com a sessão morta.** O status
+  só conferia se os cookies existiam — dava para estar tudo expirado e o
+  painel seguir verde. Agora cada chamada real registra se funcionou, e o
+  cartão avisa "Capturado, mas a última chamada falhou — recapture" quando a
+  sessão morreu depois da captura
+
 - **O "Editar com IA" também sobrevive às sessões expiradas.** O chat do
   editor caía junto com as sessões do Gemini/ChatGPT; agora usa a mesma rede
   do planejador e cai para o Groq quando as duas morrem

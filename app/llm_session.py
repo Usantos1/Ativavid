@@ -437,6 +437,43 @@ def _chatgpt_generate(prompt: str) -> str:
     return text.strip()
 
 
+# Saude REAL por provedor — cookies existirem nao significa que funcionam.
+# Em 23-24/08 as duas sessoes expiraram e o painel seguiu dizendo "Sessao
+# pronta": `has_*_session` so olha a presenca dos cookies, e a mentira custou
+# uma manha de diagnostico. Cada chamada de verdade grava aqui o resultado;
+# quem monta o cartao do provedor compara com a hora da captura.
+def _saude_path():
+    from app.local_server import SESSIONS_PATH
+
+    return SESSIONS_PATH.parent / "llm-health.json"
+
+
+def _registrar_saude(provider: str, erro: str | None) -> None:
+    import datetime as _dt
+
+    try:
+        try:
+            d = json.loads(_saude_path().read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            d = {}
+        d[provider] = {
+            "ok": erro is None,
+            "erro": (erro or "")[:200],
+            "at": _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+        _saude_path().write_text(json.dumps(d, ensure_ascii=False),
+                                 encoding="utf-8")
+    except OSError:
+        pass
+
+
+def saude_dos_provedores() -> dict:
+    try:
+        return json.loads(_saude_path().read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
 def chat(messages: list[dict], model: str | None = None) -> tuple[str, str]:
     """Return (text, backend_id). Raises RuntimeError on failure."""
     prompt = _messages_to_prompt(messages)
@@ -450,16 +487,20 @@ def chat(messages: list[dict], model: str | None = None) -> tuple[str, str]:
         try:
             text = _gemini_generate(prompt, mid)
             if text:
+                _registrar_saude("gemini-web", None)
                 return text, "gemini-web"
         except Exception as e:  # noqa: BLE001
+            _registrar_saude("gemini-web", str(e))
             errors.append(f"gemini: {e}")
 
     if has_chatgpt_session() and (prefer_chatgpt or not prefer_gemini or errors):
         try:
             text = _chatgpt_generate(prompt)
             if text:
+                _registrar_saude("chatgpt-web", None)
                 return text, "chatgpt-web"
         except Exception as e:  # noqa: BLE001
+            _registrar_saude("chatgpt-web", str(e))
             errors.append(f"chatgpt: {e}")
 
     if prefer_chatgpt and has_gemini_session() and not any(x.startswith("gemini:") for x in errors):

@@ -357,16 +357,37 @@ def save_session_capture(provider_id: str, cookies: list[dict], meta: dict | Non
 
 
 def sessions_public() -> list[dict]:
-    from app.llm_session import has_chatgpt_session, has_gemini_session
+    from app.llm_session import (
+        has_chatgpt_session,
+        has_gemini_session,
+        saude_dos_provedores,
+    )
 
     stored = load_sessions().get("providers") or {}
+    saude = saude_dos_provedores()
+
+    def _falhou_depois_da_captura(pid: str, st: dict) -> str | None:
+        """Erro REAL mais novo que a captura. Cookies presentes nao bastam:
+        em 23-24/08 as duas sessoes expiraram e o painel seguiu 'Pronto'."""
+        h = saude.get(pid) or {}
+        if h.get("ok") is not False:
+            return None
+        if str(h.get("at") or "") <= str(st.get("capturedAt") or ""):
+            return None            # ja recapturou depois do erro
+        return str(h.get("erro") or "a última chamada falhou")
+
     out = []
     for pid, info in SESSION_PROVIDERS.items():
         st = stored.get(pid) or {}
         count = int(st.get("cookieCount") or 0)
         if pid == "gemini-web":
             ready = has_gemini_session()
-            hint = (
+            falha = _falhou_depois_da_captura(pid, st) if ready else None
+            if falha:
+                ready = False
+                hint = f"Capturado, mas a última chamada falhou — recapture. ({falha[:80]})"
+            else:
+                hint = (
                 "Pronto para usar"
                 if ready
                 else (
@@ -377,7 +398,12 @@ def sessions_public() -> list[dict]:
             )
         elif pid == "chatgpt-web":
             ready = has_chatgpt_session()
-            hint = (
+            falha = _falhou_depois_da_captura(pid, st) if ready else None
+            if falha:
+                ready = False
+                hint = f"Capturado, mas a última chamada falhou — recapture. ({falha[:80]})"
+            else:
+                hint = (
                 "Pronto para usar"
                 if ready
                 else (
