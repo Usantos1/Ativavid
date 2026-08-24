@@ -743,17 +743,22 @@
     <p class="hint hidden" id="importFolderHint"></p>
     <p class="hint hidden" id="importRecommend"></p>
     <div class="intent-grid" id="intentGrid">
-      <button type="button" class="intent-card" data-intent="light">
-        <strong>Edição leve</strong>
-        <span>Só tira silêncios, erros e pausas. Sem IA mexendo no corte — simples, previsível e o mais rápido.</span>
+      <!-- "Edição leve" era o PRIMEIRO card e capturava o clique: o usuário
+           importou o mesmo vídeo cinco vezes em leve sem perceber, trocando o
+           estilo e estranhando o corte idêntico (70,4s nas cinco — no modo
+           leve o corte é heurístico e o estilo não o muda, por promessa).
+           O padrão/recomendado vem primeiro; o leve vai por último e AVISA. -->
+      <button type="button" class="intent-card on" data-intent="dynamic">
+        <strong>Deixar mais dinâmico</strong>
+        <span>Mantém o conteúdo principal, mas acelera o ritmo com cortes de pausas, erros e momentos sem informação.</span>
       </button>
       <button type="button" class="intent-card" data-intent="complete">
         <strong>Editar vídeo completo</strong>
         <span>Mantém a estrutura e a mensagem do vídeo. A IA remove apenas erros, repetições e pausas desnecessárias.</span>
       </button>
-      <button type="button" class="intent-card on" data-intent="dynamic">
-        <strong>Deixar mais dinâmico</strong>
-        <span>Mantém o conteúdo principal, mas acelera o ritmo com cortes de pausas, erros e momentos sem informação.</span>
+      <button type="button" class="intent-card" data-intent="light">
+        <strong>Edição leve</strong>
+        <span>Só tira silêncios, erros e pausas — o mais rápido. Atenção: sem IA no corte, o Estilo escolhido NÃO muda os cortes nem a duração.</span>
       </button>
       <button type="button" class="intent-card" data-intent="shorts">
         <strong>Criar Reels / Shorts</strong>

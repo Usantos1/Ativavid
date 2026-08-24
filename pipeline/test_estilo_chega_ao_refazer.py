@@ -130,3 +130,16 @@ def test_a_ui_oferece_os_tres_modos():
     bloco = s[i:i + 500]
     for v in ("light", "dynamic", "complete"):
         assert f'value="{v}"' in bloco, f"modo {v} sumiu do seletor"
+
+
+def test_o_modo_leve_nao_e_o_primeiro_card_e_avisa():
+    """"Edição leve" era o PRIMEIRO card da grade de importar e capturava o
+    clique: cinco imports reais do mesmo vídeo em leve, com o usuário trocando
+    o estilo e estranhando o corte idêntico. O padrão vem primeiro; o leve vai
+    ao fim e diz o que NÃO faz."""
+    s = (RAIZ / "assets" / "studio" / "index.html").read_text(encoding="utf-8")
+    i_dyn = s.find('data-intent="dynamic"')
+    i_light = s.find('data-intent="light"')
+    assert 0 < i_dyn < i_light, "o modo leve voltou a vir antes do padrão"
+    bloco = s[i_light:i_light + 400]
+    assert "NÃO muda os cortes" in bloco, "o aviso do modo leve sumiu"
