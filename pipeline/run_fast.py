@@ -3181,9 +3181,14 @@ def run(
         # de 24/08: dois `manual_edl` sairam com titulo cru mesmo com a
         # preservacao no lugar, porque nao havia nada preservado. Pede-se so o
         # titulo, pela mesma rede do plano; `headline_apenas` nunca levanta.
-        # O modo leve fica fora: ele promete "sem chamada de IA" na tela.
-        if (not llm_meta.get("headline")
-                and llm_meta.get("backend") != "heuristic_light"):
+        #
+        # O modo LEVE tambem entra. A primeira versao o excluia alegando que a
+        # tela promete "sem IA" -- leitura errada: a tela diz "Sem IA mexendo
+        # NO CORTE", e o proprio comentario do modo diz "Headline e legenda da
+        # Fase 2 seguem normais". O corte continua 100% heuristico; so o
+        # titulo sai escrito. Um job real do usuario (24/08 17:10) saiu com
+        # titulo cru por causa da exclusao.
+        if not llm_meta.get("headline"):
             try:
                 from llm_cut_plan import headline_apenas  # type: ignore
 

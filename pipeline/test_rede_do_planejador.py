@@ -178,7 +178,10 @@ def test_ultima_rede_do_titulo_esta_ligada():
     codigo = apenas_codigo(Path(__file__).resolve().parents[1] / "pipeline" / "run_fast.py")
     i = codigo.find("llm_meta = headline_preservada(edit_dir, llm_meta)")
     assert i > 0
-    trecho = codigo[i:i + 1200]
+    trecho = codigo[i:i + 1600]
     assert "headline_apenas" in trecho, "a ultima rede do titulo sumiu"
-    assert '"heuristic_light"' in trecho, (
-        "o modo leve promete 'sem IA' na tela — tem de ficar fora da rede")
+    # O modo leve ENTROU na rede: a tela promete "sem IA mexendo NO CORTE",
+    # nao no titulo — a exclusao original leu a promessa errada e um job real
+    # (24/08 17:10) saiu com titulo cru. O corte segue 100% heuristico.
+    assert '!= "heuristic_light"' not in trecho, (
+        "a exclusao do modo leve voltou — a promessa da tela e sobre o corte")

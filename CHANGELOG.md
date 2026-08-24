@@ -16,6 +16,10 @@
   vídeo também voltava com a mesma duração. O texto do card final tinha o
   mesmo problema
 
+- **A edição leve também sai com título escrito.** O modo continua sem IA
+  no corte, como promete — mas o título vinha das primeiras palavras da fala.
+  Agora ele é pedido à parte, sem tocar no corte
+
 - **Projetos antigos também ganham título ao refazer.** Vídeos criados antes
   desta versão nunca chegaram a guardar o título da IA; agora, ao refazer um
   deles, o app pede só o título e o vídeo sai nomeado — sem mexer no corte
