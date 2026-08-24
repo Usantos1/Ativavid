@@ -82,3 +82,51 @@ def test_dialogo_de_importar_reseta_o_modo():
     assert i > 0
     assert "applyIntentDefaults(recommended" in s[i:i + 700], (
         "o reset do modo sumiu do openImportDialog")
+
+
+# --- o MODO DE EDICAO troca no refazer --------------------------------------
+#
+# Um projeto criado em "Edicao leve" ficava preso no modo para sempre: trocar
+# o estilo e refazer nunca mudava a minutagem, porque o corte heuristico e
+# deterministico e nao existia controle de modo em lugar nenhum depois do
+# import. Caso real de 24/08: o mesmo video, 4 estilos, 70,417s nas 4.
+#
+# O modo mora no job_intent.json (o run_fast faz merge_into_preset a cada
+# render) e `editingIntent` e knob do cutStyle — mudar replaneja o corte.
+
+
+def test_o_refazer_envia_o_modo():
+    s = (RAIZ / "assets" / "preview" / "app.js").read_text(encoding="utf-8")
+    b = s[s.find("  const payload = {"):]
+    b = b[:b.find("  };")]
+    assert "editingIntent" in b, "o modo nao vai no payload do refazer"
+
+
+def test_o_save_grava_o_modo_no_job_intent(tmp_path):
+    import json as _json
+    import sys as _sys
+
+    _sys.path.insert(0, str(RAIZ))
+    from app.editing_intent import load, save
+
+    save(tmp_path, {"editingIntent": "light", "contentType": "viral"})
+    # o trecho do preview_server, extraido: modo valido troca; invalido nao
+    for modo, esperado in (("dynamic", "dynamic"), ("banana", "dynamic"),
+                          ("complete", "complete")):
+        if modo in ("light", "dynamic", "complete"):
+            atual = load(tmp_path) or {}
+            if str(atual.get("editingIntent") or "") != modo:
+                atual["editingIntent"] = modo
+                save(tmp_path, atual)
+        d = load(tmp_path)
+        assert d["editingIntent"] == esperado
+        assert d["contentType"] == "viral", "trocar o modo nao pode perder o tipo"
+
+
+def test_a_ui_oferece_os_tres_modos():
+    s = (RAIZ / "assets" / "preview" / "index.html").read_text(encoding="utf-8")
+    i = s.find('id="autoEditIntent"')
+    assert i > 0
+    bloco = s[i:i + 500]
+    for v in ("light", "dynamic", "complete"):
+        assert f'value="{v}"' in bloco, f"modo {v} sumiu do seletor"

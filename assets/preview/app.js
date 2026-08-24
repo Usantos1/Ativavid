@@ -2116,6 +2116,9 @@ async function applyState(data) {
   if (data.intent) {
     S.protectedRanges = Array.isArray(data.intent.protectedRanges) ? data.intent.protectedRanges : [];
     S.contentType = data.intent.contentType || S.contentType;
+    S.editIntent = data.intent.editingIntent || S.editIntent || null;
+    const mEl = $('autoEditIntent');
+    if (mEl && S.editIntent && ['light','dynamic','complete'].includes(S.editIntent)) mEl.value = S.editIntent;
     const ct = $('autoContentType');
     if (ct && S.contentType) ct.value = S.contentType;
   }
@@ -3237,6 +3240,10 @@ $('setupGo').addEventListener('click', async () => {
     // nao apaga o que ja havia.
     contentType: S.contentType || $('autoContentType')?.value || null,
     endCardCopy: S.endCardCopy || null,
+    // MODO DE EDICAO: e ele que decide se a IA planeja o corte. Sem este
+    // campo um projeto criado em "Edicao leve" ficava preso no modo para
+    // sempre — trocar o estilo e refazer nunca mudava a minutagem.
+    editingIntent: $('autoEditIntent')?.value || null,
   };
   const res = await fetch(`${BASE}/api/save`, {
     method: 'POST',

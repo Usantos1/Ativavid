@@ -16,6 +16,12 @@
   vídeo também voltava com a mesma duração. O texto do card final tinha o
   mesmo problema
 
+- **O modo de edição agora pode ser trocado na tela de Estilo.** Um vídeo
+  criado em *Edição leve* ficava preso no modo para sempre — trocar o estilo
+  e refazer nunca mudava a minutagem. Agora a tela de Estilo mostra e deixa
+  trocar o modo (Dinâmico / Vídeo completo / Edição leve), e o *Salvar e
+  refazer a Fase 2* replaneja o corte de verdade
+
 - **A janela de importar não lembra mais o modo escondido.** Escolher
   *Edição leve* uma vez deixava o modo marcado para as próximas importações,
   em silêncio — dava para trocar o estilo e o corte sair sempre igual sem

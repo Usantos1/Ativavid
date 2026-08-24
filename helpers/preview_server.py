@@ -643,6 +643,25 @@ class Handler(BaseHTTPRequestHandler):
         # clobber the other (they are written at different moments, by different
         # screens, and the skill consumes+deletes them independently).
         name = "preview_style.json" if body.get("type") == "style-setup" else "preview_edits.json"
+        # O MODO DE EDICAO e do job_intent.json, que o run_fast le a cada
+        # render (merge_into_preset) e que e knob de replanejo (cutStyle).
+        # Sem esta gravacao nao existia jeito NENHUM de tirar um projeto da
+        # Edicao leve: o usuario trocava o estilo, mandava refazer, e o corte
+        # heuristico saia identico — tres vezes no mesmo dia (24/08), 70,4s
+        # nas tres. Gravar aqui e o que faz "Salvar e refazer" replanejar.
+        modo = str(body.get("editingIntent") or "").strip().lower()
+        if body.get("type") == "style-setup" and modo in (
+                "light", "dynamic", "complete"):
+            try:
+                from app.editing_intent import load as _li, save as _si
+
+                atual = _li(self.root) or {}
+                if str(atual.get("editingIntent") or "") != modo:
+                    atual["editingIntent"] = modo
+                    _si(self.root, atual)
+                    print(f"[estilo] modo de edição → {modo}", flush=True)
+            except Exception as e:  # noqa: BLE001 - estilo salva mesmo assim
+                print(f"[estilo] modo não gravado: {e}", flush=True)
         out = self.root / name
         tmp = out.with_suffix(".tmp")
         tmp.write_text(json.dumps(body, ensure_ascii=False, indent=2), encoding="utf-8")

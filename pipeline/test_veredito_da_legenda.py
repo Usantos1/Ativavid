@@ -83,7 +83,7 @@ def test_o_save_devolve_o_veredito_no_corpo():
     """A metade do servidor: sem isto a tela não tem o que ler."""
     src = (REPO / "helpers" / "preview_server.py").read_text(encoding="utf-8")
     i = src.index('name = "preview_style.json"')
-    trecho = src[i:i + 3000]
+    trecho = src[i:i + 4600]
     assert "cap_res = apply_caption_fixes" in trecho, "o retorno segue descartado"
     assert 'resp["captionFix"] = cap_res' in trecho, "o veredito não vai na resposta"
     assert "except Exception:\n                pass" not in trecho, (
