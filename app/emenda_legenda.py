@@ -100,8 +100,8 @@ def keyframes(path: Path) -> list[float]:
 
 def janela_das_correcoes(
     cues: Any, fixes: list, *, fps: float, frames: int,
-) -> tuple[int, int] | None:
-    """Quadros [ini, fim) afetados por estas correcoes de legenda.
+) -> tuple[int, int, list] | None:
+    """(ini, fim, grupos): envolvente e janelas por grupo de correcoes.
 
     A janela sai das PROPRIAS correcoes, localizando o texto de destino nas
     cues ja corrigidas. Depender de um retrato das cues antigas nao serve: o
@@ -160,7 +160,43 @@ def janela_das_correcoes(
         return None
     ini = max(0, int(ms_ini / 1000.0 * fps) - FOLGA_ANTES)
     fim = min(frames, int(ms_fim / 1000.0 * fps) + FOLGA_DEPOIS)
-    return (ini, fim) if fim > ini else None
+    if fim <= ini:
+        return None
+    grupos = _agrupar_cues(lista, tocadas, fps=fps, frames=frames)
+    return (ini, fim, grupos)
+
+
+# Correcoes a menos de isto uma da outra dividem a mesma fatia. Abaixo disso o
+# pedaco `copy` entre duas fatias nem chega a ter um GOP — nao vale a costura.
+GAP_JUNTA_MS = 1500
+
+
+def _agrupar_cues(lista: list, tocadas: set, *, fps: float,
+                  frames: int) -> list[tuple[int, int]]:
+    """Uma janela [ini_f, fim_f) por grupo de cues corrigidas proximas.
+
+    A janela unica (min..max de TODAS as cues tocadas) estoura o teto de 45%
+    em 89% dos applies reais — o usuario corrige varias palavras espalhadas de
+    uma vez, e a envolvente cobre 70% do video (mediana). Por grupo, a soma
+    cai para ~42% e ~3 fatias.
+    """
+    ords = sorted(tocadas, key=lambda i: float(lista[i].get("startMs") or 0))
+    grupos: list[list[int]] = [[ords[0]]]
+    for i in ords[1:]:
+        fim_ant = max(float(lista[j].get("endMs") or 0) for j in grupos[-1])
+        if float(lista[i].get("startMs") or 0) - fim_ant <= GAP_JUNTA_MS:
+            grupos[-1].append(i)
+        else:
+            grupos.append([i])
+    fora: list[tuple[int, int]] = []
+    for g in grupos:
+        a = min(float(lista[j].get("startMs") or 0) for j in g)
+        z = max(float(lista[j].get("endMs") or 0) for j in g)
+        ini = max(0, int(a / 1000.0 * fps) - FOLGA_ANTES)
+        fim = min(frames, int(z / 1000.0 * fps) + FOLGA_DEPOIS)
+        if fim > ini:
+            fora.append((ini, fim))
+    return fora
 
 
 def _limites_em_keyframe(
@@ -349,8 +385,8 @@ def emendar_legenda(
         if motivo is not None:
             motivo.append("nao localizei a fatia com seguranca")
         return None
-    ini_f, fim_f = janela
-    fracao = (fim_f - ini_f) / max(1, frames)
+    _ini_env, _fim_env, janelas_brutas = janela
+    fracao = sum(f - i for i, f in janelas_brutas) / max(1, frames)
     def _pulada(msg: str) -> None:
         # O motivo ia so para o stdout do worker, que ninguem guarda -- e por
         # isso "0 de 44 applies pela emenda" precisou de arqueologia para ser
@@ -372,72 +408,117 @@ def emendar_legenda(
         return None
     kfs = keyframes(final)
     elementos = _intervalos_desenhados(cues, edit_data, dur)
-    lim = None
-    for _ in range(4):
-        lim = _limites_em_keyframe(kfs, ini_f=ini_f, fim_f=fim_f, fps=fps, dur=dur)
+
+    def _ajustar(ini_f: int, fim_f: int):
+        """Alinha uma janela a keyframes e alarga até não partir elemento."""
+        lim = None
+        for _ in range(4):
+            lim = _limites_em_keyframe(kfs, ini_f=ini_f, fim_f=fim_f,
+                                       fps=fps, dur=dur)
+            if lim is None:
+                return None
+            alargado = _alargar_ate_nao_partir(
+                elementos, t_ini=lim[0], t_fim=lim[1], dur=dur)
+            if alargado is None:
+                return None
+            if (abs(alargado[0] - lim[0]) < 1e-6
+                    and abs(alargado[1] - lim[1]) < 1e-6):
+                break
+            ini_f = max(0, int(alargado[0] * fps))
+            fim_f = min(frames, int(round(alargado[1] * fps)))
+        return lim
+
+    ajustadas: list[tuple[float, float]] = []
+    for ini_f, fim_f in janelas_brutas:
+        lim = _ajustar(ini_f, fim_f)
         if lim is None:
-            break
-        # alarga ate nenhum elemento ficar partido, e volta a alinhar em
-        # keyframe (o alargamento pode ter tirado a fatia do keyframe)
-        alargado = _alargar_ate_nao_partir(
-            elementos, t_ini=lim[0], t_fim=lim[1], dur=dur)
-        if alargado is None:
-            lim = None
-            break
-        if abs(alargado[0] - lim[0]) < 1e-6 and abs(alargado[1] - lim[1]) < 1e-6:
-            break
-        ini_f = max(0, int(alargado[0] * fps))
-        fim_f = min(frames, int(round(alargado[1] * fps)))
-    if lim is None:
-        _pulada("EMENDA_PULADA nao consegui fechar a costura entre elementos")
-        return None
-    t_ini, t_fim = lim
-    fracao = (t_fim - t_ini) / max(1e-6, dur)
+            _pulada("EMENDA_PULADA nao consegui fechar a costura entre elementos")
+            return None
+        ajustadas.append(lim)
+
+    # O alinhamento a keyframe alarga cada janela; duas vizinhas podem passar a
+    # se tocar (ou o copy entre elas ficar com meia duzia de quadros, que nao
+    # paga a costura). Funde ate estabilizar.
+    ajustadas.sort()
+    fundidas: list[list[float]] = [list(ajustadas[0])]
+    for a_t, b_t in ajustadas[1:]:
+        if a_t - fundidas[-1][1] < 0.5:          # gap < meio segundo: junta
+            fundidas[-1][1] = max(fundidas[-1][1], b_t)
+        else:
+            fundidas.append([a_t, b_t])
+
+    fracao = sum(b_t - a_t for a_t, b_t in fundidas) / max(1e-6, dur)
     if fracao > FRACAO_MAXIMA:
         _pulada(f"EMENDA_PULADA fatia={fracao * 100:.0f}% depois de alargar aos keyframes")
         return None
-    kf_ini_f = int(round(t_ini * fps))
-    n = int(round((t_fim - t_ini) * fps))
-    if n <= 0 or kf_ini_f + n > frames:
-        return None
+
+    fatias: list[tuple[int, int, float, float]] = []   # (kf_ini_f, n, t_ini, t_fim)
+    for t_ini, t_fim in fundidas:
+        kf_ini_f = int(round(t_ini * fps))
+        n = int(round((t_fim - t_ini) * fps))
+        if n <= 0 or kf_ini_f + n > frames:
+            return None
+        fatias.append((kf_ini_f, n, t_ini, t_fim))
 
     trab = edit_dir / "_emenda"
     trab.mkdir(parents=True, exist_ok=True)
-    meio = trab / "meio.mp4"
-    cabeca = trab / "cabeca.mp4"
-    cauda = trab / "cauda.mp4"
     lista = trab / "concat.txt"
     juntos = trab / "juntos.mp4"
     saida = Path(dest) if dest is not None else trab / "final.mp4"
+    temporarios: list[Path] = [lista, juntos]
     try:
-        if not _desenhar_fatia(public, edit_data, ini_f=kf_ini_f, n=n,
-                               frames=frames, fps=fps, width=width,
-                               height=height, cut=cut, t_ini=t_ini, dest=meio):
-            print("EMENDA_FALHOU desenho da fatia", flush=True)
-            return None
-
+        # Pedacos alternados: [copy] fatia [copy] fatia ... [copy]. Os copies
+        # comecam sempre em keyframe (t_fim de uma fatia E keyframe, por
+        # construcao) e cortam por CONTAGEM de quadros — `-t` corta no pacote
+        # e passa do ponto (medido: 2 quadros duplicados).
         pedacos: list[Path] = []
-        if t_ini > 1e-6:
-            # `-frames:v`, nao `-t`. Com `-c copy` o corte por TEMPO acontece no
-            # pacote e passa do ponto: medido neste projeto, `-t 19,4667` deu
-            # 586 quadros onde a fatia comeca no 584 — dois quadros duplicados
-            # na emenda, e a conferencia (com razao) reprovava o arquivo.
-            r = _run([_ffmpeg(), "-y", "-hide_banner", "-loglevel", "error",
-                      "-i", str(final), "-frames:v", str(kf_ini_f),
-                      "-map", "0:v:0", "-c:v", "copy", "-an", str(cabeca)])
-            if r.returncode != 0 or not cabeca.is_file():
-                print("EMENDA_FALHOU cabeca", flush=True)
+
+        def _copy(nome: str, *, ss: float | None, n_quadros: int | None) -> bool:
+            alvo = trab / nome
+            temporarios.append(alvo)
+            cmd = [_ffmpeg(), "-y", "-hide_banner", "-loglevel", "error"]
+            if ss is not None and ss > 1e-6:
+                cmd += ["-ss", f"{ss:.6f}"]
+            cmd += ["-i", str(final)]
+            if n_quadros is not None:
+                cmd += ["-frames:v", str(n_quadros)]
+            cmd += ["-map", "0:v:0", "-c:v", "copy", "-an", str(alvo)]
+            r = _run(cmd)
+            if r.returncode != 0 or not alvo.is_file():
+                print(f"EMENDA_FALHOU {nome}", flush=True)
+                return False
+            pedacos.append(alvo)
+            return True
+
+        for idx, (kf_ini_f, n, t_ini, t_fim) in enumerate(fatias):
+            # copy antes desta fatia
+            if idx == 0:
+                if t_ini > 1e-6 and not _copy(
+                        "cabeca.mp4", ss=None, n_quadros=kf_ini_f):
+                    return None
+            else:
+                fim_ant_f = fatias[idx - 1][0] + fatias[idx - 1][1]
+                n_copy = kf_ini_f - fim_ant_f
+                if n_copy < 0:
+                    print("EMENDA_FALHOU fatias sobrepostas", flush=True)
+                    return None
+                if n_copy > 0 and not _copy(
+                        f"entre_{idx}.mp4", ss=fatias[idx - 1][3],
+                        n_quadros=n_copy):
+                    return None
+            meio = trab / f"meio_{idx}.mp4"
+            temporarios.append(meio)
+            if not _desenhar_fatia(public, edit_data, ini_f=kf_ini_f, n=n,
+                                   frames=frames, fps=fps, width=width,
+                                   height=height, cut=cut, t_ini=t_ini,
+                                   dest=meio):
+                print("EMENDA_FALHOU desenho da fatia", flush=True)
                 return None
-            pedacos.append(cabeca)
-        pedacos.append(meio)
-        if t_fim < dur - 1e-3:
-            r = _run([_ffmpeg(), "-y", "-hide_banner", "-loglevel", "error",
-                      "-ss", f"{t_fim:.6f}", "-i", str(final),
-                      "-map", "0:v:0", "-c:v", "copy", "-an", str(cauda)])
-            if r.returncode != 0 or not cauda.is_file():
-                print("EMENDA_FALHOU cauda", flush=True)
-                return None
-            pedacos.append(cauda)
+            pedacos.append(meio)
+        t_fim_ult = fatias[-1][3]
+        if t_fim_ult < dur - 1e-3 and not _copy(
+                "cauda.mp4", ss=t_fim_ult, n_quadros=None):
+            return None
 
         lista.write_text(
             "".join(f"file '{p.resolve().as_posix()}'\n" for p in pedacos),
@@ -464,8 +545,8 @@ def emendar_legenda(
         if got != frames:
             partes = " ".join(
                 f"{x.stem}={count_frames(x)}" for x in pedacos if x.is_file())
-            print(f"EMENDA_REPROVADA quadros {got}!={frames} "
-                  f"[{partes}] t_ini={t_ini:.4f} t_fim={t_fim:.4f} n={n}",
+            print(f"EMENDA_REPROVADA quadros {got}!={frames} [{partes}] "
+                  f"fatias={[(k, n_) for k, n_, _a, _b in fatias]}",
                   flush=True)
             return None
         got_sec = float((video_info(saida) or {}).get("duration") or 0.0)
@@ -479,9 +560,11 @@ def emendar_legenda(
             print(f"EMENDA_REPROVADA decode {(r.stderr or '')[-200:]}", flush=True)
             return None
 
-        print(f"EMENDA_OK {n}/{frames} quadros ({n / frames * 100:.1f}%) "
-              f"em {time.perf_counter() - t0:.1f}s", flush=True)
+        total_n = sum(f[1] for f in fatias)
+        print(f"EMENDA_OK {total_n}/{frames} quadros "
+              f"({total_n / frames * 100:.1f}%) em {len(fatias)} fatia(s), "
+              f"{time.perf_counter() - t0:.1f}s", flush=True)
         return saida
     finally:
-        for p in (cabeca, cauda, juntos, lista):
+        for p in temporarios:
             p.unlink(missing_ok=True)

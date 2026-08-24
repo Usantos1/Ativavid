@@ -61,6 +61,12 @@
   outros. No teste de ponta a ponta o vídeo saiu idêntico e a fase de render
   caiu de 283s para 70s
 
+- **Corrigir legendas ficou mais rápido.** Trocar palavras da legenda
+  redesenhava e reencodava o vídeo inteiro (~2 minutos). Agora o app refaz só
+  os trechos corrigidos e emenda no vídeo pronto — o áudio e o resto dos
+  quadros saem intactos, byte a byte. Funciona também com várias correções
+  espalhadas pelo vídeo, que era o caso comum
+
 - **Refazer um vídeo ficou mais rápido: a análise de cor tem memória.** A
   detecção de cor decodificava o vídeo inteiro a cada render — até 3 minutos
   numa fonte 4K60 — mesmo quando a fonte era exatamente a mesma. Agora o

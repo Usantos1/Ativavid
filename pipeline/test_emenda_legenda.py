@@ -48,9 +48,11 @@ def test_a_janela_sai_da_cue_corrigida(tmp_path):
             _cue(3, 6000, 8000, ["ficou", "boa"])]
     j = janela_das_correcoes(cues, [fix], fps=30.0, frames=240)
     assert j is not None
-    ini, fim = j
+    ini, fim, grupos = j
     assert ini == 4000 / 1000 * 30 - FOLGA_ANTES
     assert fim == 6000 / 1000 * 30 + FOLGA_DEPOIS
+    # uma correcao so = um grupo so, igual a envolvente
+    assert grupos == [(ini, fim)]
 
 
 def test_sem_conseguir_localizar_a_janela_e_None():
@@ -156,10 +158,12 @@ def test_a_cabeca_e_cortada_por_quadro_nao_por_tempo():
     medido, `-t 19,4667` deu 586 quadros onde a fatia começa no 584 — dois
     quadros duplicados, e a conferência reprovava o arquivo."""
     src = (REPO / "app" / "emenda_legenda.py").read_text(encoding="utf-8")
-    i = src.index("if t_ini > 1e-6:")
-    cabeca = src[i:i + 700]
-    assert '"-frames:v", str(kf_ini_f)' in cabeca, "voltou a cortar por tempo"
-    assert '"-t", f"{t_ini' not in cabeca
+    # na forma multi-fatia todos os copies passam pelo `_copy`, que corta por
+    # CONTAGEM (`-frames:v`) — nunca por tempo
+    i = src.index("def _copy(")
+    copia = src[i:i + 900]
+    assert '"-frames:v", str(n_quadros)' in copia, "voltou a cortar por tempo"
+    assert '"-t",' not in copia
 
 
 def test_a_cadeia_de_cor_e_a_mesma_do_caminho_normal():
@@ -226,3 +230,51 @@ def test_tentar_emenda_grava_emendaSkip(monkeypatch, tmp_path):
     assert ok is False
     colhido = ax._colher(tmp_path)
     assert "fatia=57%" in str(colhido.get("emendaSkip")), colhido
+
+
+# --- multi-fatia ------------------------------------------------------------
+#
+# A janela única (min..max de todas as correções) estourava o teto de 45% em
+# 89% dos applies reais — o usuário corrige várias palavras espalhadas de uma
+# vez e a envolvente cobre 70% do vídeo (mediana). Por grupo de correções
+# próximas, a soma cai (~42%, ~3 fatias) e a emenda volta a disparar.
+#
+# Provado no projeto real que era recusado (envolvente 57%): EMENDA_OK em 3
+# fatias, 40,9% dos quadros, 84s; PSNR médio 60 dB contra o caminho cheio, 85%
+# dos quadros bit-idênticos e áudio byte-idêntico.
+
+
+def _cues_ms(pares):
+    return [_cue(i, a, b, ["palavra"]) for i, (a, b) in enumerate(pares)]
+
+
+def test_correcoes_proximas_viram_um_grupo():
+    from app.emenda_legenda import _agrupar_cues
+
+    lista = _cues_ms([(1000, 2000), (2500, 3500)])
+    grupos = _agrupar_cues(lista, {0, 1}, fps=30.0, frames=9000)
+    assert len(grupos) == 1
+
+
+def test_correcoes_afastadas_viram_grupos_separados():
+    from app.emenda_legenda import GAP_JUNTA_MS, _agrupar_cues
+
+    lista = _cues_ms([(1000, 2000), (2000 + GAP_JUNTA_MS + 500, 40000)])
+    grupos = _agrupar_cues(lista, {0, 1}, fps=30.0, frames=9000)
+    assert len(grupos) == 2
+    # e os grupos vem em ordem, sem sobreposicao
+    assert grupos[0][1] <= grupos[1][0]
+
+
+def test_fracao_e_a_soma_das_fatias_nao_a_envolvente():
+    """O motivo do multi-fatia existir: duas correcoes nas pontas do video
+    tem envolvente ~100% mas soma pequena — e agora passam no teto."""
+    from app.emenda_legenda import FRACAO_MAXIMA, _agrupar_cues
+
+    frames = 9000                      # 5 min a 30fps
+    lista = _cues_ms([(1000, 2000), (280000, 281000)])
+    grupos = _agrupar_cues(lista, {0, 1}, fps=30.0, frames=frames)
+    soma = sum(f - i for i, f in grupos) / frames
+    envolvente = (grupos[-1][1] - grupos[0][0]) / frames
+    assert envolvente > FRACAO_MAXIMA, "o caso de teste perdeu a graca"
+    assert soma < FRACAO_MAXIMA, soma
