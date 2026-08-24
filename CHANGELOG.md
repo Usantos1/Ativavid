@@ -61,6 +61,11 @@
   outros. No teste de ponta a ponta o vídeo saiu idêntico e a fase de render
   caiu de 283s para 70s
 
+- **Trocar o título renomeia o vídeo entregue.** O conteúdo já saía certo,
+  mas o nome do arquivo e a pasta *publicar/* ficavam com o título antigo —
+  na hora de postar, tudo aparecia com o nome velho. Agora o arquivo, o
+  atalho "Ver final" e a pasta de publicação acompanham o título novo
+
 - **Trocar o título também ficou rápido.** Escolher outra opção de título
   refazia o vídeo inteiro (~2 minutos); como o título vive nos primeiros
   segundos, agora o app redesenha só o começo e emenda no vídeo pronto — no

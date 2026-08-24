@@ -357,3 +357,18 @@ def test_hook_desligado_recusa_emenda_de_headline(monkeypatch, tmp_path):
             "dirty": {"headline": True}}
     assert ax._tentar_emenda(tmp_path, plan, cut=tmp_path / "c.mp4",
                              dest=tmp_path / "s.mp4", log=lambda m: None) is False
+
+
+def test_trocar_o_titulo_renomeia_o_entregue():
+    """O conteúdo já saía certo, mas o NOME do mp4, o state.finalVideo e a
+    pasta publicar/ ficavam com o título velho — visto no fluxo real. O rename
+    reusa o promote_final_headline do pipeline e roda ANTES do sync_pack, para
+    a pasta publicar mudar de nome junto (o pack move)."""
+    from pipeline.leitura_de_codigo import apenas_codigo
+
+    codigo = apenas_codigo(REPO / "app" / "apply_execute.py")
+    i = codigo.find('"QUICK_APPLY_PROMOTE_FINAL"')
+    assert i > 0
+    trecho = codigo[i:codigo.find("_reembutir_capa", i)]
+    assert "promote_final_headline" in trecho, "o rename sumiu do apply"
+    assert '"finalVideo"' in trecho, "o state tem de apontar o nome novo"

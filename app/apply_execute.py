@@ -1131,6 +1131,45 @@ def execute_apply_plan(
                 except OSError:
                     pass
         log("QUICK_APPLY_PROMOTE_FINAL")
+        # Titulo trocado = ARQUIVO renomeado. O conteudo ja saia certo, mas o
+        # nome do mp4, o state.finalVideo e a pasta publicar/ ficavam com o
+        # titulo VELHO — visto no fluxo real: trocar para "FLUXO REAL DO
+        # APPLY" e a entrega continuar "O menino, sabe onde tem o mercado
+        # aqui". Reusa o mecanismo do pipeline (promote_final_headline), que
+        # renomeia, apaga o leftover antigo e nunca derruba o apply — em erro
+        # devolve o arquivo como esta. Antes da capa e do sync_pack, para a
+        # pasta publicar/ mudar de nome junto (o pack MOVE quando o nome
+        # muda).
+        if (plan.get("dirty") or {}).get("headline"):
+            try:
+                import sys as _sys
+
+                _repo = str(Path(__file__).resolve().parent.parent)
+                if _repo not in _sys.path:
+                    _sys.path.insert(0, _repo)
+                from pipeline.run_fast import promote_final_headline
+
+                ed_atual = _read_json(
+                    edit / "remotion" / "public" / "edit-data.json", {})
+                novo = promote_final_headline(edit, live_final, ed_atual, None)
+                if novo != live_final and novo.is_file():
+                    live_final = novo
+                    _write_json(edit / "state.json", {
+                        **_read_json(edit / "state.json", {}),
+                        "finalVideo": novo.name,
+                    })
+                    # `final.mp4` e a copia de conveniencia que o resto do app
+                    # espera existir. Quando o live_final ERA o final.mp4, o
+                    # rename o move — repoe a copia com o conteudo atual.
+                    hard = edit / "final.mp4"
+                    if novo.resolve() != hard.resolve():
+                        try:
+                            shutil.copy2(novo, hard)
+                        except OSError:
+                            pass
+                    log(f"QUICK_APPLY_RENAME {novo.name}")
+            except Exception as e:  # noqa: BLE001
+                log(f"QUICK_APPLY_RENAME_ERRO {e}")
         # a capa volta ANTES do sync_pack, para o entregue em publicar/ ja
         # sair com ela
         _reembutir_capa(edit, live_final, log)
