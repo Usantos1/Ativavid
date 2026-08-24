@@ -53,6 +53,12 @@
   outros. No teste de ponta a ponta o vídeo saiu idêntico e a fase de render
   caiu de 283s para 70s
 
+- **Refazer um vídeo ficou mais rápido: a análise de cor tem memória.** A
+  detecção de cor decodificava o vídeo inteiro a cada render — até 3 minutos
+  numa fonte 4K60 — mesmo quando a fonte era exatamente a mesma. Agora o
+  resultado fica guardado ao lado da fonte e o reprocesso reaproveita na hora;
+  regravar o arquivo invalida sozinho
+
 - **O corte deixou de cair no caminho lento por disputa.** Quando dois vídeos
   eram processados juntos, o segundo ia para o caminho antigo — cerca de 2,4x
   mais lento — só por não conseguir a vez. Agora ele espera a vez, que custa

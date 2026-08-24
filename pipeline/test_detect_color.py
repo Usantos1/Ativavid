@@ -114,3 +114,62 @@ def test_grade_usa_caminho_relativo_no_filtro():
     assert "metadata=print:file=meta.txt" in fonte
     assert "cwd=tmpdir" in fonte
     assert "file={metadata_path}" not in fonte
+
+
+# --- cache em disco por fonte ----------------------------------------------
+#
+# A deteccao e deterministica por fonte, mas rodava inteira a cada render:
+# ~200s numa 4K60 para amostrar 24 quadros. Reprocessar e rotina (95 de 147
+# projetos reais tem 2+ renders) e o repeteco custou ~65 min nos jobs
+# historicos. Provado na fonte real: 8,1s -> 0,1s com resultado identico.
+
+
+def _video_fake(tmp_path, conteudo=b"x" * 4096):
+    v = tmp_path / "fonte.mp4"
+    v.write_bytes(conteudo)
+    return v
+
+
+def test_cache_devolve_o_mesmo_sem_medir_de_novo(tmp_path, monkeypatch):
+    import detect_color as dc
+
+    v = _video_fake(tmp_path)
+    chamadas = []
+    monkeypatch.setattr(dc, "detect", lambda video, samples=24:
+                        chamadas.append(1) or {"profile": "rec709", "grade": ""})
+    r1 = dc.detect_cached(v)
+    r2 = dc.detect_cached(v)
+    assert r1 == r2 == {"profile": "rec709", "grade": ""}
+    assert len(chamadas) == 1, "a segunda vez tinha de vir do disco"
+
+
+def test_fonte_trocada_invalida(tmp_path, monkeypatch):
+    """Regravar o arquivo com o mesmo nome nao pode herdar a cor do antigo."""
+    import detect_color as dc
+
+    v = _video_fake(tmp_path)
+    respostas = iter([{"profile": "rec709"}, {"profile": "hlg"}])
+    monkeypatch.setattr(dc, "detect", lambda video, samples=24: next(respostas))
+    assert dc.detect_cached(v)["profile"] == "rec709"
+    import os
+    v.write_bytes(b"y" * 8192)          # outro tamanho e mtime
+    assert dc.detect_cached(v)["profile"] == "hlg"
+
+
+def test_cache_corrompido_nao_derruba(tmp_path, monkeypatch):
+    import detect_color as dc
+
+    v = _video_fake(tmp_path)
+    v.with_suffix(v.suffix + ".colorjson").write_text("{ nao e json", encoding="utf-8")
+    monkeypatch.setattr(dc, "detect", lambda video, samples=24: {"profile": "rec709"})
+    assert dc.detect_cached(v)["profile"] == "rec709"
+
+
+def test_amostragem_diferente_nao_reusa(tmp_path, monkeypatch):
+    """`--samples 8` e `--samples 24` medem coisas diferentes."""
+    import detect_color as dc
+
+    v = _video_fake(tmp_path)
+    monkeypatch.setattr(dc, "detect", lambda video, samples=24: {"n": samples})
+    assert dc.detect_cached(v, 24)["n"] == 24
+    assert dc.detect_cached(v, 8)["n"] == 8

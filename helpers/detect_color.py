@@ -305,17 +305,58 @@ def detect(video: Path, samples: int = 24) -> dict:
     return r
 
 
+# Versao do cache: mudar quando a heuristica de detec/grade mudar, senao um
+# resultado velho continuaria valendo com a regra nova.
+_CACHE_VER = "1"
+
+
+def detect_cached(video: Path, samples: int = 24) -> dict:
+    """`detect()` com memoria em disco, ao lado da fonte.
+
+    A deteccao e deterministica por FONTE (o preset so entra depois, em
+    `resolve_color_grade`), mas rodava inteira a cada render: numa 4K60 sao
+    ~200s decodificando o video para amostrar 24 quadros. Como reprocessar e
+    rotina — 95 dos 147 projetos reais tem 2+ renders — o repeteco custou ~65
+    minutos so nos jobs historicos.
+
+    O arquivo `<fonte>.colorjson` vive ao lado da fonte no projeto (como o
+    `.prep.mp4`): morre com o projeto, e reprocesso no mesmo projeto acerta.
+    Chave = tamanho + mtime + amostras + versao; qualquer falha de leitura ou
+    escrita vira o caminho de sempre — cache e atalho, nunca porta.
+    """
+    cache = video.with_suffix(video.suffix + ".colorjson")
+    st = video.stat()
+    chave = {"size": st.st_size, "mtime_ns": st.st_mtime_ns,
+             "samples": int(samples), "ver": _CACHE_VER}
+    try:
+        d = json.loads(cache.read_text(encoding="utf-8"))
+        if d.get("_chave") == chave and isinstance(d.get("resultado"), dict):
+            print("DETECT_COLOR CACHE HIT", file=sys.stderr)
+            return d["resultado"]
+    except (OSError, json.JSONDecodeError, AttributeError):
+        pass
+    r = detect(video, samples)
+    try:
+        cache.write_text(json.dumps({"_chave": chave, "resultado": r},
+                                    ensure_ascii=False), encoding="utf-8")
+    except OSError:
+        pass
+    return r
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("video", type=Path)
     p.add_argument("--samples", type=int, default=24)
     p.add_argument("--json", action="store_true")
+    p.add_argument("--no-cache", action="store_true",
+                   help="ignora o .colorjson e mede de novo")
     a = p.parse_args()
     if not a.video.exists():
         sys.exit(f"não encontrado: {a.video}")
 
-    r = detect(a.video, a.samples)
+    r = detect(a.video, a.samples) if a.no_cache else detect_cached(a.video, a.samples)
     if a.json:
         print(json.dumps(r, indent=2, ensure_ascii=False))
         return
