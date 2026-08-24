@@ -936,8 +936,10 @@ def _tentar_emenda(edit: Path, plan: dict[str, Any], *, cut: Path, dest: Path,
             return False
         tl = timeline_from_edit_data(edit_data)
         final_atual = _current_final(edit)
+        pq: list = []
         saida = emendar_legenda(
             edit,
+            motivo=pq,
             public=public,
             edit_data=edit_data,
             cut=cut,
@@ -954,6 +956,14 @@ def _tentar_emenda(edit: Path, plan: dict[str, Any], *, cut: Path, dest: Path,
         log(f"QUICK_APPLY_EMENDA_ERRO {e}")
         return False
     if saida is None:
+        # O motivo vai para o apply_history via `_colher` -- e o que vai
+        # decidir, com dados de producao, se vale generalizar a emenda para
+        # multi-fatia (a envolvente unica estoura o teto em 89% dos casos
+        # reais; a estimativa multi-fatia passa em 67%).
+        if pq:
+            log(f"QUICK_APPLY_EMENDA_PULADA {pq[0][:120]}")
+            with _METRICAS_LOCK:
+                _ULTIMO_MOTOR.setdefault(_chave(edit), {})["emendaSkip"] = pq[0][:160]
         return False
     log("QUICK_APPLY_EMENDA_OK")
     _ULTIMO_MOTOR.setdefault(_chave(edit), {})["engine"] = "emenda"

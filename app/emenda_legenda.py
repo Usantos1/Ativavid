@@ -335,6 +335,7 @@ def emendar_legenda(
     cut: Path, final: Path, cues: Any, fixes: list,
     frames: int, fps: float, width: int = 1080, height: int = 1920,
     dest: Path | None = None,
+    motivo: list | None = None,
 ) -> Path | None:
     """Refaz só a fatia mexida e emenda no final. `None` = siga o caminho normal."""
     from app.overlay_compose import count_frames, video_info
@@ -345,13 +346,26 @@ def emendar_legenda(
     janela = janela_das_correcoes(cues, fixes, fps=fps, frames=frames)
     if janela is None:
         print("EMENDA_PULADA nao localizei a fatia com seguranca", flush=True)
+        if motivo is not None:
+            motivo.append("nao localizei a fatia com seguranca")
         return None
     ini_f, fim_f = janela
     fracao = (fim_f - ini_f) / max(1, frames)
+    def _pulada(msg: str) -> None:
+        # O motivo ia so para o stdout do worker, que ninguem guarda -- e por
+        # isso "0 de 44 applies pela emenda" precisou de arqueologia para ser
+        # explicado (a envolvente unica estoura o teto quando as correcoes sao
+        # espalhadas: mediana real de 70% contra teto de 45%). Com o motivo no
+        # apply_history, a decisao de generalizar para multi-fatia sai dos
+        # dados de producao, nao de estimativa.
+        print(msg, flush=True)
+        if motivo is not None:
+            motivo.append(msg)
+
     if fracao > FRACAO_MAXIMA:
-        print(f"EMENDA_PULADA fatia={fracao * 100:.0f}% > {FRACAO_MAXIMA * 100:.0f}%",
-              flush=True)
+        _pulada(f"EMENDA_PULADA fatia={fracao * 100:.0f}% > {FRACAO_MAXIMA * 100:.0f}%")
         return None
+
 
     dur = float((video_info(final) or {}).get("duration") or 0.0)
     if dur <= 0:
@@ -375,14 +389,12 @@ def emendar_legenda(
         ini_f = max(0, int(alargado[0] * fps))
         fim_f = min(frames, int(round(alargado[1] * fps)))
     if lim is None:
-        print("EMENDA_PULADA nao consegui fechar a costura entre elementos",
-              flush=True)
+        _pulada("EMENDA_PULADA nao consegui fechar a costura entre elementos")
         return None
     t_ini, t_fim = lim
     fracao = (t_fim - t_ini) / max(1e-6, dur)
     if fracao > FRACAO_MAXIMA:
-        print(f"EMENDA_PULADA fatia={fracao * 100:.0f}% depois de alargar "
-              f"> {FRACAO_MAXIMA * 100:.0f}%", flush=True)
+        _pulada(f"EMENDA_PULADA fatia={fracao * 100:.0f}% depois de alargar aos keyframes")
         return None
     kf_ini_f = int(round(t_ini * fps))
     n = int(round((t_fim - t_ini) * fps))

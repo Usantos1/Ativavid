@@ -172,3 +172,57 @@ def test_a_cadeia_de_cor_e_a_mesma_do_caminho_normal():
                    "setparams=color_primaries=bt709"):
         assert filtro in emenda, f"a emenda perdeu {filtro!r}"
         assert filtro in proprio, f"o caminho normal perdeu {filtro!r}"
+
+
+# --- o motivo do pulo chega ao apply_history --------------------------------
+#
+# A emenda (10x mais rapida para trocar uma palavra) existiu por 3 dias sem
+# disparar UMA vez em 14 applies de legenda reais — e o motivo ia so para o
+# stdout do worker, que ninguem guarda. Explicar os "0 de 44" exigiu reproduzir
+# o apply num projeto copiado. Causa real: a envolvente UNICA das correcoes
+# estoura o teto de 45% quando elas sao espalhadas (mediana real: 70%).
+# Com o motivo no history, a decisao de generalizar para multi-fatia saira dos
+# dados de producao.
+
+
+def test_motivo_do_pulo_e_devolvido(tmp_path):
+    from app.emenda_legenda import FRACAO_MAXIMA
+
+    assert 0 < FRACAO_MAXIMA < 1
+    # o parametro existe e e opcional — o chamador antigo continua valido
+    import inspect
+
+    from app.emenda_legenda import emendar_legenda
+
+    par = inspect.signature(emendar_legenda).parameters
+    assert "motivo" in par and par["motivo"].default is None
+
+
+def test_tentar_emenda_grava_emendaSkip(monkeypatch, tmp_path):
+    from app import apply_execute as ax
+
+    (tmp_path / "remotion" / "public").mkdir(parents=True)
+    (tmp_path / "remotion" / "public" / "edit-data.json").write_text(
+        '{"fps": 30, "width": 1080, "height": 1920, "captions": {}}', encoding="utf-8")
+    (tmp_path / "remotion" / "public" / "caption-cues.json").write_text(
+        '{"cues": [{"startMs": 0, "endMs": 500, "lines": [[{"text": "oi"}]]}]}',
+        encoding="utf-8")
+    (tmp_path / "caption_fixes.json").write_text(
+        '[{"from": "oi", "to": "olá"}]', encoding="utf-8")
+
+    def recusa(*a, motivo=None, **k):
+        if motivo is not None:
+            motivo.append("EMENDA_PULADA fatia=57% > 45%")
+        return None
+    import app.emenda_legenda as em
+    monkeypatch.setattr(em, "emendar_legenda", recusa)
+    import app.timeline as tl
+    monkeypatch.setattr(tl, "timeline_from_edit_data",
+                        lambda ed: {"durationInFrames": 300})
+    plan = {"mode": "REUSE_CUT", "rebuildCut": False, "remapCaptions": False,
+            "dirty": {"captions": True}}
+    ok = ax._tentar_emenda(tmp_path, plan, cut=tmp_path / "cut.mp4",
+                           dest=tmp_path / "s.mp4", log=lambda m: None)
+    assert ok is False
+    colhido = ax._colher(tmp_path)
+    assert "fatia=57%" in str(colhido.get("emendaSkip")), colhido
