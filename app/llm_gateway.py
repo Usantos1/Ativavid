@@ -129,16 +129,24 @@ def _error(message: str, code: int = 502) -> tuple[int, dict]:
     }
 
 
-def _groq_chat(messages: list[dict], model: str | None) -> dict:
+def _groq_chat(messages: list[dict], model: str | None,
+               extras: dict | None = None) -> dict:
     key = _groq_key()
     if not key:
         raise RuntimeError("Sem sessão e sem GROQ_API_KEY")
     mid = model or GROQ_MODELO
-    body = json.dumps({
+    payload = {
         "model": mid,
         "messages": messages,
         "temperature": 0.7,
-    }).encode("utf-8")
+    }
+    # `extras` cobre o que um chamador especifico precisa sem mudar o resto —
+    # o planejador pede `response_format json_object`, porque sem isso o
+    # modelo devolveu JSON com virgula faltando num plano real (23/08) e o
+    # parse caiu.
+    if extras:
+        payload.update(extras)
+    body = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
         "https://api.groq.com/openai/v1/chat/completions",
         data=body,

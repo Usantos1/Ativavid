@@ -27,6 +27,13 @@
   a sessão, o app ficava sem IA para planejar o corte. Agora ela é aceita
   apenas nas duas rotas de captura, e o resto do app continua fechado
 
+- **O plano do vídeo sai mesmo com as sessões de IA expiradas.** As sessões
+  do Gemini e do ChatGPT expiram juntas de tempos em tempos, e o corte caía
+  para o modo automático sem título. Agora, se as duas falharem e houver chave
+  do Groq configurada, o plano sai por ela — a Fila registra `groq` como
+  origem, e a mensagem de erro passou a avisar quando as DUAS sessões
+  precisam de recaptura, não só uma
+
 - **A Fila avisa quando um vídeo saiu sem IA.** Antes esse aviso existia só num
   registro técnico que ninguém abre. O conselho segue a causa: quando foi a
   conexão, pede para reconectar; quando foi outra coisa, pede só para gerar de
