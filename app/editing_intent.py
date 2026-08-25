@@ -99,7 +99,19 @@ def normalize(raw: dict | None, *, duration_s: float | None = None) -> dict:
     content = normalize_content_type(src.get("contentType") or src.get("tipoConteudo"))
     preset_id = str(src.get("brandPresetId") or "").strip() or None
     brand_id = str(src.get("brandId") or "").strip() or None
+    # Knobs do corte escolhidos NA IMPORTACAO (25/08, "mais opcoes de
+    # edicao"). Vazio/invalido = None = o preset do estilo decide. Os dois
+    # sao _CUT_STYLE_KEYS: mudar num refazer replaneja o corte.
+    ritmo = str(src.get("rhythm") or "").strip().lower() or None
+    if ritmo not in ("natural", "calmo", "dinamico", "viral", "rapido",
+                     "muito_rapido", "cirurgico", "narrativa"):
+        ritmo = None
+    limpeza = str(src.get("speechClean") or "").strip().lower() or None
+    if limpeza not in ("desativado", "leve", "medio", "forte"):
+        limpeza = None
     return {
+        "rhythm": ritmo,
+        "speechClean": limpeza,
         "editingIntent": mode,
         "contentType": content,
         "preserveHook": flags["preserveHook"],
@@ -182,6 +194,10 @@ def merge_into_preset(preset: dict, intent: dict | None) -> dict:
         out["brandPresetId"] = data["brandPresetId"]
     if data.get("sourceDurationSec") is not None:
         out["sourceDurationSec"] = data["sourceDurationSec"]
+    if data.get("rhythm"):
+        out["rhythm"] = data["rhythm"]
+    if data.get("speechClean"):
+        out["speechClean"] = data["speechClean"]
     return out
 
 

@@ -801,6 +801,26 @@
           <option value="informational" selected>Informativo</option>
         </select>
       </label>
+      <label class="import-field">Ritmo do corte
+        <select id="importRhythm">
+          <option value="" selected>Padrão do modo</option>
+          <option value="calmo">Natural — poucos cortes, cenas longas</option>
+          <option value="dinamico">Dinâmico — ritmo comercial</option>
+          <option value="rapido">Rápido — energia alta, cenas curtas</option>
+          <option value="muito_rapido">Muito rápido — só o essencial</option>
+          <option value="cirurgico">Cirúrgico — corta entre frases, zero pausa</option>
+          <option value="narrativa">Narrativa — blocos longos, história inteira</option>
+        </select>
+      </label>
+      <label class="import-field">Limpeza de fala
+        <select id="importSpeechClean">
+          <option value="" selected>Padrão do modo</option>
+          <option value="desativado">Desativada — só silêncios óbvios</option>
+          <option value="leve">Leve — preserva hesitações naturais</option>
+          <option value="medio">Média — tira gaguejos e retomadas</option>
+          <option value="forte">Forte — fala enxuta ao máximo</option>
+        </select>
+      </label>
     </div>
     <details class="import-block import-adv">
       <summary><h4>Estilo</h4><span class="muted">padrão da marca</span></summary>
@@ -818,7 +838,7 @@
     <div class="dlg-actions">
       <button type="button" class="ghost-btn" id="btnImportCancel">Cancelar</button>
       <button type="button" class="ghost-btn" id="btnImportTrio"
-              title="Importa o mesmo vídeo três vezes — Dinâmico, Vídeo completo e Sem cortes — para comparar lado a lado">Gerar 3 versões</button>
+              title="Importa o mesmo vídeo cinco vezes — Dinâmico, Vídeo completo, Sem cortes, Reels/Shorts e Viral — para comparar lado a lado">Gerar 5 versões</button>
       <button type="button" class="export-btn" id="btnImportGo">Editar com IA</button>
     </div>
   </dialog>

@@ -120,17 +120,36 @@ def test_relatorio_recusa_multi_take(tmp_path):
     assert d is None, "gap entre fontes de tempos locais nao e remocao"
 
 
-def test_gerar_3_versoes_existe_e_roda_os_tres_modos():
+def test_gerar_versoes_roda_os_cinco_modos():
     """Uso real (24/08): o usuario importou o MESMO video seis vezes trocando
-    modo/estilo na mao para comparar minutagens. O botao faz isso num clique:
-    tres projetos (dynamic, complete, intact) do mesmo arquivo."""
+    modo/estilo na mao. Comecou com 3 versoes; ele pediu mais ("falta mais",
+    25/08): agora sao 5 — os tres niveis de tesoura + Shorts + Viral."""
     imp = (RAIZ / "assets" / "studio" / "index.html").read_text(encoding="utf-8")
-    assert 'id="btnImportTrio"' in imp, "o botao Gerar 3 versoes sumiu"
+    assert 'id="btnImportTrio"' in imp, "o botao Gerar versoes sumiu"
+    assert "Gerar 5 vers" in imp, "o rotulo do botao nao diz 5 versoes"
     js = (RAIZ / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
     i = js.find("btnTrio.onclick")
     assert i > 0
-    bloco = js[i:i + 1200]
-    assert '"dynamic", "complete", "intact"' in bloco, \
-        "o trio de modos mudou sem atualizar o teste (confira o rotulo do toast)"
-    assert "editingIntent: modo" in bloco, \
-        "o intent base nao esta sendo sobrescrito por modo"
+    bloco = js[i:i + 1600]
+    for m in ('"dynamic"', '"complete"', '"intact"', '"shorts"'):
+        assert f"editingIntent: {m}" in bloco, f"versao {m} sumiu do lote"
+    assert 'contentType: "viral"' in bloco, "o pacote Viral sumiu do lote"
+
+
+def test_knobs_de_corte_viajam_no_job_intent():
+    """Ritmo do corte e Limpeza de fala escolhidos na importacao chegam ao
+    preset do planejador (sao _CUT_STYLE_KEYS: mudar replaneja). Invalido ou
+    vazio = None = o estilo decide."""
+    from app.editing_intent import merge_into_preset
+
+    d = normalize({"editingIntent": "dynamic", "rhythm": "cirurgico",
+                   "speechClean": "forte"})
+    assert d["rhythm"] == "cirurgico" and d["speechClean"] == "forte"
+    p2 = merge_into_preset({"rhythm": "dinamico"}, d)
+    assert p2["rhythm"] == "cirurgico" and p2["speechClean"] == "forte"
+    d2 = normalize({"editingIntent": "dynamic", "rhythm": "banana"})
+    assert d2["rhythm"] is None
+    p3 = merge_into_preset({"rhythm": "dinamico"}, d2)
+    assert p3["rhythm"] == "dinamico", "knob vazio nao pode apagar o do estilo"
+    imp = (RAIZ / "assets" / "studio" / "index.html").read_text(encoding="utf-8")
+    assert 'id="importRhythm"' in imp and 'id="importSpeechClean"' in imp

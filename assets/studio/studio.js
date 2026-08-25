@@ -1470,6 +1470,11 @@ function collectImportIntent() {
     protectedRanges: parseProtectedRanges($("#protRanges")?.value || ""),
     brandStyleSource: $("#useBrandStyle")?.checked ? "default" : "custom",
     contentType: $("#importContentType")?.value || null,
+    // Knobs do CORTE na importacao (pedido de 25/08: "mais opcoes de
+    // edicao"). Vazio = padrao do modo; ambos ja sao _CUT_STYLE_KEYS, entao
+    // mudar num refazer replaneja o corte.
+    rhythm: $("#importRhythm")?.value || null,
+    speechClean: $("#importSpeechClean")?.value || null,
     brandId: $("#brandSelect")?.value || null,
     brandPresetId: $("#importPresetSelect")?.value || null,
     sourceDurationSec: state.pendingDuration || null,
@@ -2191,12 +2196,21 @@ function wireDrop() {
       $("#dlgImport")?.close();
       const base = collectImportIntent();
       try {
-        for (const modo of ["dynamic", "complete", "intact"]) {
-          const intent = { ...base, editingIntent: modo };
+        // 5 versoes (pedido de 25/08: "falta mais" no trio): os tres niveis
+        // de tesoura + Shorts + o pacote Viral (dinamico com tipo viral).
+        const versoes = [
+          { editingIntent: "dynamic" },
+          { editingIntent: "complete" },
+          { editingIntent: "intact" },
+          { editingIntent: "shorts" },
+          { editingIntent: "dynamic", contentType: "viral" },
+        ];
+        for (const extra of versoes) {
+          const intent = { ...base, ...extra };
           if (paths) await importarPorCaminho(paths, intent);
           else await uploadFiles(files, intent);
         }
-        toast("3 versões na fila: Dinâmico, Vídeo completo e Sem cortes");
+        toast("5 versões na fila: Dinâmico, Completo, Sem cortes, Shorts e Viral");
       } catch (err) {
         toast(err.message);
       } finally {

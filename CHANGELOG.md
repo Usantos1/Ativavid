@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.70
+
+- **"Gerar 5 versões".** O botão de comparação agora cobre os cinco jeitos de
+  editar: Dinâmico, Vídeo completo, Sem cortes, Reels/Shorts e Viral — cinco
+  projetos na fila do mesmo arquivo, para escolher o melhor resultado
+
+- **Ritmo do corte e Limpeza de fala na importação.** Dois controles novos no
+  diálogo de importar: o ritmo (Natural, Dinâmico, Rápido, Muito rápido,
+  Cirúrgico ou Narrativa) e a limpeza de fala (Desativada, Leve, Média,
+  Forte). Vazio usa o padrão do modo; a escolha viaja com o projeto e trocar
+  qualquer um dos dois num "refazer" replaneja o corte
+
 ## 2.69
 
 - **"Gerar 3 versões" na importação.** Um clique importa o mesmo vídeo três
