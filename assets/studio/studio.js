@@ -2179,6 +2179,32 @@ function wireDrop() {
       }
     };
   }
+  // "Gerar 3 versões": o mesmo vídeo em Dinâmico + Vídeo completo + Sem
+  // cortes, três projetos na fila, para comparar lado a lado. Nasceu de uso
+  // real: o usuário importou o MESMO vídeo seis vezes num dia (24/08)
+  // trocando modo/estilo na mão para comparar as minutagens.
+  const btnTrio = $("#btnImportTrio");
+  if (btnTrio) {
+    btnTrio.onclick = async () => {
+      const files = state.pendingFiles || [];
+      const paths = state.pendingPaths || null;
+      $("#dlgImport")?.close();
+      const base = collectImportIntent();
+      try {
+        for (const modo of ["dynamic", "complete", "intact"]) {
+          const intent = { ...base, editingIntent: modo };
+          if (paths) await importarPorCaminho(paths, intent);
+          else await uploadFiles(files, intent);
+        }
+        toast("3 versões na fila: Dinâmico, Vídeo completo e Sem cortes");
+      } catch (err) {
+        toast(err.message);
+      } finally {
+        state.pendingFiles = null;
+        state.pendingPaths = null;
+      }
+    };
+  }
   const btnCancel = $("#btnImportCancel");
   if (btnCancel) {
     btnCancel.onclick = () => {

@@ -118,3 +118,19 @@ def test_relatorio_recusa_multi_take(tmp_path):
         {"source": "B", "start": 0.0, "end": 5.0},
     ])
     assert d is None, "gap entre fontes de tempos locais nao e remocao"
+
+
+def test_gerar_3_versoes_existe_e_roda_os_tres_modos():
+    """Uso real (24/08): o usuario importou o MESMO video seis vezes trocando
+    modo/estilo na mao para comparar minutagens. O botao faz isso num clique:
+    tres projetos (dynamic, complete, intact) do mesmo arquivo."""
+    imp = (RAIZ / "assets" / "studio" / "index.html").read_text(encoding="utf-8")
+    assert 'id="btnImportTrio"' in imp, "o botao Gerar 3 versoes sumiu"
+    js = (RAIZ / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
+    i = js.find("btnTrio.onclick")
+    assert i > 0
+    bloco = js[i:i + 1200]
+    assert '"dynamic", "complete", "intact"' in bloco, \
+        "o trio de modos mudou sem atualizar o teste (confira o rotulo do toast)"
+    assert "editingIntent: modo" in bloco, \
+        "o intent base nao esta sendo sobrescrito por modo"
