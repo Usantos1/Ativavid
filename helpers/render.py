@@ -1465,6 +1465,54 @@ def leading_silence(source: Path, start: float, end: float,
     return max(0.0, dur)
 
 
+def _palavras_da_fonte(edit_dir: Path, src: Path) -> list[tuple[float, float]]:
+    """(start, end) de cada palavra da transcricao da fonte; [] sem arquivo."""
+    try:
+        import json as _json
+
+        data = _json.loads((Path(edit_dir) / "transcripts" / f"{src.stem}.json")
+                           .read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        return []
+    out = []
+    for w in data.get("words") or []:
+        if w.get("type", "word") != "word":
+            continue
+        try:
+            ws, we = float(w["start"]), float(w["end"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if we - ws >= 0.05:
+            out.append((ws, we))
+    return out
+
+
+def _apara_limitada_pela_fala(avail: float, *, start: float, end: float,
+                              palavras: list[tuple[float, float]],
+                              cauda: bool = True) -> float:
+    """A apara de silencio NUNCA passa do fim da ultima palavra do take.
+
+    O detector de nivel le fala baixinha como silencio — e uma palavra
+    decepada NO ARQUIVO FINAL e invisivel para a regua do plano
+    (cover_all_words valida o EDL, nao o render). O limite vem da
+    transcricao: cauda para 60ms depois da ultima palavra; cabeca para
+    60ms antes da primeira.
+    """
+    if avail <= 0 or not palavras:
+        return avail
+    dentro = [(ws, we) for ws, we in palavras
+              if min(end, we) - max(start, ws) > 0.02]
+    if not dentro:
+        return avail
+    if cauda:
+        ultima = max(we for _, we in dentro)
+        teto = max(0.0, (end - min(ultima, end)) - 0.06)
+    else:
+        primeira = min(ws for ws, _ in dentro)
+        teto = max(0.0, (max(primeira, start) - start) - 0.06)
+    return min(avail, teto)
+
+
 def polish_edl_edges(edl: dict, edit_dir: Path) -> None:
     """In-place: clamp ranges to source duration; strip dead air at head/tail.
 
@@ -1491,13 +1539,18 @@ def polish_edl_edges(edl: dict, edit_dir: Path) -> None:
             end = min(end, src_dur)
             start = max(0.0, min(start, max(0.0, end - 0.08)))
 
+        palavras = _palavras_da_fonte(edit_dir, src)
         if i == 0 and end - start > 0.25:
             head = leading_silence(src, start, end)
+            head = _apara_limitada_pela_fala(
+                head, start=start, end=end, palavras=palavras, cauda=False)
             if head > 0.06:
                 start = min(end - 0.12, start + head - 0.040)
 
         if i == n - 1 and end - start > 0.25:
             avail = trailing_silence(src, start, end)
+            avail = _apara_limitada_pela_fala(
+                avail, start=start, end=end, palavras=palavras)
             if avail > 0.06:
                 end = max(start + 0.12, end - (avail - 0.040))
 
@@ -1523,6 +1576,14 @@ def plan_jcut(edl: dict, edit_dir: Path, cfg: dict) -> list[dict]:
 
         # Mid-take only: head/tail of the whole cut were already polished on the EDL.
         avail = trailing_silence(src, start, end) if i < n - 1 else None
+        if avail is not None:
+            antes = avail
+            avail = _apara_limitada_pela_fala(
+                avail, start=start, end=end,
+                palavras=_palavras_da_fonte(edit_dir, src))
+            if avail < antes - 0.02:
+                print(f"[palavras] corte {i}: apara limitada pela fala "
+                      f"({antes*1000:.0f}→{avail*1000:.0f}ms)", flush=True)
         silence_ms.append(round(avail * 1000) if avail is not None else None)
         tf = 0
         if avail is not None and cfg["tail_trim_frames"]:

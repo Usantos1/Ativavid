@@ -96,3 +96,46 @@ def test_a_ui_tem_o_painel_e_a_acao():
     srv = (RAIZ / "helpers" / "preview_server.py").read_text(encoding="utf-8")
     assert '"corteRelatorio": relatorio' in srv, \
         "/api/state deixou de expor o relatorio"
+
+
+def test_apara_de_silencio_nunca_come_palavra():
+    """O detector de nivel le fala baixinha como silencio; a apara de cauda
+    (tail_trim) e o polimento de bordas poderiam decepar palavra NO ARQUIVO
+    FINAL, invisivel para a regua do plano. O teto vem da transcricao."""
+    sys.path.insert(0, str(RAIZ / "helpers"))
+    from render import _apara_limitada_pela_fala
+
+    palavras = [(2.0, 3.0), (8.0, 9.5)]
+    # cauda: ultima palavra termina em 9.5 num take ate 10.0 -> teto 0.44
+    v = _apara_limitada_pela_fala(2.0, start=0.0, end=10.0, palavras=palavras)
+    assert abs(v - 0.44) < 0.01, v
+    # palavra terminando exatamente no fim: nada de apara
+    v = _apara_limitada_pela_fala(1.0, start=0.0, end=9.5, palavras=palavras)
+    assert v == 0.0, v
+    # sem palavras no take: o detector decide sozinho
+    v = _apara_limitada_pela_fala(1.0, start=20.0, end=25.0, palavras=palavras)
+    assert v == 1.0
+    # cabeca: primeira palavra em 2.0 -> teto 1.94
+    v = _apara_limitada_pela_fala(3.0, start=0.0, end=10.0,
+                                  palavras=palavras, cauda=False)
+    assert abs(v - 1.94) < 0.01, v
+
+
+def test_plano_b_groq_vira_nota_no_card(tmp_path):
+    """Sucesso pelo Groq nao e erro, mas o usuario precisa saber que as
+    sessoes web cairam — em 24/08 so dava para descobrir abrindo o painel
+    de IA. Sessao ok (gemini-web) nao gera nota nenhuma."""
+    from app.jobs_view import _aviso_de_ia
+
+    (tmp_path / "result.json").write_text(json.dumps(
+        {"llm": {"ok": True, "backend": "groq"}}), encoding="utf-8")
+    job = {"status": "done"}
+    _aviso_de_ia(job, tmp_path)
+    assert "Groq" in str(job.get("iaNota") or "")
+    assert not job.get("iaAviso"), "plano B com sucesso nao e aviso de erro"
+
+    (tmp_path / "result.json").write_text(json.dumps(
+        {"llm": {"ok": True, "backend": "gemini-web"}}), encoding="utf-8")
+    job2 = {"status": "done"}
+    _aviso_de_ia(job2, tmp_path)
+    assert not job2.get("iaNota") and not job2.get("iaAviso")

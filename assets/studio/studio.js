@@ -468,6 +468,8 @@ function fichaHtml(j) {
   // O que o corte tirou, em uma linha ("32s silêncio · 9s repetição") — a
   // resposta da pergunta que o usuario fez a cada video de 24-25/08.
   if (j.corteResumo) linhas.push(["Saiu", j.corteResumo]);
+  // Nota (nao erro): o plano veio do Groq porque as sessoes web cairam.
+  if (j.iaNota) linhas.push(["IA", j.iaNota]);
   const ini = String(j.startedAtLabel || j.createdAtLabel || "");
   const fin = String(j.finishedAtLabel || "");
   if (ini) linhas.push(["Início", ini]);
@@ -500,6 +502,7 @@ function cardSig(j, opts) {
     j.iaAviso || "",
     j.modoLabel || "",
     j.corteResumo || "",
+    j.iaNota || "",
     j.stage, j.message, j.reason || "", j.localPoster || j.thumbUrl, links.editor, links.estilo, links.final,
     opts && opts.compact ? "1" : "0",
     qa.status || "", qa.stage || "", qa.elapsedLabel || "", qa.etaLabel || "", qa.stageLabel || "",

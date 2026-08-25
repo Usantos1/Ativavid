@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.72
+
+- **A limpeza de silêncio nunca mais come o fim de uma palavra.** O acabamento
+  do render apara o silêncio no fim de cada corte usando um detector de nível
+  de áudio — e fala baixinha podia passar por silêncio, decepando a palavra
+  no arquivo final sem nada acusar. Agora a apara respeita a transcrição:
+  para 60ms depois da última palavra do trecho, sempre
+
+- **O card avisa quando o plano veio do Groq.** Se as sessões web (Gemini /
+  ChatGPT) caírem, o vídeo continua saindo pelo plano B — mas agora a ficha
+  do card mostra "IA: Plano B (Groq) — recapture em Chaves & IA", em vez de
+  falhar em silêncio ou exigir abrir o painel de IA para descobrir
+
 ## 2.71
 
 - **"Trazer de volta": restaure qualquer trecho removido com um clique.** A

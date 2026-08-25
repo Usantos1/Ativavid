@@ -94,7 +94,16 @@ def _aviso_de_ia(job: dict, edit: Path) -> None:
     except (OSError, json.JSONDecodeError):
         return
     llm = r.get("llm")
-    if not isinstance(llm, dict) or llm.get("ok"):
+    if not isinstance(llm, dict):
+        return
+    if llm.get("ok"):
+        # Sucesso pelo PLANO B: o video saiu certo, mas as sessoes web
+        # cairam e o plano veio do Groq. Em 24/08 isso aconteceu as 23h e o
+        # usuario so saberia abrindo o painel de IA — o card agora conta na
+        # hora, como nota (nao e erro).
+        if str(llm.get("backend") or "") == "groq":
+            job["iaNota"] = ("Plano B (Groq): as sessões web caíram. "
+                             "Recapture em Chaves & IA.")
         return
     # O CONSELHO tem de seguir a causa. A primeira versao mandava "reconecte
     # em Chaves & IA" em todo caso — e nos projetos reais 65 dos 67 avisos
