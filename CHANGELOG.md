@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.68
+
+- **Novo modo: "Sem cortes".** O vídeo inteiro, do jeito que foi gravado —
+  zero tesoura. Só legendas, título, cor e trilha. Aparece como card na
+  importação e como opção no "Modo de edição" da tela de Estilo. Para quem
+  quer o máximo de originalidade: nem silêncio sai
+
+- **O card agora conta o que saiu do corte.** Linha nova na ficha do vídeo
+  pronto: "Saiu: 23s silêncio · 4s repetição · 1s recomeço". O detalhe
+  completo (cada trecho removido, com o texto falado e o motivo) fica em
+  `corte_relatorio.json` no projeto. Chega de desconfiar no escuro — o corte
+  se explica
+
 ## 2.67
 
 - **O gancho nunca mais abre decepado.** A primeira frase do vídeo podia ser
