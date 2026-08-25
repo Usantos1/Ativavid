@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.78
+
+- **"Liberar espaço" em Configurações.** Cada projeto entregue guardava o
+  vídeo final em três lugares e o corte em dois — cópias idênticas, byte a
+  byte — além de intermediários que o app sabe reconstruir. O botão novo
+  deduplica as cópias (viram um arquivo só no disco, todos os caminhos
+  continuam funcionando) e remove os intermediários de projetos entregues há
+  mais de 7 dias. Fonte, vídeo final e a pasta publicar ficam intactos.
+  Medido na base real: ~31 GB recuperáveis em 143 projetos
+
 ## 2.77
 
 - **"Atualizar agora": o app se atualiza com um clique.** No aviso de nova

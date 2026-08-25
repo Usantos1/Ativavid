@@ -1777,6 +1777,12 @@ class StudioHandler(BaseHTTPRequestHandler):
             from app.settings_store import public_settings
             self._json(public_settings())
             return
+        if path == "/api/espaco":
+            sys.path.insert(0, str(HELPERS))
+            from liberar_espaco import medir  # type: ignore
+
+            self._json(medir(self.projects_root))
+            return
         if path == "/api/cache":
             sys.path.insert(0, str(HELPERS))
             from cache_cleanup import measure_cache  # type: ignore
@@ -2171,6 +2177,13 @@ class StudioHandler(BaseHTTPRequestHandler):
             # devolver 403 fazia a UI dizer que a ativação falhou.
             ok_http = bool(out.get("entitled") or out["activated"])
             self._json(out, 200 if ok_http else 403)
+            return
+
+        if path == "/api/espaco/liberar":
+            sys.path.insert(0, str(HELPERS))
+            from liberar_espaco import liberar  # type: ignore
+
+            self._json(liberar(self.projects_root))
             return
 
         if path == "/api/cache/clear":

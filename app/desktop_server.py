@@ -260,6 +260,7 @@ class DesktopHandler(ps.Handler):
         if raw in (
             "/api/settings",
             "/api/cache",
+            "/api/espaco",
             "/api/doutor/copy",
             "/api/recovery",
             "/api/update/check",
@@ -445,6 +446,7 @@ class DesktopHandler(ps.Handler):
             "/api/library/use",
             "/api/library/upload",
             "/api/update/open",
+            "/api/espaco/liberar",
             "/api/proxy/rebuild",
             "/api/open-path",
             "/api/llm-proxy",

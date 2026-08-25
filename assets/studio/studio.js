@@ -3498,6 +3498,32 @@ function wireForms() {
       }
     };
   }
+  const btnLiberarEspaco = $("#btnLiberarEspaco");
+  if (btnLiberarEspaco) {
+    // dica com o quanto da para recuperar (medicao barata, roda ao abrir)
+    api("/api/espaco").then((m) => {
+      const h = $("#espacoHint");
+      if (h && m && m.totalGb >= 0.5) {
+        h.textContent = `Dá para liberar ~${m.totalGb} GB ` +
+          `(${m.duplicatasGb} GB de cópias duplicadas + ${m.intermediariosGb} GB de intermediários de projetos entregues).`;
+      }
+    }).catch(() => {});
+    btnLiberarEspaco.onclick = async () => {
+      btnLiberarEspaco.disabled = true;
+      btnLiberarEspaco.textContent = "Liberando…";
+      try {
+        const r = await api("/api/espaco/liberar", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+        toast(`✓ ${r.totalGb || 0} GB liberados (${r.deduplicadoGb || 0} GB deduplicados, ${r.removidoGb || 0} GB de intermediários)`, 7000);
+        const h = $("#espacoHint");
+        if (h) h.textContent = "";
+      } catch (e) {
+        toast(e.message || "Não deu para liberar espaço");
+      } finally {
+        btnLiberarEspaco.disabled = false;
+        btnLiberarEspaco.textContent = "Liberar espaço";
+      }
+    };
+  }
   const btnClearCache = $("#btnClearCache");
   if (btnClearCache) {
     btnClearCache.onclick = async () => {
