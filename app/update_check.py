@@ -226,6 +226,48 @@ def open_url(url: str) -> dict[str, Any]:
         return {"ok": False, "error": str(e)}
 
 
+def baixar_e_instalar() -> dict[str, Any]:
+    """Baixa o instalador da versao nova e o executa — UM clique.
+
+    O ciclo manual era: aviso de versao -> abrir o navegador -> baixar ->
+    achar o exe -> rodar (e o usuario pedia "cade o instalador?" a cada
+    release). O app ja sabe a URL do exe pela politica de versao; baixar
+    para %TEMP% e executar fecha o ciclo — o proprio instalador derruba o
+    app (PrepareToInstall) e o reabre no Concluir.
+    """
+    info = check_update()
+    url = str(info.get("downloadUrl") or "").strip()
+    if not url.startswith(("http://", "https://")):
+        return {"ok": False, "error": "a política de versão não trouxe a URL do instalador"}
+    nome = url.rsplit("/", 1)[-1] or ""
+    if not nome.lower().endswith(".exe"):
+        return {"ok": False, "error": f"o download não é um instalador: {nome or url}"}
+    if sys.platform != "win32":
+        return open_url(url)
+    import shutil
+    import tempfile
+    import urllib.request
+
+    destino = Path(tempfile.gettempdir()) / "ativavid-update" / nome
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    tmp = destino.with_suffix(".part")
+    try:
+        with urllib.request.urlopen(url, timeout=180) as resp, open(tmp, "wb") as f:
+            shutil.copyfileobj(resp, f)
+        tmp.replace(destino)
+    except OSError as e:
+        return {"ok": False, "error": f"download falhou: {e}"}
+    if destino.stat().st_size < 1_000_000:
+        return {"ok": False, "error": "o instalador baixado veio pequeno demais — tente pelo navegador"}
+    try:
+        os.startfile(str(destino))  # type: ignore[attr-defined]
+    except OSError as e:
+        return {"ok": False, "error": f"não consegui abrir o instalador: {e}",
+                "path": str(destino)}
+    return {"ok": True, "path": str(destino),
+            "message": "Instalador aberto — o ATIVAVID fecha e reabre sozinho."}
+
+
 def open_setup() -> dict[str, Any]:
     """Abre a pasta do instalador (usuário roda setup.ps1)."""
     setup = REPO / "installer" / "setup.ps1"

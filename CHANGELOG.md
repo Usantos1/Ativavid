@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.77
+
+- **"Atualizar agora": o app se atualiza com um clique.** No aviso de nova
+  versão, o botão principal agora baixa o instalador sozinho e o executa —
+  o app fecha, atualiza e reabre. Chega de abrir o navegador, baixar e
+  procurar o arquivo. O "Baixar pelo navegador" continua como alternativa
+
 ## 2.76
 
 - **Atualizar o app não quebra mais a transcrição local.** A sincronização de

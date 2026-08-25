@@ -176,9 +176,19 @@ def test_nenhum_caminho_de_download_ignora_o_verificador():
         pass
     aberturas = js.count('"/api/update/open"')
     assert aberturas >= 2, "a busca quebrou — nenhum caminho de download achado"
-    # todo trecho que abre download precisa ter consultado o check antes
-    for pedaco in js.split('"/api/update/open"')[:-1]:
-        janela = pedaco[-1200:]
-        assert "/api/update/check" in janela, (
+    # todo trecho que abre download precisa ter consultado o check antes —
+    # OU delegar a escolha da URL inteira ao servidor (action "instalar":
+    # baixar_e_instalar chama check_update() ele mesmo; o cliente nem vê a
+    # URL, então não há como as duas metades divergirem).
+    ini = 0
+    while True:
+        i = js.find('"/api/update/open"', ini)
+        if i < 0:
+            break
+        antes = js[max(0, i - 1200):i]
+        depois = js[i:i + 400]
+        assert ("/api/update/check" in antes
+                or 'action: "instalar"' in depois), (
             "um caminho de download não consulta o verificador"
         )
+        ini = i + 1

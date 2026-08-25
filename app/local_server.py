@@ -2415,11 +2415,19 @@ class StudioHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/update/open":
-            from app.update_check import check_update, open_setup, open_url
+            from app.update_check import (
+                baixar_e_instalar,
+                check_update,
+                open_setup,
+                open_url,
+            )
             body = self._read_json() or {}
             action = (body.get("action") or "release").strip().lower()
             if action == "setup":
                 self._json(open_setup())
+                return
+            if action == "instalar":
+                self._json(baixar_e_instalar())
                 return
             url = (body.get("url") or "").strip()
             if not url:

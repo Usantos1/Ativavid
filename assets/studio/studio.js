@@ -4032,6 +4032,33 @@ function wireForms() {
   if (btnUpdNow) {
     btnUpdNow.onclick = () => openUpdateDownload(state.license);
   }
+  // "Atualizar agora": o servidor baixa o exe e o executa — o instalador
+  // derruba o app e o reabre. Um clique no lugar do ciclo
+  // navegador -> download -> achar o exe -> rodar.
+  const btnUpdInstalar = $("#btnUpdInstalar");
+  if (btnUpdInstalar) {
+    btnUpdInstalar.onclick = async () => {
+      btnUpdInstalar.disabled = true;
+      btnUpdInstalar.textContent = "Baixando…";
+      try {
+        const res = await api("/api/update/open", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "instalar" }),
+        });
+        if (res.ok) {
+          btnUpdInstalar.textContent = "Instalador aberto ✓";
+          toast(res.message || "Instalador aberto — o app fecha e reabre sozinho.", 6000);
+        } else {
+          throw new Error(res.error || "não deu para baixar");
+        }
+      } catch (err) {
+        toast(`${err.message} — use "Baixar pelo navegador"`, 6000);
+        btnUpdInstalar.disabled = false;
+        btnUpdInstalar.textContent = "Atualizar agora";
+      }
+    };
+  }
   const btnUpdLater = $("#btnUpdLater");
   if (btnUpdLater) {
     btnUpdLater.onclick = () => {
