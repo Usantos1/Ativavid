@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.66
+
+- **Uma aba antiga da tela de Estilo não muda mais o modo de edição por
+  engano.** Uma aba aberta desde antes de uma troca de modo mostrava o valor
+  antigo no seletor, e o "Salvar e refazer a Fase 2" mandava esse valor por
+  cima do escolhido — um projeto em Vídeo completo voltou sozinho para Edição
+  leve. Agora o seletor só entra no salvamento se você mexeu nele naquela
+  tela; sem mexer, o modo gravado é preservado
+
 ## 2.65
 
 - **No "Vídeo completo", nenhuma palavra falada fica de fora.** Mesmo depois
