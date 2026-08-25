@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.63
+
+- **O instalador agora fecha o ATIVAVID antes de instalar.** Instalar com o
+  app aberto deixava o servidor antigo rodando na memória: as telas mostravam
+  os campos novos, mas o app ignorava o que eles mandavam — trocar o modo de
+  edição e refazer não tinha efeito nenhum até reiniciar. Agora a instalação
+  derruba o app sozinha, e o "Abrir ATIVAVID" no final já sobe a versão nova
+
+- **O seletor "Modo de edição" entrou no lugar certo da tela de Estilo.**
+  Estava sem o estilo dos campos vizinhos: rótulo gigante e caixa branca do
+  sistema por cima do "Tipo de conteúdo" no tema escuro
+
+- **O campo "Palavras de destaque da marca" deixou de ficar branco no tema
+  escuro.** Faltava a regra de estilo para campos de texto naquela grade —
+  só as caixas de seleção tinham
+
 ## 2.62
 
 - **O título do vídeo voltou a ser escrito pela IA.** Um defeito no tipo de
