@@ -509,6 +509,22 @@ def _near_dup(a: str, b: str, *, thresh: float = 0.86) -> bool:
     return SequenceMatcher(None, na, nb).ratio() >= thresh
 
 
+def _dup_removivel(a: str, b: str, *, thresh: float = 0.86) -> bool:
+    """Dup que PODE sair: mesma coisa dita do mesmo jeito. Um eco de diálogo
+    — a pergunta que repete a afirmação do outro ("…porque tem um negócio
+    dentro." → "Tem um negócio dentro?") — tem o mesmo texto mas é outra
+    fala de outra pessoa, e cortá-lo deixa a resposta seguinte no vácuo
+    (caso real, 25/08). Pergunta de um lado e afirmação do outro: preserva.
+    """
+    if not _near_dup(a, b, thresh=thresh):
+        return False
+    # Só a direção que importa: a frase avaliada é a PERGUNTA e o par não é.
+    # Comparar os dois lados por igual descartava o refrão puro quando o par
+    # era uma frase mista que por acaso terminava em "?".
+    return not (a.rstrip().endswith("?")
+                and not str(b or "").rstrip().endswith("?"))
+
+
 def _drop_class_for(start: float, end: float, drops: list[dict] | None) -> str | None:
     span = max(0.01, end - start)
     best = None
@@ -546,7 +562,7 @@ def classify_complete_removal(
         return "non_content"
     later = [p for p in phrases if float(p["start"]) > float(phrase["end"]) - 0.05]
     earlier = [p for p in phrases if float(p["end"]) < float(phrase["start"]) + 0.05]
-    if any(_near_dup(text, p.get("text") or "") for p in later + earlier):
+    if any(_dup_removivel(text, p.get("text") or "") for p in later + earlier):
         return "repetition"
     abandoned = text.rstrip().endswith(("...", "…")) or (
         len(words) <= 4 and not text.rstrip().endswith((".", "!", "?"))
@@ -568,7 +584,7 @@ def classify_complete_removal(
     labeled = _drop_class_for(float(phrase["start"]), float(phrase["end"]), drops)
     if labeled == "repetition":
         # corroboração relaxada: o dup precisa existir, ainda que imperfeito
-        if any(_near_dup(text, p.get("text") or "", thresh=0.72)
+        if any(_dup_removivel(text, p.get("text") or "", thresh=0.72)
                for p in later + earlier):
             return "repetition"
         return None
@@ -812,7 +828,10 @@ def cover_all_words(
     if not words:
         return ranges
     sancionadas: list[tuple[float, float]] = []
-    for p in phrases:
+    # phrases[1:]: o GANCHO nunca é remoção sancionada. A primeira frase pode
+    # ser quase-dup de uma fala posterior (a piada volta ao bordão) e virava
+    # "repetição" — o vídeo abria com o "Oi," decepado (caso real, 25/08).
+    for p in phrases[1:]:
         if classify_complete_removal(p, phrases, drops=drops):
             sancionadas.append((float(p["start"]), float(p["end"])))
     if not phrases:

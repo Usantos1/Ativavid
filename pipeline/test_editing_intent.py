@@ -464,3 +464,46 @@ def test_nenhuma_palavra_fica_de_fora_no_complete(tmp_path):
     assert cov(10.1, 11.9) >= 0.6 * 1.8, "buraco com fala nao foi restaurado"
     assert cov(114.4, 115.2) >= 0.6 * 0.8, "'vai levar.' continua decepado"
     assert cov(83.9, 87.3) < 0.3, "a cantoria repetida foi restaurada por engano"
+
+
+def test_eco_de_dialogo_nao_e_repeticao_removivel():
+    """"…porque tem um negócio dentro." → "Tem um negócio dentro?" é OUTRA
+    fala de OUTRA pessoa (o eco cômico); cortá-la deixa a resposta seguinte
+    no vácuo (caso real, 25/08). Pergunta de um lado e afirmação do outro:
+    preserva. Retake da MESMA pergunta continua removível."""
+    phrases = [
+        {"start": 0.0, "end": 3.0,
+         "text": "Rápido, não, porque tem um negócio dentro."},
+        {"start": 4.0, "end": 5.0, "text": "Tem um negócio dentro?"},
+        {"start": 6.0, "end": 7.0, "text": "Tem um negócio dentro?"},
+    ]
+    assert classify_complete_removal(phrases[1], [phrases[0], phrases[1]]) \
+        is None, "o eco pergunta-afirmação virou repetição removível"
+    assert classify_complete_removal(phrases[2], phrases) == "repetition", \
+        "retake literal da mesma pergunta deixou de ser removível"
+
+
+def test_o_gancho_nunca_e_remocao_sancionada(tmp_path):
+    """A primeira frase pode ser quase-dup de uma fala posterior (a piada
+    volta ao bordão) e virava 'repetição' — o vídeo abria com o 'Oi,'
+    decepado (caso real, 25/08). Na régua por palavra o gancho é
+    inegociável."""
+    from app.editing_intent import cover_all_words
+
+    stem = "SRC"
+    _write_words(tmp_path, stem, [
+        (0.3, 1.0, "Oi,"),
+        (1.0, 2.0, "mocinha!"),
+        (50.0, 52.0, "Oi, mocinha! Tem capinha?"),
+    ])
+    phrases = [
+        {"start": 0.3, "end": 2.0, "text": "Oi, mocinha! Tem capinha?"},
+        {"start": 50.0, "end": 52.0,
+         "text": "Oi, mocinha! Tem capinha? Tem, moça. Tem lá."},
+    ]
+    ranges = [{"source": stem, "start": 0.76, "end": 3.3, "beat": "HOOK"}]
+    out = cover_all_words(ranges, edit_dir=tmp_path, stem=stem,
+                          phrases=phrases, drops=None)
+    kept = [(r["start"], r["end"]) for r in out]
+    cov = sum(max(0.0, min(1.0, b) - max(0.3, a)) for a, b in kept)
+    assert cov >= 0.6 * 0.7, "o 'Oi,' do gancho continua sancionado como dup"
