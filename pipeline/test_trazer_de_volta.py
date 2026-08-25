@@ -158,3 +158,33 @@ def test_receita_do_relogio_e_fps_tpad_trim():
             f"{nome}: trim tem que ser o ULTIMO passo"
         j = s.find("trim=end_frame={frames},{_sp}")
         assert j < 0, f"{nome}: voltou o trim antes do fps= (derruba quadros)"
+
+
+def test_lock_do_apply_expira(tmp_path):
+    """Um apply que delegou o rerun ao pipeline deixava stage='queued' com
+    ok=None para sempre — o projeto respondeu 'Ja estou aplicando' por
+    QUATRO dias (21-25/08, A001_08201036_C007). Fila parada ha 10+ min nao
+    segura lock; execucao com 2h+ tambem nao."""
+    from app.apply_execute import is_apply_running, write_apply_status
+
+    edit = tmp_path
+    # fila fresca segura o lock
+    write_apply_status(edit, running=False, ok=None, message="x",
+                       stage="queued", error=None)
+    assert is_apply_running(edit) is True
+    # o MESMO estado, datado de 4 dias atras (o arquivo real do caso)
+    p = edit / "apply_status.json"
+    d = json.loads(p.read_text(encoding="utf-8"))
+    d["at"] = "2026-08-21T09:59:36"
+    p.write_text(json.dumps(d), encoding="utf-8")
+    assert is_apply_running(edit) is False, \
+        "fila de 4 dias atras nao pode travar o projeto"
+    # execucao fresca segura; execucao de ontem nao
+    d["running"] = True
+    d["at"] = "2026-08-24T09:00:00"
+    p.write_text(json.dumps(d), encoding="utf-8")
+    assert is_apply_running(edit) is False
+    # carimbo ilegivel nao sustenta lock
+    d["at"] = "nunca"
+    p.write_text(json.dumps(d), encoding="utf-8")
+    assert is_apply_running(edit) is False

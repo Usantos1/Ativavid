@@ -171,6 +171,13 @@ def write_apply_status(edit_dir: Path, **fields: Any) -> dict[str, Any]:
             cur = {}
     cur.update(fields)
     cur.setdefault("running", False)
+    # Carimbo SEMPRE renovado: o lock do apply expira por este campo, e o
+    # update acima preservava um `at` de gravações antigas — um status recém
+    # escrito podia nascer "vencido" (ou, pior, um velho parecer fresco).
+    if "at" not in fields:
+        import datetime as _dt
+
+        cur["at"] = _dt.datetime.now().isoformat(timespec="seconds")
     tmp = path.with_suffix(path.suffix + ".tmp")
     last: OSError | None = None
     for attempt in range(8):
@@ -204,19 +211,43 @@ def read_apply_status(edit_dir: Path) -> dict[str, Any]:
     return data if isinstance(data, dict) else {"running": False}
 
 
+def _status_vencido(carimbo: str, minutos: float) -> bool:
+    """True se o carimbo é mais velho que N minutos (ou ilegível)."""
+    import datetime as _dt
+
+    raw = str(carimbo or "").replace("Z", "+00:00")
+    try:
+        t = _dt.datetime.fromisoformat(raw)
+    except ValueError:
+        return True  # sem carimbo legível o lock não se sustenta
+    agora = _dt.datetime.now(t.tzinfo) if t.tzinfo else _dt.datetime.now()
+    return (agora - t).total_seconds() > minutos * 60
+
+
 def is_apply_running(edit_dir: Path) -> bool:
-    """True se já está na fila ou executando — não abre segundo Apply."""
+    """True se já está na fila ou executando — não abre segundo Apply.
+
+    O lock EXPIRA. Caso real (21-25/08): um apply falhou, delegou o rerun ao
+    pipeline (stage="queued", ok=None) e ninguém finalizou o status quando o
+    pipeline terminou — o projeto respondeu "Já estou aplicando" por QUATRO
+    DIAS a cada clique. Fila que não começou em 10 min está morta; execução
+    com mais de 2h também (a mediana do apply é 15-35s; o rerun completo,
+    minutos). Estado velho não segura lock — no pior caso um segundo apply
+    roda, que é recuperável; um projeto travado para sempre não é.
+    """
     st = read_apply_status(edit_dir)
     if st.get("running"):
-        return True
+        return not _status_vencido(str(st.get("at") or ""), 120)
     if st.get("ok") is None and str(st.get("stage") or "") == "queued":
-        return True
+        return not _status_vencido(str(st.get("at") or ""), 10)
     try:
         from app.apply_tasks import STATUS_QUEUED, STATUS_RUNNING, read_task
 
         task = read_task(edit_dir)
         if task and str(task.get("status") or "") in (STATUS_QUEUED, STATUS_RUNNING):
-            return True
+            carimbo = str(task.get("updatedAt") or task.get("startedAt") or "")
+            prazo = 10 if str(task.get("status")) == STATUS_QUEUED else 120
+            return not _status_vencido(carimbo, prazo)
     except Exception:
         pass
     return False

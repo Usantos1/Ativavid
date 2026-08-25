@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.75
+
+- **"Já estou aplicando" nunca mais trava um projeto para sempre.** Quando um
+  Aplicar falhava e o vídeo era mandado para o reprocesso completo, o status
+  ficava marcado como "na fila" e nunca era finalizado — e todo clique em
+  Aplicar dali em diante respondia "Já estou aplicando as alterações deste
+  vídeo" (um projeto real ficou travado assim por quatro dias). O bloqueio
+  agora expira: fila parada há mais de 10 minutos ou execução com mais de
+  2 horas não seguram mais o botão
+
 ## 2.74
 
 - **"Comparar versões" lado a lado.** Quando o mesmo vídeo tem duas ou mais
