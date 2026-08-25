@@ -367,3 +367,48 @@ def test_preserve_cta_nao_passa_da_duracao_da_fonte():
                        preset={"editingIntent": "dynamic"},
                        regions=[(0.0, 5.0), (20.0, 99.0)], duration_s=30.0)
     assert out[-1]["end"] <= 30.0, out
+
+
+def test_rotulo_do_modelo_nao_carimba_fala_unica():
+    """Um drop de 25s rotulado "repetition" carimbava TODA fala dentro dele.
+    Caso real (24/08, "Cliente foi só pelo cafezinho"): o Vídeo completo
+    entregou 56s de um vídeo de 2:01 — menos que a Edição leve — porque
+    "Vou esperar o cafezinho ali sentada, tá bom?" herdou o rótulo da
+    cantoria vizinha. Rótulo do modelo só vale com evidência na frase."""
+    phrases = [
+        {"start": 0.0, "end": 4.0, "text": "Abertura do vídeo com fala real"},
+        {"start": 68.0, "end": 71.0, "text": "A sua mão que me sustenta."},
+        {"start": 72.0, "end": 75.0, "text": "A sua mão que me sustenta."},
+        {"start": 76.0, "end": 80.0,
+         "text": "Vou esperar o cafezinho ali sentada, tá bom?"},
+    ]
+    drops = [{"start": 68.0, "end": 80.0, "class": "repetition"}]
+    assert classify_complete_removal(phrases[2], phrases, drops=drops) \
+        == "repetition"
+    assert classify_complete_removal(phrases[3], phrases, drops=drops) is None
+
+
+def test_rotulo_silence_nao_apaga_frase_com_palavras():
+    phrases = [
+        {"start": 0.0, "end": 4.0, "text": "Abertura do vídeo com fala real"},
+        {"start": 6.0, "end": 9.0, "text": "É, chegou o cafezinho? Chegou."},
+    ]
+    drops = [{"start": 5.0, "end": 10.0, "class": "silence"}]
+    assert classify_complete_removal(phrases[1], phrases, drops=drops) is None
+
+
+def test_frase_que_contem_refrao_nao_e_repeticao():
+    """`_near_dup` aceitava continência nos DOIS sentidos: a frase que
+    CONTÉM o refrão repetido era marcada como repetição, e a fala única
+    grudada nela morria junto ("A sua mão que me sustenta. Você tá feliz
+    hoje, hein?"). Repetição removível é a frase cujo texto inteiro já
+    existe em outro lugar — direcional."""
+    phrases = [
+        {"start": 0.0, "end": 3.0, "text": "A sua mão que me sustenta."},
+        {"start": 4.0, "end": 8.0,
+         "text": "A sua mão que me sustenta. Você tá feliz hoje, hein?"},
+    ]
+    # a mista NAO e repeticao (contem fala unica)...
+    assert classify_complete_removal(phrases[1], phrases) is None
+    # ...mas o refrao puro, contido na mista, continua sendo
+    assert classify_complete_removal(phrases[0], phrases) == "repetition"

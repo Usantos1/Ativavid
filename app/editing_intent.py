@@ -492,10 +492,19 @@ def _class_from_blob(blob: str) -> str | None:
 
 
 def _near_dup(a: str, b: str, *, thresh: float = 0.86) -> bool:
+    """`a` é (quase toda) repetição de `b` — DIRECIONAL de propósito.
+
+    O `nb in na` (b contido em a) foi removido: uma frase que CONTÉM um
+    refrão repetido não é ela mesma uma repetição. Caso real (24/08): "A sua
+    mão que me sustenta. Você tá feliz hoje, hein?" era marcada como
+    repetição porque continha a cantoria — e a fala única morria junto no
+    modo Vídeo completo. Repetição removível é a frase cujo texto INTEIRO
+    já existe em outro lugar.
+    """
     na, nb = _norm_txt(a), _norm_txt(b)
     if not na or not nb or min(len(na), len(nb)) < 10:
         return False
-    if na == nb or na in nb or nb in na:
+    if na == nb or na in nb:
         return True
     return SequenceMatcher(None, na, nb).ratio() >= thresh
 
@@ -526,9 +535,6 @@ def classify_complete_removal(
     drops: list[dict] | None = None,
 ) -> str | None:
     """Classe permitida ou None (restaurar). Sem teto de duração."""
-    labeled = _drop_class_for(float(phrase["start"]), float(phrase["end"]), drops)
-    if labeled:
-        return labeled
     text = str(phrase.get("text") or "")
     low = _norm_txt(text)
     if not low:
@@ -551,6 +557,28 @@ def classify_complete_removal(
             other = _norm_txt(str(p.get("text") or ""))
             if head and other.startswith(head[:12]):
                 return "abandoned_take" if text.rstrip().endswith(("...", "…")) else "false_start"
+    # O rótulo do modelo entra por ÚLTIMO e só com evidência na PRÓPRIA frase.
+    # Antes ele vinha primeiro e valia sozinho: um único drop de 25s rotulado
+    # "repetition" carimbou como repetição quatro falas únicas da piada
+    # ("Vou esperar o cafezinho ali sentada, tá bom?") junto com a cantoria
+    # de fato repetida — e o Vídeo completo, cujo contrato é preservar,
+    # entregou 56s de um vídeo de 2:01, menos que a Edição leve (caso real,
+    # 24/08). Rotular a janela inteira custa nada para o modelo; restaurar
+    # é o comportamento seguro do modo.
+    labeled = _drop_class_for(float(phrase["start"]), float(phrase["end"]), drops)
+    if labeled == "repetition":
+        # corroboração relaxada: o dup precisa existir, ainda que imperfeito
+        if any(_near_dup(text, p.get("text") or "", thresh=0.72)
+               for p in later + earlier):
+            return "repetition"
+        return None
+    if labeled in ("false_start", "abandoned_take"):
+        # só se a frase realmente parecer inacabada
+        if len(words) <= 6 or not text.rstrip().endswith((".", "!", "?", "…")):
+            return labeled
+        return None
+    # "silence"/"non_content" numa frase com palavras reais é contradição:
+    # as heurísticas acima já teriam pego silêncio e muleta de verdade.
     return None
 
 
