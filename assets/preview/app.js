@@ -2119,6 +2119,15 @@ async function applyState(data) {
     S.editIntent = data.intent.editingIntent || S.editIntent || null;
     const mEl = $('autoEditIntent');
     if (mEl && S.editIntent && ['light','dynamic','complete'].includes(S.editIntent)) mEl.value = S.editIntent;
+    // O payload só carrega o modo se o USUÁRIO mexeu nele nesta tela. Uma aba
+    // do Estilo aberta desde antes de uma troca de modo mostrava o valor
+    // velho no seletor, e o "Salvar e refazer" mandava esse valor por cima do
+    // job_intent — caso real (25/08): o projeto estava em Vídeo completo e
+    // uma aba da véspera o rebaixou para Edição leve sem ninguém pedir.
+    if (mEl && !mEl.dataset.wired) {
+      mEl.dataset.wired = '1';
+      mEl.addEventListener('change', () => { S.editIntentTocado = true; });
+    }
     const ct = $('autoContentType');
     if (ct && S.contentType) ct.value = S.contentType;
   }
@@ -3243,7 +3252,9 @@ $('setupGo').addEventListener('click', async () => {
     // MODO DE EDICAO: e ele que decide se a IA planeja o corte. Sem este
     // campo um projeto criado em "Edicao leve" ficava preso no modo para
     // sempre — trocar o estilo e refazer nunca mudava a minutagem.
-    editingIntent: $('autoEditIntent')?.value || null,
+    // So vai quando o usuario TOCOU no seletor nesta tela: null preserva o
+    // que esta gravado, e uma aba antiga nao rebaixa o modo por engano.
+    editingIntent: S.editIntentTocado ? ($('autoEditIntent')?.value || null) : null,
   };
   const res = await fetch(`${BASE}/api/save`, {
     method: 'POST',

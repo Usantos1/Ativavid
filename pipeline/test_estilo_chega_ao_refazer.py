@@ -161,3 +161,18 @@ def test_o_modo_leve_nao_e_o_primeiro_card_e_avisa():
     assert 0 < i_dyn < i_light, "o modo leve voltou a vir antes do padrão"
     bloco = s[i_light:i_light + 400]
     assert "NÃO muda os cortes" in bloco, "o aviso do modo leve sumiu"
+
+
+def test_aba_antiga_nao_rebaixa_o_modo():
+    """O seletor so entra no payload se o usuario MEXEU nele nesta tela.
+    Caso real (25/08): o projeto estava em Video completo e uma aba do
+    Estilo aberta desde a vespera — seletor ainda mostrando Edicao leve —
+    mandou o valor velho no Salvar e refazer e rebaixou o modo sem ninguem
+    pedir. Nao tocou: vai null, e o servidor preserva o que esta gravado."""
+    s = (RAIZ / "assets" / "preview" / "app.js").read_text(encoding="utf-8")
+    b = s[s.find("  const payload = {"):]
+    b = b[:b.find("  };")]
+    assert "S.editIntentTocado ?" in b, \
+        "o payload voltou a mandar o seletor sem checar se foi tocado"
+    assert "editIntentTocado = true" in s, \
+        "ninguem marca o seletor como tocado (change listener sumiu)"
