@@ -130,6 +130,24 @@ def test_a_ui_oferece_os_tres_modos():
     bloco = s[i:i + 500]
     for v in ("light", "dynamic", "complete"):
         assert f'value="{v}"' in bloco, f"modo {v} sumiu do seletor"
+    # O seletor nasceu com class="fld", que NAO existe no app.css desta tela:
+    # label gigante e select branco do sistema por cima do campo vizinho no
+    # tema escuro (print do usuario, 24/08). O campo tem que vestir a mesma
+    # classe dos irmaos da auto-grid.
+    rotulo = s.rfind("<label", 0, i)
+    assert 'class="auto-field"' in s[rotulo:i], \
+        "o Modo de edição precisa ser um auto-field como os campos vizinhos"
+
+
+def test_o_input_de_texto_da_auto_grid_tem_estilo():
+    """O input "Palavras de destaque da marca" ficava BRANCO no tema escuro:
+    o app.css estilizava `.auto-field select` e nunca `.auto-field input`
+    (defeito antigo, visto no mesmo print de 24/08)."""
+    css = (RAIZ / "assets" / "preview" / "app.css").read_text(encoding="utf-8")
+    assert ".auto-field input" in css, "input da auto-grid sem estilo proprio"
+    i = css.find(".auto-field select,")
+    assert i >= 0 and ".auto-field input" in css[i:i + 80], \
+        "o input tem que dividir a MESMA regra do select, nao uma copia"
 
 
 def test_o_modo_leve_nao_e_o_primeiro_card_e_avisa():

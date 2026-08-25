@@ -1918,7 +1918,8 @@ kbd {
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
-.auto-field select {
+.auto-field select,
+.auto-field input {
   font: inherit;
   font-size: 13px;
   font-weight: 500;
@@ -1933,18 +1934,25 @@ kbd {
   min-width: 0;
   appearance: auto;
 }
+.auto-field input::placeholder {
+  color: var(--dim);
+  text-transform: none;
+  letter-spacing: 0;
+}
 .auto-field select option,
 .auto-field select optgroup {
   color: #121218;
   background-color: #ffffff;
 }
-:root[data-theme="light"] .auto-field select {
+:root[data-theme="light"] .auto-field select,
+:root[data-theme="light"] .auto-field input {
   background: #fff;
   border-color: rgba(20, 22, 30, 0.18);
   color: #1b1e24;
   box-shadow: 0 1px 0 rgba(20, 22, 30, 0.04);
 }
-:root[data-theme="light"] .auto-field select:focus {
+:root[data-theme="light"] .auto-field select:focus,
+:root[data-theme="light"] .auto-field input:focus {
   border-color: rgba(255, 119, 19, 0.55);
   outline: none;
 }
