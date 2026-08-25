@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.69
+
+- **"Gerar 3 versões" na importação.** Um clique importa o mesmo vídeo três
+  vezes — Dinâmico, Vídeo completo e Sem cortes — e os três entram na fila
+  para você comparar as versões lado a lado e escolher a melhor. Antes o
+  jeito era importar na mão várias vezes trocando o modo
+
 ## 2.68
 
 - **Novo modo: "Sem cortes".** O vídeo inteiro, do jeito que foi gravado —
