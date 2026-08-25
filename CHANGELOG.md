@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.64
+
+- **O modo "Vídeo completo" passou a preservar de verdade.** Ele prometia só
+  limpar (silêncio, erro + recomeço, repetição literal) mas entregou 56s de um
+  vídeo de 2:01 — menos que a Edição leve. Dois defeitos no fiscal do modo:
+  o rótulo que a IA dá ao trecho removido ("é repetição") valia sozinho, e um
+  único bloco de 25s rotulado assim apagava quatro falas únicas da piada junto
+  com a cantoria repetida; e uma frase que apenas **contém** um refrão repetido
+  era tratada como se fosse toda repetição. Agora o rótulo da IA só vale com
+  evidência na própria frase, e repetição removível é a frase cujo texto
+  inteiro já existe em outro lugar. No mesmo vídeo, o modo passa a manter
+  81s em vez de 56s — toda fala única fica
+
 ## 2.63
 
 - **O instalador agora fecha o ATIVAVID antes de instalar.** Instalar com o
