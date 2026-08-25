@@ -430,7 +430,14 @@ def test_recaptura_depois_da_falha_restaura(tmp_path):
     lsrv = _sessao_gemini(tmp_path, "2026-08-24T10:00:00Z")
     ls._registrar_saude("gemini-web", "Token Gemini ausente")
     d = json.loads(lsrv.SESSIONS_PATH.read_text(encoding="utf-8"))
-    d["providers"]["gemini-web"]["capturedAt"] = "2026-08-24T23:00:00Z"
+    # A falha e gravada com o relogio REAL; a recaptura precisa ser mais nova
+    # que ela. Data fixa aqui virou bomba-relogio: "23:00Z de hoje" era futuro
+    # quando o teste nasceu e passou a ser passado no mesmo dia.
+    import datetime as _dt
+
+    depois = _dt.datetime.now(_dt.timezone.utc) + _dt.timedelta(hours=1)
+    d["providers"]["gemini-web"]["capturedAt"] = depois.strftime(
+        "%Y-%m-%dT%H:%M:%SZ")
     lsrv.SESSIONS_PATH.write_text(json.dumps(d), encoding="utf-8")
     card = {c["id"]: c for c in lsrv.sessions_public()}["gemini-web"]
     assert card["ready"] is True, card["hint"]
