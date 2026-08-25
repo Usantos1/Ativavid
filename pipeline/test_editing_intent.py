@@ -412,3 +412,55 @@ def test_frase_que_contem_refrao_nao_e_repeticao():
     assert classify_complete_removal(phrases[1], phrases) is None
     # ...mas o refrao puro, contido na mista, continua sendo
     assert classify_complete_removal(phrases[0], phrases) == "repetition"
+
+
+def _write_words(root: Path, stem: str, words: list[tuple]) -> None:
+    import json
+    (root / "transcripts").mkdir(exist_ok=True)
+    data = {"words": [
+        {"type": "word", "start": s, "end": e, "text": t} for s, e, t in words
+    ]}
+    (root / "transcripts" / f"{stem}.json").write_text(
+        json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+
+def test_nenhuma_palavra_fica_de_fora_no_complete(tmp_path):
+    """Regua final por PALAVRA. O fiscal por frases usa o takes_packed.md e os
+    tempos de la desalinham das palavras reais (caso real, 24/08: 4,7s de
+    dialogo central fora do corte, 'nao vai levar.' decepado). O que a
+    transcricao diz que foi falado tem que estar coberto — exceto remocao
+    sancionada (a cantoria repetida continua fora)."""
+    from app.editing_intent import cover_all_words
+
+    stem = "SRC"
+    _write_words(tmp_path, stem, [
+        (0.3, 1.0, "Oi,"),                    # comeco decepado pelo range
+        (1.0, 2.0, "mocinha!"),
+        (10.1, 10.9, "café,"),                # buraco com fala
+        (10.9, 11.9, "quem tem."),
+        (80.1, 83.3, "A sua mão que me sustenta."),   # refrao repetido
+        (83.9, 87.3, "A sua mão que me sustenta."),
+        (114.4, 115.2, "vai levar."),         # cauda decepada
+    ])
+    phrases = [
+        {"start": 0.3, "end": 2.0, "text": "Oi, mocinha!"},
+        {"start": 10.1, "end": 11.9, "text": "café, você tem que ver quem tem."},
+        {"start": 80.1, "end": 83.3, "text": "A sua mão que me sustenta."},
+        {"start": 83.9, "end": 87.3, "text": "A sua mão que me sustenta."},
+        {"start": 112.4, "end": 115.2, "text": "se você não comprar, não vai levar."},
+    ]
+    ranges = [
+        {"source": stem, "start": 0.76, "end": 3.3, "beat": "HOOK"},
+        {"source": stem, "start": 112.4, "end": 114.9, "beat": "CTA"},
+    ]
+    out = cover_all_words(ranges, edit_dir=tmp_path, stem=stem,
+                          phrases=phrases, drops=None)
+    kept = [(r["start"], r["end"]) for r in out]
+
+    def cov(s, e):
+        return sum(max(0.0, min(e, b) - max(s, a)) for a, b in kept)
+
+    assert cov(0.3, 1.0) >= 0.6 * 0.7, "o 'Oi,' do gancho continua decepado"
+    assert cov(10.1, 11.9) >= 0.6 * 1.8, "buraco com fala nao foi restaurado"
+    assert cov(114.4, 115.2) >= 0.6 * 0.8, "'vai levar.' continua decepado"
+    assert cov(83.9, 87.3) < 0.3, "a cantoria repetida foi restaurada por engano"

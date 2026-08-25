@@ -768,6 +768,76 @@ def enforce_complete_edl(
     return out
 
 
+def _load_transcript_words(edit_dir: Path | None, stem: str | None) -> list[dict]:
+    if not edit_dir or not stem:
+        return []
+    path = Path(edit_dir) / "transcripts" / f"{stem}.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError, TypeError):
+        return []
+    out = []
+    for w in data.get("words") or []:
+        if w.get("type", "word") != "word":
+            continue
+        try:
+            s, e = float(w["start"]), float(w["end"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if e - s < 0.05:  # timestamps zero-width são artefato do alinhador
+            continue
+        out.append({"start": s, "end": e, "text": str(w.get("text") or "")})
+    return out
+
+
+def cover_all_words(
+    ranges: list[dict],
+    *,
+    edit_dir: Path | None,
+    stem: str | None,
+    phrases: list[dict],
+    drops: list[dict] | None = None,
+) -> list[dict]:
+    """Complete: nenhuma PALAVRA fica de fora sem remoção sancionada.
+
+    O fiscal por frases depende do takes_packed.md, e os tempos de lá
+    desalinham dos tempos reais das palavras (caso real, 24/08: 4,7s de
+    diálogo central fora do corte, "não vai levar." decepado no meio, "Tem
+    lá." reduzido a 0,3s). A régua final é a transcrição palavra a palavra:
+    o que não estiver coberto volta, a menos que caia dentro de uma frase
+    cuja remoção o fiscal classificou (repetição/recomeço/muleta) — a
+    cantoria repetida continua fora, mas fala única nunca.
+    """
+    words = _load_transcript_words(edit_dir, stem)
+    if not words:
+        return ranges
+    sancionadas: list[tuple[float, float]] = []
+    for p in phrases:
+        if classify_complete_removal(p, phrases, drops=drops):
+            sancionadas.append((float(p["start"]), float(p["end"])))
+    if not phrases:
+        # sem takes_packed só sobra o rótulo do modelo — melhor que restaurar
+        # a cantoria inteira, pior que a corroboração por frase
+        for d in drops or []:
+            if _class_from_blob(str(d.get("class") or d.get("reason") or "")):
+                try:
+                    sancionadas.append((float(d["start"]), float(d["end"])))
+                except (KeyError, TypeError, ValueError):
+                    continue
+    out = [dict(r) for r in (ranges or [])]
+    for w in words:
+        dur = w["end"] - w["start"]
+        if _coverage(w["start"], w["end"], out) >= 0.6 * dur:
+            continue
+        if sum(_overlap(w["start"], w["end"], a, b)
+               for a, b in sancionadas) >= 0.5 * dur:
+            continue
+        # folga assimétrica: fim de palavra carrega a cauda da consoante
+        out = _insert_range(out, max(0.0, w["start"] - 0.05), w["end"] + 0.15,
+                            "KEEP", "restore-complete-word")
+    return out
+
+
 def guard_ranges(
     ranges: list[dict],
     *,
@@ -797,7 +867,10 @@ def guard_ranges(
                     if _coverage(a, b, out) < 0.95 * (b - a):
                         out = _insert_range(out, a, b, "HOOK", "preserve-hook-complete")
             out = enforce_complete_edl(out, phrases=phrases, regions=regions, drops=drop_list)
-        elif bool(p.get("preserveHook", True)):
+        if edit_dir:
+            out = cover_all_words(out, edit_dir=edit_dir, stem=source_stem,
+                                  phrases=phrases, drops=drop_list)
+        if not phrases and bool(p.get("preserveHook", True)):
             hook = first_hook_region(regions)
             if hook and not _covers(out, hook[0], hook[1]):
                 out = _insert_range(out, hook[0], hook[1], "HOOK", "preserve-hook")
