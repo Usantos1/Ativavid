@@ -796,6 +796,8 @@ def record_apply_metric(edit_dir: Path, rec: dict[str, Any]) -> None:
         "success": bool(rec.get("success")),
         **_colher(edit_dir),
     }
+    if rec.get("dirty"):
+        row["dirty"] = list(rec["dirty"])[:6]
     if rec.get("error"):
         row["error"] = str(rec["error"])[:160]
     items.append(row)
@@ -1241,6 +1243,11 @@ def execute_apply_plan(
             "videoDuration": dur,
             "applyDuration": time.time() - t_all,
             "success": True,
+            # O QUE estava sujo: sem isto um REUSE_CUT de 45s por troca de
+            # estilo (redesenho legitimo) e indistinguivel de uma emenda
+            # perdida na auditoria do apply_history (visto em 25/08: 6
+            # applies "overlay" sem como saber por que a emenda nao rodou).
+            "dirty": sorted(k for k, v in (plan.get("dirty") or {}).items() if v),
         })
         return {
             "ok": True,
@@ -1274,6 +1281,7 @@ def execute_apply_plan(
                 "applyDuration": time.time() - t_all,
                 "success": False,
                 "error": str(e)[:160],
+                "dirty": sorted(k for k, v in ((plan or {}).get("dirty") or {}).items() if v),
             })
         except Exception:
             pass

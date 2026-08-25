@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.79
+
+- **O histórico do Aplicar agora registra o que mudou.** Cada entrada do
+  histórico ganha a lista do que estava alterado (estilo, legendas, título,
+  corte) — é o que permite auditar por que um Aplicar usou a emenda rápida
+  (15-30s) ou o redesenho completo, e achar desperdício com dados em vez de
+  suposição
+
 ## 2.78
 
 - **"Liberar espaço" em Configurações.** Cada projeto entregue guardava o

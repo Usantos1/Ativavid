@@ -188,3 +188,22 @@ def test_lock_do_apply_expira(tmp_path):
     d["at"] = "nunca"
     p.write_text(json.dumps(d), encoding="utf-8")
     assert is_apply_running(edit) is False
+
+
+def test_apply_history_grava_o_que_estava_sujo(tmp_path):
+    """Sem o dirty no historico, um REUSE_CUT de 45s por troca de estilo
+    (redesenho legitimo) e indistinguivel de uma emenda perdida — foi o que
+    travou a auditoria de producao de 25/08 (6 applies 'overlay' sem como
+    saber por que a emenda nao rodou)."""
+    from app.apply_execute import record_apply_metric
+
+    record_apply_metric(tmp_path, {
+        "type": "REUSE_CUT", "videoDuration": 60, "applyDuration": 45,
+        "success": True, "dirty": ["style"],
+    })
+    h = json.loads((tmp_path / "apply_history.json").read_text(encoding="utf-8"))
+    assert h[-1]["dirty"] == ["style"]
+    # e os DOIS registros (sucesso e falha) mandam o campo
+    s = (RAIZ / "app" / "apply_execute.py").read_text(encoding="utf-8")
+    assert s.count('"dirty": sorted(k for k, v in') == 2, \
+        "sucesso E falha precisam gravar o dirty"
