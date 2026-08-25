@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.65
+
+- **No "Vídeo completo", nenhuma palavra falada fica de fora.** Mesmo depois
+  da 2.64, o corte ainda decepava pontas de frase ("não vai levar." pela
+  metade) e engolia trechos com fala (4,7s de diálogo central) — o fiscal
+  trabalhava por blocos de frase cujos tempos desalinham dos tempos reais
+  das palavras. Agora existe uma régua final palavra a palavra: tudo o que a
+  transcrição diz que foi falado precisa estar no vídeo, exceto o que foi
+  removido com justificativa confirmada (repetição literal, recomeço,
+  cacoete). No vídeo do caso real, o modo passou a manter 86s de 121s, com
+  todas as falas inteiras
+
 ## 2.64
 
 - **O modo "Vídeo completo" passou a preservar de verdade.** Ele prometia só
