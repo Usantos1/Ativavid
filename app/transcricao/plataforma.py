@@ -128,12 +128,21 @@ def registrar_dlls_cuda() -> list[str]:
     return registrados
 
 
+def dlls_cuda_completas() -> bool:
+    """cuBLAS E cuDNN registrados — os dois sao obrigatorios no CTranslate2.
+
+    Qualquer-um-serve foi o buraco do caso real de 25/08: o uv sync removeu
+    o cublas, o cudnn sobrou, o check passou e o motor morreu no runtime."""
+    achados = set(registrar_dlls_cuda())
+    return "nvidia/cublas/bin" in achados and "nvidia/cudnn/bin" in achados
+
+
 def _cuda_utilizavel(vram_mb: int) -> tuple[bool, str]:
     if vram_mb <= 0:
         return False, "sem GPU NVIDIA"
     if vram_mb < _VRAM_MINIMA_MB:
         return False, f"VRAM insuficiente ({vram_mb} MB < {_VRAM_MINIMA_MB})"
-    if not registrar_dlls_cuda() and sys.platform == "win32":
+    if sys.platform == "win32" and not dlls_cuda_completas():
         return False, "bibliotecas CUDA ausentes (nvidia-cublas-cu12 / nvidia-cudnn-cu12)"
     return True, f"GPU {vram_mb} MB"
 

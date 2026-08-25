@@ -306,9 +306,16 @@ def test_o_instalador_traz_o_motor():
     linhas = [x.strip() for x in setup.splitlines()
               if x.strip().startswith("uv sync")]
     assert linhas, "o instalador deixou de sincronizar as dependências"
+    # Desde 25/08 o extra é escolhido pela GPU ($ExtraTranscricao =
+    # transcricao | transcricao-cuda): sincronizar só o CPU numa máquina
+    # NVIDIA desinstalava o cublas a cada update. O que importa aqui segue o
+    # mesmo: toda linha de sync carrega UM extra de transcrição.
     for linha in linhas:
-        assert "--extra transcricao" in linha, (
+        assert ("--extra transcricao" in linha
+                or "--extra $ExtraTranscricao" in linha), (
             "instalação nova ficaria sem o motor local: " + linha)
+    assert '$ExtraTranscricao = if ($TemNvidia) { "transcricao-cuda" }' in setup, (
+        "a escolha do extra pela GPU sumiu — o sync volta a desinstalar o cublas")
 
 
 def test_o_preparo_instala_o_motor_ANTES_de_baixar_o_resto(monkeypatch):

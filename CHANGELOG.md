@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.76
+
+- **Atualizar o app não quebra mais a transcrição local.** A sincronização de
+  dependências do instalador removia, a cada atualização, as bibliotecas de
+  aceleração NVIDIA instaladas depois — e a transcrição em GPU passava a
+  morrer com "cublas64_12.dll não encontrada" (foi a causa real do card em
+  ERRO de hoje). Três defesas: o instalador agora detecta a GPU e sincroniza
+  com as bibliotecas CUDA incluídas; a verificação de presença exige TODAS as
+  bibliotecas (antes uma só bastava e ele dizia "já instalado" com o cublas
+  faltando); e se a GPU quebrar no meio de uma transcrição, o motor refaz na
+  CPU em vez de derrubar o vídeo
+
 ## 2.75
 
 - **"Já estou aplicando" nunca mais trava um projeto para sempre.** Quando um

@@ -25,7 +25,11 @@ import threading
 from pathlib import Path
 from typing import Callable
 
-from app.transcricao.plataforma import _DLLS_CUDA, registrar_dlls_cuda
+from app.transcricao.plataforma import (
+    _DLLS_CUDA,
+    dlls_cuda_completas,
+    registrar_dlls_cuda,
+)
 
 # Os pacotes que trazem as DLLs. `nvidia-cuda-nvrtc-cu12` entra de carona como
 # dependência do cuDNN; não precisa ser pedido.
@@ -79,8 +83,15 @@ def garantir_motor(
 
 
 def cuda_presente() -> bool:
-    """As DLLs estão no disco e o carregador as encontra?"""
-    return bool(registrar_dlls_cuda())
+    """As DLLs estão no disco e o carregador as encontra?
+
+    TODAS as essenciais, não qualquer uma: o `uv sync` do instalador removeu
+    o cublas e deixou o cudnn (caso real, 25/08) — o check antigo achava o
+    cudnn, dizia "já instalado", e o motor morria no runtime com "Library
+    cublas64_12.dll is not found". cuBLAS e cuDNN são ambos obrigatórios
+    para o CTranslate2 em CUDA; faltando um, reinstala.
+    """
+    return dlls_cuda_completas()
 
 
 def _uv() -> str | None:

@@ -151,6 +151,28 @@ class MotorWhisperLocal:
             _CARREGADO[chave] = m
         return m, dt
 
+    def _queda_para_cpu_no_runtime(self, e: RuntimeError, progresso, cancelar):
+        """Reconstrói o motor em CPU quando a GPU quebra DEPOIS da carga.
+
+        Só para falha de biblioteca/aceleração (DLL, CUDA, cuBLAS/cuDNN) e
+        só se ainda estamos em GPU — qualquer outro RuntimeError sobe."""
+        txt = str(e).lower()
+        de_gpu = any(t in txt for t in ("dll", "cublas", "cudnn", "cuda"))
+        if self._maquina.backend == "cpu" or not de_gpu:
+            raise e
+        print(f"WHISPER_ACELERACAO_FALHOU_RUNTIME {type(e).__name__}: "
+              f"{str(e)[:160]} — refazendo em CPU", flush=True)
+        import dataclasses
+
+        self._maquina = dataclasses.replace(
+            self._maquina, backend="cpu", motivo="queda da aceleração (runtime)")
+        self._modelo = cat.escolher_modelo(
+            self._maquina.vram_mb, self._pedido, backend="cpu")
+        modelo, _dt = self._carregar(progresso, cancelar)
+        print(f"TRANSCRIPTION ENGINE local model={self._modelo.chave} "
+              f"device=cpu (revisto no runtime)", flush=True)
+        return modelo
+
     def _transcrever_rapido(self, modelo: Any, audio: Path,
                             idioma: str | None) -> tuple[Any, Any]:
         """Transcreve pulando o silêncio e processando em lote na GPU.
@@ -216,8 +238,13 @@ class MotorWhisperLocal:
             raise Cancelado("cancelado antes de transcrever")
 
         t0 = time.perf_counter()
-        segs_it, info = self._transcrever_rapido(modelo, audio, idioma)
-        total = float(getattr(info, "duration", 0.0) or 0.0)
+        try:
+            segs_it, info = self._transcrever_rapido(modelo, audio, idioma)
+            total = float(getattr(info, "duration", 0.0) or 0.0)
+        except RuntimeError as e:
+            modelo = self._queda_para_cpu_no_runtime(e, progresso, cancelar)
+            segs_it, info = self._transcrever_rapido(modelo, audio, idioma)
+            total = float(getattr(info, "duration", 0.0) or 0.0)
 
         segmentos: list[Segmento] = []
         partes: list[str] = []
@@ -226,6 +253,21 @@ class MotorWhisperLocal:
         nao_fala: dict[int, float] = {}
         # `transcribe` devolve um gerador: o trabalho acontece ao iterar. É
         # aqui, e só aqui, que dá para cancelar no meio e informar progresso.
+        # E é AQUI que a GPU quebra de verdade: a construção do modelo passa
+        # e o primeiro encode explode ("Library cublas64_12.dll is not
+        # found" — caso real de 25/08, uv sync removeu o cublas). A queda
+        # para CPU da carga não cobria este ponto; o job inteiro morria.
+        try:
+            primeiro = next(segs_it, None)
+        except RuntimeError as e:
+            modelo = self._queda_para_cpu_no_runtime(e, progresso, cancelar)
+            segs_it, info = self._transcrever_rapido(modelo, audio, idioma)
+            total = float(getattr(info, "duration", 0.0) or 0.0)
+            primeiro = next(segs_it, None)
+        import itertools as _it
+
+        if primeiro is not None:
+            segs_it = _it.chain([primeiro], segs_it)
         for s in segs_it:
             if cancelar is not None and cancelar.is_set():
                 raise Cancelado("cancelado durante a transcrição")

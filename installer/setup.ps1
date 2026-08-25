@@ -116,7 +116,15 @@ if (-not (Test-Cmd "uv")) {
 }
 
 Write-Step "uv sync (dependencias Python)"
-uv sync --extra transcricao --directory $Repo
+# Maquina com NVIDIA sincroniza o extra COM as DLLs de CUDA. `uv sync` faz o
+# venv espelhar o lock e REMOVE o que nao esta nele: sincronizar so o extra
+# CPU numa maquina CUDA desinstalava nvidia-cublas-cu12 a cada atualizacao
+# — apos ~6 updates num dia o cublas sumiu e a transcricao local passou a
+# morrer com "Library cublas64_12.dll is not found" (caso real, 25/08).
+$TemNvidia = [bool](Get-Command nvidia-smi -ErrorAction SilentlyContinue)
+$ExtraTranscricao = if ($TemNvidia) { "transcricao-cuda" } else { "transcricao" }
+Write-Host "  transcricao: $ExtraTranscricao (nvidia-smi: $TemNvidia)"
+uv sync --extra $ExtraTranscricao --directory $Repo
 
 $Projects = Join-Path $env:USERPROFILE "ATIVAVID\Projetos"
 New-Item -ItemType Directory -Force -Path $Projects | Out-Null
