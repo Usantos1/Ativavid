@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.74
+
+- **"Comparar versões" lado a lado.** Quando o mesmo vídeo tem duas ou mais
+  versões prontas (o "Gerar 5 versões" cria cinco), o menu "⋯" do card ganha
+  "Comparar N versões": abre todas lado a lado, cada uma com o modo, a
+  duração e o que saiu do corte — dá para tocar todas juntas e escolher a
+  melhor na hora
+
 ## 2.73
 
 - **O renderizador rápido parou de cair para o caminho lento à toa.** Alguns

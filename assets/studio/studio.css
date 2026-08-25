@@ -3275,3 +3275,20 @@ body.home-working .hero-import .hero-inner { padding: 10px 0; }
   .keys-block--apis .keys-api-card { flex: 1 1 360px; min-width: 0; }
   .keys-block--apis .keys-actions { flex: 1 0 100%; }
 }
+
+/* Comparar versoes: o mesmo video em N modos, lado a lado. */
+.dlg-compare { width: min(96vw, 1180px); max-width: none; }
+.cmp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.cmp-cell { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.cmp-cell video {
+  width: 100%; aspect-ratio: 9 / 16; background: #000;
+  border-radius: 10px; object-fit: contain;
+}
+.cmp-nome { font-weight: 700; font-size: 13px; }
+.cmp-meta { font-size: 12px; color: var(--dim, #9aa); line-height: 1.45; }

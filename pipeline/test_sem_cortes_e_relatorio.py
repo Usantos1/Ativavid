@@ -153,3 +153,24 @@ def test_knobs_de_corte_viajam_no_job_intent():
     assert p3["rhythm"] == "dinamico", "knob vazio nao pode apagar o do estilo"
     imp = (RAIZ / "assets" / "studio" / "index.html").read_text(encoding="utf-8")
     assert 'id="importRhythm"' in imp and 'id="importSpeechClean"' in imp
+
+
+def test_comparar_versoes_existe(tmp_path):
+    """"Gerar 5 versoes" cria 5 projetos irmaos; o Comparar mostra os finais
+    lado a lado. O agrupamento vem do fonteStem (state.json project) que o
+    jobs_view expoe."""
+    from app.jobs_view import _fonte_do_video
+
+    (tmp_path / "state.json").write_text(json.dumps(
+        {"project": "A001_08221139_C002.mov"}), encoding="utf-8")
+    job = {}
+    _fonte_do_video(job, tmp_path)
+    assert job["fonteStem"] == "A001_08221139_C002"
+
+    js = (RAIZ / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
+    assert "versoesDaFonte" in js and "abrirComparar" in js
+    assert 'data-act="compare"' in js, "o item Comparar sumiu do menu do card"
+    assert "const nome = String(v.final).split(/[" + "\\" * 2 + "/]/)" in js, \
+        "o basename do final tem que separar por barra E contrabarra (Windows)"
+    html = (RAIZ / "assets" / "studio" / "index.html").read_text(encoding="utf-8")
+    assert 'id="dlgCompare"' in html and 'id="cmpGrid"' in html

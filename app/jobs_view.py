@@ -51,6 +51,19 @@ _MODO_LABEL = {
 }
 
 
+def _fonte_do_video(job: dict, edit: Path) -> None:
+    """Stem do ARQUIVO de origem — a chave que agrupa as versoes do mesmo
+    video ("Gerar 5 versoes" cria 5 projetos da mesma fonte; o Comparar
+    precisa saber quem e irmao de quem)."""
+    try:
+        st = json.loads((edit / "state.json").read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError):
+        return
+    proj = str(st.get("project") or "").strip()
+    if proj:
+        job["fonteStem"] = Path(proj).stem
+
+
 def _resumo_do_corte(job: dict, edit: Path) -> None:
     """"Saiu: 32s silêncio · 9s repetição" na ficha do card. A auditoria do
     corte era feita na mão abrindo EDL + transcrição (24-25/08); agora o
@@ -147,6 +160,7 @@ def build(store: Any, projects_root: Path, *, com_links: bool = False) -> list[d
                 j["score"] = json.loads(score_path.read_text(encoding="utf-8-sig"))
             except (OSError, json.JSONDecodeError):
                 pass
+        _fonte_do_video(j, edit)
         _modo_de_edicao(j, edit)
         _resumo_do_corte(j, edit)
         _aviso_de_ia(j, edit)

@@ -408,6 +408,45 @@ function jobFolderName(j) {
   return parts[parts.length - 1] || String(j.id || "");
 }
 
+// Versoes CONCLUIDAS do mesmo arquivo de origem (fonteStem vem do
+// jobs_view). "Gerar 5 versoes" cria 5 projetos irmaos — comparar e o
+// proximo passo natural.
+function versoesDaFonte(j) {
+  const stem = j && j.fonteStem;
+  if (!stem) return [];
+  return state.jobs
+    .filter((x) => x.status === "done" && x.fonteStem === stem && x.final)
+    .sort((a2, b2) => String(a2.finishedAt || "").localeCompare(String(b2.finishedAt || "")));
+}
+
+function abrirComparar(id) {
+  const j = state.jobs.find((x) => x.id === id);
+  const versoes = versoesDaFonte(j);
+  if (versoes.length < 2) { toast("Só existe uma versão pronta deste vídeo"); return; }
+  const grid = $("#cmpGrid");
+  if (!grid) return;
+  $("#cmpTitle").textContent = `Comparar versões — ${j.fonteStem} (${versoes.length})`;
+  grid.innerHTML = "";
+  versoes.slice(0, 6).forEach((v) => {
+    const folder = encodeURIComponent(jobFolderName(v));
+    const nome = String(v.final).split(/[\\/]/).pop() || "";
+    const cell = document.createElement("div");
+    cell.className = "cmp-cell";
+    const meta = [
+      v.modoLabel ? `Modo: ${v.modoLabel}` : "Modo: Dinâmico",
+      v.styleLabel ? `Estilo: ${v.styleLabel}` : "",
+      duracoesLabel(v) || "",
+      v.corteResumo ? `Saiu: ${v.corteResumo}` : "",
+    ].filter(Boolean).join("<br>");
+    cell.innerHTML = `
+      <video controls preload="metadata" src="/p/${folder}/media/${encodeURIComponent(nome)}"></video>
+      <div class="cmp-nome">${escapeHtml(displayTitle(v))}</div>
+      <div class="cmp-meta">${meta}</div>`;
+    grid.appendChild(cell);
+  });
+  $("#dlgCompare")?.showModal();
+}
+
 function jobLinks(j) {
   const folder = encodeURIComponent(jobFolderName(j));
   return {
@@ -503,6 +542,7 @@ function cardSig(j, opts) {
     j.modoLabel || "",
     j.corteResumo || "",
     j.iaNota || "",
+    versoesDaFonte(j).length,
     j.stage, j.message, j.reason || "", j.localPoster || j.thumbUrl, links.editor, links.estilo, links.final,
     opts && opts.compact ? "1" : "0",
     qa.status || "", qa.stage || "", qa.elapsedLabel || "", qa.etaLabel || "", qa.stageLabel || "",
@@ -636,6 +676,9 @@ function cardMenuHtml(j, opts) {
         <a role="menuitem" href="${escapeHtml(links.final)}" ${canFinal ? "" : "class=\"disabled\""}>Ver vídeo final</a>
         <a role="menuitem" href="${escapeHtml(links.editor)}">Editar</a>
         <a role="menuitem" href="${escapeHtml(links.estilo)}" data-id="${safeId}">Alterar estilo</a>
+        ${j.status === "done" && versoesDaFonte(j).length >= 2
+          ? `<button type="button" role="menuitem" data-act="compare" data-id="${safeId}">Comparar ${versoesDaFonte(j).length} versões</button>`
+          : ""}
         ${j.status === "done" ? `<button type="button" role="menuitem" data-act="retry" data-id="${safeId}">Tentar novamente</button>` : ""}
         ${(copy.badge === "ERRO" || copy.badge === "REVISAR" || j.detail)
           ? `<button type="button" role="menuitem" data-act="detail" data-id="${safeId}">Ver detalhe</button>`
@@ -2222,6 +2265,15 @@ function wireDrop() {
       }
     };
   }
+  $("#cmpClose")?.addEventListener("click", () => {
+    const dlg = $("#dlgCompare");
+    $("#cmpGrid")?.querySelectorAll("video").forEach((v) => v.pause());
+    $("#cmpGrid") && ($("#cmpGrid").innerHTML = "");
+    dlg?.close();
+  });
+  $("#cmpPlayAll")?.addEventListener("click", () => {
+    $("#cmpGrid")?.querySelectorAll("video").forEach((v) => { v.currentTime = 0; v.play().catch(() => {}); });
+  });
   const btnCancel = $("#btnImportCancel");
   if (btnCancel) {
     btnCancel.onclick = () => {
@@ -2486,6 +2538,8 @@ function wireList() {
         toast(wasApplyFail ? "Refazendo o vídeo com os seus cortes" : "De volta à fila");
         setView("fila");
         await refreshJobs();
+      } else if (act === "compare") {
+        abrirComparar(id);
       } else if (act === "reimport") {
         // O arquivo antigo não abre: abre o seletor para o usuário trazer a
         // cópia boa. O card quebrado continua ali para ele apagar.
