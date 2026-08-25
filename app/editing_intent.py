@@ -10,7 +10,7 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 
-INTENTS = ("complete", "dynamic", "shorts", "clips", "light")
+INTENTS = ("complete", "dynamic", "shorts", "clips", "light", "intact")
 INTENT_FILE = "job_intent.json"
 
 # Vídeo ≥ isto (segundos) recomenda "Editar vídeo completo"
@@ -49,6 +49,16 @@ DEFAULTS = {
     # "light": edição leve — corte heurístico local (só silêncio/erro),
     # SEM IA reescrevendo o corte. Tudo preservado por padrão.
     "light": {
+        "preserveHook": True,
+        "preserveCTA": True,
+        "preserveCompleteSentences": True,
+        "preserveContext": True,
+    },
+    # "intact": SEM CORTES — o vídeo inteiro, zero tesoura. Só legendas,
+    # título, cor e trilha. Nasceu de pedido direto do usuário (24-25/08):
+    # "quero o mais original possível" — e o mínimo que existia (Vídeo
+    # completo) ainda tira silêncio e repetição.
+    "intact": {
         "preserveHook": True,
         "preserveCTA": True,
         "preserveCompleteSentences": True,
@@ -873,6 +883,9 @@ def guard_ranges(
     if mode not in INTENTS:
         mode = "dynamic"
     out = [dict(r) for r in (ranges or [])]
+    if mode == "intact":
+        # Sem cortes: o EDL ja e o video inteiro, nao ha o que guardar.
+        return out
     if not out and not regions:
         return out
 

@@ -2118,7 +2118,7 @@ async function applyState(data) {
     S.contentType = data.intent.contentType || S.contentType;
     S.editIntent = data.intent.editingIntent || S.editIntent || null;
     const mEl = $('autoEditIntent');
-    if (mEl && S.editIntent && ['light','dynamic','complete'].includes(S.editIntent)) mEl.value = S.editIntent;
+    if (mEl && S.editIntent && ['light','dynamic','complete','intact'].includes(S.editIntent)) mEl.value = S.editIntent;
     // O payload só carrega o modo se o USUÁRIO mexeu nele nesta tela. Uma aba
     // do Estilo aberta desde antes de uma troca de modo mostrava o valor
     // velho no seletor, e o "Salvar e refazer" mandava esse valor por cima do

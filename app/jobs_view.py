@@ -44,10 +44,28 @@ def _status_do_pipeline(job: dict, edit: Path) -> None:
 # imports do mesmo video herdaram o modo leve em silencio e o corte
 # heuristico saiu identico tres vezes.
 _MODO_LABEL = {
+    "intact": "Sem cortes",
     "light": "Edição leve",
     "complete": "Vídeo completo",
     "shorts": "Reels / Shorts",
 }
+
+
+def _resumo_do_corte(job: dict, edit: Path) -> None:
+    """"Saiu: 32s silêncio · 9s repetição" na ficha do card. A auditoria do
+    corte era feita na mão abrindo EDL + transcrição (24-25/08); agora o
+    pipeline grava corte_relatorio.json e o card conta o que saiu."""
+    try:
+        d = json.loads((edit / "corte_relatorio.json").read_text(
+            encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError):
+        return
+    if d.get("removedSec") is None:
+        return
+    if float(d.get("removedSec") or 0) < 0.5:
+        job["corteResumo"] = "nada — vídeo inteiro"
+    elif d.get("resumo"):
+        job["corteResumo"] = str(d["resumo"])[:90]
 
 
 def _modo_de_edicao(job: dict, edit: Path) -> None:
@@ -121,6 +139,7 @@ def build(store: Any, projects_root: Path, *, com_links: bool = False) -> list[d
             except (OSError, json.JSONDecodeError):
                 pass
         _modo_de_edicao(j, edit)
+        _resumo_do_corte(j, edit)
         _aviso_de_ia(j, edit)
         enrich_job_display(j, edit)
         if j.get("sourceDurationSec") in (None, "") and (j.get("sources") or j.get("source")):

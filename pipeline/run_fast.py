@@ -2486,7 +2486,7 @@ def run(
         max_dur = 7200  # podcast/aula: o job mãe só analisa e divide
     elif allow_landscape:
         max_dur = 1800
-    elif intent_mode == "complete":
+    elif intent_mode in ("complete", "intact"):
         max_dur = 1800
     elif intent_mode == "dynamic":
         max_dur = 600
@@ -2612,6 +2612,18 @@ def run(
             source_key = key
 
         if len(sources) > 1:
+            if intent_mode == "intact":
+                # Sem cortes com varios takes: cada take entra inteiro, na ordem.
+                all_ranges.append({
+                    "source": key,
+                    "start": 0.0,
+                    "end": round(dur_i, 3),
+                    "beat": "HOOK" if idx == 0 else f"B{idx}",
+                    "quote": "",
+                    "reason": "sem cortes",
+                    "gain_db": 0.0,
+                })
+                continue
             try:
                 all_ranges.extend(build_edl_ranges(
                     key, regions_i, voice_i, spoken_i, source_dur=dur_i,
@@ -2688,6 +2700,23 @@ def run(
         llm_meta = {"ok": True, "backend": "manual_edl"}
         print(f"[edits] mantendo seu corte aplicado · {len(ranges)} takes", flush=True)
         set_stage(edit_dir, "planning", "Mantendo seus cortes…", 38)
+    elif str(preset.get("editingIntent") or "").lower() == "intact" and len(sources) == 1:
+        # Sem cortes: o video INTEIRO, zero tesoura. So legendas, titulo,
+        # cor e trilha. Pedido direto do usuario (24-25/08): "quero o mais
+        # original possivel" — o minimo que existia (Video completo) ainda
+        # tira silencio e repeticao.
+        print("[intacto] sem cortes — o video inteiro", flush=True)
+        set_stage(edit_dir, "planning", "Mantendo o video inteiro…", 38)
+        ranges = [{
+            "source": source_key,
+            "start": 0.0,
+            "end": round(float(dur), 3),
+            "beat": "HOOK",
+            "quote": "",
+            "reason": "sem cortes",
+            "gain_db": 0.0,
+        }]
+        llm_meta = {"ok": True, "backend": "sem_cortes"}
     elif str(preset.get("editingIntent") or "").lower() == "light" and len(sources) == 1:
         # Edição leve: corte heurístico local (silêncio/erro), sem chamada de
         # IA — o modo mais rápido e previsível do app. Headline e legenda da
@@ -2774,13 +2803,22 @@ def run(
             continue
         r["beat"] = "HOOK" if i == 0 else ("CTA" if i == len(ranges) - 1 and len(ranges) > 2 else f"B{i}")
 
-    if not allow_landscape and intent_mode != "complete":
+    if not allow_landscape and intent_mode not in ("complete", "intact"):
         total_keep = sum(max(0.0, float(r["end"]) - float(r["start"])) for r in ranges)
         if total_keep > max_dur:
             raise NeedsReview(
                 "out_of_format",
                 f"corte estimado {total_keep:.0f}s acima do limite {max_dur}s — reduza takes",
             )
+
+    try:
+        from app.corte_relatorio import gerar as _gerar_relatorio
+
+        _gerar_relatorio(edit_dir, duration_s=dur, ranges=ranges,
+                         stem=primary.stem, mode=intent_mode or "dynamic",
+                         backend=llm_meta.get("backend"))
+    except Exception as e:  # noqa: BLE001 - relatorio nunca derruba o render
+        print(f"[relatorio] indisponivel: {str(e)[:80]}", flush=True)
 
     edl = {
         "version": 1,

@@ -651,7 +651,7 @@ class Handler(BaseHTTPRequestHandler):
         # nas tres. Gravar aqui e o que faz "Salvar e refazer" replanejar.
         modo = str(body.get("editingIntent") or "").strip().lower()
         if body.get("type") == "style-setup" and modo in (
-                "light", "dynamic", "complete"):
+                "light", "dynamic", "complete", "intact"):
             try:
                 from app.editing_intent import load as _li, save as _si
 
