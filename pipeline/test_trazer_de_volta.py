@@ -139,3 +139,22 @@ def test_plano_b_groq_vira_nota_no_card(tmp_path):
     job2 = {"status": "done"}
     _aviso_de_ia(job2, tmp_path)
     assert not job2.get("iaNota") and not job2.get("iaAviso")
+
+
+def test_receita_do_relogio_e_fps_tpad_trim():
+    """O cut chega com relogio quebrado nos DOIS sentidos: buraco (2424
+    quadros em 2426 posicoes) e excesso (1655 quadros em 68,83s — job real
+    24/08 22:11, que caiu FRAMES 1651!=1654 para o Remotion, 568s). trim
+    antes do fps= reamostrava DEPOIS do corte e derrubava quadros; a ordem
+    fps -> tpad -> trim sai exata nos dois sentidos (provado no cut real:
+    antigo 1651, novo 1654)."""
+    for nome in ("app/render_proprio.py", "app/overlay_compose.py"):
+        s = (RAIZ / nome).read_text(encoding="utf-8")
+        i = s.find('tpad=stop_mode=clone:stop={frames}')
+        assert i > 0, f"{nome}: a receita do relogio sumiu"
+        trecho = s[max(0, i - 200):i + 200]
+        assert "{_sp},tpad" in trecho, f"{nome}: fps= tem que vir ANTES do tpad"
+        assert 'trim=end_frame={frames}[cutv]' in trecho, \
+            f"{nome}: trim tem que ser o ULTIMO passo"
+        j = s.find("trim=end_frame={frames},{_sp}")
+        assert j < 0, f"{nome}: voltou o trim antes do fps= (derruba quadros)"

@@ -453,37 +453,27 @@ def compose_overlay(
     dec: list[str] = ["-c:v", "libvpx"] if overlay.suffix.lower() == ".webm" else []
 
     fade_out_at = max(0.0, duration_sec - 1.5)
-    # `fps=` na frente: o cut pode chegar com BURACO no proprio relogio.
-    # Medido nos 8 ultimos cuts do usuario, 2 deles pulam 3 quadros de uma
-    # vez no fim — 2424 quadros ocupando 2426 posicoes. A timeline conta as
-    # posicoes (ela deriva de `durationSec`), entao pedia 2426 e o arquivo
-    # saia com 2424: `FRAMES 2424!=2426`, e o job inteiro voltava para o
-    # Remotion completo.
-    #
-    # O `tpad` sozinho nao resolve: ele acrescenta DEPOIS do ultimo quadro,
-    # que ja esta na posicao 2425, entao os clones caem em 2426 e 2427 — e o
-    # `-t duration_sec` corta exatamente ali. Medido no arquivo real:
-    #   so tpad, como era  ->  2424 quadros / 80,866667s / buraco de 2
-    #   tpad + fps=        ->  2426 quadros / 80,866667s / sem buraco
-    #
-    # `fps` PREENCHE o buraco duplicando quadro, sem mexer no tempo do que ja
-    # estava no lugar. Renumerar o PTS tambem daria a contagem certa, mas
-    # FECHANDO o buraco: tudo depois dele adiantaria, saindo de sincronia com
-    # o audio. Nestes arquivos o buraco e sempre no ultimo quadro, mas nao ha
-    # garantia disso.
+    # UMA receita para os DOIS defeitos de relogio do cut:
+    #   - BURACO (quadros a MENOS que as posicoes): 2424 quadros em 2426
+    #     posicoes — `fps=` preenche duplicando, `tpad` clona o que faltar
+    #     no fim.
+    #   - EXCESSO (quadros a MAIS que o relogio): 1655 quadros em 68,83s
+    #     (job real de 24/08 22:11) — o ramo antigo fazia `trim` ANTES do
+    #     `fps=`, e o `fps=` reamostrava pelo relogio DEPOIS, derrubando 3
+    #     quadros: saia 1651!=1654 e o job caia para o Remotion completo
+    #     (568s em vez de ~100s).
+    # A ordem fps -> tpad -> trim normaliza o relogio primeiro e corta por
+    # ultimo, entao a contagem sai EXATA nos dois sentidos — provado no
+    # cut real: antigo 1651, novo 1654/1654.
     _sp = f"fps={fps_f:g},setpts=PTS-STARTPTS"
-    if cut_frames and cut_frames < frames:
-        pad = frames - cut_frames
-        cut_v = f"[0:v]tpad=stop_mode=clone:stop={pad},{_sp}[cutv]"
-        print(f"COMPOSE_CUT_PAD {pad} frames (cut {cut_frames} < {frames})", flush=True)
-    else:
-        cut_v = f"[0:v]trim=end_frame={frames},{_sp}[cutv]"
-        if cut_frames and cut_frames > frames:
-            print(
-                f"COMPOSE_CUT_TRIM {cut_frames - frames} frames "
-                f"(cut {cut_frames} > {frames})",
-                flush=True,
-            )
+    cut_v = (f"[0:v]{_sp},tpad=stop_mode=clone:stop={frames},"
+             f"trim=end_frame={frames}[cutv]")
+    if cut_frames and cut_frames != frames:
+        print(
+            f"COMPOSE_CUT_AJUSTE relogio normalizado "
+            f"(cut {cut_frames} -> {frames})",
+            flush=True,
+        )
     ov_v = f"[1:v]trim=end_frame={frames},setpts=PTS-STARTPTS[ov]"
     vid = (
         f"{cut_v};{ov_v};"

@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.73
+
+- **O renderizador rápido parou de cair para o caminho lento à toa.** Alguns
+  vídeos chegam da câmera com o relógio interno quebrado (quadros a mais ou a
+  menos do que a duração diz). O caso "a menos" já era tratado; o caso "a
+  mais" fazia a contagem final errar por 3 quadros e o app, por segurança,
+  refazia tudo pelo caminho lento — 9 minutos em vez de ~2. A normalização
+  do relógio agora cobre os dois sentidos, com prova no vídeo real que caiu
+
 ## 2.72
 
 - **A limpeza de silêncio nunca mais come o fim de uma palavra.** O acabamento
