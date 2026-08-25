@@ -6,7 +6,7 @@
 ; Atalho → ATIVAVID.vbs (sem janela CMD).
 
 #define MyAppName "ATIVAVID"
-#define MyAppVersion "2.62"
+#define MyAppVersion "2.63"
 #define MyAppPublisher "ATIVAVID"
 #define MyAppURL "https://github.com/fillrochaa/edvid"
 #define MyAppExeName "ATIVAVID.vbs"
@@ -83,6 +83,30 @@ Filename: "{win}\explorer.exe"; \
 function InitializeSetup(): Boolean;
 begin
   Result := True;
+end;
+
+// Instalar por cima do app ABERTO deixava o servidor Python velho na memoria:
+// as telas (lidas do disco) mostravam os campos novos, o servidor ignorava os
+// campos que nao conhecia, e "instalei mas continua igual" (caso real, 24/08:
+// o modo de edicao chegou no payload e nao foi gravado). CloseApplications
+// nao pega: pythonw le os .py e fecha, o Restart Manager nao ve nada.
+// Entao: derrubar os processos do app ANTES de copiar. So os que tem o
+// diretorio de instalacao na linha de comando — e nunca o proprio PowerShell
+// (a propria cmdline contem o caminho; sem o filtro de $PID ele se mataria
+// no meio do trabalho).
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  R: Integer;
+  Cmd: String;
+begin
+  Cmd := '-NoProfile -Command "Get-CimInstance Win32_Process | ' +
+         'Where-Object { ($_.Name -match ''^(python|pythonw|wscript|node|ffmpeg)'') ' +
+         '-and $_.CommandLine -like ''*' + ExpandConstant('{app}') + '*'' ' +
+         '-and $_.ProcessId -ne $PID } | ' +
+         'ForEach-Object { Stop-Process -Id $_.ProcessId -Force ' +
+         '-ErrorAction SilentlyContinue }"';
+  Exec('powershell.exe', Cmd, '', SW_HIDE, ewWaitUntilTerminated, R);
+  Result := '';
 end;
 
 
