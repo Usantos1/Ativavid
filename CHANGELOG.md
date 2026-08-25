@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.71
+
+- **"Trazer de volta": restaure qualquer trecho removido com um clique.** A
+  aba Visual ganhou o painel "O que saiu do corte": cada trecho removido
+  aparece com o horário, o motivo e o texto que foi falado — e um botão
+  "Trazer de volta". Clicou, o trecho volta ao corte e o vídeo é refeito
+  automaticamente. A IA não desfaz sua decisão em refazeres futuros: o corte
+  passa a ser tratado como edição manual sua
+
 ## 2.70
 
 - **"Gerar 5 versões".** O botão de comparação agora cobre os cinco jeitos de

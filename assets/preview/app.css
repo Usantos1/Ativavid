@@ -3337,3 +3337,21 @@ body.styles-wide .setup-actions .btn.primary {
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 55%, transparent);
   }
 }
+
+/* "O que saiu do corte" — cada item com o motivo e o botao de trazer de
+   volta. Divide o visual do postPanel (post-panel/post-toggle). */
+.saiu-list { display: flex; flex-direction: column; }
+.saiu-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 2px; border-top: 1px solid var(--stroke);
+  font-size: 13px; color: var(--text);
+}
+.saiu-item:first-child { border-top: 0; }
+.saiu-item .saiu-quando {
+  font-variant-numeric: tabular-nums; color: var(--dim); flex: 0 0 auto;
+}
+.saiu-item .saiu-motivo { color: var(--dim); flex: 0 0 auto; }
+.saiu-item .saiu-texto {
+  flex: 1 1 auto; min-width: 0; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}

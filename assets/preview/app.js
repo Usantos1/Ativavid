@@ -1220,6 +1220,84 @@ function formatReelCaption(txt) {
   return tagLine ? `${body}\n\n${tagLine}` : body;
 }
 
+const SAIU_ROTULO = {
+  silence: 'silêncio',
+  repetition: 'repetição',
+  false_start: 'recomeço',
+  abandoned_take: 'recomeço',
+  non_content: 'sem fala útil',
+  estilo: 'ritmo/estilo (IA)',
+  outro: 'outros',
+};
+
+function fmtSaiuTempo(sec) {
+  const t = Math.max(0, Math.round(sec));
+  return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
+}
+
+// "O que saiu do corte": o relatorio vira lista com "Trazer de volta" por
+// item. A mecanica e a do corte do editor (preview_edits) — restaurar um
+// trecho reescreve o EDL e o refazer entra como corte manual.
+function renderSaiuPanel() {
+  const panel = $('saiuPanel');
+  if (!panel) return;
+  const rel = S.corteRelatorio;
+  const itens = (rel && Array.isArray(rel.itens)) ? rel.itens : [];
+  const mostrar = S.tab === 2 && itens.length > 0;
+  panel.classList.toggle('hidden', !mostrar);
+  if (!mostrar) return;
+  const hint = $('saiuHint');
+  if (hint) hint.textContent = rel.resumo || '';
+  const list = $('saiuList');
+  list.innerHTML = '';
+  itens.forEach((it) => {
+    const row = el('div', 'saiu-item', list);
+    const quando = el('span', 'saiu-quando', row);
+    quando.textContent = `${fmtSaiuTempo(it.start)}–${fmtSaiuTempo(it.end)}`;
+    const motivo = el('span', 'saiu-motivo', row);
+    motivo.textContent = `${SAIU_ROTULO[it.classe] || it.classe} · ${Math.max(1, Math.round(it.dur))}s`;
+    const texto = el('span', 'saiu-texto', row);
+    texto.textContent = it.texto || '';
+    if (it.texto) texto.title = it.texto;
+    const btn = el('button', 'btn ghost small', row);
+    btn.type = 'button';
+    btn.textContent = 'Trazer de volta';
+    btn.onclick = () => trazerDeVolta(it, btn);
+  });
+}
+
+async function trazerDeVolta(item, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = 'Voltando…'; }
+  try {
+    const r = await fetch(`${BASE}/api/restaurar-trecho`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ start: item.start, end: item.end }),
+    });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(body.error || 'não deu para restaurar');
+    if (!body.changed) {
+      toast(body.hint || 'Esse trecho já está no corte');
+      if (btn) { btn.textContent = 'Já no corte'; }
+      return;
+    }
+    if (BASE && BASE.startsWith('/p/')) {
+      const folder = decodeURIComponent(BASE.slice('/p/'.length).split('/')[0]);
+      const rq = await fetch('/api/jobs/requeue-folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folder }),
+      });
+      if (!rq.ok) throw new Error('restaurado, mas não entrou na fila — refaça em Projetos');
+    }
+    toast('✓ Trecho de volta — refazendo o vídeo');
+    if (btn) btn.textContent = 'Voltou ✓';
+  } catch (err) {
+    toast(err.message, 5000);
+    if (btn) { btn.disabled = false; btn.textContent = 'Trazer de volta'; }
+  }
+}
+
 async function loadPostCaption() {
   const panel = $('postPanel');
   panel.classList.toggle('hidden', S.tab !== 2);
@@ -2113,6 +2191,7 @@ async function applyState(data) {
     source: r.source, start: +r.start, end: +r.end, beat: r.beat || '',
     removed: false, srcIdx, orig: { start: +r.start, end: +r.end },
   }));
+  S.corteRelatorio = data.corteRelatorio || null;
   if (data.intent) {
     S.protectedRanges = Array.isArray(data.intent.protectedRanges) ? data.intent.protectedRanges : [];
     S.contentType = data.intent.contentType || S.contentType;
@@ -2258,6 +2337,7 @@ async function applyState(data) {
   renderSetup();
   refreshHeader();
   loadPostCaption(); // picks up a caption written between polls
+  renderSaiuPanel();
   loadBrandPresets({ applyActive: !!(HOUSE_STYLE || HUB_EMBED) });
 }
 
@@ -4970,6 +5050,13 @@ $('postToggle')?.addEventListener('click', () => {
   if (!panel) return;
   setPostCollapsed(!panel.classList.contains('collapsed'));
 });
+$('saiuToggle')?.addEventListener('click', () => {
+  const panel = $('saiuPanel');
+  if (!panel) return;
+  const fechado = !panel.classList.contains('collapsed');
+  panel.classList.toggle('collapsed', fechado);
+  $('saiuToggle')?.setAttribute('aria-expanded', fechado ? 'false' : 'true');
+});
 
 function closeHeadMore() {
   $('headMoreMenu')?.classList.add('hidden');
@@ -5375,6 +5462,7 @@ function goToTab(tab) {
   renderAll();
   renderSetup();
   loadPostCaption();
+  renderSaiuPanel();
 }
 document.querySelectorAll('.tab').forEach((tab) => tab.addEventListener('click', () => goToTab(tab)));
 // back/forward, or a link straight to someone's /estilo

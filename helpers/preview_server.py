@@ -616,6 +616,9 @@ class Handler(BaseHTTPRequestHandler):
         if route == "/api/intent":
             self._intent_post()
             return
+        if route == "/api/restaurar-trecho":
+            self._restaurar_trecho()
+            return
         if route == "/api/versions":
             self._versions_post()
             return
@@ -1351,6 +1354,13 @@ class Handler(BaseHTTPRequestHandler):
                 intent = json.loads(intent_p.read_text(encoding="utf-8-sig"))
             except (OSError, json.JSONDecodeError):
                 intent = None
+        relatorio = None
+        rel_p = self.root / "corte_relatorio.json"
+        if rel_p.exists():
+            try:
+                relatorio = json.loads(rel_p.read_text(encoding="utf-8-sig"))
+            except (OSError, json.JSONDecodeError):
+                relatorio = None
         corrections = None
         try:
             from app.quick_corrections import load as load_corrections
@@ -1387,6 +1397,7 @@ class Handler(BaseHTTPRequestHandler):
             "state": state,
             "edl": edl,
             "intent": intent,
+            "corteRelatorio": relatorio,
             "mtimes": mtimes,
             "videoDuration": dur,
             "hasCut": video is not None,
@@ -1446,6 +1457,54 @@ class Handler(BaseHTTPRequestHandler):
             cur.update(body)
         saved = save_intent(self.root, cur)
         self._json({"ok": True, "intent": saved})
+
+    def _restaurar_trecho(self) -> None:
+        """"Traz de volta": recoloca um trecho removido no corte, sem refazer
+        o plano. Recebe {start, end} em segundos DO ORIGINAL (os mesmos do
+        corte_relatorio.json), insere no EDL atual e grava preview_edits.json
+        — o mesmo caminho do corte do editor: o proximo render entra como
+        backend preview_edits e o replanejo da IA nao mexe mais nisso."""
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            body = json.loads(self.rfile.read(length) or b"{}")
+            ini = float(body.get("start"))
+            fim = float(body.get("end"))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            self._json({"error": "start/end invalidos"}, 400)
+            return
+        if not (fim > ini >= 0):
+            self._json({"error": "start/end invalidos"}, 400)
+            return
+        try:
+            edl = json.loads((self.root / "edl.json").read_text(
+                encoding="utf-8-sig"))
+        except (OSError, json.JSONDecodeError):
+            self._json({"error": "este projeto ainda nao tem corte"}, 409)
+            return
+        ranges = edl.get("ranges") or []
+        fontes = {str(r.get("source") or "") for r in ranges}
+        if len(fontes) != 1:
+            self._json({"error": "restaurar por trecho so em fonte unica"}, 409)
+            return
+        from app.editing_intent import _insert_range
+
+        novo = _insert_range([dict(r) for r in ranges], ini, fim,
+                             "KEEP", "trazido de volta")
+        if sum(r["end"] - r["start"] for r in novo) <=                 sum(float(r.get("end") or 0) - float(r.get("start") or 0)
+                    for r in ranges) + 0.01:
+            self._json({"ok": True, "changed": False,
+                        "hint": "esse trecho ja esta no corte"})
+            return
+        out = self.root / "preview_edits.json"
+        out.write_text(json.dumps({
+            "type": "timeline-edits",
+            "savedAt": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "origem": "trazer-de-volta",
+            "edl": {"ranges": novo},
+        }, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(f"[restaurar] trecho {ini:.2f}-{fim:.2f}s de volta ao corte",
+              flush=True)
+        self._json({"ok": True, "changed": True})
 
     def _versions_get(self) -> None:
         from app.project_versions import list_versions

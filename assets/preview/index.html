@@ -642,6 +642,17 @@
          that got skipped. Sits OUTSIDE the timeline panel on purpose — that
          panel scrolls horizontally with the zoom, and text does not belong on
          a scrolling ruler. -->
+    <section id="saiuPanel" class="post-panel glass hidden">
+      <button type="button" id="saiuToggle" class="post-toggle" aria-expanded="true">
+        <span class="post-toggle-title">O que saiu do corte</span>
+        <span id="saiuHint" class="post-hint"></span>
+        <span class="spacer"></span>
+        <span class="post-caret" aria-hidden="true">▾</span>
+      </button>
+      <div class="post-body">
+        <div id="saiuList" class="saiu-list"></div>
+      </div>
+    </section>
     <section id="postPanel" class="post-panel glass hidden">
       <button type="button" id="postToggle" class="post-toggle" aria-expanded="true">
         <span class="post-toggle-title">Legenda do post</span>
