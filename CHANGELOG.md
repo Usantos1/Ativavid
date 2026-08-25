@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.67
+
+- **O gancho nunca mais abre decepado.** A primeira frase do vídeo podia ser
+  parecida com uma fala posterior (a piada volta ao bordão) e era tratada
+  como "repetição" — o vídeo abria com o "Oi," cortado no meio. O começo
+  agora é inegociável
+
+- **O eco cômico fica.** Quando a cliente repete em pergunta o que a
+  atendente afirmou ("…porque tem um negócio dentro." → "Tem um negócio
+  dentro?"), o texto é igual mas são duas falas de duas pessoas — cortar a
+  pergunta deixava a resposta seguinte sem sentido. Pergunta que ecoa
+  afirmação é preservada; retake literal da mesma frase continua saindo
+
 ## 2.66
 
 - **Uma aba antiga da tela de Estilo não muda mais o modo de edição por
