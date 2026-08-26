@@ -185,3 +185,39 @@ def test_ultima_rede_do_titulo_esta_ligada():
     # (24/08 17:10) saiu com titulo cru. O corte segue 100% heuristico.
     assert '!= "heuristic_light"' not in trecho, (
         "a exclusao do modo leve voltou — a promessa da tela e sobre o corte")
+
+
+def test_json_quebrado_da_sessao_cai_para_o_groq(monkeypatch):
+    """TRES planos reais (25-26/08) sairam 'sem IA' com o Groq parado: a
+    sessao respondeu (rede nao cai) mas com JSON quebrado — virgula
+    faltando — e o parse matava o plano. Parse quebrado agora tambem e
+    plano B."""
+    import llm_cut_plan as lcp
+    from app import llm_gateway as gw
+
+    monkeypatch.setattr(lcp, "_chat_com_rede",
+                        lambda msgs: ('{"headline": "Oi" "sem virgula"}',
+                                      "gemini-web"))
+    monkeypatch.setattr(gw, "_groq_key", lambda: "chave")
+    chamado = {}
+
+    def _groq_falso(msgs, model, extras=None):
+        chamado["extras"] = extras
+        return {"choices": [{"message": {"content":
+                '{"headline": "Consertado no plano B"}'}}]}
+
+    monkeypatch.setattr(gw, "_groq_chat", _groq_falso)
+    parsed, backend, bruto = lcp._chamar_e_parsear([{"role": "user",
+                                                     "content": "x"}])
+    assert backend == "groq"
+    assert parsed["headline"] == "Consertado no plano B"
+    assert chamado["extras"] == {"response_format": {"type": "json_object"}}, \
+        "o retry PRECISA exigir json_object — e o que garante parse valido"
+
+    # groq ja era o backend? nao ha proximo — o erro sobe
+    monkeypatch.setattr(lcp, "_chat_com_rede",
+                        lambda msgs: ('{quebrado', "groq"))
+    import json as _json
+    import pytest
+    with pytest.raises(_json.JSONDecodeError):
+        lcp._chamar_e_parsear([{"role": "user", "content": "x"}])

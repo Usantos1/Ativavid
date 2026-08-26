@@ -288,6 +288,32 @@ def _user_prompt(
     )
 
 
+def _chamar_e_parsear(messages: list[dict]) -> tuple[dict | list, str, str]:
+    """Rede + parse, com plano B DE PARSE.
+
+    A rede sessão→Groq só cobre sessão MORTA. O Gemini vivo às vezes devolve
+    JSON quebrado (vírgula faltando — TRÊS planos reais em 25-26/08 saíram
+    "sem IA" com a chave do Groq parada no .env). Parse quebrado agora também
+    cai para o Groq, que com response_format=json_object devolve JSON válido
+    por contrato.
+    """
+    text, backend = _chat_com_rede(messages)
+    try:
+        return _extract_json(text), backend, text
+    except json.JSONDecodeError as e:
+        from app import llm_gateway as gw
+
+        if backend == "groq" or not gw._groq_key():
+            raise
+        print(f"[ia] resposta de {backend} com JSON quebrado ({str(e)[:60]}) "
+              "— refazendo no groq", flush=True)
+        resp = gw._groq_chat(
+            messages, None,
+            extras={"response_format": {"type": "json_object"}})
+        texto = str(resp["choices"][0]["message"]["content"] or "")
+        return _extract_json(texto), "groq", texto
+
+
 def _extract_json(text: str) -> dict | list:
     raw = (text or "").strip()
     if raw.startswith("```"):
@@ -466,8 +492,7 @@ def headline_apenas(texto_falado: str, preset: dict | None = None) -> dict:
                 + extra)},
             {"role": "user", "content": f"Fala do vídeo:\n{texto[:1800]}"},
         ]
-        bruto, backend = _chat_com_rede(messages)
-        parsed = _extract_json(bruto)
+        parsed, backend, _bruto = _chamar_e_parsear(messages)
         hl = str((parsed or {}).get("headline") or "").strip()[:80]
         if not hl:
             return {}
@@ -515,8 +540,7 @@ def plan_cut(
             duration_hint=duration_s,
         )},
     ]
-    text, backend = _chat_com_rede(messages)
-    parsed = _extract_json(text)
+    parsed, backend, text = _chamar_e_parsear(messages)
     ranges = _normalize_ranges(
         parsed,
         source_key=source_key,

@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.88
+
+- **"Saiu sem IA" por resposta quebrada do Gemini — consertado.** Três vídeos
+  reais saíram com o aviso "Saiu sem IA" mesmo com a sessão do Gemini viva: a
+  resposta vinha com JSON defeituoso (vírgula faltando) e o plano inteiro
+  morria, sem tentar o plano B. Agora resposta ilegível também cai para o
+  Groq, que devolve JSON válido por contrato — o título e o corte saem da IA
+  do mesmo jeito
+
+- O seletor "Traço da ênfase" (novo na 2.87) estava com o visual branco do
+  sistema no tema escuro — vestiu o estilo dos campos vizinhos
+
 ## 2.87
 
 - **Nova ênfase "Marca-texto".** Irmã do círculo riscado: em vez de circular a
