@@ -509,6 +509,7 @@ function fichaHtml(j) {
   if (j.corteResumo) linhas.push(["Saiu", j.corteResumo]);
   // Nota (nao erro): o plano veio do Groq porque as sessoes web cairam.
   if (j.iaNota) linhas.push(["IA", j.iaNota]);
+  if (j.trilhaNota) linhas.push(["Trilha", j.trilhaNota]);
   const ini = String(j.startedAtLabel || j.createdAtLabel || "");
   const fin = String(j.finishedAtLabel || "");
   if (ini) linhas.push(["Início", ini]);
@@ -542,6 +543,7 @@ function cardSig(j, opts) {
     j.modoLabel || "",
     j.corteResumo || "",
     j.iaNota || "",
+    j.trilhaNota || "",
     versoesDaFonte(j).length,
     j.stage, j.message, j.reason || "", j.localPoster || j.thumbUrl, links.editor, links.estilo, links.final,
     opts && opts.compact ? "1" : "0",

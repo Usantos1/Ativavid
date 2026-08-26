@@ -206,6 +206,11 @@ def write_timing(edit_dir: Path) -> dict:
     for campo in ("overlayEngine", "overlayEngineSkip"):
         if _RENDER_META.get(campo):
             payload[campo] = _RENDER_META[campo]
+    # Trilha pedida e nao entregue: ate 25/08 o video saia SEM musica em
+    # silencio absoluto (caso real: creditos do ElevenLabs esgotados e nada
+    # no card, no timing, em lugar nenhum).
+    if _RENDER_META.get("musicaSkip"):
+        payload["musicaSkip"] = _RENDER_META["musicaSkip"]
     try:
         (edit_dir / "timing.json").write_text(
             json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8"
@@ -3363,12 +3368,21 @@ def run(
             os.replace(music_tmp, trilha)
         else:
             # Antecipada falhou (rede/planned<3s) — chamada síncrona antiga.
-            _helper(
+            _mproc = _helper(
                 "elevenlabs_music.py", music_vibe,
                 "-o", str(trilha),
                 "--length-sec", str(int(duration) + 2),
                 check=False,
             )
+            if not trilha.exists():
+                _mtxt = ((_mproc.stderr or "") + (_mproc.stdout or ""))
+                if "insufficient_credits" in _mtxt or "payment_required" in _mtxt:
+                    _RENDER_META["musicaSkip"] = (
+                        "créditos do ElevenLabs esgotados — renove o plano")
+                else:
+                    _RENDER_META["musicaSkip"] = (
+                        "geração falhou: " + _mtxt.strip()[-140:]
+                        if _mtxt.strip() else "geração falhou (sem detalhe)")
         if trilha.exists():
             edit_data["soundtrack"]["enabled"] = True
             (public / "edit-data.json").write_text(
@@ -3376,6 +3390,10 @@ def run(
             )
         else:
             music = False
+            _RENDER_META.setdefault(
+                "musicaSkip", "geração falhou (sem detalhe)")
+            print(f"[7/9] SEM trilha: {_RENDER_META['musicaSkip']}",
+                  flush=True)
     else:
         music_tmp.unlink(missing_ok=True)
         print("[7/9] soundtrack skipped")

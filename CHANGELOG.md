@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.82
+
+- **Vídeo sem trilha sonora agora avisa.** Quando a música de IA é pedida e a
+  geração falha, o vídeo continua saindo (sem música) — mas antes isso era
+  totalmente silencioso: nada no card, nada em lugar nenhum. Foi exatamente o
+  que aconteceu quando os créditos do ElevenLabs esgotaram. Agora a ficha do
+  card mostra "Trilha: Sem trilha sonora — créditos do ElevenLabs esgotados,
+  renove o plano" (ou o motivo real da falha), e o motivo fica gravado no
+  projeto
+
 ## 2.81
 
 - **A janela funciona direito em monitor externo.** Num monitor com escala

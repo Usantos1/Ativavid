@@ -64,6 +64,19 @@ def _fonte_do_video(job: dict, edit: Path) -> None:
         job["fonteStem"] = Path(proj).stem
 
 
+def _aviso_de_trilha(job: dict, edit: Path) -> None:
+    """"Sem trilha" no card. Video pedia musica de IA, a geracao falhou e ate
+    25/08 nada avisava (caso real: creditos do ElevenLabs esgotados — o
+    video saiu mudo de musica e so uma auditoria manual descobriu)."""
+    try:
+        t = json.loads((edit / "timing.json").read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError):
+        return
+    skip = str(t.get("musicaSkip") or "").strip()
+    if skip:
+        job["trilhaNota"] = f"Sem trilha sonora: {skip[:110]}"
+
+
 def _resumo_do_corte(job: dict, edit: Path) -> None:
     """"Saiu: 32s silêncio · 9s repetição" na ficha do card. A auditoria do
     corte era feita na mão abrindo EDL + transcrição (24-25/08); agora o
@@ -163,6 +176,7 @@ def build(store: Any, projects_root: Path, *, com_links: bool = False) -> list[d
         _fonte_do_video(j, edit)
         _modo_de_edicao(j, edit)
         _resumo_do_corte(j, edit)
+        _aviso_de_trilha(j, edit)
         _aviso_de_ia(j, edit)
         enrich_job_display(j, edit)
         if j.get("sourceDurationSec") in (None, "") and (j.get("sources") or j.get("source")):
