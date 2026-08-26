@@ -30,6 +30,24 @@ function Test-Cmd([string]$name) {
   return [bool](Get-Command $name -ErrorAction SilentlyContinue)
 }
 
+function Refresh-Path {
+  # O winget grava o PATH no REGISTRO; o processo atual nao ve ("feche e
+  # reabra o PowerShell") — mas este script roda UMA vez, pelo instalador.
+  # Em toda maquina nova o setup morria logo depois de instalar o uv
+  # (caso real, 26/08). Recarrega Machine+User e soma as pastas classicas.
+  $m = [Environment]::GetEnvironmentVariable("Path", "Machine")
+  $u = [Environment]::GetEnvironmentVariable("Path", "User")
+  $env:Path = "$m;$u"
+  foreach ($extra in @(
+    (Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links"),
+    (Join-Path $env:USERPROFILE ".local\bin"),
+    (Join-Path $env:ProgramFiles "nodejs"),
+    (Join-Path $env:ProgramFiles "Git\cmd")
+  )) {
+    if ($extra -and (Test-Path $extra)) { $env:Path = "$env:Path;$extra" }
+  }
+}
+
 function Ensure-VendorFfmpeg {
   param([switch]$Force)
 
@@ -103,13 +121,26 @@ if (-not $SkipWinget) {
         winget install --id $p.Id -e --accept-package-agreements --accept-source-agreements
       }
     }
-    Write-Host ""
-    Write-Host "Se algum pacote acabou de instalar, FECHE e reabra o PowerShell para o PATH atualizar." -ForegroundColor Yellow
+    Refresh-Path
   }
 }
 
 Ensure-VendorFfmpeg -Force:$ForceFfmpeg
 
+if (-not (Test-Cmd "uv")) {
+  Refresh-Path
+}
+if (-not (Test-Cmd "uv")) {
+  # winget falhou/pulou? instalador oficial standalone do uv como reserva.
+  Write-Step "Instalando uv (instalador oficial)"
+  try {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    Invoke-RestMethod https://astral.sh/uv/install.ps1 | Invoke-Expression
+  } catch {
+    Write-Host "Falha ao instalar o uv: $_" -ForegroundColor Red
+  }
+  Refresh-Path
+}
 if (-not (Test-Cmd "uv")) {
   Write-Host "uv nao encontrado no PATH. Instale: https://docs.astral.sh/uv/" -ForegroundColor Red
   exit 1

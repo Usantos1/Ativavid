@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.93
+
+- **Publicar no Instagram direto do app.** Menu "⋯" de qualquer vídeo pronto
+  → "Publicar no Instagram": o app envia o Reel pela API oficial da Meta
+  (upload direto do arquivo, sem link público) com a legenda do post — suas
+  hashtags e SEO incluídos — e o card mostra "publicado ✓" com o link.
+  Conecte em Integrações → "Publicar — Instagram" (IG User ID + token da
+  Meta, com botão Testar que confirma a conta). Publicação SEMPRE pede
+  confirmação — nada sai sozinho
+
+- **Instalação em computador novo consertada.** Na primeira instalação, o
+  assistente instalava as dependências mas não as enxergava logo em seguida
+  (o PATH do Windows só vale para janelas novas) e parava com "ainda não
+  terminou a instalação". Agora o caminho é recarregado na hora e o uv tem
+  instalador reserva — máquina zerada instala de ponta a ponta
+
 ## 2.92
 
 - Correção interna de tipos do template (os estilos novos "Bolha de

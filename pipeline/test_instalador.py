@@ -35,3 +35,20 @@ def test_o_kill_nao_mata_o_proprio_powershell():
     s = _iss()
     bloco = s[s.find("PrepareToInstall"):]
     assert "$PID" in bloco, "filtro de auto-preservacao sumiu do kill"
+
+
+def test_setup_refresca_o_path_depois_do_winget():
+    """Maquina NOVA (caso real, 26/08): o winget instala o uv mas grava o
+    PATH no REGISTRO — o processo do setup nao ve e morria em 'uv nao
+    encontrado' em TODA primeira instalacao. Refresh-Path recarrega
+    Machine+User em processo, e o uv ainda tem o instalador oficial como
+    reserva."""
+    s = (RAIZ / "installer" / "setup.ps1").read_text(encoding="utf-8")
+    assert "function Refresh-Path" in s
+    assert s.count("Refresh-Path") >= 4, "refresh some do fluxo do uv"
+    assert "astral.sh/uv/install.ps1" in s, "a reserva do uv sumiu"
+    assert "GetEnvironmentVariable(\"Path\", \"Machine\")" in s
+    assert (".local" + chr(92) + "bin") in s, \
+        "a barra do .local/bin foi comida de novo"
+    assert "FECHE e reabra o PowerShell" not in s, \
+        "conselho impossivel num script que roda uma vez pelo instalador"

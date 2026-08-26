@@ -64,6 +64,22 @@ def _fonte_do_video(job: dict, edit: Path) -> None:
         job["fonteStem"] = Path(proj).stem
 
 
+def _estado_de_publicacao(job: dict, edit: Path) -> None:
+    """Instagram no card: publicado (com link), publicando, ou falha."""
+    try:
+        d = json.loads((edit / "publicacao.json").read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError):
+        return
+    estado = str(d.get("estado") or "")
+    if estado == "ok":
+        job["publicadoLink"] = str(d.get("permalink") or "")
+        job["publicadoEm"] = str(d.get("at") or "")
+    elif estado == "rodando":
+        job["publicando"] = True
+    elif estado == "erro":
+        job["publicacaoErro"] = str(d.get("error") or "")[:120]
+
+
 def _aviso_de_trilha(job: dict, edit: Path) -> None:
     """"Sem trilha" no card. Video pedia musica de IA, a geracao falhou e ate
     25/08 nada avisava (caso real: creditos do ElevenLabs esgotados — o
@@ -186,6 +202,7 @@ def build(store: Any, projects_root: Path, *, com_links: bool = False) -> list[d
         _modo_de_edicao(j, edit)
         _resumo_do_corte(j, edit)
         _aviso_de_trilha(j, edit)
+        _estado_de_publicacao(j, edit)
         _aviso_de_ia(j, edit)
         enrich_job_display(j, edit)
         if j.get("sourceDurationSec") in (None, "") and (j.get("sources") or j.get("source")):

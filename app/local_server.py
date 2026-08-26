@@ -18,6 +18,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 import uuid
 import webbrowser
 from datetime import datetime, timezone
@@ -1950,7 +1951,9 @@ class StudioHandler(BaseHTTPRequestHandler):
 
         if path == "/api/keys":
             body = self._read_json() or {}
-            allowed = {k: body[k] for k in ("GROQ_API_KEY", "ELEVENLABS_API_KEY", "PEXELS_API_KEY") if k in body}
+            allowed = {k: body[k] for k in (
+                "GROQ_API_KEY", "ELEVENLABS_API_KEY", "PEXELS_API_KEY",
+                "IG_USER_ID", "META_ACCESS_TOKEN") if k in body}
             try:
                 save_env_keys(allowed)
             except OSError as e:
@@ -1960,6 +1963,8 @@ class StudioHandler(BaseHTTPRequestHandler):
                 "GROQ_API_KEY": bool(load_env_keys().get("GROQ_API_KEY")),
                 "ELEVENLABS_API_KEY": bool(load_env_keys().get("ELEVENLABS_API_KEY")),
                 "PEXELS_API_KEY": bool(load_env_keys().get("PEXELS_API_KEY")),
+                "IG_USER_ID": bool(load_env_keys().get("IG_USER_ID")),
+                "META_ACCESS_TOKEN": bool(load_env_keys().get("META_ACCESS_TOKEN")),
             }})
             return
 
@@ -1974,6 +1979,9 @@ class StudioHandler(BaseHTTPRequestHandler):
                 patch["ELEVENLABS_API_KEY"] = str(body["ELEVENLABS_API_KEY"])
             if body.get("PEXELS_API_KEY"):
                 patch["PEXELS_API_KEY"] = str(body["PEXELS_API_KEY"])
+            for k in ("IG_USER_ID", "META_ACCESS_TOKEN"):
+                if body.get(k):
+                    patch[k] = str(body[k])
             if patch:
                 try:
                     save_env_keys(patch)
@@ -2051,6 +2059,23 @@ class StudioHandler(BaseHTTPRequestHandler):
                     self._json(payload)
                 except Exception as e:  # noqa: BLE001
                     self._json({"ok": False, "error": str(e)[:120]}, 502)
+                return
+            if which == "instagram":
+                igid = (keys.get("IG_USER_ID") or "").strip()
+                tok = (keys.get("META_ACCESS_TOKEN") or "").strip()
+                if not igid or not tok:
+                    self._json({"ok": False, "error": "preencha IG User ID e o token da Meta"}, 400)
+                    return
+                try:
+                    sys.path.insert(0, str(HELPERS))
+                    from publicar_instagram import testar_conta  # type: ignore
+
+                    res = testar_conta(igid, tok)
+                    if res.get("ok") and res.get("username"):
+                        res["hint"] = f"conta @{res['username']}"
+                    self._json(res, 200 if res.get("ok") else 502)
+                except Exception as e:  # noqa: BLE001
+                    self._json({"ok": False, "error": str(e)[:160]}, 502)
                 return
             self._json({"error": "service inválido"}, 400)
             return
@@ -2851,6 +2876,75 @@ class StudioHandler(BaseHTTPRequestHandler):
                 updatedAt=_utc(),
             )
             self._json({"ok": True, "job": updated})
+            return
+
+        if path == "/api/jobs/publicar-instagram":
+            # Publicar e para FORA: so acontece porque o USUARIO clicou e
+            # confirmou no dialogo do app — nunca automatico.
+            body = self._read_json() or {}
+            job = self.store.get(body.get("id", ""))
+            if not job:
+                self._json({"error": "job not found"}, 404)
+                return
+            keys = load_env_keys()
+            igid = (keys.get("IG_USER_ID") or "").strip()
+            tok = (keys.get("META_ACCESS_TOKEN") or "").strip()
+            if not igid or not tok:
+                self._json({"ok": False, "error": "Conecte o Instagram em Integrações (IG User ID + token da Meta)."}, 400)
+                return
+            edit = Path(job.get("editDir") or "")
+            final = Path(job.get("final") or "")
+            if not final.is_file():
+                self._json({"ok": False, "error": "vídeo final não encontrado"}, 409)
+                return
+            pubfile = edit / "publicacao.json"
+            try:
+                atual = json.loads(pubfile.read_text(encoding="utf-8-sig"))
+            except (OSError, json.JSONDecodeError):
+                atual = {}
+            if atual.get("estado") == "rodando":
+                self._json({"ok": False, "error": "já estou publicando este vídeo"}, 409)
+                return
+            legenda = ""
+            for cand in (edit / "legenda.txt", edit / "post" / "legenda.txt"):
+                try:
+                    legenda = cand.read_text(encoding="utf-8").strip()
+                    if legenda:
+                        break
+                except OSError:
+                    continue
+
+            def _escreve(d: dict) -> None:
+                try:
+                    pubfile.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
+                except OSError:
+                    pass
+
+            _escreve({"estado": "rodando", "rede": "instagram",
+                      "at": time.strftime("%Y-%m-%dT%H:%M:%S")})
+
+            def _roda() -> None:
+                try:
+                    sys.path.insert(0, str(HELPERS))
+                    from publicar_instagram import publicar_reel  # type: ignore
+
+                    res = publicar_reel(
+                        final, legenda, ig_user_id=igid, token=tok,
+                        progresso=lambda m: print(f"[instagram] {m}", flush=True))
+                except Exception as e:  # noqa: BLE001
+                    res = {"ok": False, "error": str(e)[:200]}
+                _escreve({
+                    "estado": "ok" if res.get("ok") else "erro",
+                    "rede": "instagram",
+                    "permalink": res.get("permalink") or "",
+                    "error": res.get("error") or "",
+                    "at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                })
+                print(f"[instagram] {'publicado: ' + str(res.get('permalink')) if res.get('ok') else 'FALHOU: ' + str(res.get('error'))}", flush=True)
+
+            threading.Thread(target=_roda, daemon=True,
+                             name="publicar-instagram").start()
+            self._json({"ok": True, "started": True})
             return
 
         if path == "/api/jobs/retry":

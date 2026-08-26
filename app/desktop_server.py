@@ -447,6 +447,7 @@ class DesktopHandler(ps.Handler):
             "/api/library/upload",
             "/api/update/open",
             "/api/espaco/liberar",
+            "/api/jobs/publicar-instagram",
             "/api/proxy/rebuild",
             "/api/open-path",
             "/api/llm-proxy",

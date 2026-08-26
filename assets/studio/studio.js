@@ -510,6 +510,9 @@ function fichaHtml(j) {
   // Nota (nao erro): o plano veio do Groq porque as sessoes web cairam.
   if (j.iaNota) linhas.push(["IA", j.iaNota]);
   if (j.trilhaNota) linhas.push(["Trilha", j.trilhaNota]);
+  if (j.publicadoLink) linhas.push(["Instagram", "publicado ✓"]);
+  else if (j.publicando) linhas.push(["Instagram", "publicando…"]);
+  else if (j.publicacaoErro) linhas.push(["Instagram", `falhou: ${j.publicacaoErro}`]);
   const ini = String(j.startedAtLabel || j.createdAtLabel || "");
   const fin = String(j.finishedAtLabel || "");
   if (ini) linhas.push(["Início", ini]);
@@ -543,6 +546,9 @@ function cardSig(j, opts) {
     j.modoLabel || "",
     j.corteResumo || "",
     j.iaNota || "",
+    j.publicadoLink || "",
+    j.publicando ? "pub" : "",
+    j.publicacaoErro || "",
     j.trilhaNota || "",
     versoesDaFonte(j).length,
     j.stage, j.message, j.reason || "", j.localPoster || j.thumbUrl, links.editor, links.estilo, links.final,
@@ -678,6 +684,11 @@ function cardMenuHtml(j, opts) {
         <a role="menuitem" href="${escapeHtml(links.final)}" ${canFinal ? "" : "class=\"disabled\""}>Ver vídeo final</a>
         <a role="menuitem" href="${escapeHtml(links.editor)}">Editar</a>
         <a role="menuitem" href="${escapeHtml(links.estilo)}" data-id="${safeId}">Alterar estilo</a>
+        ${j.status === "done"
+          ? (j.publicadoLink
+            ? `<a role="menuitem" href="${escapeHtml(j.publicadoLink)}" target="_blank" rel="noopener">Ver no Instagram</a>`
+            : `<button type="button" role="menuitem" data-act="publicar-ig" data-id="${safeId}">Publicar no Instagram</button>`)
+          : ""}
         ${j.status === "done" && versoesDaFonte(j).length >= 2
           ? `<button type="button" role="menuitem" data-act="compare" data-id="${safeId}">Comparar ${versoesDaFonte(j).length} versões</button>`
           : ""}
@@ -2540,6 +2551,25 @@ function wireList() {
         toast(wasApplyFail ? "Refazendo o vídeo com os seus cortes" : "De volta à fila");
         setView("fila");
         await refreshJobs();
+      } else if (act === "publicar-ig") {
+        const job = state.jobs.find((x) => x.id === id);
+        const titulo = job ? displayTitle(job) : "este vídeo";
+        // Publicar e para FORA — confirmacao explicita sempre.
+        if (!window.confirm(`Publicar "${titulo}" no Instagram agora?
+
+A legenda do post (com suas hashtags) vai junto.`)) return;
+        try {
+          const r = await api("/api/jobs/publicar-instagram", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id }),
+          });
+          if (!r.ok && r.error) throw new Error(r.error);
+          toast("Publicando no Instagram… acompanhe pela ficha do card", 6000);
+          setTimeout(() => refreshJobs().catch(() => {}), 4000);
+        } catch (err) {
+          toast(err.message || "Não deu para publicar", 6000);
+        }
       } else if (act === "compare") {
         abrirComparar(id);
       } else if (act === "reimport") {
@@ -3357,6 +3387,10 @@ function wireForms() {
     if (g) body.GROQ_API_KEY = g;
     if (el) body.ELEVENLABS_API_KEY = el;
     if (px) body.PEXELS_API_KEY = px;
+    const igid = ($("#keyIgId")?.value || "").trim();
+    const meta = ($("#keyMeta")?.value || "").trim();
+    if (igid) body.IG_USER_ID = igid;
+    if (meta) body.META_ACCESS_TOKEN = meta;
     if (!Object.keys(body).length) {
       toast("Cole pelo menos uma chave antes de salvar");
       $("#keysStatus").textContent = "Nada para salvar";
@@ -3456,6 +3490,12 @@ function wireForms() {
       if (service === "groq" && g) body.GROQ_API_KEY = g;
       if (service === "elevenlabs" && el) body.ELEVENLABS_API_KEY = el;
       if (service === "pexels" && px) body.PEXELS_API_KEY = px;
+      if (service === "instagram") {
+        const igid = ($("#keyIgId")?.value || "").trim();
+        const meta = ($("#keyMeta")?.value || "").trim();
+        if (igid) body.IG_USER_ID = igid;
+        if (meta) body.META_ACCESS_TOKEN = meta;
+      }
       try {
         const res = await api("/api/keys/test", {
           method: "POST",
