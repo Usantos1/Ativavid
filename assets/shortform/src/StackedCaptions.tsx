@@ -50,6 +50,8 @@ type SfxCfg = {
 type CapCfg = {
   emphasisAccent?: string;
   circleAccent?: string;
+  // "marca-texto": a enfase pinta o fundo em vez de circular (2.87)
+  emphasisStyle?: 'circle' | 'marker';
   stackedOffsetY?: number;
   fontScale?: number;
   sfx?: SfxCfg;

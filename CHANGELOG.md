@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.92
+
+- Correção interna de tipos do template (os estilos novos "Bolha de
+  conversa" e "Marca-texto" agora são conhecidos pelo verificador de tipos
+  — sem efeito visual, previne quebras em builds futuros)
+
 ## 2.91
 
 - **Você define as hashtags do post.** Campo novo na tela de Estilo:

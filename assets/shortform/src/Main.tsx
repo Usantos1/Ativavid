@@ -139,7 +139,7 @@ export type EditData = {
     // The STATIC ones ("simples", "serifada", "classica", "bloco", "recorte")
     // live in SimpleCaptions.tsx and take no tunables — they ARE the tuning.
     // "impacto" (ImpactCaptions.tsx) boxes the spoken word in emphasisAccent.
-    style?: 'karaoke' | 'stacked' | 'scatter' | 'impacto'
+    style?: 'karaoke' | 'stacked' | 'scatter' | 'impacto' | 'bolha'
       | 'simples' | 'serifada' | 'classica' | 'bloco' | 'recorte';
     scatterOffsetY?: number;   // scatter: block centre, fraction of height
     scatterFontSize?: number;  // scatter: ordinary word size (default 74)

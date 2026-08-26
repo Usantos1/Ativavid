@@ -63,3 +63,15 @@ def test_gate_do_motor_aceita_bolha():
     i = rp.find('permitidos = {"stacked"')
     assert '"bolha"' in rp[i:i + 200], \
         "sem a bolha no gate, todo job do estilo cai no caminho lento calado"
+
+
+def test_tipos_do_template_conhecem_os_estilos_novos():
+    """tsc --noEmit rodado num projeto real (26/08) acusou: a uniao de
+    estilos nao tinha 'bolha' e CapCfg nao tinha emphasisStyle. O esbuild
+    transpila sem checar, entao renderizava — mas tipo mentiroso e bomba
+    para qualquer build estrito futuro."""
+    main = (RAIZ / "assets" / "shortform" / "src" / "Main.tsx").read_text(encoding="utf-8")
+    assert "| 'bolha'" in main, "a uniao de estilos perdeu a bolha"
+    st = (RAIZ / "assets" / "shortform" / "src" / "StackedCaptions.tsx").read_text(encoding="utf-8")
+    assert "emphasisStyle?: 'circle' | 'marker'" in st, \
+        "CapCfg perdeu o tipo do emphasisStyle"
