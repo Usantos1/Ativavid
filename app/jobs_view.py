@@ -128,8 +128,17 @@ def _aviso_de_ia(job: dict, edit: Path) -> None:
         # usuario so saberia abrindo o painel de IA — o card agora conta na
         # hora, como nota (nao e erro).
         if str(llm.get("backend") or "") == "groq":
-            job["iaNota"] = ("Plano B (Groq): as sessões web caíram. "
-                             "Recapture em Chaves & IA.")
+            # O conselho segue o MOTIVO: "recapture" só vale quando as
+            # sessões caíram; resposta ilegível com sessão viva não tem o
+            # que recapturar (caso real 26/08 — a nota mandou recapturar
+            # com o Gemini saudável e confundiu o usuário).
+            if str(llm.get("groqVia") or "") == "parse":
+                job["iaNota"] = ("Plano B (Groq): a IA principal respondeu "
+                                 "ilegível nesta geração. O vídeo saiu com "
+                                 "IA normalmente.")
+            else:
+                job["iaNota"] = ("Plano B (Groq): as sessões web caíram. "
+                                 "Recapture em Chaves & IA.")
         return
     # O CONSELHO tem de seguir a causa. A primeira versao mandava "reconecte
     # em Chaves & IA" em todo caso — e nos projetos reais 65 dos 67 avisos

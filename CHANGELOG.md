@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.90
+
+- **As notas do card param de dar conselho errado.** "Plano B (Groq)" agora
+  distingue os dois casos: quando as sessões web caíram de verdade, a nota
+  manda recapturar; quando a IA principal só respondeu ilegível naquela
+  geração (e o plano B salvou), a nota diz isso — recapturar não mudaria
+  nada. Antes o card mandava recapturar com o Gemini saudável
+
+- **O "Testar" do ElevenLabs enxerga os créditos.** Chave válida com carteira
+  zerada dizia só "OK" — enquanto a trilha falhava por falta de créditos.
+  Agora o teste mostra a sobra de créditos, e avisa quando o plano acabou
+
 ## 2.89
 
 - **Novo estilo de legenda: "Bolha de conversa".** Cada frase falada aparece

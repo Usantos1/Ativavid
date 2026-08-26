@@ -2026,7 +2026,29 @@ class StudioHandler(BaseHTTPRequestHandler):
                         headers={"xi-api-key": key},
                         timeout=12,
                     )
-                    self._json({"ok": r.status_code < 400, "status": r.status_code})
+                    # Chave valida != creditos disponiveis: a trilha morreu
+                    # com "insufficient_credits" enquanto este teste dizia
+                    # "OK" (caso real, 26/08). O /v1/user traz a assinatura;
+                    # sobra de caracteres zerada = carteira no talo.
+                    aviso = None
+                    if r.status_code < 400:
+                        try:
+                            sub = (r.json() or {}).get("subscription") or {}
+                            usados = int(sub.get("character_count") or 0)
+                            teto = int(sub.get("character_limit") or 0)
+                            if teto and usados >= teto:
+                                aviso = ("chave v\u00e1lida, mas os cr\u00e9ditos do "
+                                         "plano acabaram \u2014 trilha/voz v\u00e3o "
+                                         "falhar at\u00e9 renovar")
+                            elif teto:
+                                aviso = f"cr\u00e9ditos: {teto - usados} de {teto}"
+                        except Exception:  # noqa: BLE001
+                            aviso = None
+                    payload = {"ok": r.status_code < 400,
+                               "status": r.status_code}
+                    if aviso:
+                        payload["hint"] = aviso
+                    self._json(payload)
                 except Exception as e:  # noqa: BLE001
                     self._json({"ok": False, "error": str(e)[:120]}, 502)
                 return

@@ -3462,8 +3462,12 @@ function wireForms() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         });
-        $("#keysStatus").textContent = res.ok ? `${service}: OK` : `${service}: falhou`;
-        toast(res.ok ? `${service} OK` : `${service} falhou`);
+        // `hint` diz o que o "OK" nao diz: chave valida com creditos
+        // esgotados falha na trilha do mesmo jeito (caso real, 26/08).
+        const rotulo = res.ok ? (res.hint ? `${service}: ${res.hint}` : `${service}: OK`)
+          : `${service}: falhou`;
+        $("#keysStatus").textContent = rotulo;
+        toast(rotulo, res.hint ? 6000 : 2500);
       } catch (e) {
         $("#keysStatus").textContent = e.message;
         toast(e.message);

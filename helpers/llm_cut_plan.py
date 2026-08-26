@@ -310,6 +310,7 @@ def _chamar_e_parsear(messages: list[dict]) -> tuple[dict | list, str, str]:
         resp = gw._groq_chat(
             messages, None,
             extras={"response_format": {"type": "json_object"}})
+        gw.ULTIMO_GROQ_MOTIVO = "parse"
         texto = str(resp["choices"][0]["message"]["content"] or "")
         return _extract_json(texto), "groq", texto
 
@@ -584,6 +585,8 @@ def plan_cut(
         "notes": (parsed.get("notes") if isinstance(parsed, dict) else None),
         "rangeCount": len(ranges),
         "rawChars": len(text or ""),
+        **({"groqVia": __import__("app.llm_gateway", fromlist=["x"]).ULTIMO_GROQ_MOTIVO}
+           if backend == "groq" else {}),
     }
     # Persist for editor / doutor
     (edit_dir / "llm_cut_plan.json").write_text(

@@ -170,6 +170,14 @@ def _groq_chat(messages: list[dict], model: str | None,
         raise RuntimeError(f"Groq HTTP {e.code}: {detail}") from e
 
 
+# Por que a ULTIMA chamada saiu pelo Groq: "sessao" (as sessoes web
+# morreram) ou "parse" (a sessao respondeu ilegivel). O card do video da o
+# conselho certo com isso — "recapture" so vale no primeiro caso; no
+# segundo o video saiu com IA e nao ha nada a recapturar (caso real 26/08:
+# a nota mandou recapturar com o Gemini saudavel).
+ULTIMO_GROQ_MOTIVO: str | None = None
+
+
 def chat_com_rede(messages: list[dict], model: str | None = None, *,
                   json_no_groq: bool = False) -> tuple[str, str]:
     """Sessão web (Gemini/ChatGPT) e, se as duas falharem, o Groq.
@@ -201,6 +209,8 @@ def chat_com_rede(messages: list[dict], model: str | None = None, *,
         if not texto.strip():
             raise erro_sessao
         print(f"[ia] plano via groq ({str(erro_sessao)[:80]})", flush=True)
+        global ULTIMO_GROQ_MOTIVO
+        ULTIMO_GROQ_MOTIVO = "sessao"
         return texto, "groq"
 
 

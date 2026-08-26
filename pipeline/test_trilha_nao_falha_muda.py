@@ -42,3 +42,39 @@ def test_card_avisa_sem_trilha(tmp_path):
 
     js = (RAIZ / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
     assert "trilhaNota" in js, "a ficha do card nao mostra a nota da trilha"
+
+
+def test_nota_groq_distingue_parse_de_sessao(tmp_path):
+    """"Se da tudo OK, por que da isso?" (26/08): a nota mandava recapturar
+    com o Gemini saudavel — o Groq tinha entrado por PARSE quebrado, nao por
+    sessao morta. O conselho segue o motivo."""
+    from app.jobs_view import _aviso_de_ia
+
+    (tmp_path / "result.json").write_text(json.dumps(
+        {"llm": {"ok": True, "backend": "groq", "groqVia": "parse"}}),
+        encoding="utf-8")
+    job = {"status": "done"}
+    _aviso_de_ia(job, tmp_path)
+    assert "ilegível" in job["iaNota"] and "Recapture" not in job["iaNota"]
+
+    (tmp_path / "result.json").write_text(json.dumps(
+        {"llm": {"ok": True, "backend": "groq"}}), encoding="utf-8")
+    job2 = {"status": "done"}
+    _aviso_de_ia(job2, tmp_path)
+    assert "Recapture" in job2["iaNota"]
+
+
+def test_meta_do_plano_carrega_o_motivo_do_groq():
+    s = (RAIZ / "helpers" / "llm_cut_plan.py").read_text(encoding="utf-8")
+    assert "groqVia" in s, "o motivo do groq nao chega ao result.json"
+    assert 'ULTIMO_GROQ_MOTIVO = "parse"' in s
+    gw = (RAIZ / "app" / "llm_gateway.py").read_text(encoding="utf-8")
+    assert 'ULTIMO_GROQ_MOTIVO = "sessao"' in gw
+
+
+def test_testar_elevenlabs_avisa_creditos():
+    s = (RAIZ / "app" / "local_server.py").read_text(encoding="utf-8")
+    assert "character_limit" in s, \
+        "o Testar dizia OK com a carteira zerada — chave valida != creditos"
+    js = (RAIZ / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
+    assert "res.hint" in js, "a UI descarta o hint do teste de chave"
