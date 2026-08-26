@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.85
+
+- **O redimensionar pelas bordas passou a funcionar de verdade.** As duas
+  tentativas anteriores dependiam do mecanismo nativo do Windows, que não
+  roda quando o clique nasce dentro do miolo do app (ele pertence a outro
+  processo). Agora o próprio ATIVAVID conduz o redimensionamento: segurou a
+  borda, a janela acompanha o mouse tick a tick até soltar o botão — em
+  qualquer monitor e escala, com o mínimo de 900×600 respeitado
+
 ## 2.84
 
 - **Botões da janela com a cara do Mac.** Minimizar, maximizar e fechar agora

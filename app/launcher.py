@@ -98,42 +98,63 @@ class WindowApi:
         """Redimensionar iniciado PELA PAGINA (faixas de borda em JS).
 
         O miolo da janela e do WebView2, que roda em OUTRO processo — o
-        mouse morre la e o WM_NCHITTEST do pai quase nunca dispara ("so
-        apareceu uma vez na esquerda", caso real 25-26/08). Subclassificar
-        o filho e impossivel (cross-process). A saida robusta, a mesma do
-        Tauri: a pagina detecta o mousedown na borda e o Windows assume o
-        resize nativo via WM_NCLBUTTONDOWN + HT* — modal, com DPI e snap
-        corretos em qualquer monitor.
+        mouse morre la, o WM_NCHITTEST do pai quase nunca dispara e o loop
+        modal do Windows (WM_NCLBUTTONDOWN + HT*, receita do Tauri) tambem
+        nao rodou nesta maquina: a captura do botao pertence ao processo do
+        navegador ("tem as setas mas nao arrasta", 26/08, ja com o lparam
+        correto). Entao o loop e NOSSO: GetCursorPos + GetAsyncKeyState sao
+        globais (nao precisam de captura nenhuma) e SetWindowPos move a
+        janela tick a tick — fisico, com PMv2, em qualquer monitor.
         """
         if sys.platform != "win32" or _is_app_maximized():
             return False
-        ht = {
-            "left": 10, "right": 11, "top": 12, "topleft": 13,
-            "topright": 14, "bottom": 15, "bottomleft": 16,
-            "bottomright": 17,
-        }.get(str(edge or "").lower())
+        borda = str(edge or "").lower()
+        if borda not in ("left", "right", "top", "bottom", "topleft",
+                         "topright", "bottomleft", "bottomright"):
+            return False
         hwnd = _find_hwnd()
-        if not ht or not hwnd:
+        if not hwnd:
             return False
-        try:
-            import ctypes
-            from ctypes import wintypes
+        rect = _get_window_rect(hwnd)
+        if not rect:
+            return False
+        import ctypes
+        from ctypes import wintypes
 
-            user32 = ctypes.windll.user32
-            # O lparam PRECISA levar o ponto de partida (coordenadas de tela
-            # do cursor): com 0 o Windows nao inicia o loop modal de resize
-            # — "as setas aparecem mas nao funcionam" (caso real, 26/08).
-            # E o que o wry/Tauri empacota no mesmo caminho. & 0xFFFF nos
-            # dois eixos: monitor a esquerda do principal tem X negativo.
+        user32 = ctypes.windll.user32
+        x0, y0, w0, h0 = rect
+        pt0 = wintypes.POINT()
+        user32.GetCursorPos(ctypes.byref(pt0))
+        MIN_W, MIN_H = 900, 600  # mesmo min_size do create_window
+        VK_LBUTTON = 0x01
+        SWP = 0x0004 | 0x0010  # NOZORDER | NOACTIVATE
+        e_esq = "left" in borda
+        e_dir = "right" in borda
+        e_topo = borda.startswith("top")
+        e_baixo = borda.startswith("bottom")
+
+        def _laco() -> None:
             pt = wintypes.POINT()
-            user32.GetCursorPos(ctypes.byref(pt))
-            lparam = ((pt.y & 0xFFFF) << 16) | (pt.x & 0xFFFF)
-            user32.ReleaseCapture()
-            WM_NCLBUTTONDOWN = 0x00A1
-            user32.SendMessageW(hwnd, WM_NCLBUTTONDOWN, ht, lparam)
-            return True
-        except Exception:
-            return False
+            while user32.GetAsyncKeyState(VK_LBUTTON) & 0x8000:
+                user32.GetCursorPos(ctypes.byref(pt))
+                dx, dy = pt.x - pt0.x, pt.y - pt0.y
+                x, y, w, h = x0, y0, w0, h0
+                if e_dir:
+                    w = max(MIN_W, w0 + dx)
+                if e_baixo:
+                    h = max(MIN_H, h0 + dy)
+                if e_esq:
+                    w = max(MIN_W, w0 - dx)
+                    x = x0 + (w0 - w)
+                if e_topo:
+                    h = max(MIN_H, h0 - dy)
+                    y = y0 + (h0 - h)
+                user32.SetWindowPos(hwnd, 0, int(x), int(y), int(w), int(h), SWP)
+                time.sleep(0.01)
+
+        threading.Thread(target=_laco, daemon=True,
+                         name="ativavid-resize").start()
+        return True
 
     def is_maximized(self) -> bool:
         return bool(self._maximized)

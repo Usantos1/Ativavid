@@ -18,17 +18,20 @@ sys.path.insert(0, str(RAIZ))
 def test_api_begin_resize_existe_com_todas_as_bordas():
     s = (RAIZ / "app" / "launcher.py").read_text(encoding="utf-8")
     assert "def begin_resize" in s
-    corpo = s[s.find("def begin_resize"):][:1800]
+    corpo = s[s.find("def begin_resize"):][:3200]
     for edge in ("left", "right", "top", "bottom", "topleft", "topright",
                  "bottomleft", "bottomright"):
-        assert f'"{edge}"' in corpo, f"borda {edge} sumiu do mapa HT"
-    assert "WM_NCLBUTTONDOWN" in corpo
-    # lparam=0 nao inicia o loop modal de resize — "as setas aparecem mas
-    # nao funcionam" (26/08). O ponto de partida vai empacotado no lparam.
-    assert "GetCursorPos" in corpo, "o ponto de partida do resize sumiu"
-    assert "(pt.x & 0xFFFF)" in corpo,         "X negativo (monitor a esquerda) precisa do & 0xFFFF"
-    assert "_is_app_maximized()" in corpo, \
-        "maximizada a janela nao redimensiona — a API tem que recusar"
+        assert f'"{edge}"' in corpo, f"borda {edge} sumiu do mapa"
+    assert "_is_app_maximized()" in corpo,         "maximizada a janela nao redimensiona — a API tem que recusar"
+    # O loop e NOSSO, nao do Windows: WM_NCLBUTTONDOWN nao rodou nesta
+    # maquina (captura do botao no processo do WebView2 — 26/08, duas
+    # tentativas). GetCursorPos + GetAsyncKeyState sao globais e
+    # SetWindowPos move tick a tick.
+    assert "GetAsyncKeyState" in corpo, "o loop proprio de resize sumiu"
+    assert "SetWindowPos" in corpo
+    assert "GetCursorPos" in corpo
+    assert "SendMessageW(hwnd, WM_NCLBUTTONDOWN" not in corpo,         "o loop modal do Windows voltou — ele NAO funciona com WebView2 aqui"
+    assert "MIN_W, MIN_H = 900, 600" in corpo,         "o minimo tem que casar com o min_size do create_window"
 
 
 def test_faixas_carregadas_nas_duas_telas():
