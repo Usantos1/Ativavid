@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.87
+
+- **Nova ênfase "Marca-texto".** Irmã do círculo riscado: em vez de circular a
+  palavra de destaque, pinta o fundo dela como um marca-texto — a tinta se
+  espalha da esquerda para a direita no mesmo ritmo do risco, com o mesmo som
+  de caneta riscando o papel. Mesma fonte, mesmo estilo, mesmos momentos de
+  ênfase. Liga em Estilo → "Traço da ênfase" → Marca-texto (o padrão continua
+  o círculo); a cor escolhida no "Cor do círculo riscado" também vale para o
+  marca-texto (sem escolher, sai amarelo clássico)
+
 ## 2.86
 
 - **Redimensionar sem piscar.** O arrasto pelas bordas funcionava mas piscava

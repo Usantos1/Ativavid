@@ -1738,6 +1738,10 @@ def build_edit_data(cut: Path, preset: dict, hook: list[str], duration: float, f
     circ = preset.get("circleAccent")
     if circ and captions == "stacked":
         ed["captions"]["circleAccent"] = circ
+    # "marca-texto": a enfase pinta o fundo em vez de circular (pedido do
+    # usuario, 26/08). Mesmas cues, mesmo tempo, mesmo scratch — so a tinta.
+    if str(preset.get("emphasisStyle") or "").lower() == "marker"             and captions == "stacked":
+        ed["captions"]["emphasisStyle"] = "marker"
     _apply_caption_geometry(ed, preset)
     _apply_brand_fonts(ed, preset)
 

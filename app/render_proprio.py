@@ -136,6 +136,13 @@ TRACO_CURVAS = [
 TRACO_VB = (312.0, 150.0)
 TRACO_PX = 9
 TRACO_COR = "#39E508"
+# Marca-texto (MarkerHighlight.tsx): banda unica com leve inclinacao, no
+# MESMO viewBox 312x150 do traco — geometria compartilhada entre motores.
+MARCADOR_COR = "#FFE94A"
+MARCADOR_PONTOS = ((8.0, 84.0), (90.0, 82.0), (210.0, 80.0), (304.0, 76.0))
+MARCADOR_LARG_VB = 92.0     # strokeWidth em unidades do viewBox (escala junto)
+MARCADOR_ALPHA = 0.85
+MARCADOR_CAIXA = (-0.07, -0.16, 1.14, 1.38)  # left/top/width/height do svg
 TRACO_SOMBRA = (0, 3, 8, 0.45)
 TRACO_CAIXA = (-0.10, -0.22, 1.20, 1.50)   # esq, topo, larg, alt (fração)
 
@@ -476,6 +483,11 @@ class Renderizador:
         self.font_file = dict(FONT_FILE)
         self.font_file[2] = (FONT_FILE[2][0], accent)
         self.cor_traco = caps.get("circleAccent") or TRACO_COR
+        # "marca-texto": pinta o fundo da enfase em vez de circular (opt-in,
+        # pedido do usuario 26/08). Mesmas cues SOLO_OUTLINE, mesmo tempo,
+        # mesmo scratch; so o desenho muda — espelho do MarkerHighlight.tsx.
+        self.enfase_marcador = str(caps.get("emphasisStyle") or "") == "marker"
+        self.cor_marcador = caps.get("circleAccent") or MARCADOR_COR
         sfx = caps.get("sfx") or {}
         self.sfx_on = sfx.get("enabled") is not False
         # `_pos`, nao `or`: volume 0 e "silencia SO este som", um valor de
@@ -1052,6 +1064,69 @@ class Renderizador:
             int(round(y_c + (alt_c - (asc + desc)) / 2)), None, local,
             self._enter_da_palavra(enter, leg.saida_f, local),
             ease="bezier")
+
+        if self.enfase_marcador:
+            esq, topo, larg_f, alt_f = MARCADOR_CAIXA
+            bx, by = x_c + esq * larg_c, y_c + topo * alt_c
+            bw, bh = larg_f * larg_c, alt_f * alt_c
+            pts = [(bx + x / TRACO_VB[0] * bw, by + y / TRACO_VB[1] * bh)
+                   for x, y in MARCADOR_PONTOS]
+            o_ini = local + 2
+            o_fim = max(min(o_ini + 10, leg.saida_f - 1, dur - 2), o_ini + 3)
+            larg_px = max(6, int(round(MARCADOR_LARG_VB / TRACO_VB[1] * bh)))
+            marg = larg_px + 8
+            tx0 = int(min(x for x, _ in pts) - marg)
+            ty0 = int(min(y for _, y in pts) - marg)
+            lt = int(max(x for x, _ in pts) + marg) - tx0
+            at = int(max(y for _, y in pts) + marg) - ty0
+            cor = self._cor(self.cor_marcador)
+            acum = [0.0]
+            for i in range(1, len(pts)):
+                acum.append(acum[-1] + math.hypot(
+                    pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]))
+
+            def _faixa(frac: float, janela: tuple[float, float]) -> None:
+                total = acum[-1]
+                if frac >= 1:
+                    sub = list(pts)
+                elif frac <= 0:
+                    sub = []
+                else:
+                    alvo = total * frac
+                    sub = [pts[0]]
+                    for i in range(1, len(pts)):
+                        if acum[i] < alvo:
+                            sub.append(pts[i])
+                            continue
+                        seg = acum[i] - acum[i - 1]
+                        t = (alvo - acum[i - 1]) / seg if seg > 1e-9 else 0.0
+                        sub.append((
+                            pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * t,
+                            pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * t))
+                        break
+                img = Image.new("L", (lt, at), 0)
+                if len(sub) >= 2:
+                    dr = ImageDraw.Draw(img)
+                    desl = [(x - tx0, y - ty0) for x, y in sub]
+                    dr.line(desl, fill=255, width=larg_px, joint="curve")
+                    r = larg_px / 2
+                    for x, y in (desl[0], desl[-1]):
+                        dr.ellipse([x - r, y - r, x + r, y + r], fill=255)
+                alpha = (np.asarray(img, dtype=np.float32) / 255.0
+                         * MARCADOR_ALPHA)
+                sem_sombra = np.zeros_like(alpha)
+                rgb = np.broadcast_to(cor, (at, lt, 3)).copy()
+                leg.palavras.insert(0, Palavra(
+                    tx0, ty0, rgb, alpha, sem_sombra,
+                    inicio_f=0, enter=1, janela=janela))
+
+            q = int(math.floor(o_ini))
+            while q < o_fim:
+                _faixa(min(1.0, max(0.0, (q - o_ini)
+                                    / max(1e-6, o_fim - o_ini))),
+                       (q, q + 1))
+                q += 1
+            return leg
 
         esq, topo, larg_f, alt_f = TRACO_CAIXA
         bx, by = x_c + esq * larg_c, y_c + topo * alt_c

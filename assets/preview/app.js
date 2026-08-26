@@ -1021,6 +1021,9 @@ function defaultStyle() {
     captionAccent: '#FFFFFF', // "legenda": base text (karaoke line, static styles)
     emphasisAccent: '#FF0000', // "ênfase": stacked serif line, scatter highlighted word
     circleAccent: null,    // "círculo riscado": stacked pencil-circle stroke only
+    // "marca-texto": a ênfase pinta o fundo em vez de circular (opt-in,
+    // pedido do usuário 26/08). 'circle' é o visual de sempre.
+    emphasisStyle: 'circle',
     elements,
     note: '',
   };
@@ -2834,6 +2837,20 @@ const legendaAccentUsed = () => capAccentUsed() && CAP_BASE_STYLES.includes(S.st
 const emphasisAccentUsed = () => capAccentUsed() && CAP_EMPH_STYLES.includes(S.style.captions);
 const circleAccentUsed = () => capAccentUsed() && CAP_CIRCLE_STYLES.includes(S.style.captions);
 
+// Seletor "Traço da ênfase" (círculo x marca-texto): espelha S.style e
+// marca sujo como qualquer knob de estilo.
+function wireEmphStyle() {
+  const el = $('optEmphStyle');
+  if (!el || el.dataset.wired) return;
+  el.dataset.wired = '1';
+  el.value = S.style.emphasisStyle === 'marker' ? 'marker' : 'circle';
+  el.addEventListener('change', () => {
+    S.style.emphasisStyle = el.value === 'marker' ? 'marker' : 'circle';
+  });
+}
+document.addEventListener('DOMContentLoaded', wireEmphStyle);
+setTimeout(wireEmphStyle, 800);
+
 function applyAccent() {
   $('styleSetup').style.setProperty('--hl-accent', S.style.accent || ACCENT_DEFAULT);
 }
@@ -3202,6 +3219,7 @@ $('setupGo').addEventListener('click', async () => {
       captionAccent: S.style.captionAccent,
       emphasisAccent: S.style.emphasisAccent,
       circleAccent: S.style.circleAccent,
+      emphasisStyle: S.style.emphasisStyle || 'circle',
       elements: { ...S.style.elements },
       fastMode: !!S.fastMode,
       oneClick: !!S.fastMode,
@@ -3293,6 +3311,7 @@ $('setupGo').addEventListener('click', async () => {
     circleAccent: S.style.circleAccent,
     circleAccentName: S.style.circleAccent ? accentName(S.style.circleAccent) : null,
     circleAccentUsed: circleAccentUsed() && !!S.style.circleAccent,
+    emphasisStyle: S.style.emphasisStyle || 'circle',
     elements: { ...S.style.elements },
     elementNames: STYLE_CATALOG.elements
       .filter((e) => S.style.elements[e.id])
@@ -3422,6 +3441,7 @@ $('setupSaveDefault').addEventListener('click', async () => {
     captionAccent: S.style.captionAccent,
     emphasisAccent: S.style.emphasisAccent,
     circleAccent: S.style.circleAccent,
+    emphasisStyle: S.style.emphasisStyle || 'circle',
     elements: { ...S.style.elements },
     // Policy, not looks — but it belongs with the house preset because it only
     // makes sense WITH one: "fast" means "the recipe is already decided", and

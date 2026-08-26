@@ -12,7 +12,7 @@ PRESETS_DIR = USER_DIR / "brand-presets"
 
 STYLE_KEYS = (
     "edit", "headline", "captions", "accent", "captionAccent",
-    "emphasisAccent", "circleAccent", "elements", "rhythm", "intensity",
+    "emphasisAccent", "circleAccent", "emphasisStyle", "elements", "rhythm", "intensity",
     "speechClean", "videoGoal", "brollMode", "captionChunk", "exportPreset",
     "colorGrade", "endCardCopy", "fastMode", "oneClick", "contentType",
     "brandId", "brandName", "note", "smartEmphasis", "endCardType",

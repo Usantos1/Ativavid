@@ -32,6 +32,7 @@ import {loadFont as loadPlayfair} from '@remotion/google-fonts/PlayfairDisplay';
 import cues from '../public/caption-cues.json';
 import editData from '../public/edit-data.json';
 import {PencilOutline} from './PencilOutline';
+import {MarkerHighlight} from './MarkerHighlight';
 
 const poppins = loadPoppins('normal', {weights: ['400', '700', '800', '900']});
 loadPoppins('italic', {weights: ['700', '900']});
@@ -56,6 +57,11 @@ type CapCfg = {
 const CAP = ((editData as {captions?: CapCfg}).captions ?? {}) as CapCfg;
 const ORANGE = CAP.emphasisAccent ?? '#ff5200';
 const CIRCLE_ACCENT = CAP.circleAccent; // undefined → PencilOutline's own #39E508 default
+// "marca-texto": the emphasis paints the word background instead of circling
+// it (user request, 26/08). Same cues, same timing, same scratch SFX — only
+// the ink changes. Opt-in via preset emphasisStyle; default stays the circle.
+const EMPH_MARKER = CAP.emphasisStyle === 'marker';
+const MARKER_ACCENT = CAP.circleAccent || '#FFE94A';
 const WHITE_GRAD: React.CSSProperties = {
   backgroundImage: 'linear-gradient(180deg, #ffffff 0%, #ffffff 46%, #cfcfcf 100%)',
   WebkitBackgroundClip: 'text',
@@ -242,7 +248,11 @@ const Cue: React.FC<{cue: CueData; cueDurationFrames: number}> = ({cue, cueDurat
     });
     inner = (
       <div style={{position: 'relative', display: 'inline-block'}}>
-        <PencilOutline progress={outlineProg} color={CIRCLE_ACCENT} />
+        {EMPH_MARKER ? (
+          <MarkerHighlight progress={outlineProg} color={MARKER_ACCENT} />
+        ) : (
+          <PencilOutline progress={outlineProg} color={CIRCLE_ACCENT} />
+        )}
         <span
           style={{
             ...WHITE_GRAD,
