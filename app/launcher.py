@@ -134,23 +134,40 @@ class WindowApi:
         e_baixo = borda.startswith("bottom")
 
         def _laco() -> None:
+            global _RESIZE_ATIVO
+            _RESIZE_ATIVO = True
+            SWP_NOMOVE = 0x0002
             pt = wintypes.POINT()
-            while user32.GetAsyncKeyState(VK_LBUTTON) & 0x8000:
-                user32.GetCursorPos(ctypes.byref(pt))
-                dx, dy = pt.x - pt0.x, pt.y - pt0.y
-                x, y, w, h = x0, y0, w0, h0
-                if e_dir:
-                    w = max(MIN_W, w0 + dx)
-                if e_baixo:
-                    h = max(MIN_H, h0 + dy)
-                if e_esq:
-                    w = max(MIN_W, w0 - dx)
-                    x = x0 + (w0 - w)
-                if e_topo:
-                    h = max(MIN_H, h0 - dy)
-                    y = y0 + (h0 - h)
-                user32.SetWindowPos(hwnd, 0, int(x), int(y), int(w), int(h), SWP)
-                time.sleep(0.01)
+            ultimo = (x0, y0, w0, h0)
+            try:
+                while user32.GetAsyncKeyState(VK_LBUTTON) & 0x8000:
+                    user32.GetCursorPos(ctypes.byref(pt))
+                    dx, dy = pt.x - pt0.x, pt.y - pt0.y
+                    x, y, w, h = x0, y0, w0, h0
+                    if e_dir:
+                        w = max(MIN_W, w0 + dx)
+                    if e_baixo:
+                        h = max(MIN_H, h0 + dy)
+                    if e_esq:
+                        w = max(MIN_W, w0 - dx)
+                        x = x0 + (w0 - w)
+                    if e_topo:
+                        h = max(MIN_H, h0 - dy)
+                        y = y0 + (h0 - h)
+                    novo = (int(x), int(y), int(w), int(h))
+                    # so encosta na janela quando a geometria MUDOU — mandar
+                    # SetWindowPos identico em loop e flicker gratis
+                    if novo != ultimo:
+                        flags = SWP
+                        if novo[0] == ultimo[0] and novo[1] == ultimo[1]:
+                            flags |= SWP_NOMOVE
+                        user32.SetWindowPos(hwnd, 0, *novo, flags)
+                        ultimo = novo
+                    time.sleep(0.016)
+            finally:
+                _RESIZE_ATIVO = False
+                # acabamento DWM UMA vez, no fim — nao a cada tick
+                _apply_dwm_chrome(maximized=False)
 
         threading.Thread(target=_laco, daemon=True,
                          name="ativavid-resize").start()
@@ -477,6 +494,12 @@ def _handoff_if_running(port: int) -> bool:
 _MAXIMIZED = False
 
 
+# Ligada enquanto o NOSSO laco de resize esta movendo a janela: o evento
+# resized do pywebview dispara _clamp_to_work_area a cada tick, e reaplicar
+# atributos DWM 100x/segundo e strobo ("piscando tudo", caso real 26/08).
+_RESIZE_ATIVO = False
+
+
 def _set_maximized_flag(on: bool) -> None:
     global _MAXIMIZED
     _MAXIMIZED = bool(on)
@@ -651,6 +674,8 @@ def _fill_work_area(hwnd: int) -> bool:
 
 def _clamp_to_work_area() -> None:
     """Corrige maximize nativo que cobre a taskbar ou deixa fresta."""
+    if _RESIZE_ATIVO:
+        return
     hwnd = _find_hwnd()
     if not hwnd:
         return

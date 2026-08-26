@@ -32,6 +32,13 @@ def test_api_begin_resize_existe_com_todas_as_bordas():
     assert "GetCursorPos" in corpo
     assert "SendMessageW(hwnd, WM_NCLBUTTONDOWN" not in corpo,         "o loop modal do Windows voltou — ele NAO funciona com WebView2 aqui"
     assert "MIN_W, MIN_H = 900, 600" in corpo,         "o minimo tem que casar com o min_size do create_window"
+    # Anti-flicker ("piscando tudo", 26/08): so SetWindowPos quando a
+    # geometria mudou, clamp silenciado durante o laco e DWM uma vez no fim.
+    assert "if novo != ultimo:" in corpo, "o skip de geometria identica sumiu"
+    assert "_RESIZE_ATIVO = True" in corpo
+    todo = (RAIZ / "app" / "launcher.py").read_text(encoding="utf-8")
+    assert "if _RESIZE_ATIVO:\n        return" in todo, \
+        "_clamp_to_work_area tem que calar durante o laco de resize"
 
 
 def test_faixas_carregadas_nas_duas_telas():

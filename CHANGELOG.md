@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.86
+
+- **Redimensionar sem piscar.** O arrasto pelas bordas funcionava mas piscava
+  a tela inteira: a cada movimento o app reaplicava o acabamento da janela
+  (cem vezes por segundo). Agora a janela só é tocada quando a geometria
+  realmente muda, o acabamento entra uma única vez ao soltar o botão, e o
+  laço roda a 60 quadros — arrasto liso
+
 ## 2.85
 
 - **O redimensionar pelas bordas passou a funcionar de verdade.** As duas
