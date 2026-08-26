@@ -174,3 +174,28 @@ def test_comparar_versoes_existe(tmp_path):
         "o basename do final tem que separar por barra E contrabarra (Windows)"
     html = (RAIZ / "assets" / "studio" / "index.html").read_text(encoding="utf-8")
     assert 'id="dlgCompare"' in html and 'id="cmpGrid"' in html
+
+
+def test_score_respeita_o_contrato_do_modo():
+    """A regua "abertura ideal 1,2-3,4s" punia 92 de 157 projetos — muitos de
+    modos cujo CONTRATO e preservar (complete/intact/light). Abertura longa
+    num Sem cortes nao e defeito; a dica era ruido contra a promessa do
+    proprio modo. No dynamic a regua continua valendo."""
+    import sys as _sys
+    _sys.path.insert(0, str(RAIZ / "helpers"))
+    from video_score import score_structural
+
+    ranges = [
+        {"start": 0.0, "end": 8.0, "beat": "HOOK", "quote": "abertura longa de proposito"},
+        {"start": 8.0, "end": 20.0, "beat": "B1", "quote": "meio comprido tambem"},
+        {"start": 20.0, "end": 24.0, "beat": "CTA", "quote": "me segue ai"},
+    ]
+    sc_int = score_structural(duration=24.0, ranges=ranges, mode="intact",
+                              spoken="x" * 100)
+    blob = " ".join(sc_int["tips"])
+    assert "abertura" not in blob.lower(), sc_int["tips"]
+    assert "longos" not in blob.lower(), sc_int["tips"]
+    sc_dyn = score_structural(duration=24.0, ranges=ranges, mode="dynamic",
+                              spoken="x" * 100)
+    assert sc_dyn["hook"] < sc_int["hook"], \
+        "no dynamic a abertura de 8s tem que pesar contra"

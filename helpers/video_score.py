@@ -15,7 +15,15 @@ def _clamp(n: float, lo: float = 35, hi: float = 98) -> int:
     return int(round(min(hi, max(lo, n))))
 
 
-def _hook_score(ranges: list[dict]) -> tuple[int, str | None]:
+# Modos cujo CONTRATO e preservar (nao encurtar): a regua de "abertura/take
+# ideal em segundos" nao se aplica — punir a abertura longa num "Sem cortes"
+# e ruido contra a promessa do proprio modo. Medido em 25/08: a dica de
+# abertura aparecia em 92 de 157 projetos, muitos deles de modos
+# preservadores por design.
+MODOS_PRESERVADORES = ("complete", "intact", "light")
+
+
+def _hook_score(ranges: list[dict], *, preserva: bool = False) -> tuple[int, str | None]:
     if not ranges:
         return 48, "Sem takes para avaliar a abertura."
     first = ranges[0]
@@ -29,7 +37,10 @@ def _hook_score(ranges: list[dict]) -> tuple[int, str | None]:
     elif named:
         score = 62
         tip = "O gancho existe, mas não abre o vídeo."
-    if 1.2 <= hd <= 3.4:
+    if preserva:
+        # abertura longa e o contrato do modo; so o gancho nomeado pontua
+        score += 10
+    elif 1.2 <= hd <= 3.4:
         score += 16
     elif 0.8 <= hd <= 5.0:
         score += 8
@@ -65,6 +76,7 @@ def _rhythm_score(
     duration: float,
     *,
     silence_flags: int,
+    preserva: bool = False,
 ) -> tuple[int, str | None]:
     n = len(ranges)
     if duration <= 0 or n == 0:
@@ -79,6 +91,13 @@ def _rhythm_score(
         score = 56.0
     else:
         score = 70.0
+    if preserva:
+        # Take longo e o contrato dos modos preservadores; densidade de corte
+        # tambem nao se aplica. Sobram so as pausas (que complete/light
+        # removem de fato) — o resto vira nota neutra sem dica.
+        score = max(70.0, 88.0 - min(18, silence_flags * 5))
+        tip = "Há pausas longas que dá para enxugar." if silence_flags else None
+        return _clamp(score), tip
     durs = [_take_dur(r) for r in ranges if _take_dur(r) > 0.05]
     tip = None
     if durs:
@@ -132,14 +151,16 @@ def score_structural(
     silence_flags: int = 0,
     transcript_ok: bool = True,
     spoken: str = "",
+    mode: str | None = None,
 ) -> dict[str, Any]:
     ranges = list(ranges or [])
-    hook, hook_tip = _hook_score(ranges)
+    preserva = str(mode or "").lower() in MODOS_PRESERVADORES
+    hook, hook_tip = _hook_score(ranges, preserva=preserva)
     clarity, clarity_tip = _clarity_score(
         ranges, transcript_ok=transcript_ok, spoken=spoken,
     )
     rhythm, rhythm_tip = _rhythm_score(
-        ranges, duration, silence_flags=silence_flags,
+        ranges, duration, silence_flags=silence_flags, preserva=preserva,
     )
     cta, cta_tip = _cta_score(ranges)
     if has_hook_beat is False:

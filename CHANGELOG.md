@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.80
+
+- **A nota do vídeo agora respeita o modo de edição.** A régua do score punia
+  "abertura longa" e "takes longos" em vídeos dos modos que existem
+  justamente para preservar (Vídeo completo, Sem cortes, Edição leve) — a
+  dica aparecia em 92 de 157 projetos, muitos deles cumprindo o próprio
+  contrato. Nesses modos a nota deixa de cobrar encurtamento e só aponta o
+  que faz sentido (pausas longas); no Dinâmico/Shorts a régua continua
+  exigente
+
 ## 2.79
 
 - **O histórico do Aplicar agora registra o que mudou.** Cada entrada do
