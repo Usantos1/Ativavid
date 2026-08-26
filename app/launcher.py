@@ -94,6 +94,38 @@ class WindowApi:
             pass
         return self._maximized
 
+    def begin_resize(self, edge: str) -> bool:
+        """Redimensionar iniciado PELA PAGINA (faixas de borda em JS).
+
+        O miolo da janela e do WebView2, que roda em OUTRO processo — o
+        mouse morre la e o WM_NCHITTEST do pai quase nunca dispara ("so
+        apareceu uma vez na esquerda", caso real 25-26/08). Subclassificar
+        o filho e impossivel (cross-process). A saida robusta, a mesma do
+        Tauri: a pagina detecta o mousedown na borda e o Windows assume o
+        resize nativo via WM_NCLBUTTONDOWN + HT* — modal, com DPI e snap
+        corretos em qualquer monitor.
+        """
+        if sys.platform != "win32" or _is_app_maximized():
+            return False
+        ht = {
+            "left": 10, "right": 11, "top": 12, "topleft": 13,
+            "topright": 14, "bottom": 15, "bottomleft": 16,
+            "bottomright": 17,
+        }.get(str(edge or "").lower())
+        hwnd = _find_hwnd()
+        if not ht or not hwnd:
+            return False
+        try:
+            import ctypes
+
+            user32 = ctypes.windll.user32
+            user32.ReleaseCapture()
+            WM_NCLBUTTONDOWN = 0x00A1
+            user32.SendMessageW(hwnd, WM_NCLBUTTONDOWN, ht, 0)
+            return True
+        except Exception:
+            return False
+
     def is_maximized(self) -> bool:
         return bool(self._maximized)
 

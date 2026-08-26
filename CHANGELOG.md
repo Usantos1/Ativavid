@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.83
+
+- **Redimensionar a janela agora funciona de verdade, em todas as bordas.**
+  As bordas invisíveis dependiam de um mecanismo do Windows que o miolo do
+  app (que roda em outro processo) engolia — na prática só uma borda pegava,
+  uma vez. Agora as bordas moram na própria interface e entregam o
+  redimensionar ao Windows nativamente: as quatro bordas e os quatro cantos
+  respondem sempre, com o cursor certo, em qualquer monitor e escala
+
 ## 2.82
 
 - **Vídeo sem trilha sonora agora avisa.** Quando a música de IA é pedida e a
