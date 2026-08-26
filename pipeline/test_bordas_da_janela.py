@@ -23,6 +23,10 @@ def test_api_begin_resize_existe_com_todas_as_bordas():
                  "bottomleft", "bottomright"):
         assert f'"{edge}"' in corpo, f"borda {edge} sumiu do mapa HT"
     assert "WM_NCLBUTTONDOWN" in corpo
+    # lparam=0 nao inicia o loop modal de resize — "as setas aparecem mas
+    # nao funcionam" (26/08). O ponto de partida vai empacotado no lparam.
+    assert "GetCursorPos" in corpo, "o ponto de partida do resize sumiu"
+    assert "(pt.x & 0xFFFF)" in corpo,         "X negativo (monitor a esquerda) precisa do & 0xFFFF"
     assert "_is_app_maximized()" in corpo, \
         "maximizada a janela nao redimensiona — a API tem que recusar"
 

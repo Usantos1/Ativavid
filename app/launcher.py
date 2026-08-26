@@ -117,11 +117,20 @@ class WindowApi:
             return False
         try:
             import ctypes
+            from ctypes import wintypes
 
             user32 = ctypes.windll.user32
+            # O lparam PRECISA levar o ponto de partida (coordenadas de tela
+            # do cursor): com 0 o Windows nao inicia o loop modal de resize
+            # — "as setas aparecem mas nao funcionam" (caso real, 26/08).
+            # E o que o wry/Tauri empacota no mesmo caminho. & 0xFFFF nos
+            # dois eixos: monitor a esquerda do principal tem X negativo.
+            pt = wintypes.POINT()
+            user32.GetCursorPos(ctypes.byref(pt))
+            lparam = ((pt.y & 0xFFFF) << 16) | (pt.x & 0xFFFF)
             user32.ReleaseCapture()
             WM_NCLBUTTONDOWN = 0x00A1
-            user32.SendMessageW(hwnd, WM_NCLBUTTONDOWN, ht, 0)
+            user32.SendMessageW(hwnd, WM_NCLBUTTONDOWN, ht, lparam)
             return True
         except Exception:
             return False
