@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.81
+
+- **A janela funciona direito em monitor externo.** Num monitor com escala
+  diferente da tela principal, arrastar e redimensionar o ATIVAVID caía no
+  lugar errado (o Windows virtualizava as coordenadas). O app agora se
+  declara ciente do DPI por monitor: bordas de redimensionar, arrasto e
+  maximizar passam a responder certo em qualquer monitor — e a borda de
+  pegar com o mouse cresce junto com a escala da tela
+
 ## 2.80
 
 - **A nota do vídeo agora respeita o modo de edição.** A régua do score punia

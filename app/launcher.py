@@ -624,6 +624,41 @@ def _wait_http(url: str, timeout: float = 25.0) -> None:
     raise SystemExit(f"servidor nao subiu em {url}")
 
 
+def _declarar_dpi_por_monitor() -> None:
+    """Per-Monitor DPI v2 ANTES de existir janela.
+
+    O pywebview deixa o processo apenas system-DPI aware. Num monitor com
+    escala diferente da principal o Windows VIRTUALIZA as coordenadas: o
+    hit-test das bordas (hook WM_NCHITTEST) e o arrasto pelo titlebar caem
+    deslocados — "num monitor maior nao da pra arrastar nem ajustar o
+    tamanho" (caso real, 25/08). Com PMv2 as coordenadas sao fisicas e
+    consistentes em todos os monitores. Precisa rodar antes do primeiro
+    HWND; depois disso o Windows ignora a chamada.
+    """
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+
+        # -4 = DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
+        if ctypes.windll.user32.SetProcessDpiAwarenessContext(
+                ctypes.c_void_p(-4)):
+            return
+    except Exception:
+        pass
+    try:
+        import ctypes
+
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)  # PER_MONITOR
+    except Exception:
+        try:
+            import ctypes
+
+            ctypes.windll.user32.SetProcessDPIAware()
+        except Exception:
+            pass
+
+
 def _find_hwnd() -> int:
     if sys.platform != "win32":
         return 0
@@ -635,6 +670,25 @@ def _find_hwnd() -> int:
             hwnd = int(user32.FindWindowW(None, title) or 0)
             if hwnd:
                 return hwnd
+        # Titulo mudou (document.title de outra pagina)? Cai para o PID:
+        # a primeira janela top-level visivel deste processo.
+        from ctypes import wintypes
+
+        achado = []
+        proto = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND,
+                                   wintypes.LPARAM)
+
+        def _cada(hwnd, _l):
+            pid = wintypes.DWORD()
+            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            if pid.value == os.getpid() and user32.IsWindowVisible(hwnd):
+                achado.append(int(hwnd))
+                return False
+            return True
+
+        user32.EnumWindows(proto(_cada), 0)
+        if achado:
+            return achado[0]
     except Exception:
         pass
     return 0
@@ -722,7 +776,13 @@ def _install_edge_to_edge_hook() -> None:
         HTLEFT, HTRIGHT = 10, 11
         HTTOP, HTTOPLEFT, HTTOPRIGHT = 12, 13, 14
         HTBOTTOM, HTBOTTOMLEFT, HTBOTTOMRIGHT = 15, 16, 17
-        BORDER = 8
+        # 8px logicos, escalados pelo DPI do monitor DA JANELA (com PMv2 o
+        # GetWindowRect e fisico; borda fixa ficava fina demais em 150%).
+        def _borda(h):
+            try:
+                return max(8, int(8 * user32.GetDpiForWindow(h) / 96))
+            except Exception:
+                return 8
 
         LRESULT = ctypes.c_ssize_t
         WNDPROC = ctypes.WINFUNCTYPE(
@@ -759,10 +819,11 @@ def _install_edge_to_edge_hook() -> None:
                 rect = wintypes.RECT()
                 user32.GetWindowRect(hwnd_msg, ctypes.byref(rect))
                 left, top, right, bottom = rect.left, rect.top, rect.right, rect.bottom
-                on_left = (x - left) < BORDER
-                on_right = (right - x) < BORDER
-                on_top = (y - top) < BORDER
-                on_bottom = (bottom - y) < BORDER
+                borda = _borda(hwnd_msg)
+                on_left = (x - left) < borda
+                on_right = (right - x) < borda
+                on_top = (y - top) < borda
+                on_bottom = (bottom - y) < borda
                 if on_top and on_left:
                     return HTTOPLEFT
                 if on_top and on_right:
@@ -1023,6 +1084,7 @@ def main() -> None:
             pass
         return
 
+    _declarar_dpi_por_monitor()
     api = WindowApi()
     # CapCut: frameless + titlebar HTML. Win32 reativa resize/snap.
     # min_size cabe em metade de monitor 1080p (Aero Snap).
