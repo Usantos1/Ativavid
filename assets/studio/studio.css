@@ -3292,3 +3292,51 @@ body.home-working .hero-import .hero-inner { padding: 10px 0; }
 }
 .cmp-nome { font-weight: 700; font-size: 13px; }
 .cmp-meta { font-size: 12px; color: var(--dim, #9aa); line-height: 1.45; }
+
+/* ============================================================
+   Botoes da janela com a cara do macOS (pedido do usuario, 26/08):
+   bolinhas amarela (minimizar), verde (maximizar) e vermelha (fechar),
+   com o glifo aparecendo no hover — como no Mac. O bloco vive DEPOIS
+   das regras antigas de proposito: o cascade e quem desliga o visual
+   retangular do Windows (hover cinza / fechar vermelho cheio).
+   ============================================================ */
+.tb-win,
+.tb-close,
+.tb-close:hover {
+  position: relative;
+  width: 26px;
+  border-radius: 0;
+  background: transparent;
+}
+.tb-win:hover,
+.tb-close:hover {
+  background: transparent;
+  color: inherit;
+}
+.tb-win::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.18);
+}
+#btnWinMin::before { background: #febc2e; }
+#btnWinMax::before { background: #28c840; }
+.tb-close::before  { background: #ff5f57; }
+.tb-win svg {
+  position: relative;
+  width: 7px;
+  height: 7px;
+  stroke: rgba(60, 20, 0, 0.7);
+  stroke-width: 2;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+.tb-close svg { stroke: rgba(90, 0, 0, 0.7); }
+.tb-win:hover svg { opacity: 1; }
+.tb-win:hover::before { filter: brightness(1.1); }
+.tb-win:active::before { filter: brightness(0.9); }

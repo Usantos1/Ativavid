@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.84
+
+- **Botões da janela com a cara do Mac.** Minimizar, maximizar e fechar agora
+  são as bolinhas amarela, verde e vermelha do macOS, com o símbolo
+  aparecendo ao passar o mouse — nas duas telas do app
+
 ## 2.83
 
 - **Redimensionar a janela agora funciona de verdade, em todas as bordas.**
