@@ -289,7 +289,7 @@ def motivo_nao_suportado(edit_data: dict[str, Any], public: Path) -> str | None:
     #   serifada 1,009 · recorte 1,014 · scatter 1,024 · bloco 1,033
     #   classica 1,036 · simples 1,059 · impacto 1,094
     estilo = caps.get("style") or "stacked"
-    permitidos = {"stacked", "impacto", "scatter", "karaoke",
+    permitidos = {"stacked", "impacto", "scatter", "karaoke", "bolha",
                   "simples", "serifada", "classica", "bloco", "recorte"}
     # Tudo daqui para baixo so importa se a legenda VAI ser desenhada. Com ela
     # desligada o pipeline grava `style="karaoke"` fixo (run_fast: `captions if
@@ -770,6 +770,8 @@ class Renderizador:
             self.cues = []
         elif estilo == "karaoke":
             self.camadas.extend(self._montar_karaoke())
+        elif estilo == "bolha":
+            self.camadas.extend(self._montar_bolha())
             self.cues = []
         elif estilo in self.SIMPLE_VARIANTES or estilo == "recorte":
             self.camadas.extend(self._montar_simple(
@@ -2158,6 +2160,146 @@ class Renderizador:
     KAR_MARGIN = 18.0       # Word: marginRight
     KAR_LS = -1.0           # div: letterSpacing -1
     KAR_SOMBRA = [(0, 4, 20, 0.55)]   # div: textShadow 0 4px 20px rgba(0,0,0,.55)
+
+    # Espelho do BubbleCaptions (Main.tsx): agrupamento por CONTAGEM
+    # (12 palavras / pontuacao final / respiro >450ms) — mesmo spec, sem
+    # medir largura, para os dois motores quebrarem as bolhas IGUAL.
+    BOLHA_MAX_PALAVRAS = 12
+    BOLHA_RESPIRO_MS = 450
+    BOLHA_BG = "#005C4B"
+    BOLHA_CHECK = "#53BDEB"
+
+    def _montar_bolha(self):
+        """Uma Camada por bolha; a bolha inteira e UMA Palavra (sobe+fade)."""
+        import re
+
+        C = self.ed.get("captions") or {}
+        tam = max(8, int(round(int(C.get("fontSize") or 76) * 0.62)))
+        safe_w = float(C.get("safeWidth") or 720)
+        pad_b = float(C.get("paddingBottom") or 420)
+        f = self.fonte(4, tam, 500, marca="cap")
+        f_meta = self.fonte(4, max(8, int(round(tam * 0.52))), 500, marca="cap")
+        asc, desc = f.getmetrics()
+        alt_linha = int(round(tam * 1.3))
+
+        def quebra(t):
+            return bool(re.search(r"[.,!?\u2026]$", str(t or "")))
+
+        raw = json.loads((self.public / "captions.json")
+                         .read_text(encoding="utf-8-sig"))
+        words = raw if isinstance(raw, list) else (raw.get("words") or [])
+
+        bolhas, cur = [], []
+        for i, w in enumerate(words):
+            cur.append(w)
+            prox = words[i + 1] if i + 1 < len(words) else None
+            respiro = (float(prox.get("startMs") or 0)
+                       - float(w.get("endMs") or 0)) if prox else 0.0
+            if (len(cur) >= self.BOLHA_MAX_PALAVRAS or quebra(w.get("text"))
+                    or respiro > self.BOLHA_RESPIRO_MS):
+                bolhas.append(cur)
+                cur = []
+        if cur:
+            bolhas.append(cur)
+
+        pad_x = int(round(tam * 0.55))
+        pad_top = int(round(tam * 0.42))
+        pad_bot = int(round(tam * 0.3))
+        cor_bg = self._cor(self.BOLHA_BG)
+        cor_chk = self._cor(self.BOLHA_CHECK)
+        saida = []
+        for bi, grupo in enumerate(bolhas):
+            ini_ms = float(grupo[0].get("startMs") or 0)
+            fim_ms = (float(bolhas[bi + 1][0].get("startMs") or 0)
+                      if bi + 1 < len(bolhas)
+                      else self.frames / self.fps * 1000.0)
+            ini_f = round(ini_ms / 1000 * self.fps)
+            fim_f = max(ini_f + 1, round(fim_ms / 1000 * self.fps))
+
+            texto = " ".join(str(w.get("text") or "") for w in grupo)
+            # quebra visual gulosa pela largura interna
+            linhas, atual = [], ""
+            interno = safe_w - 2 * pad_x
+            for palavra in texto.split():
+                tent = (atual + " " + palavra).strip()
+                if atual and f.getlength(tent) > interno:
+                    linhas.append(atual)
+                    atual = palavra
+                else:
+                    atual = tent
+            if atual:
+                linhas.append(atual)
+
+            secs = int(ini_ms // 1000)
+            hora = f"{secs // 60:02d}:{secs % 60:02d}"
+            meta = hora + "  "
+            larg_meta = f_meta.getlength(meta) + tam * 0.9  # + checks
+            larg_txt = max((f.getlength(ln) for ln in linhas), default=0)
+            larg = int(min(safe_w, max(larg_txt + larg_meta * 0.0,
+                                       larg_txt) + 2 * pad_x))
+            # a meta divide a ultima linha; se nao couber, ganha linha propria
+            ultima_com_meta = (f.getlength(linhas[-1]) + tam * 0.4
+                               + larg_meta <= larg - 2 * pad_x) if linhas else False
+            alt = (pad_top + len(linhas) * alt_linha
+                   + (0 if ultima_com_meta else int(alt_linha * 0.72))
+                   + pad_bot)
+
+            img = Image.new("L", (larg, alt), 0)
+            dr = ImageDraw.Draw(img)
+            dr.rounded_rectangle([0, 0, larg - 1, alt - 1], radius=20,
+                                 fill=255,
+                                 corners=(True, True, False, True))
+            dr.rounded_rectangle([larg - 13, alt - 13, larg - 1, alt - 1],
+                                 radius=6, fill=255)
+            base_a = np.asarray(img, dtype=np.float32) / 255.0
+
+            cam_img = Image.new("L", (larg, alt), 0)
+            cor_img = np.broadcast_to(cor_bg, (alt, larg, 3)).copy()
+            dtx = ImageDraw.Draw(cam_img)
+            y = pad_top
+            for ln in linhas:
+                dtx.text((pad_x, y), ln, font=f, fill=255)
+                y += alt_linha
+            # hora + checks (vetoriais — o glifo U+2713 nem sempre existe)
+            my = alt - pad_bot - int(alt_linha * 0.55)
+            mx = larg - pad_x - int(larg_meta)
+            dtx.text((mx, my), hora, font=f_meta, fill=180)
+            cx = mx + f_meta.getlength(hora) + tam * 0.18
+            r = tam * 0.16
+            for desloc in (0.0, r * 1.1):
+                dtx.line([(cx + desloc, my + r * 1.1),
+                          (cx + desloc + r * 0.55, my + r * 1.7),
+                          (cx + desloc + r * 1.5, my + r * 0.4)],
+                         fill=255, width=max(2, int(tam * 0.05)))
+            texto_a = np.asarray(cam_img, dtype=np.float32) / 255.0
+
+            # composicao: fundo verde + texto branco/azul POR CIMA, tudo numa
+            # unica Palavra (rgb blend do texto sobre o fundo)
+            rgb = cor_img.astype(np.float32)
+            branco = np.array([255.0, 255.0, 255.0])
+            t3 = texto_a[..., None]
+            rgb = rgb * (1 - t3) + branco * t3
+            # tinge os checks de azul: mascara na regiao dos checks
+            chk_x0 = int(cx - 2)
+            rgb[my - 2:, chk_x0:, :] = (
+                rgb[my - 2:, chk_x0:, :] * (1 - t3[my - 2:, chk_x0:, :])
+                + np.array(cor_chk, dtype=np.float32)
+                * t3[my - 2:, chk_x0:, :]
+                + rgb[my - 2:, chk_x0:, :] * 0)
+            alpha = np.maximum(base_a, texto_a)
+            sombra = self._sombra_de(alpha, [(0, 8, 26, 0.45)])
+
+            x0 = int(round((self.w - larg) / 2))
+            y0 = int(round(self.h - pad_b - alt))
+            leg = Camada(inicio_f=ini_f, fim_f=fim_f, saida_f=fim_f - ini_f,
+                         palavras=[])
+            leg.palavras.append(Palavra(
+                x0, y0, rgb, alpha, sombra,
+                inicio_f=0, enter=7, sobe=24.0, ease="cubic"))
+            saida.append(leg)
+            if self.sfx_on:
+                self.eventos_sfx.append(("pop.mp3", ini_ms / 1000.0, 0.12))
+        return saida
 
     def _montar_karaoke(self):
         """Uma Camada por LINHA, uma Palavra por palavra."""

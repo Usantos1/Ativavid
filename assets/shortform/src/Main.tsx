@@ -427,6 +427,115 @@ const Karaoke: React.FC = () => {
   );
 };
 
+// ============ BOLHA DE CONVERSA (WhatsApp) ============
+// Pedido do usuário (26/08): cada frase vira uma bolha de chat — verde do
+// WhatsApp escuro, hora + "✓✓" azuis, pop.mp3 de mensagem chegando.
+// Agrupamento por CONTAGEM (12 palavras / pontuação / respiro >450ms), SEM
+// medir largura: determinístico e idêntico no render_proprio
+// (_montar_bolha). A quebra interna da bolha é só visual.
+const BUBBLE_MAX_WORDS = 12;
+const BUBBLE_GAP_MS = 450;
+const BUBBLE_BG = '#005C4B';
+const BUBBLE_CHECK = '#53BDEB';
+
+function buildBubbles(caps: Caption[]): Caption[][] {
+  const out: Caption[][] = [];
+  let cur: Caption[] = [];
+  for (let i = 0; i < caps.length; i++) {
+    cur.push(caps[i]);
+    const next = caps[i + 1];
+    const gap = next ? next.startMs - caps[i].endMs : 0;
+    if (cur.length >= BUBBLE_MAX_WORDS || isBreak(caps[i].text) || gap > BUBBLE_GAP_MS) {
+      out.push(cur);
+      cur = [];
+    }
+  }
+  if (cur.length) out.push(cur);
+  return out;
+}
+const BUBBLES = buildBubbles(captions as Caption[]);
+
+const BubbleOne: React.FC<{text: string; hora: string; size: number; maxW: number}> = ({
+  text,
+  hora,
+  size,
+  maxW,
+}) => {
+  const frame = useCurrentFrame();
+  const p = interpolate(frame, [0, 7], [0, 1], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+    easing: Easing.out(Easing.cubic),
+  });
+  return (
+    <div
+      style={{
+        maxWidth: maxW,
+        background: BUBBLE_BG,
+        borderRadius: 20,
+        borderBottomRightRadius: 6,
+        padding: `${Math.round(size * 0.42)}px ${Math.round(size * 0.55)}px ${Math.round(size * 0.3)}px`,
+        color: '#fff',
+        fontFamily: CAP_FF,
+        fontWeight: capWeight(500),
+        fontSize: size,
+        lineHeight: 1.3,
+        textAlign: 'left',
+        boxShadow: '0 8px 26px rgba(0,0,0,0.45)',
+        opacity: p,
+        translate: `0px ${interpolate(p, [0, 1], [24, 0])}px`,
+      }}
+    >
+      {text}
+      <span
+        style={{
+          float: 'right',
+          marginLeft: Math.round(size * 0.4),
+          marginTop: Math.round(size * 0.55),
+          fontSize: Math.round(size * 0.52),
+          color: 'rgba(255,255,255,0.72)',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {hora} <span style={{color: BUBBLE_CHECK}}>{'\u2713\u2713'}</span>
+      </span>
+    </div>
+  );
+};
+
+const BubbleCaptions: React.FC = () => {
+  const {fps, durationInFrames} = useVideoConfig();
+  const C = D.captions;
+  const size = Math.round(C.fontSize * 0.62);
+  return (
+    <>
+      {BUBBLES.map((line, i) => {
+        const from = Math.round((line[0].startMs / 1000) * fps);
+        const nextFrom =
+          i + 1 < BUBBLES.length
+            ? Math.round((BUBBLES[i + 1][0].startMs / 1000) * fps)
+            : durationInFrames;
+        const duration = Math.max(1, nextFrom - from);
+        const secs = Math.floor(line[0].startMs / 1000);
+        const hora = `${String(Math.floor(secs / 60)).padStart(2, '0')}:${String(secs % 60).padStart(2, '0')}`;
+        return (
+          <Sequence key={i} from={from} durationInFrames={duration} layout="none">
+            <Sfx src="pop.mp3" volume={0.12} />
+            <CaptionShell fromFrame={from}>
+              <BubbleOne
+                text={line.map((w) => w.text).join(' ')}
+                hora={hora}
+                size={size}
+                maxW={C.safeWidth}
+              />
+            </CaptionShell>
+          </Sequence>
+        );
+      })}
+    </>
+  );
+};
+
 // ============ ILLUSTRATIVE IMAGE INSERTS (rounded card + shadow, upper zone) ====
 const CARD_W = 780;
 const CARD_H = 500;
@@ -1137,6 +1246,8 @@ export const Main: React.FC = () => {
       {D.captions.enabled
         ? D.captions.style === 'stacked'
           ? <StackedCaptions />
+          : D.captions.style === 'bolha'
+            ? <BubbleCaptions />
           : D.captions.style === 'scatter'
             ? <ScatterCaptions />
             : D.captions.style === 'impacto'

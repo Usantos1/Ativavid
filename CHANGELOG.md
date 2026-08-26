@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.89
+
+- **Novo estilo de legenda: "Bolha de conversa".** Cada frase falada aparece
+  como uma bolha de chat estilo WhatsApp — verde escuro, cantos de mensagem,
+  hora e os dois checks azuis — surgindo com o som de mensagem chegando.
+  Feito para vídeo de loja de celular. Está no catálogo de "Estilo de
+  legenda"; funciona no renderizador rápido como os demais
+
 ## 2.88
 
 - **"Saiu sem IA" por resposta quebrada do Gemini — consertado.** Três vídeos

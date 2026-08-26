@@ -242,6 +242,7 @@ const STYLE_CATALOG = {
     {id: 'impacto', name: 'Impacto', demo: 'impacto'},
     {id: 'scatter', name: 'Disperso', demo: 'scatter'},
     {id: 'recorte', name: 'Recorte', stat: 'recorte'},
+    {id: 'bolha', name: 'Bolha de conversa', stat: 'bolha'},
     {id: 'simples', name: 'Simples', stat: 'simples'},
     {id: 'serifada', name: 'Serifada', stat: 'serifada'},
     {id: 'classica', name: 'Clássica', stat: 'classica'},
@@ -710,6 +711,7 @@ const STATIC_VARIANTS = {
   classica: {family: "'Inter',sans-serif", weight: 500, size: 52, maxWords: 14, lines: 2, sx: 1, sy: 1, tracking: 0, maxW: 840},
   bloco: {family: "'Poppins',sans-serif", weight: 800, size: 76, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: -2, maxW: 760, block: true},
   recorte: {family: "'Poppins',sans-serif", weight: 800, size: 78, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: -1, maxW: 800, sticker: true},
+  bolha: {family: "'Inter',sans-serif", weight: 500, size: 46, maxWords: 12, lines: 2, sx: 1, sy: 1, tracking: 0, maxW: 760, bubble: true},
 };
 const ORPHAN_PT = /^(o|a|os|as|e|é|de|do|da|em|no|na|um|uma|que|se|ao|à|por|com)$/i;
 
@@ -766,6 +768,20 @@ function buildStaticDemo(host, id) {
     box.style.fontSize = `${V.size * s}px`;
     box.style.letterSpacing = `${V.tracking * s}px`;
     box.style.transform = V.sx === 1 && V.sy === 1 ? '' : `scale(${V.sx}, ${V.sy})`;
+    if (V.bubble) {
+      // mini-preview da Bolha de conversa: verde WhatsApp, canto de chat
+      const pad = V.size * 0.34 * s;
+      for (const ln of lines) {
+        const b = el('div', 'stat-block-line', box);
+        b.style.padding = `${pad * 0.7}px ${pad}px`;
+        b.style.borderRadius = `${V.size * 0.42 * s}px`;
+        b.style.borderBottomRightRadius = `${V.size * 0.12 * s}px`;
+        b.style.background = '#005C4B';
+        b.style.color = '#fff';
+        b.textContent = ln.join(' ');
+      }
+      return box;
+    }
     if (V.block) {
       // mirrors SimpleCaptions' block branch: the slab carries the picked
       // caption colour, and the INK comes from the slab's luminance. This
@@ -2830,7 +2846,7 @@ const capAccentUsed = () => S.style.captions !== 'nenhuma';
 // belongs here; the note in the Estilo tab is what explains where it lands.
 // "recorte" pinta o TEXTO do sticker (o contorno escuro é fixo — é ele que
 // garante a leitura); "impacto" usa a cor de ênfase na CAIXA da palavra atual.
-const CAP_BASE_STYLES = ['karaoke', 'simples', 'serifada', 'classica', 'bloco', 'recorte'];
+const CAP_BASE_STYLES = ['karaoke', 'simples', 'serifada', 'classica', 'bloco', 'recorte', 'bolha'];
 const CAP_EMPH_STYLES = ['stacked', 'scatter', 'impacto'];
 const CAP_CIRCLE_STYLES = ['stacked'];
 const legendaAccentUsed = () => capAccentUsed() && CAP_BASE_STYLES.includes(S.style.captions);
