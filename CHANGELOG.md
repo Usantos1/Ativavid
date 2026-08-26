@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.94
+
+- A configuração técnica do "Publicar — Instagram" (IG User ID + token) saiu
+  da tela de Integrações — pedia dados de desenvolvedor e confundia. O motor
+  de publicação continua pronto por dentro, aguardando um caminho de conexão
+  simples ("Entrar com Instagram") para voltar à interface
+
 ## 2.93
 
 - **Publicar no Instagram direto do app.** Menu "⋯" de qualquer vídeo pronto

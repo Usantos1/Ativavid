@@ -84,12 +84,15 @@ def test_rotas_chaves_e_card():
     assert 'which == "instagram"' in srv
     ds = (RAIZ / "app" / "desktop_server.py").read_text(encoding="utf-8")
     assert '"/api/jobs/publicar-instagram"' in ds
+    # UI de credenciais REMOVIDA a pedido do usuario (26/08: "isso pode
+    # remover, nao faz sentido" — pedir IG User ID/token da Meta e UX de
+    # desenvolvedor). O motor fica adormecido para um futuro login simples;
+    # o card so mostra o link quando um video JA foi publicado.
     html = (RAIZ / "assets" / "studio" / "index.html").read_text(encoding="utf-8")
-    assert 'id="keyIgId"' in html and 'id="keyMeta"' in html
+    assert 'id="keyIgId"' not in html and 'id="keyMeta"' not in html
     js = (RAIZ / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
-    assert 'data-act="publicar-ig"' in js
-    assert "window.confirm" in js, \
-        "publicar e para FORA — confirmacao explicita sempre"
+    assert 'data-act="publicar-ig"' not in js
+    assert "Ver no Instagram" in js
 
 
 def test_card_mostra_o_estado(tmp_path):

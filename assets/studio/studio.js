@@ -684,10 +684,8 @@ function cardMenuHtml(j, opts) {
         <a role="menuitem" href="${escapeHtml(links.final)}" ${canFinal ? "" : "class=\"disabled\""}>Ver vídeo final</a>
         <a role="menuitem" href="${escapeHtml(links.editor)}">Editar</a>
         <a role="menuitem" href="${escapeHtml(links.estilo)}" data-id="${safeId}">Alterar estilo</a>
-        ${j.status === "done"
-          ? (j.publicadoLink
-            ? `<a role="menuitem" href="${escapeHtml(j.publicadoLink)}" target="_blank" rel="noopener">Ver no Instagram</a>`
-            : `<button type="button" role="menuitem" data-act="publicar-ig" data-id="${safeId}">Publicar no Instagram</button>`)
+        ${j.status === "done" && j.publicadoLink
+          ? `<a role="menuitem" href="${escapeHtml(j.publicadoLink)}" target="_blank" rel="noopener">Ver no Instagram</a>`
           : ""}
         ${j.status === "done" && versoesDaFonte(j).length >= 2
           ? `<button type="button" role="menuitem" data-act="compare" data-id="${safeId}">Comparar ${versoesDaFonte(j).length} versões</button>`
@@ -3387,10 +3385,7 @@ function wireForms() {
     if (g) body.GROQ_API_KEY = g;
     if (el) body.ELEVENLABS_API_KEY = el;
     if (px) body.PEXELS_API_KEY = px;
-    const igid = ($("#keyIgId")?.value || "").trim();
-    const meta = ($("#keyMeta")?.value || "").trim();
-    if (igid) body.IG_USER_ID = igid;
-    if (meta) body.META_ACCESS_TOKEN = meta;
+
     if (!Object.keys(body).length) {
       toast("Cole pelo menos uma chave antes de salvar");
       $("#keysStatus").textContent = "Nada para salvar";
@@ -3490,12 +3485,6 @@ function wireForms() {
       if (service === "groq" && g) body.GROQ_API_KEY = g;
       if (service === "elevenlabs" && el) body.ELEVENLABS_API_KEY = el;
       if (service === "pexels" && px) body.PEXELS_API_KEY = px;
-      if (service === "instagram") {
-        const igid = ($("#keyIgId")?.value || "").trim();
-        const meta = ($("#keyMeta")?.value || "").trim();
-        if (igid) body.IG_USER_ID = igid;
-        if (meta) body.META_ACCESS_TOKEN = meta;
-      }
       try {
         const res = await api("/api/keys/test", {
           method: "POST",
