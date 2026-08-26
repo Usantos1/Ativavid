@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.91
+
+- **Você define as hashtags do post.** Campo novo na tela de Estilo:
+  "Hashtags do post (fixas)". O que você escrever ali sai EXATAMENTE assim no
+  fim de toda legenda — a IA é obrigada a usar sua lista e proibida de
+  inventar outras. Salvando como padrão da marca, vale para todos os vídeos
+
+- **Legenda escrita para o Google (SEO local).** Campo "SEO local (cidade e
+  termos de busca)": informe sua cidade e os termos que os clientes
+  pesquisam (ex.: "Campinas SP; conserto de celular; troca de tela") e a IA
+  passa a tecer cidade e termos naturalmente no corpo da legenda — pensada
+  para busca indexada, não só para descrever o vídeo
+
 ## 2.90
 
 - **As notas do card param de dar conselho errado.** "Plano B (Groq)" agora

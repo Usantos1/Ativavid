@@ -17,7 +17,7 @@ STYLE_KEYS = (
     "colorGrade", "endCardCopy", "fastMode", "oneClick", "contentType",
     "brandId", "brandName", "note", "smartEmphasis", "endCardType",
     "captionPosition", "captionSize", "captionFont", "headlineFont",
-    "emphasisWords", "headlineDuration", "headlineAnimation",
+    "emphasisWords", "postHashtags", "postSeo", "headlineDuration", "headlineAnimation",
 )
 
 

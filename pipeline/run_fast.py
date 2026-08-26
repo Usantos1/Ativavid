@@ -1442,6 +1442,17 @@ def _legenda_from_edl(edit_dir: Path, spoken: str, preset: dict) -> str:
         if cta:
             lines.append(cta)
 
+    # Hashtags FIXAS da marca mandam (pedido 26/08): o dono define a lista
+    # e ela sai EXATAMENTE assim — posicionamento e estrategia dele, nao
+    # heuristica nossa. Sem lista, o palpite automatico continua.
+    fixas = [t if t.startswith("#") else "#" + t
+             for t in re.split(r"[\s,;]+", str(preset.get("postHashtags") or "").strip())
+             if t.strip("#").strip()]
+    if fixas:
+        lines.append("")
+        lines.append(" ".join(fixas[:12]))
+        return "\n".join(lines).strip() + "\n"
+
     # Niche-first tags; #reels only as filler if we have room
     tags: list[str] = []
     brand = re.sub(r"^Segue\s+", "", handle, flags=re.I).strip()
@@ -1471,16 +1482,31 @@ def _llm_polish_legenda(draft: str, *, spoken: str, preset: dict) -> str | None:
     except Exception:
         return None
     copy = preset.get("endCardCopy") or {}
+    seo = str(preset.get("postSeo") or "").strip()
+    fixas = [t if t.startswith("#") else "#" + t
+             for t in re.split(r"[\s,;]+", str(preset.get("postHashtags") or "").strip())
+             if t.strip("#").strip()][:12]
     system = (
         "Você escreve legendas curtas de Reels/TikTok em português do Brasil.\n"
         "Responda SOMENTE com o texto final da legenda (sem markdown, sem aspas).\n"
         "Regras: 1ª linha = gancho; 2–4 linhas no máximo no corpo; NÃO cole a "
-        "transcrição inteira; corrija erros óbvios de ASR; no máximo 4 hashtags "
-        "de nicho (evite #viral #fyp); preserve o CTA da marca se houver."
+        "transcrição inteira; corrija erros óbvios de ASR; preserve o CTA da "
+        "marca se houver."
+        + ("\nSEO LOCAL: escreva também para busca do Google — inclua de forma "
+           "NATURAL a cidade/região e 1-2 dos termos de busca abaixo no corpo "
+           "(sem lista de palavras-chave, sem tom de anúncio). A legenda deve "
+           "responder o que alguém pesquisaria."
+           if seo else "")
+        + ("\nHASHTAGS: termine com EXATAMENTE estas hashtags, nesta ordem, "
+           "sem adicionar outras."
+           if fixas else
+           "\nNo máximo 4 hashtags de nicho (evite #viral #fyp).")
     )
     user = (
         f"CTA marca: {(copy.get('line1') or '').strip()} | {(copy.get('line2') or '').strip()}\n"
-        f"Rascunho atual:\n{draft}\n\n"
+        + (f"SEO local (cidade e termos): {seo}\n" if seo else "")
+        + (f"Hashtags obrigatórias: {' '.join(fixas)}\n" if fixas else "")
+        + f"Rascunho atual:\n{draft}\n\n"
         f"Fala (referência, NÃO copiar inteira):\n{(spoken or '')[:500]}"
     )
     try:
@@ -1495,8 +1521,15 @@ def _llm_polish_legenda(draft: str, *, spoken: str, preset: dict) -> str | None:
         text = re.sub(r"^```\w*\n?", "", text).removesuffix("```").strip()
     if len(text) < 12 or len(text) > 900:
         return None
-    if text.count("#") > 6:
+    # teto de hashtags acompanha a lista fixa do dono (que pode passar de 6)
+    if text.count("#") > max(6, len(fixas) + 2):
         return None
+    if fixas:
+        # a IA e obrigada a fechar com as fixas; se derrapou, conserta aqui
+        faltando = [t for t in fixas if t.lower() not in text.lower()]
+        if faltando:
+            corpo = re.sub(r"(?:^|\n)\s*#[^\n]*$", "", text.rstrip()).rstrip()
+            text = corpo + "\n\n" + " ".join(fixas)
     return text if text.endswith("\n") else text + "\n"
 
 
