@@ -1182,14 +1182,20 @@ function renderHomeNow() {
   const sig = actives.map((j) => `${j.id}|${j.message}|${j.progress || ""}`).join("~");
   if (host.dataset.sig === sig) return;
   host.dataset.sig = sig;
-  host.innerHTML = `<div class="home-now-title">Agora</div>` + actives.slice(0, 3).map((j) => `
+  // TODAS as ativas, nao as tres primeiras: cortar em 3 e resumir o resto
+  // em "+2 na fila" escondia justamente o que o usuario quer olhar quando
+  // manda varios videos de uma vez (pedido de 27/08). A lista rola dentro
+  // do proprio painel, entao 20 na fila nao empurram a tela.
+  const titulo = actives.length > 1
+    ? `Agora <span class="home-now-count">${actives.length} na fila</span>`
+    : "Agora";
+  host.innerHTML = `<div class="home-now-title">${titulo}</div>`
+    + `<div class="home-now-list">` + actives.map((j) => `
     <div class="home-now-row" data-id="${escapeHtml(j.id)}">
       <div class="home-now-name">${escapeHtml(displayTitle(j))}</div>
       <div class="home-now-stage">${escapeHtml(j.message || "Processando…")}</div>
       ${cardProgressHtml(j)}
-    </div>`).join("") + (actives.length > 3
-      ? `<button type="button" class="ghost-btn home-now-more" data-view="fila">+${actives.length - 3} na fila</button>`
-      : "");
+    </div>`).join("") + `</div>`;
   if (!host.dataset.wired) {
     host.dataset.wired = "1";
     host.addEventListener("click", (e) => {

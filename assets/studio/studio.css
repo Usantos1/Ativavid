@@ -2823,6 +2823,17 @@ body.view-estilo-on .ws-head {
 .home-now-name { font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .home-now-stage { font-size: 12.5px; opacity: .75; white-space: nowrap; }
 .home-now-more { justify-self: start; }
+/* A lista rola dentro do painel: com a fila cheia o hero de importar
+   continua visivel na mesma tela. ~4,5 linhas antes de rolar. */
+.home-now-list {
+  display: flex; flex-direction: column; gap: 10px;
+  max-height: 232px; overflow-y: auto; overscroll-behavior: contain;
+  padding-right: 4px;
+}
+.home-now-count {
+  font-size: 12px; font-weight: 600; letter-spacing: .02em;
+  color: var(--muted); margin-left: 8px;
+}
 
 /* com trabalho ativo, o hero de importar encolhe — o palco é do progresso */
 body.home-working .hero-import { min-height: 0; }

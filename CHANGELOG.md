@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.16
+
+- **O painel "Agora" mostra a fila inteira.** Ele listava só três e resumia
+  o resto em "+2 na fila" — justamente quando você manda vários vídeos de
+  uma vez é que quer ver todos. Agora aparecem todos, com a contagem no
+  título, e a lista rola dentro do próprio painel para não empurrar o
+  restante da tela.
+
 ## 3.15
 
 - **O card agora avisa o que sobrou no corte.** O app sempre conferiu o
