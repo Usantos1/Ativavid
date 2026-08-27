@@ -1824,6 +1824,50 @@ def _trilha_da_biblioteca(destino: Path, dur_s: float, ct: str = "",
     return escolha.name
 
 
+# Sobra de silencio e take baixo: os DOIS defeitos que o verify_cut acha de
+# verdade nos videos reais. Medido em 27/08 nos 10 ultimos: 6 de 10 com
+# pausa sobrando (0,4-0,7s cada) e 6 de 10 com um trecho mais baixo que o
+# resto. Estouro de emenda e clipping: zero. O diagnostico existia desde
+# sempre — e era jogado fora ao fim do render, entao ninguem podia agir.
+_SILENCIO_MIN_S = 0.4      # abaixo disso e respiracao, nao pausa morta
+_SILENCIO_AVISA_S = 0.8    # so avisa quando o total incomoda de verdade
+_NIVEL_AVISA_DB = -6.0     # queda que o ouvido pega (o flag interno e -4)
+
+
+def _gravar_diagnostico_do_corte(edit_dir: Path, vdata: dict) -> None:
+    """Guarda em verificacao.json o que o verify_cut achou.
+
+    Sem isto o dado morre no fim do render: 158 projetos entregues e
+    nenhum guardou uma linha do que a verificacao viu (varredura 27/08).
+    """
+    if not vdata:
+        return
+    sil = [(float(x.get("start") or 0), float(x.get("end") or 0))
+           for x in (vdata.get("silences") or [])]
+    sil = [(a, b) for a, b in sil if b - a >= _SILENCIO_MIN_S]
+    baixos = [x for x in (vdata.get("range_levels") or [])
+              if float(x.get("delta_db") or 0) <= _NIVEL_AVISA_DB]
+    pops = [j for j in (vdata.get("junctions") or [])
+            if any(t in str(j.get("verdict") or "")
+                   for t in ("POP", "HOT"))]
+    dados = {
+        "flags": vdata.get("flags"),
+        "silenciosSobrando": [{"inicio": round(a, 2), "fim": round(b, 2)}
+                              for a, b in sil],
+        "silencioTotalS": round(sum(b - a for a, b in sil), 2),
+        "takesBaixos": [{"trecho": int(x.get("index") or 0),
+                         "quedaDb": round(float(x.get("delta_db") or 0), 1)}
+                        for x in baixos],
+        "emendasEstouradas": len(pops),
+        "picoDb": vdata.get("peak_db"),
+    }
+    try:
+        (edit_dir / "verificacao.json").write_text(
+            json.dumps(dados, ensure_ascii=False, indent=2), encoding="utf-8")
+    except OSError:
+        pass
+
+
 def write_neutral_track(public: Path, edit_data: dict) -> None:
     from app.timeline import canonical_duration_in_frames
 
@@ -3332,6 +3376,7 @@ def run(
     status["phase"] = 1
     status["cut"] = str(cut_path)
     status["verify_flags"] = vdata.get("flags", verify.returncode)
+    _gravar_diagnostico_do_corte(edit_dir, vdata)
 
     fps_guess = 30 if _ffprobe_fps(cut_path) >= 29.5 else 24
     style_blob = {

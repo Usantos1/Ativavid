@@ -119,7 +119,10 @@ def test_a_ficha_do_card_tem_as_seis_linhas():
     início e final."""
     js = (REPO / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
     i = js.index("function fichaHtml(")
-    ficha = js[i:i + 1600]
+    # a função inteira, não uma janela de N caracteres: cada linha nova da
+    # ficha empurrava as últimas para fora do recorte e quebrava este teste
+    # sem nada estar errado (aconteceu ao entrar "Revisar no corte").
+    ficha = js[i:js.index("\n}", i)]
     for rotulo in ("Vídeo original", "Vídeo editado", "Formato", "Estilo",
                    "Início", "Final"):
         assert rotulo in ficha, f"faltou a linha {rotulo!r}"

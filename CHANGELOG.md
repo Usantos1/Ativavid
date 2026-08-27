@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.15
+
+- **O card agora avisa o que sobrou no corte.** O app sempre conferiu o
+  corte pronto (pausa morta, trecho com voz mais baixa, emenda estourada) e
+  jogava o resultado fora no fim do render. Agora a ficha mostra, por
+  exemplo, "2 pausas somando 1,3s (a 1ª aos 0:22) · 1 trecho com a voz 9 dB
+  mais baixa" — com o minuto, para você ir direto ao ponto no editor. Só
+  aparece quando incomoda de verdade (0,8s de pausa ou 6 dB de queda).
+
 ## 3.14
 
 - **O diagnóstico parou de acusar chave que existe.** "Rodar checagem"

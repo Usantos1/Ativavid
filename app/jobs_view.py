@@ -121,6 +121,49 @@ def _resumo_do_corte(job: dict, edit: Path) -> None:
         job["corteResumo"] = str(d["resumo"])[:90]
 
 
+def _qualidade_do_corte(job: dict, edit: Path) -> None:
+    """"Sobrou 1,4s de pausa" na ficha do card.
+
+    O pipeline sempre mediu isso (verify_cut) e sempre jogou fora. Nos 10
+    videos mais recentes do usuario (27/08): 6 tinham pausa sobrando e 6
+    tinham um trecho mais baixo que o resto — defeitos pequenos, mas que
+    ele so descobriria assistindo. O aviso so aparece quando incomoda:
+    pausa somando 0,8s ou queda de 6 dB.
+    """
+    try:
+        d = json.loads((edit / "verificacao.json").read_text(
+            encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError):
+        return
+    partes = []
+    total = float(d.get("silencioTotalS") or 0)
+    quantas = len(d.get("silenciosSobrando") or [])
+    if quantas and total >= 0.8:
+        onde = (d.get("silenciosSobrando") or [{}])[0].get("inicio")
+        tempo = f"{total:.1f}".replace(".", ",")
+        quando = (f" (a 1ª aos {int(onde // 60)}:{int(onde % 60):02d})"
+                  if onde is not None else "")
+        partes.append(
+            (f"{quantas} pausas somando {tempo}s" if quantas > 1
+             else f"1 pausa de {tempo}s") + quando)
+    baixos = d.get("takesBaixos") or []
+    if baixos:
+        pior = abs(min(float(x.get("quedaDb") or 0) for x in baixos))
+        # meio-a-meio arredonda PARA CIMA: 8,5 dB virava "8 dB" com o
+        # arredondamento bancário do Python, e quem lê espera 9.
+        db = int(pior + 0.5)
+        partes.append(
+            (f"{len(baixos)} trechos com a voz até {db} dB mais baixa"
+             if len(baixos) > 1
+             else f"1 trecho com a voz {db} dB mais baixa"))
+    estouros = int(d.get("emendasEstouradas") or 0)
+    if estouros:
+        partes.append(f"{estouros} emenda com estouro" if estouros == 1
+                      else f"{estouros} emendas com estouro")
+    if partes:
+        job["corteQualidade"] = " · ".join(partes)
+
+
 def _modo_de_edicao(job: dict, edit: Path) -> None:
     try:
         d = json.loads((edit / "job_intent.json").read_text(encoding="utf-8-sig"))
@@ -212,6 +255,7 @@ def build(store: Any, projects_root: Path, *, com_links: bool = False) -> list[d
         _fonte_do_video(j, edit)
         _modo_de_edicao(j, edit)
         _resumo_do_corte(j, edit)
+        _qualidade_do_corte(j, edit)
         _aviso_de_trilha(j, edit)
         _estado_de_publicacao(j, edit)
         _aviso_de_ia(j, edit)
