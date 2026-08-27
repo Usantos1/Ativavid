@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.08
+
+- **Atualizar não abre mais o navegador.** Em Configurações → Atualizações,
+  o botão agora baixa o instalador e o executa dentro do app (o ATIVAVID
+  fecha e reabre sozinho), como a janela de aviso já fazia. O navegador só
+  entra se o download falhar.
+
 ## 3.07
 
 - **Toda trilha gerada passa a ficar guardada na Biblioteca**, com a

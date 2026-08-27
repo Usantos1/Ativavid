@@ -3339,7 +3339,7 @@ function marcarBotaoDeUpdate(up) {
   const tem = !!(up && (up.updateAvailable || up.force));
   btn.classList.toggle("export-btn", tem);
   btn.classList.toggle("ghost-btn", !tem);
-  btn.textContent = tem ? "Baixar atualização" : "Baixar última versão";
+  btn.textContent = tem ? "Atualizar agora" : "Reinstalar a última versão";
 }
 
 async function loadAccessList() {
@@ -4165,20 +4165,46 @@ function wireForms() {
       }
     };
   }
+  // Atualizar é DENTRO do app: o servidor baixa o instalador e o executa
+  // (o instalador derruba o ATIVAVID e o reabre). O navegador só entra se
+  // o download falhar — antes este botão SEMPRE mandava o usuário para o
+  // GitHub achar o .exe na mão, enquanto a janela de aviso já fazia tudo
+  // sozinha: dois caminhos para a mesma coisa, e o pior deles em Ajustes.
   const btnUpdateOpen = $("#btnUpdateOpen");
   if (btnUpdateOpen) {
     btnUpdateOpen.onclick = async () => {
-      const check = await api("/api/update/check").catch(() => ({}));
-      const url =
-        check.downloadUrl ||
-        check.releaseUrl ||
-        "https://github.com/Usantos1/Ativavid/releases/latest";
-      const res = await api("/api/update/open", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "release", url }),
-      });
-      toast(res.ok ? "Abrindo download…" : (res.error || "Não abriu"));
+      const rotuloOriginal = btnUpdateOpen.textContent;
+      btnUpdateOpen.disabled = true;
+      btnUpdateOpen.textContent = "Baixando…";
+      try {
+        const res = await api("/api/update/open", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "instalar" }),
+        });
+        if (!res.ok) throw new Error(res.error || "não deu para baixar");
+        btnUpdateOpen.textContent = "Instalador aberto ✓";
+        toast(res.message
+          || "Instalador aberto — o app fecha e reabre sozinho.", 6000);
+        return;
+      } catch (err) {
+        toast(`${err.message} — abrindo o navegador`, 6000);
+      }
+      // Reserva: navegador, o caminho antigo.
+      try {
+        const check = await api("/api/update/check").catch(() => ({}));
+        const url =
+          check.downloadUrl ||
+          check.releaseUrl ||
+          "https://github.com/Usantos1/Ativavid/releases/latest";
+        await api("/api/update/open", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "release", url }),
+        });
+      } catch { /* o toast do erro já contou */ }
+      btnUpdateOpen.disabled = false;
+      btnUpdateOpen.textContent = rotuloOriginal;
     };
   }
   const btnBrandAct = $("#btnBrandActivate");
