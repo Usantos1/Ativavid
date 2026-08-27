@@ -1653,8 +1653,8 @@ def _trilha_etiqueta(nome: str) -> str:
     return nome.split("--", 1)[0].lower() if "--" in nome else ""
 
 
-def _trilha_da_biblioteca(destino: Path, dur_s: float,
-                          ct: str = "") -> str | None:
+def _trilha_da_biblioteca(destino: Path, dur_s: float, ct: str = "",
+                          raiz_projetos: Path | None = None) -> str | None:
     """Plano B da trilha quando a IA falha: musicas do PROPRIO usuario.
 
     A geracao por IA morre de dois jeitos reais — creditos esgotados (caso
@@ -1667,7 +1667,17 @@ def _trilha_da_biblioteca(destino: Path, dur_s: float,
     faixa usada, ou None (pasta vazia / ffmpeg falhou) — e o chamador
     mantem o aviso de "sem trilha".
     """
-    pasta = Path.home() / "ATIVAVID" / "Biblioteca" / "Trilhas"
+    # A pasta REAL vem do library_root do app — o mesmo que a tela
+    # Biblioteca usa. Caso real (26/08): os Projetos do usuario sao um
+    # junction C:\Users\...\ATIVAVID\Projetos -> E:\ATIVAVID\Projetos, e o
+    # Path.home() apontava para a biblioteca do C: enquanto o app usa a do
+    # E: — 139 trilhas invisiveis. A raiz dos projetos resolve o junction;
+    # home fica de reserva.
+    try:
+        from app.broll_library import library_root
+        pasta = library_root(raiz_projetos) / "Trilhas"
+    except Exception:
+        pasta = Path.home() / "ATIVAVID" / "Biblioteca" / "Trilhas"
     try:
         pasta.mkdir(parents=True, exist_ok=True)
         faixas = sorted(
@@ -3581,7 +3591,8 @@ def run(
                 except Exception:
                     _ct_bib = ""
                 _nome_bib = _trilha_da_biblioteca(
-                    trilha, float(duration), _ct_bib)
+                    trilha, float(duration), _ct_bib,
+                    raiz_projetos=edit_dir.parents[1])
                 if _nome_bib:
                     _RENDER_META.pop("musicaSkip", None)
                     _RENDER_META["musicaFonte"] = _nome_bib

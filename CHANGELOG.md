@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.03
+
+- **As trilhas do plano B apareciam vazias quando os Projetos moram em outro
+  disco.** Com `Projetos` sendo um atalho (junction) para outro drive, o
+  pipeline procurava as músicas na biblioteca errada. Agora a pasta de
+  trilhas vem da mesma raiz que a tela Biblioteca usa.
+
 ## 3.02
 
 - **A trilha do plano B agora combina com o clima do vídeo.** Faixas com

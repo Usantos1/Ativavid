@@ -232,3 +232,31 @@ def test_a_tela_da_biblioteca_mostra_as_trilhas():
     assert 'kind === "track"' in js
     css = (RAIZ / "assets" / "studio" / "studio.css").read_text(encoding="utf-8")
     assert ".lib-track" in css
+
+
+# ---------- junction: a biblioteca REAL e a da raiz dos projetos (3.03) ----------
+
+def test_a_pasta_vem_da_raiz_dos_projetos_nao_do_home(
+        tmp_path, monkeypatch, _sem_ffmpeg_real):
+    """Caso real 26/08: Projetos do usuario e um junction C:->E:. O home
+    (C:) tinha uma biblioteca vazia; a do app (E:) tinha as 139 trilhas — e
+    o plano B olhava o C:. A raiz dos projetos e a unica fonte de verdade."""
+    home_falso = tmp_path / "disco-c"
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: home_falso))
+    raiz = tmp_path / "disco-e" / "Projetos"
+    trilhas = tmp_path / "disco-e" / "Biblioteca" / "Trilhas"
+    trilhas.mkdir(parents=True)
+    (trilhas / "viral--phonk.mp3").write_bytes(b"\x00" * 60_000)
+    nome = rf._trilha_da_biblioteca(tmp_path / "t.mp3", 10.0, ct="viral",
+                                    raiz_projetos=raiz)
+    assert nome == "viral--phonk.mp3"
+    assert not (home_falso / "ATIVAVID" / "Biblioteca" / "Trilhas"
+                / "viral--phonk.mp3").exists()
+
+
+def test_o_gancho_passa_a_raiz_dos_projetos():
+    s = (RAIZ / "pipeline" / "run_fast.py").read_text(encoding="utf-8")
+    i = s.find("_nome_bib = _trilha_da_biblioteca(")
+    assert i > 0
+    assert "raiz_projetos=edit_dir.parents[1]" in s[i:i + 300], \
+        "sem a raiz o plano B volta a olhar o home (junction C:->E:)"
