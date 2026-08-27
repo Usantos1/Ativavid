@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.01
+
+- **Trilha sonora ganhou plano B: a sua biblioteca de músicas.** Quando a
+  geração por IA falha (créditos do ElevenLabs esgotados, rede fora), o
+  vídeo não sai mais mudo: o app usa uma música da pasta
+  `ATIVAVID/Biblioteca/Trilhas` — rodiziando entre elas, ajustada ao tamanho
+  do vídeo com fade — e a ficha do card conta qual foi usada. Basta deixar
+  seus MP3s (royalty-free) na pasta uma vez.
+
 ## 3.00
 
 - O campo "Rodapé fixo do post" estava branco no tema escuro — vestiu o tema

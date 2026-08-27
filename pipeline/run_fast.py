@@ -211,6 +211,8 @@ def write_timing(edit_dir: Path) -> dict:
     # no card, no timing, em lugar nenhum).
     if _RENDER_META.get("musicaSkip"):
         payload["musicaSkip"] = _RENDER_META["musicaSkip"]
+    if _RENDER_META.get("musicaFonte"):
+        payload["musicaFonte"] = _RENDER_META["musicaFonte"]
     if _RENDER_META.get("endCardSkip"):
         payload["endCardSkip"] = _RENDER_META["endCardSkip"]
     try:
@@ -1624,6 +1626,58 @@ def write_segments_json(edit_dir: Path, fps: float) -> None:
     }
     dest = edit_dir / "remotion" / "public" / "segments.json"
     dest.write_text(json.dumps(out, indent=2), encoding="utf-8")
+
+
+def _trilha_da_biblioteca(destino: Path, dur_s: float) -> str | None:
+    """Plano B da trilha quando a IA falha: musicas do PROPRIO usuario.
+
+    A geracao por IA morre de dois jeitos reais — creditos esgotados (caso
+    de 26/08: 346k creditos do ElevenLabs queimados e o plano so renova em
+    08/09) e rede fora — e nos dois o video saia MUDO de musica. Aqui o
+    usuario deixa MP3s royalty-free em ATIVAVID/Biblioteca/Trilhas UMA vez
+    e o pipeline rodizia entre eles (.rodizio.txt guarda a ultima usada,
+    senao todo video sairia com a mesma musica). A faixa e loopada/aparada
+    para a duracao do video com fade de entrada e saida. Retorna o nome da
+    faixa usada, ou None (pasta vazia / ffmpeg falhou) — e o chamador
+    mantem o aviso de "sem trilha".
+    """
+    pasta = Path.home() / "ATIVAVID" / "Biblioteca" / "Trilhas"
+    try:
+        pasta.mkdir(parents=True, exist_ok=True)
+        faixas = sorted(
+            f for f in pasta.iterdir()
+            if f.is_file() and f.stat().st_size > 50_000
+            and f.suffix.lower() in {".mp3", ".wav", ".m4a", ".aac",
+                                     ".ogg", ".flac"})
+    except OSError:
+        return None
+    if not faixas:
+        return None
+    marca = pasta / ".rodizio.txt"
+    try:
+        ultima = marca.read_text(encoding="utf-8").strip()
+    except OSError:
+        ultima = ""
+    nomes = [f.name for f in faixas]
+    idx = (nomes.index(ultima) + 1) % len(faixas) if ultima in nomes else 0
+    escolha = faixas[idx]
+    alvo = max(4.0, float(dur_s) + 2.0)
+    proc = subprocess.run(
+        [_ffmpeg_exe(), "-y", "-stream_loop", "-1", "-i", str(escolha),
+         "-t", f"{alvo:.2f}", "-vn",
+         "-af", ("afade=t=in:st=0:d=0.6,"
+                 f"afade=t=out:st={max(0.5, alvo - 1.8):.2f}:d=1.6"),
+         "-c:a", "libmp3lame", "-q:a", "4", str(destino)],
+        capture_output=True, text=True, check=False)
+    if proc.returncode != 0 or not destino.exists() \
+            or destino.stat().st_size < 1000:
+        destino.unlink(missing_ok=True)
+        return None
+    try:
+        marca.write_text(escolha.name, encoding="utf-8")
+    except OSError:
+        pass
+    return escolha.name
 
 
 def write_neutral_track(public: Path, edit_data: dict) -> None:
@@ -3482,6 +3536,16 @@ def run(
                     _RENDER_META["musicaSkip"] = (
                         "geração falhou: " + _mtxt.strip()[-140:]
                         if _mtxt.strip() else "geração falhou (sem detalhe)")
+                _nome_bib = _trilha_da_biblioteca(trilha, float(duration))
+                if _nome_bib:
+                    _RENDER_META.pop("musicaSkip", None)
+                    _RENDER_META["musicaFonte"] = _nome_bib
+                    print(f"[7/9] trilha da BIBLIOTECA: {_nome_bib}",
+                          flush=True)
+                else:
+                    _RENDER_META["musicaSkip"] += (
+                        " · plano B: deixe MP3s em "
+                        "ATIVAVID/Biblioteca/Trilhas")
         if trilha.exists():
             try:
                 trilha.with_suffix(".vibe.txt").write_text(
