@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.95
+
+- Os campos "Palavras de destaque da marca", "Hashtags do post" e "SEO local"
+  agora ocupam a linha inteira da tela de Estilo, com letra e altura maiores —
+  são listas, não cabiam em coluna estreita
+
 ## 2.94
 
 - A configuração técnica do "Publicar — Instagram" (IG User ID + token) saiu

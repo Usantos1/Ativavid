@@ -65,3 +65,17 @@ def test_polish_exige_e_conserta_as_fixas(monkeypatch):
     ultima = out.strip().splitlines()[-1]
     assert ultima == "#primecamp #campinas", \
         f"a IA derrapou e o conserto nao entrou: {ultima!r}"
+
+
+def test_campos_de_lista_ocupam_a_linha_inteira():
+    """"Isso ta muito pequeno" (26/08): hashtags e SEO sao LISTAS e estavam
+    espremidos em colunas de 150px da auto-grid. Linha inteira."""
+    html = (RAIZ / "assets" / "preview" / "index.html").read_text(encoding="utf-8")
+    for campo in ("Palavras de destaque da marca", "Hashtags do post (fixas)",
+                  "SEO local (cidade e termos de busca)"):
+        i = html.find(campo)
+        assert i > 0
+        assert "auto-field--wide" in html[max(0, i - 80):i], \
+            f"{campo} voltou a ficar espremido"
+    css = (RAIZ / "assets" / "preview" / "app.css").read_text(encoding="utf-8")
+    assert "grid-column: 1 / -1" in css

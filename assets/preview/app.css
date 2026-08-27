@@ -3355,3 +3355,12 @@ body.styles-wide .setup-actions .btn.primary {
   flex: 1 1 auto; min-width: 0; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap;
 }
+
+/* Campos de LISTA (palavras da marca, hashtags, SEO local) precisam de
+   largura de frase, nao de coluna de 150px — "isso ta muito pequeno"
+   (26/08). Linha inteira da auto-grid e um pouco mais de altura. */
+.auto-field--wide { grid-column: 1 / -1; }
+.auto-field--wide input {
+  font-size: 14px;
+  padding: 10px 12px;
+}
