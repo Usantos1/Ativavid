@@ -1649,6 +1649,28 @@ _TRILHA_ROTULO_PT = {
 }
 
 
+def _motor_musica_dir(raiz_projetos: Path) -> str:
+    """Pasta do venv MotorMusica, irma da Biblioteca real (resolve o
+    junction dos Projetos do mesmo jeito que a biblioteca de trilhas)."""
+    try:
+        from app.broll_library import library_root
+        return str(library_root(raiz_projetos).parent / "MotorMusica")
+    except Exception:
+        return ""
+
+
+def _tentar_musicgen(destino: Path, vibe: str, length_sec: int,
+                     raiz_projetos: Path) -> bool:
+    """Plano B da trilha: o motor LOCAL compoe a musica DESTE video, com o
+    mesmo vibe que o ElevenLabs receberia. So roda onde o venv MotorMusica
+    existe (launcher sai com 3 na hora em maquina sem ele); medido em
+    26/08 na RTX 3050: 30s compostos em 67s, pico 1,9GB de VRAM."""
+    _helper("musicgen_local.py", vibe, "-o", str(destino),
+            "--length-sec", str(int(length_sec)),
+            "--motor", _motor_musica_dir(raiz_projetos), check=False)
+    return destino.exists() and destino.stat().st_size > 1000
+
+
 def _trilha_etiqueta(nome: str) -> str:
     return nome.split("--", 1)[0].lower() if "--" in nome else ""
 
@@ -3051,6 +3073,7 @@ def run(
     import threading as _threading
 
     music_thread = None
+    _music_via: dict = {}
     music_tmp = edit_dir / "_trilha_ai.mp3"
     music_tmp.unlink(missing_ok=True)
     music_vibe = _music_vibe_for(preset, is_longform)
@@ -3101,6 +3124,16 @@ def run(
                     "--length-sec", str(int(planned_keep) + 2),
                     check=False,
                 )
+                if not (music_tmp.exists()
+                        and music_tmp.stat().st_size > 1000):
+                    # ElevenLabs caiu (creditos/rede): o motor local compoe
+                    # a trilha DESTE video ainda em paralelo com o prep.
+                    if _tentar_musicgen(music_tmp, music_vibe,
+                                        int(planned_keep) + 2,
+                                        edit_dir.parents[1]):
+                        _music_via["motor"] = True
+                        print("[7/9] trilha composta pelo MOTOR LOCAL "
+                              "(MusicGen)", flush=True)
 
             music_thread = _threading.Thread(
                 target=_music_worker, daemon=True, name="music-ai")
@@ -3566,6 +3599,8 @@ def run(
             music_thread.join(timeout=240)
         if music_tmp.exists() and music_tmp.stat().st_size > 1000:
             os.replace(music_tmp, trilha)
+            if _music_via.get("motor"):
+                _RENDER_META["musicaFonte"] = "motor: MusicGen local"
         else:
             # Antecipada falhou (rede/planned<3s) — chamada síncrona antiga.
             _mproc = _helper(
@@ -3583,6 +3618,13 @@ def run(
                     _RENDER_META["musicaSkip"] = (
                         "geração falhou: " + _mtxt.strip()[-140:]
                         if _mtxt.strip() else "geração falhou (sem detalhe)")
+                if _tentar_musicgen(trilha, music_vibe,
+                                    int(duration) + 2,
+                                    edit_dir.parents[1]):
+                    _RENDER_META.pop("musicaSkip", None)
+                    _RENDER_META["musicaFonte"] = "motor: MusicGen local"
+                    print("[7/9] trilha composta pelo MOTOR LOCAL "
+                          "(MusicGen)", flush=True)
                 try:
                     from app.content_type import normalize_content_type
                     _ct_bib = "longform" if is_longform else (
@@ -3590,15 +3632,21 @@ def run(
                         or "")
                 except Exception:
                     _ct_bib = ""
-                _nome_bib = _trilha_da_biblioteca(
-                    trilha, float(duration), _ct_bib,
-                    raiz_projetos=edit_dir.parents[1])
+                if not trilha.exists():
+                    _nome_bib = _trilha_da_biblioteca(
+                        trilha, float(duration), _ct_bib,
+                        raiz_projetos=edit_dir.parents[1])
+                else:
+                    _nome_bib = None
                 if _nome_bib:
                     _RENDER_META.pop("musicaSkip", None)
                     _RENDER_META["musicaFonte"] = _nome_bib
                     print(f"[7/9] trilha da BIBLIOTECA: {_nome_bib}",
                           flush=True)
-                else:
+                elif not trilha.exists():
+                    # so quando NADA salvou a trilha — com o motor tendo
+                    # composto, o musicaSkip ja foi removido e nao ha o
+                    # que anexar (KeyError, pego em revisao 26/08)
                     _RENDER_META["musicaSkip"] += (
                         " · plano B: deixe MP3s em "
                         "ATIVAVID/Biblioteca/Trilhas")

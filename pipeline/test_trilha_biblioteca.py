@@ -94,7 +94,7 @@ def test_o_gancho_esta_no_ponto_de_falha_da_ia():
     s = (RAIZ / "pipeline" / "run_fast.py").read_text(encoding="utf-8")
     i = s.find('"créditos do ElevenLabs esgotados')
     assert i > 0
-    trecho = s[i:i + 1800]
+    trecho = s[i:i + 2600]
     assert "_trilha_da_biblioteca(" in trecho
     assert '_RENDER_META.pop("musicaSkip"' in trecho
     assert "Biblioteca/Trilhas" in trecho, "cade a dica no aviso?"
@@ -260,3 +260,56 @@ def test_o_gancho_passa_a_raiz_dos_projetos():
     assert i > 0
     assert "raiz_projetos=edit_dir.parents[1]" in s[i:i + 300], \
         "sem a raiz o plano B volta a olhar o home (junction C:->E:)"
+
+
+# ---------- motor local de musica (3.04) ----------
+
+def test_launcher_sem_motor_sai_rapido_com_3(tmp_path, monkeypatch):
+    """Maquina de cliente sem o venv MotorMusica: o launcher sai com codigo
+    3 em milissegundos e o pipeline cai para a biblioteca — instalacao de
+    cliente nao paga nada pelo recurso."""
+    import subprocess as sp
+    import sys
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
+    monkeypatch.delenv("ATIVAVID_MUSICGEN_PY", raising=False)
+    r = sp.run([sys.executable, str(RAIZ / "helpers" / "musicgen_local.py"),
+                "vibe qualquer", "-o", str(tmp_path / "t.mp3"),
+                "--motor", str(tmp_path / "nao-existe")],
+               capture_output=True, text=True, timeout=30)
+    assert r.returncode == 3
+    assert "motor local" in r.stdout
+
+
+def test_ordem_dos_planos_elevenlabs_motor_biblioteca():
+    """A retentativa sincrona tenta NESTA ordem: ElevenLabs -> motor local
+    -> biblioteca; e a biblioteca so roda se a trilha ainda nao existe."""
+    s = (RAIZ / "pipeline" / "run_fast.py").read_text(encoding="utf-8")
+    i = s.find('"créditos do ElevenLabs esgotados')
+    assert i > 0
+    trecho = s[i:i + 2600]
+    i_motor = trecho.find("_tentar_musicgen(trilha")
+    i_bib = trecho.find("_trilha_da_biblioteca(")
+    assert 0 < i_motor < i_bib, "motor tem de vir antes da biblioteca"
+    assert "if not trilha.exists():" in trecho[:i_bib + 50]
+
+
+def test_fio_antecipado_tambem_tem_o_motor():
+    """O caminho normal e o fio antecipado (paralelo ao prep): o motor tem
+    de compor ali, senao todo video com ElevenLabs fora paga +90s no [7/9]."""
+    s = (RAIZ / "pipeline" / "run_fast.py").read_text(encoding="utf-8")
+    i = s.find("def _music_worker")
+    assert i > 0
+    trecho = s[i:i + 1200]
+    assert "_tentar_musicgen(music_tmp" in trecho
+    assert '_music_via["motor"] = True' in trecho
+
+
+def test_o_card_conta_que_o_motor_compos(tmp_path):
+    from app.jobs_view import _aviso_de_trilha
+    (tmp_path / "timing.json").write_text(
+        json.dumps({"musicaFonte": "motor: MusicGen local"}),
+        encoding="utf-8")
+    job = {}
+    _aviso_de_trilha(job, tmp_path)
+    assert "IA local" in job["trilhaNota"]
+    assert "biblioteca" not in job["trilhaNota"]

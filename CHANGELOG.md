@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.04
+
+- **Motor local de música (MusicGen).** Quando o ElevenLabs falha, a IA
+  local compõe a trilha DESTE vídeo na GPU, com o mesmo clima que o
+  ElevenLabs receberia — na RTX 3050, 30s em ~67s, rodando em paralelo com
+  o preparo do vídeo. A ordem agora é: ElevenLabs → motor local →
+  biblioteca de trilhas. O motor é opcional (pasta `MotorMusica` ao lado da
+  `Biblioteca`); sem ele instalado, nada muda e nada pesa na instalação.
+
 ## 3.03
 
 - **As trilhas do plano B apareciam vazias quando os Projetos moram em outro
