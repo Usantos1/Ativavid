@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.17
+
+- **O aviso de pausa no corte agora respeita o modo escolhido.** Em "Sem
+  cortes", "Vídeo completo" e "Edição leve" as pausas são o que você pediu
+  — o card parou de marcá-las como problema (o primeiro vídeo real a
+  receber o aviso era justamente um "Sem cortes"). Nos modos que cortam, o
+  aviso continua; e voz mais baixa que o resto continua sendo apontada em
+  qualquer modo, porque isso é defeito em todos.
+
 ## 3.16
 
 - **O painel "Agora" mostra a fila inteira.** Ele listava só três e resumia

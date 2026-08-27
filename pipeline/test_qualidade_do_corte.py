@@ -85,3 +85,65 @@ def test_a_ficha_do_card_mostra_a_linha():
     js = (RAIZ / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
     assert '["Revisar no corte", j.corteQualidade]' in js
     assert "j.corteQualidade ||" in js, "campo fora da assinatura do card"
+
+
+# ---------- o aviso segue o MODO (3.17) ----------
+
+def _projeto(tmp_path, modo: str, silencio_s: float = 4.9):
+    (tmp_path / "job_intent.json").write_text(
+        json.dumps({"editingIntent": modo}), encoding="utf-8")
+    rf._gravar_diagnostico_do_corte(tmp_path, {
+        "silences": [{"start": 4.0 + i, "end": 4.0 + i + silencio_s / 6}
+                     for i in range(6)],
+        "range_levels": [], "junctions": [],
+    })
+    job = {}
+    _qualidade_do_corte(job, tmp_path)
+    return job
+
+
+def test_modo_sem_cortes_nao_reclama_de_pausa(tmp_path):
+    """Caso real (27/08, primeiro video a receber o aviso novo): rodado em
+    "Sem cortes", ganhou "6 pausas somando 4,9s" — mandando arrumar
+    exatamente o que o modo escolhido manda manter."""
+    assert "corteQualidade" not in _projeto(tmp_path, "intact")
+
+
+def test_video_completo_e_edicao_leve_tambem_preservam(tmp_path):
+    for modo in ("complete", "light"):
+        d = tmp_path / modo
+        d.mkdir()
+        assert "corteQualidade" not in _projeto(d, modo), modo
+
+
+def test_modo_que_corta_continua_avisando(tmp_path):
+    for modo in ("dynamic", "shorts"):
+        d = tmp_path / modo
+        d.mkdir()
+        job = _projeto(d, modo)
+        assert "pausas somando" in job.get("corteQualidade", ""), modo
+
+
+def test_sem_modo_gravado_o_aviso_vale(tmp_path):
+    """Projeto antigo, sem job_intent.json: o padrao do app e dynamic (que
+    corta), entao calar seria esconder defeito de verdade."""
+    rf._gravar_diagnostico_do_corte(tmp_path, {
+        "silences": [{"start": 4.0, "end": 5.5}],
+        "range_levels": [], "junctions": []})
+    job = {}
+    _qualidade_do_corte(job, tmp_path)
+    assert "corteQualidade" in job
+
+
+def test_voz_baixa_avisa_ate_no_modo_sem_cortes(tmp_path):
+    """Take mais baixo que o resto e defeito em QUALQUER modo — nada a ver
+    com preservar a fonte."""
+    (tmp_path / "job_intent.json").write_text(
+        json.dumps({"editingIntent": "intact"}), encoding="utf-8")
+    rf._gravar_diagnostico_do_corte(tmp_path, {
+        "silences": [],
+        "range_levels": [{"index": 2, "delta_db": -9.0}],
+        "junctions": []})
+    job = {}
+    _qualidade_do_corte(job, tmp_path)
+    assert "voz 9 dB mais baixa" in job.get("corteQualidade", "")

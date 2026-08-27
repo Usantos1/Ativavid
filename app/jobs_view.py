@@ -135,10 +135,23 @@ def _qualidade_do_corte(job: dict, edit: Path) -> None:
             encoding="utf-8-sig"))
     except (OSError, json.JSONDecodeError):
         return
+    # Nos modos que PRESERVAM a fonte (Sem cortes, Vídeo completo, Edição
+    # leve) a pausa NAO e defeito: e o que o usuario pediu. O primeiro
+    # video real a receber este aviso (27/08, modo "Sem cortes") ganhou
+    # "6 pausas somando 4,9s" — mandando arrumar o que o proprio modo
+    # manda manter. Mesma armadilha do aviso de IA que mandava recapturar
+    # sessao viva: o conselho tem de seguir a CAUSA.
+    try:
+        modo = str(json.loads(
+            (edit / "job_intent.json").read_text(encoding="utf-8-sig")
+        ).get("editingIntent") or "").lower()
+    except (OSError, json.JSONDecodeError):
+        modo = ""
+    preserva = modo in ("intact", "complete", "light")
     partes = []
     total = float(d.get("silencioTotalS") or 0)
     quantas = len(d.get("silenciosSobrando") or [])
-    if quantas and total >= 0.8:
+    if quantas and total >= 0.8 and not preserva:
         onde = (d.get("silenciosSobrando") or [{}])[0].get("inicio")
         tempo = f"{total:.1f}".replace(".", ",")
         quando = (f" (a 1ª aos {int(onde // 60)}:{int(onde % 60):02d})"
