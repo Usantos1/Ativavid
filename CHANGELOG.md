@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.18
+
+- **Fim do trecho que soa mais baixo no meio do vídeo.** O app reforçava só
+  as falas bem abaixo da média — e o próprio reforço deixava as vizinhas
+  para trás, fazendo um trecho normal parecer abafado. Agora, depois de
+  decidir os cortes, ele nivela: quem ficou mais de 5 dB abaixo dos outros
+  recebe um complemento (com o mesmo teto de sempre). Num vídeo real, o
+  pior desnível caiu de 6,3 dB para 2,1 dB e os avisos de revisão zeraram.
+
 ## 3.17
 
 - **O aviso de pausa no corte agora respeita o modo escolhido.** Em "Sem

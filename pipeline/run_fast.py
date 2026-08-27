@@ -966,6 +966,73 @@ def build_edl_ranges(
     return ranges
 
 
+# Equilibrio de niveis entre os trechos do corte.
+#
+# O voice_levels acha as passagens que estao >= 5 dB abaixo da mediana da
+# PROPRIA fonte e sugere ganho para elas. Quem esta so um pouco abaixo (-3,
+# -4 dB) nao e tocado — e ai o reforco dos vizinhos CRIA o desnivel: com
+# +7 dB nos outros, o trecho intocado passa a soar 6-8 dB abaixo do resto.
+# Medido em 27/08: 6 de 10 videos com um trecho assim, e os marcados eram
+# justamente os de ganho 0 (fala cobrindo 100% do trecho — nao e artefato
+# de medida).
+_DESNIVEL_AVISA_DB = 5.0   # so mexe quando a diferenca e audivel
+_FOLGA_DB = 1.5            # mesma folga do suggest_gain: nao encosta na mediana
+_TETO_GANHO_DB = 12.0      # teto de sempre: acima disso sobe o ruido da sala
+
+
+def _nivel_do_trecho(fases: list[dict], ini: float, fim: float) -> float | None:
+    """Nivel do trecho = media dos niveis das frases, pesada pelo tempo que
+    cada uma ocupa dentro dele."""
+    soma = peso = 0.0
+    for f in fases:
+        a = max(ini, float(f.get("start") or 0))
+        b = min(fim, float(f.get("end") or 0))
+        if b <= a:
+            continue
+        lvl = f.get("level_db")
+        if lvl is None:
+            continue
+        soma += float(lvl) * (b - a)
+        peso += (b - a)
+    return soma / peso if peso > 0 else None
+
+
+def _equilibrar_ganhos(ranges: list[dict], voice: dict) -> int:
+    """Da ganho de complemento aos trechos que ficariam abaixo dos demais.
+
+    Devolve quantos trechos foram ajustados. So SOBE volume, nunca abaixa —
+    abaixar mexeria no que ja foi aprovado de ouvido.
+    """
+    fases = [f for f in (voice.get("phrases") or [])
+             if f.get("level_db") is not None]
+    if not fases or len(ranges) < 3:
+        return 0
+    depois = []
+    for r in ranges:
+        lvl = _nivel_do_trecho(fases, float(r.get("start") or 0),
+                              float(r.get("end") or 0))
+        depois.append(None if lvl is None
+                      else lvl + float(r.get("gain_db") or 0))
+    validos = sorted(x for x in depois if x is not None)
+    if len(validos) < 3:
+        return 0
+    mediana = validos[len(validos) // 2]
+    ajustados = 0
+    for r, pos in zip(ranges, depois):
+        if pos is None or pos > mediana - _DESNIVEL_AVISA_DB:
+            continue
+        atual = float(r.get("gain_db") or 0)
+        extra = min(mediana - _FOLGA_DB - pos, _TETO_GANHO_DB - atual)
+        if extra < 0.5:
+            continue
+        r["gain_db"] = round(atual + extra, 1)
+        ajustados += 1
+        print(f"[nivel] trecho {r.get('beat') or ''} {atual:.1f} -> "
+              f"{r['gain_db']:.1f} dB (estava {mediana - pos:.1f} dB abaixo "
+              "dos outros)", flush=True)
+    return ajustados
+
+
 def transcript_text(edit_dir: Path, stem: str) -> str:
     p = edit_dir / "transcripts" / f"{stem}.json"
     if not p.exists():
@@ -3123,6 +3190,12 @@ def run(
             )
     else:
         ranges = all_ranges
+    if ranges and intent_mode not in ("intact",):
+        # depois de TODOS os ranges decididos (plano da IA ou heuristica):
+        # o ultimo passo antes do corte e nivelar o que ficou para tras.
+        _n_eq = _equilibrar_ganhos(ranges, voice)
+        if _n_eq:
+            _RENDER_META["nivelAjustado"] = _n_eq
         llm_meta = {"ok": True, "backend": "multi_take_concat", "takes": len(sources)}
         print(f"[multi] {len(sources)} takes · {len(ranges)} ranges", flush=True)
         spoken = cut_spoken_join
