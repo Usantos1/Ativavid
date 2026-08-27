@@ -361,3 +361,50 @@ def test_a_tela_de_configuracoes_deixa_escolher_o_motor():
     js = (RAIZ / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
     assert "btnSaveMusicEngine" in js
     assert "musicEngine" in js.split("loadSistema")[0] or "musicEngine" in js
+
+
+# ---------- toda trilha gerada vai para a Biblioteca (3.07) ----------
+
+def test_trilha_gerada_e_arquivada_com_a_etiqueta_do_clima(tmp_path):
+    raiz = tmp_path / "Projetos"
+    trilha = tmp_path / "trilha.mp3"
+    trilha.write_bytes(b"\x00" * 40_000)
+    nome = rf._arquivar_trilha(trilha, "sales", raiz, "mg")
+    assert nome.startswith("venda--mg-"), nome
+    guardada = tmp_path / "Biblioteca" / "Trilhas" / nome
+    assert guardada.is_file() and guardada.stat().st_size == 40_000
+
+
+def test_tipo_vazio_vira_padrao(tmp_path):
+    trilha = tmp_path / "t.mp3"
+    trilha.write_bytes(b"\x00" * 1000)
+    assert rf._arquivar_trilha(trilha, "", tmp_path / "Projetos",
+                               "ia").startswith("padrao--ia-")
+
+
+def test_arquivar_nunca_derruba_o_render(tmp_path):
+    """Origem inexistente: devolve string vazia, sem excecao — a trilha do
+    video ja esta pronta e um erro de arquivo nao pode matar o job."""
+    assert rf._arquivar_trilha(tmp_path / "nao-existe.mp3", "viral",
+                               tmp_path / "Projetos", "mg") == ""
+
+
+def test_reaproveitada_e_a_da_biblioteca_nao_voltam_para_o_acervo():
+    """Sem esta condicao, refazer a Fase 2 encheria a Biblioteca de copias
+    da MESMA musica a cada rodada."""
+    s = (RAIZ / "pipeline" / "run_fast.py").read_text(encoding="utf-8")
+    i = s.find("_fonte_atual = str(_RENDER_META.get")
+    assert i > 0
+    trecho = s[i:i + 900]
+    assert "if not reuso" in trecho, "trilha reaproveitada nao pode arquivar"
+    assert 'startswith("motor:")' in trecho, \
+        "trilha vinda da biblioteca nao pode voltar para a biblioteca"
+    assert "_arquivar_trilha(" in trecho
+
+
+def test_a_origem_distingue_motor_de_nuvem():
+    s = (RAIZ / "pipeline" / "run_fast.py").read_text(encoding="utf-8")
+    i = s.find("_arquivar_trilha(\n")
+    assert i > 0
+    assert '"mg" if _fonte_atual.startswith("motor:") else "ia"' in \
+        s[i:i + 300], "o nome do arquivo tem de dizer quem compos"

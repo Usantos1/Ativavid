@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.07
+
+- **Toda trilha gerada passa a ficar guardada na Biblioteca**, com a
+  etiqueta do tipo do vídeo (`viral--`, `humor--`…) e a marca de quem
+  compôs (`ia` para o ElevenLabs, `mg` para a IA local). A cada vídeo o
+  acervo cresce — e é dele que sai a música quando as duas IAs falham.
+  Trilha reaproveitada ou que já veio da Biblioteca não vira cópia.
+
 ## 3.06
 
 - **A IA local de música agora cede a vez para o render.** Compor uma trilha

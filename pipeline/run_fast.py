@@ -1649,6 +1649,36 @@ _TRILHA_ROTULO_PT = {
 }
 
 
+def _arquivar_trilha(trilha: Path, ct: str, raiz_projetos: Path,
+                     origem: str) -> str:
+    """Guarda na Biblioteca a trilha que ACABOU de ser gerada.
+
+    Musica gerada e ativo pago (em credito ou em tempo de GPU) e antes ela
+    morria dentro da pasta do projeto: as 139 primeiras faixas so viraram
+    biblioteca porque foram garimpadas na mao em 26/08. Agora toda trilha
+    nova entra sozinha, com a etiqueta do tipo do video ("viral--...") que
+    o proprio plano B usa para escolher pelo clima — a biblioteca cresce a
+    cada video e o acervo do plano B fica mais rico com o uso.
+
+    Nao arquiva o que ja veio da biblioteca nem o reaproveitado (seria a
+    mesma musica de novo). Falha aqui nunca derruba o render.
+    """
+    try:
+        from app.broll_library import library_root
+        pasta = library_root(raiz_projetos) / "Trilhas"
+        pasta.mkdir(parents=True, exist_ok=True)
+        rotulo = _TRILHA_ROTULO_PT.get(ct, ct or "padrao").lower()
+        carimbo = time.strftime("%Y%m%d-%H%M%S")
+        dest = pasta / f"{rotulo}--{origem}-{carimbo}.mp3"
+        shutil.copy2(trilha, dest)
+        print(f"[7/9] trilha arquivada na Biblioteca: {dest.name}",
+              flush=True)
+        return dest.name
+    except (OSError, ValueError) as e:  # noqa: BLE001
+        print(f"[7/9] nao deu para arquivar a trilha: {e}", flush=True)
+        return ""
+
+
 def _preferencia_motor_musica() -> str:
     """auto (nuvem primeiro) | local (IA local primeiro) | nuvem (só ela)."""
     try:
@@ -3683,6 +3713,21 @@ def run(
                     music_vibe.strip(), encoding="utf-8")
             except OSError:
                 pass
+            # Trilha NOVA (nao reaproveitada e nao vinda da biblioteca) vai
+            # para o acervo com a etiqueta do clima deste video.
+            _fonte_atual = str(_RENDER_META.get("musicaFonte") or "")
+            if not reuso and not (_fonte_atual
+                                  and not _fonte_atual.startswith("motor:")):
+                try:
+                    from app.content_type import normalize_content_type
+                    _ct_arq = "longform" if is_longform else (
+                        normalize_content_type(preset.get("contentType"))
+                        or "")
+                except Exception:
+                    _ct_arq = ""
+                _arquivar_trilha(
+                    trilha, _ct_arq, edit_dir.parents[1],
+                    "mg" if _fonte_atual.startswith("motor:") else "ia")
             edit_data["soundtrack"]["enabled"] = True
             (public / "edit-data.json").write_text(
                 json.dumps(edit_data, indent=2, ensure_ascii=False), encoding="utf-8"
