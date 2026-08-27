@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.06
+
+- **A IA local de música agora cede a vez para o render.** Compor uma trilha
+  custa ~4GB de memória e metade da placa de vídeo; se a máquina estiver
+  apertada, ou a placa ocupada, ou outro vídeo já estiver compondo, o motor
+  desiste na hora e a música vem do ElevenLabs ou da sua biblioteca — o
+  render nunca fica mais lento por causa da trilha.
+
 ## 3.05
 
 - **Você escolhe quem compõe a música** em Configurações → Música dos vídeos:

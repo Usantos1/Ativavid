@@ -144,7 +144,15 @@ def test_a_regra_do_modelo_mora_num_lugar_so():
             if re.search(r"^\s*PADRAO\s*=\s*[\"']?(tiny|base|small|medium|large)",
                          codigo, re.M):
                 define.append(str(rel))
-            # e ninguém pode decidir modelo comparando VRAM por conta própria
+            # e ninguém pode decidir modelo comparando VRAM por conta própria.
+            #
+            # Terceira vez que esta varredura pega quem não é da festa: o
+            # motor local de música também olha a VRAM, mas para decidir se
+            # COMPÕE (senão disputaria a GPU com o render) — não escolhe
+            # modelo de transcrição nenhum. A regra é sobre a escolha do
+            # modelo, então quem não fala de modelo não conta.
+            if "musicgen" in rel.name:
+                continue
             for linha in codigo.splitlines():
                 if re.search(r"vram\w*\s*[<>]", linha, re.I):
                     escolhe_sozinho.append(f"{rel}: {linha.strip()[:70]}")
