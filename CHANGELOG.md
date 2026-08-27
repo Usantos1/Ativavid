@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.12
+
+- **A trilha da IA local não segura mais o render.** Em teste de render
+  completo, o vídeo esperava até 2,5 minutos pela música: quando a máquina
+  estava apertada, o motor adiava o começo e só compunha no fim. Agora ele
+  reaproveita a folga de memória assim que ela aparece — a espera caiu para
+  ~28 segundos — e tem prazo máximo: se travar, o vídeo sai com trilha da
+  Biblioteca em vez de ficar parado.
+
 ## 3.11
 
 - **Atualizar é sempre dentro do app, por qualquer caminho.** A pastilha de

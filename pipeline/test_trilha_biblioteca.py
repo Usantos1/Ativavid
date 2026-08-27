@@ -470,3 +470,66 @@ def test_a_semente_e_o_projeto():
     s = (RAIZ / "pipeline" / "run_fast.py").read_text(encoding="utf-8")
     assert "semente=edit_dir.parent.name" in s, \
         "sem semente estavel por projeto o reaproveitamento quebra"
+
+
+# ---------- o motor nunca segura o render (3.12) ----------
+
+def test_o_motor_tem_teto_de_tempo(monkeypatch, tmp_path):
+    """Render real de 27/08: o [7/9] esperou 124s pela musica. O launcher
+    tem teto proprio, mas se ELE travar o render fica preso para sempre —
+    a chamada sincrona nao tinha prazo nenhum."""
+    chamadas = []
+
+    def fake_helper(nome, *args, **kw):
+        chamadas.append(kw.get("timeout"))
+        raise rf.subprocess.TimeoutExpired(cmd=nome, timeout=1)
+    monkeypatch.setattr(rf, "_helper", fake_helper)
+    assert rf._tentar_musicgen(tmp_path / "t.mp3", "vibe", 30,
+                               tmp_path / "Projetos") is False
+    assert chamadas and chamadas[0] == rf._MOTOR_TETO_S
+
+
+def test_maquina_apertada_faz_o_motor_esperar_e_tentar_de_novo(
+        monkeypatch, tmp_path):
+    """Guarda de RAM recusou (codigo 6) porque a transcricao estava
+    comendo memoria. Insistir no fio ANTECIPADO deixa a musica sair em
+    paralelo em vez de cair no caminho que segura o render."""
+    voltas = []
+
+    class R:  # noqa: N801
+        returncode = rf._MOTOR_RECUSADO
+
+    def fake_helper(nome, *args, **kw):
+        voltas.append(1)
+        return R()
+    monkeypatch.setattr(rf, "_helper", fake_helper)
+    monkeypatch.setattr(rf.time, "sleep", lambda s: None)
+    assert rf._tentar_musicgen(tmp_path / "t.mp3", "vibe", 30,
+                               tmp_path / "Projetos", tentativas=4) is False
+    assert len(voltas) == 4, f"insistiu {len(voltas)}x"  # tentativas=4 no teste
+
+
+def test_falha_que_nao_e_recusa_nao_insiste(monkeypatch, tmp_path):
+    """Sem motor instalado (codigo 3) nao adianta esperar: seria 3 minutos
+    de espera boba em toda maquina de cliente."""
+    voltas = []
+
+    class R:  # noqa: N801
+        returncode = 3
+
+    monkeypatch.setattr(rf, "_helper",
+                        lambda *a, **k: (voltas.append(1), R())[1])
+    monkeypatch.setattr(rf.time, "sleep", lambda s: None)
+    assert rf._tentar_musicgen(tmp_path / "t.mp3", "vibe", 30,
+                               tmp_path / "Projetos", tentativas=4) is False
+    assert len(voltas) == 1
+
+
+def test_o_fio_antecipado_insiste_e_o_sincrono_nao():
+    s = (RAIZ / "pipeline" / "run_fast.py").read_text(encoding="utf-8")
+    i = s.find("def _local() -> None:")
+    assert "tentativas=_MOTOR_TENTATIVAS" in s[i:i + 400], \
+        "o fio paralelo tem de insistir"
+    j = s.find("_tentar_musicgen(trilha")
+    assert "tentativas" not in s[j:j + 200], \
+        "no sincrono insistir so aumenta a espera do render"

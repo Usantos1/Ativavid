@@ -412,7 +412,8 @@ def set_stage(edit_dir: Path, stage: str, message: str, progress: int | None = N
     print(f"[{stage}] {message}", flush=True)
 
 
-def _uv_python(*args: str, cwd: Path | None = None, check: bool = True) -> subprocess.CompletedProcess:
+def _uv_python(*args: str, cwd: Path | None = None, check: bool = True,
+               timeout: float | None = None) -> subprocess.CompletedProcess:
     try:
         from app.win_process import hide_console_kwargs, resolve_python_cmd  # type: ignore
         hide = hide_console_kwargs()
@@ -451,6 +452,7 @@ def _uv_python(*args: str, cwd: Path | None = None, check: bool = True) -> subpr
             encoding="utf-8",
             errors="replace",
             env=env,
+            timeout=timeout,
             **hide,
         )
     except FileNotFoundError as e:
@@ -523,8 +525,10 @@ def _backend_transcricao() -> str:
     return escolhido
 
 
-def _helper(name: str, *args: str, check: bool = True) -> subprocess.CompletedProcess:
-    return _uv_python(str(HELPERS / name), *args, check=check)
+def _helper(name: str, *args: str, check: bool = True,
+            timeout: float | None = None) -> subprocess.CompletedProcess:
+    return _uv_python(str(HELPERS / name), *args, check=check,
+                      timeout=timeout)
 
 
 def _ffprobe_exe() -> str:
@@ -1700,16 +1704,46 @@ def _motor_musica_dir(raiz_projetos: Path) -> str:
         return ""
 
 
+# Teto de tempo para o motor local. O launcher ja tem o dele (240s), mas
+# se ELE travar o render fica preso para sempre: o [7/9] espera a chamada
+# sincrona sem prazo. Render real de 27/08 mostrou MUSIC_WAIT=124s — nao
+# pode virar infinito.
+_MOTOR_TETO_S = 300
+# Quando a maquina esta apertada o launcher recusa (codigo 6). No fio
+# ANTECIPADO vale esperar e tentar de novo: a fase que come RAM (transcricao,
+# corte) acaba, a memoria volta e a musica ainda sai em paralelo, sem
+# segurar o render. No caminho sincrono nao ha o que esperar.
+_MOTOR_RECUSADO = 6
+# Espera CURTA e muitas voltas: com 45s de intervalo o motor so comecava
+# depois que a memoria ja tinha liberado ha tempo, e o render esperava 2,5
+# min pela musica (medido em 27/08). Com 12s ele pega a folga assim que a
+# transcricao solta a RAM — mesma cobertura (~2 min), musica pronta antes.
+_MOTOR_TENTATIVAS = 10
+_MOTOR_ESPERA_S = 12
+
+
 def _tentar_musicgen(destino: Path, vibe: str, length_sec: int,
-                     raiz_projetos: Path) -> bool:
+                     raiz_projetos: Path, tentativas: int = 1) -> bool:
     """Plano B da trilha: o motor LOCAL compoe a musica DESTE video, com o
     mesmo vibe que o ElevenLabs receberia. So roda onde o venv MotorMusica
     existe (launcher sai com 3 na hora em maquina sem ele); medido em
     26/08 na RTX 3050: 30s compostos em 67s, pico 1,9GB de VRAM."""
-    _helper("musicgen_local.py", vibe, "-o", str(destino),
-            "--length-sec", str(int(length_sec)),
-            "--motor", _motor_musica_dir(raiz_projetos), check=False)
-    return destino.exists() and destino.stat().st_size > 1000
+    for volta in range(max(1, tentativas)):
+        try:
+            proc = _helper("musicgen_local.py", vibe, "-o", str(destino),
+                           "--length-sec", str(int(length_sec)),
+                           "--motor", _motor_musica_dir(raiz_projetos),
+                           check=False, timeout=_MOTOR_TETO_S)
+        except subprocess.TimeoutExpired:
+            print(f"[7/9] motor local passou de {_MOTOR_TETO_S}s — seguindo "
+                  "sem ele", flush=True)
+            return False
+        if destino.exists() and destino.stat().st_size > 1000:
+            return True
+        if proc.returncode != _MOTOR_RECUSADO or volta == tentativas - 1:
+            return False
+        time.sleep(_MOTOR_ESPERA_S)  # maquina apertada: espera a fase pesada
+    return False
 
 
 def _trilha_etiqueta(nome: str) -> str:
@@ -3221,7 +3255,8 @@ def run(
 
                 def _local() -> None:
                     if _tentar_musicgen(music_tmp, music_vibe, segundos,
-                                        edit_dir.parents[1]):
+                                        edit_dir.parents[1],
+                                        tentativas=_MOTOR_TENTATIVAS):
                         _music_via["motor"] = True
                         print("[7/9] trilha composta pelo MOTOR LOCAL "
                               "(MusicGen)", flush=True)
