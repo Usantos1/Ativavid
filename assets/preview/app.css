@@ -1919,7 +1919,8 @@ kbd {
   letter-spacing: 0.04em;
 }
 .auto-field select,
-.auto-field input {
+.auto-field input,
+.auto-field textarea {
   font: inherit;
   font-size: 13px;
   font-weight: 500;
@@ -1934,7 +1935,9 @@ kbd {
   min-width: 0;
   appearance: auto;
 }
-.auto-field input::placeholder {
+.auto-field textarea { resize: vertical; min-height: 64px; }
+.auto-field input::placeholder,
+.auto-field textarea::placeholder {
   color: var(--dim);
   text-transform: none;
   letter-spacing: 0;
@@ -1945,14 +1948,16 @@ kbd {
   background-color: #ffffff;
 }
 :root[data-theme="light"] .auto-field select,
-:root[data-theme="light"] .auto-field input {
+:root[data-theme="light"] .auto-field input,
+:root[data-theme="light"] .auto-field textarea {
   background: #fff;
   border-color: rgba(20, 22, 30, 0.18);
   color: #1b1e24;
   box-shadow: 0 1px 0 rgba(20, 22, 30, 0.04);
 }
 :root[data-theme="light"] .auto-field select:focus,
-:root[data-theme="light"] .auto-field input:focus {
+:root[data-theme="light"] .auto-field input:focus,
+:root[data-theme="light"] .auto-field textarea:focus {
   border-color: rgba(255, 119, 19, 0.55);
   outline: none;
 }
@@ -3360,7 +3365,8 @@ body.styles-wide .setup-actions .btn.primary {
    largura de frase, nao de coluna de 150px — "isso ta muito pequeno"
    (26/08). Linha inteira da auto-grid e um pouco mais de altura. */
 .auto-field--wide { grid-column: 1 / -1; }
-.auto-field--wide input {
+.auto-field--wide input,
+.auto-field--wide textarea {
   font-size: 14px;
   padding: 10px 12px;
 }

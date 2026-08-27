@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.00
+
+- O campo "Rodapé fixo do post" estava branco no tema escuro — vestiu o tema
+  como os campos vizinhos (e perdeu o sublinhado vermelho do corretor)
+
 ## 2.99
 
 - **Instalação nova não trava mais os primeiros vídeos.** Sem o texto da

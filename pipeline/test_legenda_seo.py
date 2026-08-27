@@ -106,3 +106,17 @@ def test_rodape_fixo_monta_na_ordem_certa(monkeypatch):
     assert blocos[-2] == "PIN Prime Camp — Campinas/SP", blocos
     assert out.count("PIN Prime Camp") == 1, "rodape duplicado"
     assert "#viral" not in out
+
+
+def test_textarea_da_auto_grid_veste_o_tema():
+    """4a mordida da familia 'campo cru no tema escuro' (select 24/08, input
+    24/08, select da enfase 26/08, textarea do rodape 26/08): o CSS vestia
+    input e select, mas nao textarea — rodape saiu BRANCO."""
+    css = (RAIZ / "assets" / "preview" / "app.css").read_text(encoding="utf-8")
+    assert ".auto-field textarea {" in css or ".auto-field textarea," in css \
+        or ".auto-field textarea" in css, "textarea sem estilo na auto-grid"
+    i = css.find(".auto-field select,")
+    assert ".auto-field textarea" in css[i:i + 120], \
+        "textarea tem que dividir a MESMA regra de select/input"
+    html = (RAIZ / "assets" / "preview" / "index.html").read_text(encoding="utf-8")
+    assert 'id="autoPostRodape" rows="3" spellcheck="false"' in html
