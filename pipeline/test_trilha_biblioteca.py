@@ -313,3 +313,51 @@ def test_o_card_conta_que_o_motor_compos(tmp_path):
     _aviso_de_trilha(job, tmp_path)
     assert "IA local" in job["trilhaNota"]
     assert "biblioteca" not in job["trilhaNota"]
+
+
+# ---------- motor local como PRINCIPAL (3.05) ----------
+
+def test_preferencia_le_o_settings_e_rejeita_valor_estranho(monkeypatch):
+    import app.settings_store as ss
+    for valor, esperado in (("local", "local"), ("nuvem", "nuvem"),
+                            ("auto", "auto"), ("banana", "auto"),
+                            (None, "auto")):
+        monkeypatch.setattr(ss, "load_settings",
+                            lambda v=valor: {"musicEngine": v})
+        assert rf._preferencia_motor_musica() == esperado
+
+
+def test_settings_tem_a_chave_com_padrao_nuvem_primeiro():
+    """O padrao NAO pode mudar sozinho: maquina de cliente nao tem o motor
+    local, e "local" ali faria toda trilha esperar o launcher falhar."""
+    from app.settings_store import DEFAULTS
+    assert DEFAULTS["musicEngine"] == "auto"
+
+
+def test_com_local_primeiro_o_motor_roda_antes_da_nuvem():
+    """Ordem dentro do fio antecipado: em "local", _local() vem antes de
+    _nuvem(); em "auto", o contrario."""
+    s = (RAIZ / "pipeline" / "run_fast.py").read_text(encoding="utf-8")
+    i = s.find("def _music_worker")
+    assert i > 0
+    corpo = s[i:i + 1800]
+    ramo_local = corpo[corpo.find('if _pref_musica == "local":'):]
+    assert ramo_local.find("_local()") < ramo_local.find("_nuvem()"), \
+        "com a preferencia local, a IA local tem de compor primeiro"
+    ramo_auto = corpo[corpo.find("else:"):]
+    assert ramo_auto.find("_nuvem()") < ramo_auto.find("_local()")
+
+
+def test_so_nuvem_nao_chama_o_motor_na_retentativa():
+    s = (RAIZ / "pipeline" / "run_fast.py").read_text(encoding="utf-8")
+    i = s.find('_preferencia_motor_musica() != "nuvem"')
+    assert i > 0, "a retentativa sincrona ignora a preferencia 'nuvem'"
+    assert "_tentar_musicgen(trilha" in s[i:i + 300]
+
+
+def test_a_tela_de_configuracoes_deixa_escolher_o_motor():
+    html = (RAIZ / "assets" / "studio" / "index.html").read_text(encoding="utf-8")
+    assert 'id="musicEngine"' in html and 'value="local"' in html
+    js = (RAIZ / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
+    assert "btnSaveMusicEngine" in js
+    assert "musicEngine" in js.split("loadSistema")[0] or "musicEngine" in js

@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.05
+
+- **Você escolhe quem compõe a música** em Configurações → Música dos vídeos:
+  *IA local primeiro* (grátis, não gasta créditos, a nuvem fica de reserva),
+  *Nuvem primeiro* (ElevenLabs, como antes) ou *Só a nuvem*. Em qualquer
+  opção, a biblioteca de trilhas fecha a fila.
+
 ## 3.04
 
 - **Motor local de música (MusicGen).** Quando o ElevenLabs falha, a IA

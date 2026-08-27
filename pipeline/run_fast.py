@@ -1649,6 +1649,16 @@ _TRILHA_ROTULO_PT = {
 }
 
 
+def _preferencia_motor_musica() -> str:
+    """auto (nuvem primeiro) | local (IA local primeiro) | nuvem (só ela)."""
+    try:
+        from app.settings_store import load_settings
+        v = str(load_settings().get("musicEngine") or "auto").lower().strip()
+    except Exception:
+        return "auto"
+    return v if v in ("auto", "local", "nuvem") else "auto"
+
+
 def _motor_musica_dir(raiz_projetos: Path) -> str:
     """Pasta do venv MotorMusica, irma da Biblioteca real (resolve o
     junction dos Projetos do mesmo jeito que a biblioteca de trilhas)."""
@@ -3117,23 +3127,39 @@ def run(
                       f"({dur_antiga:.0f}s >= {planned_keep:.0f}s) — sem "
                       "gasto de créditos", flush=True)
         if planned_keep >= 3 and not reuso:
+            _pref_musica = _preferencia_motor_musica()
+
             def _music_worker() -> None:
-                _helper(
-                    "elevenlabs_music.py", music_vibe,
-                    "-o", str(music_tmp),
-                    "--length-sec", str(int(planned_keep) + 2),
-                    check=False,
-                )
-                if not (music_tmp.exists()
-                        and music_tmp.stat().st_size > 1000):
-                    # ElevenLabs caiu (creditos/rede): o motor local compoe
-                    # a trilha DESTE video ainda em paralelo com o prep.
-                    if _tentar_musicgen(music_tmp, music_vibe,
-                                        int(planned_keep) + 2,
+                pronto = lambda: (music_tmp.exists()  # noqa: E731
+                                  and music_tmp.stat().st_size > 1000)
+                segundos = int(planned_keep) + 2
+
+                def _nuvem() -> None:
+                    _helper("elevenlabs_music.py", music_vibe,
+                            "-o", str(music_tmp),
+                            "--length-sec", str(segundos), check=False)
+
+                def _local() -> None:
+                    if _tentar_musicgen(music_tmp, music_vibe, segundos,
                                         edit_dir.parents[1]):
                         _music_via["motor"] = True
                         print("[7/9] trilha composta pelo MOTOR LOCAL "
                               "(MusicGen)", flush=True)
+
+                # "local": a IA da propria maquina compoe primeiro — nao
+                # gasta credito nenhum e a nuvem vira reserva. "nuvem": so
+                # ElevenLabs. "auto" (padrao): nuvem primeiro, local de
+                # reserva. Em todos, a biblioteca fecha a fila la no [7/9].
+                if _pref_musica == "local":
+                    _local()
+                    if not pronto():
+                        _nuvem()
+                elif _pref_musica == "nuvem":
+                    _nuvem()
+                else:
+                    _nuvem()
+                    if not pronto():
+                        _local()
 
             music_thread = _threading.Thread(
                 target=_music_worker, daemon=True, name="music-ai")
@@ -3618,9 +3644,10 @@ def run(
                     _RENDER_META["musicaSkip"] = (
                         "geração falhou: " + _mtxt.strip()[-140:]
                         if _mtxt.strip() else "geração falhou (sem detalhe)")
-                if _tentar_musicgen(trilha, music_vibe,
-                                    int(duration) + 2,
-                                    edit_dir.parents[1]):
+                if (_preferencia_motor_musica() != "nuvem"
+                        and _tentar_musicgen(trilha, music_vibe,
+                                             int(duration) + 2,
+                                             edit_dir.parents[1])):
                     _RENDER_META.pop("musicaSkip", None)
                     _RENDER_META["musicaFonte"] = "motor: MusicGen local"
                     print("[7/9] trilha composta pelo MOTOR LOCAL "

@@ -34,6 +34,11 @@ DEFAULTS: dict[str, Any] = {
     "experimentalOverlay": False,  # força OVERLAY (dev). Preferir overlayRollout.
     "experimentalFfmpegZoom": False,  # zoomCuts+pushIn no extract — off em produção
     "projectsRoot": None,  # None → %USERPROFILE%/ATIVAVID/Projetos
+    # Motor de música: auto = nuvem (ElevenLabs) primeiro; local = IA local
+    # (MusicGen na GPU) primeiro, nuvem de reserva — não gasta créditos;
+    # nuvem = só ElevenLabs. Em qualquer caso a biblioteca de trilhas
+    # fecha a fila.
+    "musicEngine": "auto",  # auto | local | nuvem
     "llmFallback": True,  # Gemini → ChatGPT se explícito no gateway
     "oneClickDefault": True,
     "updateChannel": "stable",

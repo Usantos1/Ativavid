@@ -3518,6 +3518,21 @@ function wireForms() {
       loadSistema().catch(() => {});
     };
   }
+  const btnSaveMusic = $("#btnSaveMusicEngine");
+  if (btnSaveMusic) {
+    btnSaveMusic.onclick = async () => {
+      const musicEngine = $("#musicEngine").value;
+      await api("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ musicEngine }),
+      });
+      toast(musicEngine === "local"
+        ? "IA local passa a compor as trilhas — sem gastar créditos"
+        : "Motor de música salvo");
+      loadSistema().catch(() => {});
+    };
+  }
   const btnHwBench = $("#btnHwBench");
   if (btnHwBench) {
     btnHwBench.onclick = async () => {
@@ -4341,6 +4356,18 @@ function applySistemaData(data) {
     $("#sysMetricProxy").textContent = perf.proxyEnabled ? `${perf.proxyHeight}p` : "off";
   }
   if ($("#perfProfile") && s.performanceProfile) $("#perfProfile").value = s.performanceProfile || "auto";
+  if ($("#musicEngine")) {
+    const me = s.musicEngine || "auto";
+    $("#musicEngine").value = me;
+    const dica = $("#musicEngineHint");
+    if (dica) {
+      dica.textContent = me === "local"
+        ? "A IA da sua máquina compõe a trilha de cada vídeo (grátis); a nuvem fica de reserva."
+        : me === "nuvem"
+          ? "Só o ElevenLabs compõe; se falhar, entra uma trilha da sua biblioteca."
+          : "O ElevenLabs compõe; se falhar, a IA local da sua máquina assume.";
+    }
+  }
   loadHardwareCard().catch(() => {});
   if ($("#projectsRootHint") && m.projectsRoot) {
     $("#projectsRootHint").textContent = m.projectsRoot || "";
