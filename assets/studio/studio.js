@@ -51,10 +51,23 @@ const VIEW_COPY = {
   doutor: ["Configurações", "Desempenho e pastas."],
 };
 
+/* O aviso nasce no TOPO, no centro: em pe embaixo ele passava despercebido
+ * ("ali quase nunca da pra ver" — 27/08), ainda mais numa tela larga onde o
+ * olho esta no conteudo. A mensagem continua entrando como TEXTO (nunca
+ * innerHTML): metade das chamadas passa recado de erro do servidor. */
 function toast(msg, ms) {
   const t = $("#toast");
-  t.textContent = msg;
+  let corpo = t.querySelector(".toast-msg");
+  if (!corpo) {
+    t.innerHTML = '<span class="toast-ico" aria-hidden="true"></span>'
+      + '<span class="toast-msg"></span>';
+    corpo = t.querySelector(".toast-msg");
+  }
+  corpo.textContent = msg;
   t.classList.remove("hidden");
+  t.classList.remove("toast-in");
+  void t.offsetWidth;  // reinicia a animacao quando um aviso segue o outro
+  t.classList.add("toast-in");
   clearTimeout(toast._tm);
   toast._tm = setTimeout(() => t.classList.add("hidden"), ms || 2800);
 }

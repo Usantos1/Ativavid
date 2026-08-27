@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.10
+
+- **Os avisos agora aparecem no topo, no centro da tela**, com cara de
+  cartão de notificação (ícone, borda de destaque e entrada animada). No
+  rodapé eles passavam despercebidos justamente quando importavam — chave
+  salva, motor trocado, erro do servidor.
+
 ## 3.09
 
 - **Cada vídeo ganha uma trilha com timbre próprio.** O pedido de música
