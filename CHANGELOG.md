@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.96
+
+- **A frase de SEO local virou obrigatória e concreta.** Com o campo "SEO
+  local" preenchido, a legenda passa a exigir da IA uma frase de busca de
+  verdade — que conecta o assunto do vídeo ao serviço mais ligado a ele e à
+  cidade ("troca de tela em Campinas é aqui na loja"), no jeito que o
+  cliente digitaria no Google — em vez de uma menção genérica
+
 ## 2.95
 
 - Os campos "Palavras de destaque da marca", "Hashtags do post" e "SEO local"
