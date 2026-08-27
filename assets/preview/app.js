@@ -5098,12 +5098,25 @@ $('postToggle')?.addEventListener('click', () => {
   if (!panel) return;
   setPostCollapsed(!panel.classList.contains('collapsed'));
 });
+function setSaiuCollapsed(fechado) {
+  const panel = $('saiuPanel');
+  if (!panel) return;
+  panel.classList.toggle('collapsed', fechado);
+  $('saiuToggle')?.setAttribute('aria-expanded', fechado ? 'false' : 'true');
+  try {
+    sessionStorage.setItem('ativavid-saiu-open', fechado ? '0' : '1');
+  } catch { /* ignore */ }
+}
+// Padrao FECHADO: so abre se o usuario tiver aberto nesta sessao.
+try {
+  setSaiuCollapsed(sessionStorage.getItem('ativavid-saiu-open') !== '1');
+} catch {
+  setSaiuCollapsed(true);
+}
 $('saiuToggle')?.addEventListener('click', () => {
   const panel = $('saiuPanel');
   if (!panel) return;
-  const fechado = !panel.classList.contains('collapsed');
-  panel.classList.toggle('collapsed', fechado);
-  $('saiuToggle')?.setAttribute('aria-expanded', fechado ? 'false' : 'true');
+  setSaiuCollapsed(!panel.classList.contains('collapsed'));
 });
 
 function closeHeadMore() {

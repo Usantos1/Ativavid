@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.19
+
+- **"O que saiu do corte" agora vem fechado.** Aberto, ele ocupava meia
+  tela (15 linhas num vídeo normal) e empurrava a timeline e a legenda para
+  baixo. Um clique no título abre quando você quiser conferir, e a escolha
+  fica lembrada enquanto o app estiver aberto.
+
 ## 3.18
 
 - **Fim do trecho que soa mais baixo no meio do vídeo.** O app reforçava só
