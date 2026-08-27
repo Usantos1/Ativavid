@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.97
+
+- **A trilha de IA parou de ser cobrada em dobro.** Cada "Salvar e refazer",
+  cada versão do "Gerar 5 versões" e cada reprocesso gerava uma música NOVA
+  no ElevenLabs — foi assim que os créditos do plano evaporaram em dias.
+  Agora o refazer reaproveita a trilha que o vídeo já tem; só gera de novo
+  se o corte ficou mais longo que a música ou se o clima do estilo mudou
+
 ## 2.96
 
 - **A frase de SEO local virou obrigatória e concreta.** Com o campo "SEO

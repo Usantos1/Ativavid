@@ -2932,7 +2932,39 @@ def run(
             max(0.0, float(r.get("end") or 0) - float(r.get("start") or 0))
             for r in ranges
         )
-        if planned_keep >= 3:
+        # REAPROVEITA a trilha do render anterior: cada geracao custa
+        # creditos do ElevenLabs, e "refazer a Fase 2" gerava musica NOVA
+        # toda vez — foi assim que 346k creditos do plano do usuario
+        # evaporaram em dias (26/08: refazeres + Gerar 5 versoes, uma
+        # trilha cobrada por rodada). So gera de novo se nao ha trilha, se
+        # o corte ficou mais LONGO que ela, ou se o clima (vibe) mudou.
+        trilha_antiga = edit_dir / "remotion" / "public" / "trilha.mp3"
+        vibe_antigo = ""
+        try:
+            vibe_antigo = (trilha_antiga.with_suffix(".vibe.txt")
+                           .read_text(encoding="utf-8").strip())
+        except OSError:
+            pass
+        reuso = False
+        if (trilha_antiga.is_file()
+                and trilha_antiga.stat().st_size > 100_000
+                and vibe_antigo == music_vibe.strip()):
+            try:
+                pr = subprocess.run(
+                    [_ffprobe_exe(), "-v", "error", "-show_entries",
+                     "format=duration", "-of", "csv=p=0",
+                     str(trilha_antiga)],
+                    capture_output=True, text=True, timeout=30)
+                dur_antiga = float((pr.stdout or "0").strip() or 0)
+            except (OSError, ValueError, subprocess.SubprocessError):
+                dur_antiga = 0.0
+            if dur_antiga + 0.5 >= planned_keep:
+                shutil.copy2(trilha_antiga, music_tmp)
+                reuso = True
+                print(f"[7/9] soundtrack REAPROVEITADA do render anterior "
+                      f"({dur_antiga:.0f}s >= {planned_keep:.0f}s) — sem "
+                      "gasto de créditos", flush=True)
+        if planned_keep >= 3 and not reuso:
             def _music_worker() -> None:
                 _helper(
                     "elevenlabs_music.py", music_vibe,
@@ -3423,6 +3455,11 @@ def run(
                         "geração falhou: " + _mtxt.strip()[-140:]
                         if _mtxt.strip() else "geração falhou (sem detalhe)")
         if trilha.exists():
+            try:
+                trilha.with_suffix(".vibe.txt").write_text(
+                    music_vibe.strip(), encoding="utf-8")
+            except OSError:
+                pass
             edit_data["soundtrack"]["enabled"] = True
             (public / "edit-data.json").write_text(
                 json.dumps(edit_data, indent=2, ensure_ascii=False), encoding="utf-8"

@@ -78,3 +78,18 @@ def test_testar_elevenlabs_avisa_creditos():
         "o Testar dizia OK com a carteira zerada — chave valida != creditos"
     js = (RAIZ / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
     assert "res.hint" in js, "a UI descarta o hint do teste de chave"
+
+
+def test_refazer_reaproveita_a_trilha():
+    """346k creditos do ElevenLabs evaporaram em dias (26/08): CADA render
+    gerava musica nova — refazer, Gerar 5 versoes, reprocesso. A trilha do
+    render anterior agora e reaproveitada quando cobre o corte novo e o
+    clima (vibe) nao mudou; so ai se paga geracao nova."""
+    s = (RAIZ / "pipeline" / "run_fast.py").read_text(encoding="utf-8")
+    assert "soundtrack REAPROVEITADA" in s
+    assert "vibe_antigo == music_vibe.strip()" in s, \
+        "trocar o clima da musica tem que gerar de novo"
+    assert "dur_antiga + 0.5 >= planned_keep" in s, \
+        "corte mais longo que a trilha tem que gerar de novo"
+    assert "and not reuso" in s, "o reuso tem que PULAR a geracao"
+    assert '.vibe.txt' in s, "sem gravar o vibe usado nao ha chave de reuso"
