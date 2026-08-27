@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.14
+
+- **O diagnóstico parou de acusar chave que existe.** "Rodar checagem"
+  dizia "Sem chave da ElevenLabs" e "Sem chave da Pexels" mesmo com as duas
+  configuradas e funcionando: ele procurava as chaves na pasta do programa,
+  não onde a tela de Integrações as grava. Acontecia em toda instalação.
+
 ## 3.13
 
 - **O aviso não cobre mais as abas na tela de edição.** Ali o cabeçalho é

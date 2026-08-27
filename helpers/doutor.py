@@ -97,15 +97,31 @@ def checar_programas() -> None:
 
 
 # -------------------------------------------------------------------- chaves
+def _ler_env(arq: Path, valores: dict[str, str]) -> None:
+    """Le um .env para dentro de `valores` SEM sobrescrever o que ja veio
+    (a primeira fonte da ordem vence, igual ao app)."""
+    if not arq.exists():
+        return
+    for linha in arq.read_text(encoding="utf-8", errors="replace").splitlines():
+        linha = linha.strip()
+        if linha and not linha.startswith("#") and "=" in linha:
+            k, _, v = linha.partition("=")
+            if v.strip():
+                valores.setdefault(k.strip(),
+                                   v.strip().strip('"').strip("'"))
+
+
 def checar_chaves() -> None:
-    env = SKILL / ".env"
+    # ORDEM DO APP: %USERPROFILE%\ATIVAVID\.env primeiro (Program Files e
+    # so leitura, entao e ali que a tela de Integracoes grava), depois o
+    # .env legado ao lado do codigo. Ate 27/08 o Doutor so olhava o legado:
+    # numa instalacao normal ele NUNCA achava as chaves e acusava "Sem
+    # chave da ElevenLabs" com a chave configurada e funcionando. Aviso
+    # falso no diagnostico e pior que aviso nenhum — manda o cliente (e a
+    # mim) caçar fantasma.
     valores: dict[str, str] = {}
-    if env.exists():
-        for linha in env.read_text(encoding="utf-8", errors="replace").splitlines():
-            linha = linha.strip()
-            if linha and not linha.startswith("#") and "=" in linha:
-                k, _, v = linha.partition("=")
-                valores[k.strip()] = v.strip().strip('"').strip("'")
+    _ler_env(Path.home() / "ATIVAVID" / ".env", valores)
+    _ler_env(SKILL / ".env", valores)
     for k in ("GROQ_API_KEY", "ELEVENLABS_API_KEY", "PEXELS_API_KEY"):
         if os.environ.get(k):
             valores.setdefault(k, os.environ[k])
