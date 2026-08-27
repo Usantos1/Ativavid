@@ -93,3 +93,22 @@ def test_refazer_reaproveita_a_trilha():
         "corte mais longo que a trilha tem que gerar de novo"
     assert "and not reuso" in s, "o reuso tem que PULAR a geracao"
     assert '.vibe.txt' in s, "sem gravar o vibe usado nao ha chave de reuso"
+
+
+def test_marca_vazia_desliga_o_card_final_em_vez_de_bloquear(tmp_path):
+    """Cliente novo (26/08): 5 de 5 primeiros jobs travados no REVISAR com
+    'Falta o texto da marca' — pessimo onboarding. Sem endCardCopy o video
+    sai SEM o card final e a ficha avisa onde preencher."""
+    s = (RAIZ / "pipeline" / "run_fast.py").read_text(encoding="utf-8")
+    assert 'raise NeedsReview("missing_brand_copy"' not in s, \
+        "o bloqueio de marca vazia voltou"
+    assert '"endCardSkip"' in s and 'elems["endCard"] = False' in s
+
+    from app.jobs_view import _aviso_de_trilha
+
+    (tmp_path / "timing.json").write_text(json.dumps(
+        {"endCardSkip": "sem texto da marca — preencha em Estilos"}),
+        encoding="utf-8")
+    job = {}
+    _aviso_de_trilha(job, tmp_path)
+    assert "Card final desligado" in job["cardFinalNota"]

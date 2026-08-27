@@ -510,6 +510,7 @@ function fichaHtml(j) {
   // Nota (nao erro): o plano veio do Groq porque as sessoes web cairam.
   if (j.iaNota) linhas.push(["IA", j.iaNota]);
   if (j.trilhaNota) linhas.push(["Trilha", j.trilhaNota]);
+  if (j.cardFinalNota) linhas.push(["Marca", j.cardFinalNota]);
   if (j.publicadoLink) linhas.push(["Instagram", "publicado ✓"]);
   else if (j.publicando) linhas.push(["Instagram", "publicando…"]);
   else if (j.publicacaoErro) linhas.push(["Instagram", `falhou: ${j.publicacaoErro}`]);
@@ -550,6 +551,7 @@ function cardSig(j, opts) {
     j.publicando ? "pub" : "",
     j.publicacaoErro || "",
     j.trilhaNota || "",
+    j.cardFinalNota || "",
     versoesDaFonte(j).length,
     j.stage, j.message, j.reason || "", j.localPoster || j.thumbUrl, links.editor, links.estilo, links.final,
     opts && opts.compact ? "1" : "0",

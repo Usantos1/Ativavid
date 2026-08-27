@@ -91,6 +91,9 @@ def _aviso_de_trilha(job: dict, edit: Path) -> None:
     skip = str(t.get("musicaSkip") or "").strip()
     if skip:
         job["trilhaNota"] = f"Sem trilha sonora: {skip[:110]}"
+    ec = str(t.get("endCardSkip") or "").strip()
+    if ec:
+        job["cardFinalNota"] = f"Card final desligado: {ec[:110]}"
 
 
 def _resumo_do_corte(job: dict, edit: Path) -> None:

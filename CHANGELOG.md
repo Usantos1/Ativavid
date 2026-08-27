@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.99
+
+- **Instalação nova não trava mais os primeiros vídeos.** Sem o texto da
+  marca preenchido, todos os jobs paravam em "Revisar: falta o texto da
+  marca (card final)" — cinco de cinco no primeiro uso de um cliente. Agora
+  o vídeo sai normalmente SEM o card final, e a ficha avisa: "Card final
+  desligado: sem texto da marca — preencha em Estilos para o card voltar"
+
 ## 2.98
 
 - **Erro "Bad request syntax" ao importar — consertado na raiz.** Em algumas

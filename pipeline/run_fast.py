@@ -211,6 +211,8 @@ def write_timing(edit_dir: Path) -> dict:
     # no card, no timing, em lugar nenhum).
     if _RENDER_META.get("musicaSkip"):
         payload["musicaSkip"] = _RENDER_META["musicaSkip"]
+    if _RENDER_META.get("endCardSkip"):
+        payload["endCardSkip"] = _RENDER_META["endCardSkip"]
     try:
         (edit_dir / "timing.json").write_text(
             json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8"
@@ -2529,7 +2531,17 @@ def run(
     if elems.get("endCard", True) and not (
         (copy.get("line1") or "").strip() or (copy.get("line2") or "").strip()
     ):
-        raise NeedsReview("missing_brand_copy", "endCardCopy.line1/line2 empty in preset")
+        # Instalacao NOVA sem a marca preenchida travava TODOS os primeiros
+        # jobs no REVISAR (caso real, cliente em trial 26/08: 5 de 5) —
+        # pessimo primeiro contato. O video sai SEM o card final e a ficha
+        # avisa onde preencher; quem ja tem marca nem passa por aqui.
+        elems = dict(elems)
+        elems["endCard"] = False
+        preset = dict(preset)
+        preset["elements"] = elems
+        _RENDER_META["endCardSkip"] = (
+            "sem texto da marca — preencha em Estilos para o card voltar")
+        print("[marca] card final desligado: endCardCopy vazio", flush=True)
 
     export_id = str(preset.get("exportPreset") or preset.get("videoGoal") or "reels").lower()
     allow_landscape = export_id in ("youtube", "longform", "horizontal", "16:9", "16x9")
