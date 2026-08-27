@@ -4434,6 +4434,15 @@ panel.addEventListener('pointerdown', (e) => {
     // a range" — pointermove below promotes this to the latter only past a
     // few px of real movement, so a plain click keeps working exactly as
     // before. See deleteClipRange().
+    //
+    // A AGULHA VAI JUNTO. Depois de um corte os takes cobrem a faixa
+    // inteira, e como este ramo saia sem mexer no tempo so restava a regua
+    // (uma tira de ~14px) para posicionar a agulha — "fiz um corte e nao
+    // consigo arrastar a agulha pra cortar mais" (27/08). Cortar precisa da
+    // agulha DENTRO do take, entao clicar no take e exatamente onde ela
+    // deve ir.
+    seekDraft((e.clientX - timelineEl.getBoundingClientRect().left
+               - LABEL_W) / S.pps);
     drag = { type: 'clip-range', i: +clip.dataset.i, x0: e.clientX, x1: e.clientX, moved: false };
     try { panel.setPointerCapture(e.pointerId); } catch (err) { /* synthetic/touch */ }
     e.preventDefault();
@@ -4501,6 +4510,8 @@ panel.addEventListener('pointermove', (e) => {
     showTooltip(e, `${fmt(c.start)} → ${fmt(c.end)}`);
   } else if (drag.type === 'clip-range') {
     drag.x1 = e.clientX;
+    seekDraft((e.clientX - timelineEl.getBoundingClientRect().left
+               - LABEL_W) / S.pps);   // a agulha segue o dedo, como na regua
     if (Math.abs(drag.x1 - drag.x0) > 4) drag.moved = true;
     if (drag.moved) {
       const range = clipRangeFromPixels(drag.i, drag.x0, drag.x1);

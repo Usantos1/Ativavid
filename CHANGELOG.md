@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.22
+
+- **Dá para posicionar a agulha clicando no próprio take.** Depois do
+  primeiro corte, os takes cobrem a linha do tempo inteira e só a régua fina
+  do topo movia a agulha — mas o botão Cortar exige a agulha dentro do take,
+  então cortar de novo virava um exercício de mira. Agora clicar (ou
+  arrastar) sobre o take leva a agulha junto, e o take continua sendo
+  selecionado como antes.
+
 ## 3.21
 
 - **Cards do mesmo tamanho de novo.** Com vários avisos preenchidos (corte,
