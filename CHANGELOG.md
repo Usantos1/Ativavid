@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.13
+
+- **O aviso não cobre mais as abas na tela de edição.** Ali o cabeçalho é
+  mais alto que no painel, e o aviso (que subiu para o topo na 3.10) caía
+  em cima de Edição / Estilo / Visual. Agora ele se posiciona logo abaixo
+  do cabeçalho de verdade, mesmo quando ele quebra linha em tela estreita.
+
 ## 3.12
 
 - **A trilha da IA local não segura mais o render.** Em teste de render

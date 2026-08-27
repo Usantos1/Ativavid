@@ -1148,7 +1148,9 @@ kbd {
 
 .toast {
   position: fixed;
-  top: 52px; left: 50%;
+  /* valor de partida: abaixo da barra (72px) + faixa das abas. O app.js
+     ajusta na hora de mostrar, para o caso do cabecalho quebrar linha. */
+  top: 148px; left: 50%;
   transform: translateX(-50%);
   z-index: 100;
   white-space: pre-line;

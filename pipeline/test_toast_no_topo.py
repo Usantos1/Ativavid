@@ -58,3 +58,21 @@ def test_avisos_seguidos_reanimam_a_entrada():
 def test_o_aviso_e_anunciado_para_leitores_de_tela():
     html = (RAIZ / "assets" / "studio" / "index.html").read_text(encoding="utf-8")
     assert 'id="toast"' in html and 'role="status"' in html
+
+
+def test_no_preview_o_aviso_desce_abaixo_do_cabecalho():
+    """A tela de preview tem barra de 72px MAIS a faixa das abas
+    (Edicao/Estilo/Visual). Medido em 27/08 numa copia isolada da tela: o
+    aviso a 52px cobria as abas (toast 52-95 x abas 92-127). Ele comeca
+    abaixo do cabecalho e o app.js reajusta na hora de mostrar, porque o
+    cabecalho quebra linha em tela estreita."""
+    regra = _regra_toast(
+        (RAIZ / "assets" / "preview" / "app.css").read_text(encoding="utf-8"))
+    topo = int(re.search(r"top:\s*(\d+)px", regra).group(1))
+    assert topo >= 140, f"o aviso voltaria a cobrir as abas (top {topo})"
+
+    js = (RAIZ / "assets" / "preview" / "app.js").read_text(encoding="utf-8")
+    i = js.find("function toast(msg, ms)")
+    corpo = js[i:js.find("\n}", i)]
+    assert "header.glass" in corpo and "getBoundingClientRect" in corpo, \
+        "sem medir o cabecalho, o aviso erra quando ele quebra linha"

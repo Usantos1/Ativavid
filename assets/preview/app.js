@@ -5633,9 +5633,19 @@ function showTooltip(e, html) {
 }
 function hideTooltip() { tooltip.classList.add('hidden'); }
 let toastTimer = null;
+/* O aviso mora no topo, mas AQUI o cabecalho e alto (barra de 72px + a
+ * faixa das abas Edicao/Estilo/Visual): medido em 27/08, o toast a 52px
+ * cobria justamente as abas. Ele desce para logo abaixo do cabecalho de
+ * verdade — e como o cabecalho quebra em telas estreitas, a conta e feita
+ * na hora de mostrar, nao fixada no CSS. */
 function toast(msg, ms) {
   const t = $('toast');
   t.textContent = msg;
+  const cab = document.querySelector('header.glass');
+  if (cab) {
+    const base = Math.round(cab.getBoundingClientRect().bottom) + 12;
+    if (base > 0) t.style.top = base + 'px';
+  }
   t.classList.remove('hidden');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.add('hidden'), ms || 3000);
