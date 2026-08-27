@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.21
+
+- **Cards do mesmo tamanho de novo.** Com vários avisos preenchidos (corte,
+  trilha, marca, IA), a ficha esticava o card até quase o dobro da altura e
+  a lista de Recentes virava uma escada. Cada informação agora ocupa no
+  máximo duas linhas — o essencial vem no começo da frase, e o texto
+  completo aparece ao passar o mouse.
+
 ## 3.20
 
 - **O botão "..." dos cards voltou ao lugar.** A nota da trilha trazia o

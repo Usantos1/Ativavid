@@ -49,3 +49,32 @@ def test_valor_longo_ganha_titulo_para_ler_inteiro():
     i = js.index('<dl class="pc-ficha">')
     trecho = js[i - 200:i + 400]
     assert "title=" in trecho, "sem title, texto longo so cortado na tela"
+
+
+def test_valor_da_ficha_para_em_duas_linhas():
+    """Com todos os avisos preenchidos o card chegava a 790px de altura e a
+    grade de Recentes virava uma escada. Duas linhas por valor: 540px, com
+    o essencial (que vem no comeco da frase) sempre visivel."""
+    css = (RAIZ / "assets" / "studio" / "studio.css").read_text(encoding="utf-8")
+    i = css.index(".pc-ficha dd {")
+    regra = css[i:css.index("}", i)]
+    assert "-webkit-line-clamp: 2" in regra
+    assert "overflow: hidden" in regra
+
+
+def test_o_recado_essencial_cabe_nas_duas_primeiras_linhas():
+    """Cada aviso tem de dizer o que importa ANTES de qualquer explicacao —
+    o que passar de ~60 caracteres so aparece no title."""
+    import json as _json
+    from app.jobs_view import _qualidade_do_corte
+    import tempfile
+    d = Path(tempfile.mkdtemp())
+    (d / "verificacao.json").write_text(_json.dumps({
+        "silenciosSobrando": [{"inicio": 22.0, "fim": 23.4}],
+        "silencioTotalS": 1.4,
+        "takesBaixos": [{"trecho": 3, "quedaDb": -9.0}],
+        "emendasEstouradas": 0}), encoding="utf-8")
+    job = {}
+    _qualidade_do_corte(job, d)
+    cabeca = job["corteQualidade"][:60]
+    assert "pausa" in cabeca and "0:22" in cabeca, cabeca

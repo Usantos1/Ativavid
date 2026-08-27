@@ -1203,6 +1203,14 @@ body.view-estilo-on .ws-head {
      "como vou apagar estes sem o menu?"). */
   min-width: 0;
   overflow-wrap: anywhere;
+  /* No maximo DUAS linhas por valor. Com todos os avisos preenchidos o
+     card ia a 790px de altura e a grade de Recentes virava uma escada
+     (medido em 27/08 no pior caso: 790 -> 540px). O recado essencial esta
+     sempre no comeco; o texto inteiro fica no title, ao passar o mouse. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 /* Inicio -> fim do processamento, nos cards que nao sao o "pronto". */
