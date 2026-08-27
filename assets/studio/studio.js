@@ -4617,17 +4617,24 @@ async function loadLibraryUi() {
     return;
   }
   state.libraryRoot = lib.root || "";
-  const itens = lib.items || [];
+  const tudo = lib.items || [];
+  const trilhas = tudo.filter((i) => i.kind === "track");
+  const itens = tudo.filter((i) => i.kind !== "track");
   const empty = $("#libraryEmpty");
-  if (empty) empty.classList.toggle("hidden", itens.length > 0);
+  if (empty) empty.classList.toggle("hidden", tudo.length > 0);
   const hint = $("#libraryHint");
   if (hint) {
     const imgs = itens.filter((i) => i.kind === "image").length;
     const clips = itens.length - imgs;
-    hint.textContent = itens.length
-      ? `${imgs} imagem(ns)${clips ? ` e ${clips} clipe(s)` : ""} · a IA usa como b-roll`
+    const partes = [];
+    if (imgs) partes.push(`${imgs} imagem(ns)`);
+    if (clips) partes.push(`${clips} clipe(s)`);
+    if (trilhas.length) partes.push(`${trilhas.length} trilha(s)`);
+    hint.textContent = tudo.length
+      ? `${partes.join(" · ")} · imagens viram b-roll; trilhas são o plano B da música`
       : "Coloque fotos dos seus produtos aqui para a IA usar como b-roll.";
   }
+  renderLibraryTracks(trilhas);
   grid.innerHTML = itens.map((it) => {
     const src = `/api/library/file?rel=${encodeURIComponent(it.rel)}`;
     const kb = it.bytes > 1048576
@@ -4640,6 +4647,36 @@ async function loadLibraryUi() {
       ${midia}
       <figcaption><span class="lib-name">${escapeHtml(it.name)}</span><span class="lib-size">${kb}</span></figcaption>
     </figure>`;
+  }).join("");
+}
+
+/* Trilhas: lista compacta com play. A etiqueta e o prefixo "rotulo--" do
+ * nome — e o que o pipeline usa para casar a musica com o clima do video. */
+function renderLibraryTracks(trilhas) {
+  const box = $("#libraryTracks");
+  const head = $("#libraryTracksHead");
+  if (!box || !head) return;
+  head.classList.toggle("hidden", !trilhas.length);
+  if (!trilhas.length) { box.innerHTML = ""; return; }
+  const hintT = $("#libraryTracksHint");
+  if (hintT) {
+    hintT.textContent = `${trilhas.length} faixa(s) · usadas quando a IA de música falha, escolhidas pelo clima do vídeo`;
+  }
+  box.innerHTML = trilhas.map((it) => {
+    const src = `/api/library/file?rel=${encodeURIComponent(it.rel)}`;
+    const kb = it.bytes > 1048576
+      ? `${(it.bytes / 1048576).toFixed(1)} MB`
+      : `${Math.max(1, Math.round(it.bytes / 1024))} KB`;
+    const rotulo = it.name.includes("--") ? it.name.split("--")[0] : "";
+    const chip = rotulo
+      ? `<span class="lib-track-tag">${escapeHtml(rotulo)}</span>`
+      : `<span class="lib-track-tag lib-track-tag--solta">rodízio</span>`;
+    return `<div class="lib-track" title="${escapeHtml(it.name)}">
+      ${chip}
+      <span class="lib-track-name">${escapeHtml(it.name)}</span>
+      <span class="lib-size">${kb}</span>
+      <audio controls preload="none" src="${src}"></audio>
+    </div>`;
   }).join("");
 }
 
@@ -4759,27 +4796,31 @@ function wirePresets() {
 }
 
 function wireBiblioteca() {
-  const btn = $("#btnLibraryUpload");
-  const input = $("#libraryFileInput");
-  if (!btn || !input || btn.dataset.wired) return;
-  btn.dataset.wired = "1";
-  btn.onclick = () => input.click();
-  input.onchange = async () => {
-    const files = [...(input.files || [])];
-    if (!files.length) return;
-    let ok = 0;
-    for (const f of files) {
-      const fd = new FormData();
-      fd.append("file", f, f.name);
-      try {
-        const res = await fetch("/api/library/upload", { method: "POST", body: fd });
-        if (res.ok) ok += 1;
-      } catch { /* segue para o próximo */ }
-    }
-    input.value = "";
-    toast(ok ? `${ok} arquivo(s) na biblioteca` : "Nada foi enviado");
-    await loadLibraryUi().catch(() => {});
-  };
+  const pares = [["#btnLibraryUpload", "#libraryFileInput"],
+                 ["#btnLibraryUploadMusic", "#libraryMusicInput"]];
+  for (const [b, i] of pares) {
+    const btn = $(b);
+    const input = $(i);
+    if (!btn || !input || btn.dataset.wired) continue;
+    btn.dataset.wired = "1";
+    btn.onclick = () => input.click();
+    input.onchange = async () => {
+      const files = [...(input.files || [])];
+      if (!files.length) return;
+      let ok = 0;
+      for (const f of files) {
+        const fd = new FormData();
+        fd.append("file", f, f.name);
+        try {
+          const res = await fetch("/api/library/upload", { method: "POST", body: fd });
+          if (res.ok) ok += 1;
+        } catch { /* segue para o próximo */ }
+      }
+      input.value = "";
+      toast(ok ? `${ok} arquivo(s) na biblioteca` : "Nada foi enviado");
+      await loadLibraryUi().catch(() => {});
+    };
+  }
 }
 
 async function checkCrashRecovery() {

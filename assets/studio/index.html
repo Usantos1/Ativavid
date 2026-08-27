@@ -338,17 +338,27 @@
             </div>
             <div class="lib-bar-actions">
               <button type="button" class="export-btn export-btn--sm" id="btnLibraryUpload">Adicionar imagens</button>
+              <button type="button" class="export-btn export-btn--sm" id="btnLibraryUploadMusic">Adicionar músicas</button>
               <button type="button" class="ghost-btn" id="btnLibraryRefresh">Abrir pasta</button>
               <input type="file" id="libraryFileInput" accept="image/*" multiple hidden>
+              <input type="file" id="libraryMusicInput" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac" multiple hidden>
             </div>
           </div>
           <div class="lib-grid" id="libraryGrid"></div>
+          <div class="lib-tracks-head hidden" id="libraryTracksHead">
+            <h3>Trilhas sonoras</h3>
+            <p class="hint" id="libraryTracksHint"></p>
+          </div>
+          <div class="lib-tracks" id="libraryTracks"></div>
           <div class="hub-empty hidden" id="libraryEmpty">
             Nenhuma imagem ainda. Coloque fotos dos seus produtos aqui para a IA usar como b-roll.
           </div>
           <p class="lib-soon">
-            Vinhetas, músicas, overlays e vídeos entram nesta mesma biblioteca conforme forem
-            suportados pelo pipeline. Hoje ela guarda as <strong>imagens</strong> que o b-roll usa.
+            As <strong>imagens</strong> viram b-roll nos vídeos. As <strong>trilhas</strong> são o
+            plano B da música: quando a IA falha (créditos, rede), o vídeo usa uma daqui —
+            escolhida pelo clima do vídeo. Nomeie como <code>viral--nome.mp3</code>,
+            <code>humor--</code>, <code>educacional--</code>… para casar tipo a tipo;
+            sem prefixo, entra no rodízio geral.
           </p>
         </section>
 

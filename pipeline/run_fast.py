@@ -1628,7 +1628,33 @@ def write_segments_json(edit_dir: Path, fps: float) -> None:
     dest.write_text(json.dumps(out, indent=2), encoding="utf-8")
 
 
-def _trilha_da_biblioteca(destino: Path, dur_s: float) -> str | None:
+# Etiqueta (prefixo "rotulo--" no nome do arquivo) -> clima. As faixas
+# colhidas dos projetos ganharam o tipo do video que as gerou; um MP3 solto
+# sem prefixo cai no rodizio geral. Ingles e portugues porque o contentType
+# interno e em ingles e o usuario renomeia em portugues.
+_TRILHA_CLIMA = {
+    "viral": "agitado", "humor": "agitado", "sales": "agitado",
+    "ad": "agitado", "venda": "agitado", "anuncio": "agitado",
+    "padrao": "agitado", "agitado": "agitado",
+    "review": "medio", "informational": "medio", "resenha": "medio",
+    "informativo": "medio", "medio": "medio",
+    "educational": "calmo", "institutional": "calmo",
+    "educacional": "calmo", "institucional": "calmo",
+    "longform": "calmo", "calmo": "calmo",
+}
+_TRILHA_ROTULO_PT = {
+    "sales": "venda", "ad": "anuncio", "review": "resenha",
+    "informational": "informativo", "educational": "educacional",
+    "institutional": "institucional", "": "padrao",
+}
+
+
+def _trilha_etiqueta(nome: str) -> str:
+    return nome.split("--", 1)[0].lower() if "--" in nome else ""
+
+
+def _trilha_da_biblioteca(destino: Path, dur_s: float,
+                          ct: str = "") -> str | None:
     """Plano B da trilha quando a IA falha: musicas do PROPRIO usuario.
 
     A geracao por IA morre de dois jeitos reais — creditos esgotados (caso
@@ -1653,14 +1679,25 @@ def _trilha_da_biblioteca(destino: Path, dur_s: float) -> str | None:
         return None
     if not faixas:
         return None
+    # Escolha por CLIMA, em tres degraus: (1) faixas do MESMO tipo do video
+    # (um video viral pega uma trilha nascida de video viral — phonk pesado,
+    # nao piano calmo); (2) faixas do mesmo clima (agitado/medio/calmo);
+    # (3) qualquer uma. O rodizio roda DENTRO do degrau escolhido.
+    rotulo = _TRILHA_ROTULO_PT.get(ct, ct or "padrao").lower()
+    clima = _TRILHA_CLIMA.get(rotulo, "agitado")
+    mesmas = [f for f in faixas if _trilha_etiqueta(f.name) == rotulo]
+    parecidas = [f for f in faixas
+                 if _TRILHA_CLIMA.get(_trilha_etiqueta(f.name)) == clima]
+    escolhidas = mesmas or parecidas or faixas
     marca = pasta / ".rodizio.txt"
     try:
         ultima = marca.read_text(encoding="utf-8").strip()
     except OSError:
         ultima = ""
-    nomes = [f.name for f in faixas]
-    idx = (nomes.index(ultima) + 1) % len(faixas) if ultima in nomes else 0
-    escolha = faixas[idx]
+    nomes = [f.name for f in escolhidas]
+    idx = (nomes.index(ultima) + 1) % len(escolhidas) \
+        if ultima in nomes else 0
+    escolha = escolhidas[idx]
     alvo = max(4.0, float(dur_s) + 2.0)
     proc = subprocess.run(
         [_ffmpeg_exe(), "-y", "-stream_loop", "-1", "-i", str(escolha),
@@ -3536,7 +3573,15 @@ def run(
                     _RENDER_META["musicaSkip"] = (
                         "geração falhou: " + _mtxt.strip()[-140:]
                         if _mtxt.strip() else "geração falhou (sem detalhe)")
-                _nome_bib = _trilha_da_biblioteca(trilha, float(duration))
+                try:
+                    from app.content_type import normalize_content_type
+                    _ct_bib = "longform" if is_longform else (
+                        normalize_content_type(preset.get("contentType"))
+                        or "")
+                except Exception:
+                    _ct_bib = ""
+                _nome_bib = _trilha_da_biblioteca(
+                    trilha, float(duration), _ct_bib)
                 if _nome_bib:
                     _RENDER_META.pop("musicaSkip", None)
                     _RENDER_META["musicaFonte"] = _nome_bib

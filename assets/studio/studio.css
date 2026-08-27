@@ -3340,3 +3340,25 @@ body.home-working .hero-import .hero-inner { padding: 10px 0; }
 .tb-win:hover svg { opacity: 1; }
 .tb-win:hover::before { filter: brightness(1.1); }
 .tb-win:active::before { filter: brightness(0.9); }
+
+/* Trilhas na Biblioteca — lista compacta com play */
+.lib-tracks-head { margin: 26px 0 8px; }
+.lib-tracks-head h3 { margin: 0 0 2px; font-size: 15px; }
+.lib-tracks { display: flex; flex-direction: column; gap: 6px; }
+.lib-track {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 12px; border-radius: 10px;
+  background: var(--panel, rgba(255, 255, 255, .04));
+  border: 1px solid var(--line, rgba(255, 255, 255, .08));
+}
+.lib-track-name {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; font-size: 13px;
+}
+.lib-track-tag {
+  flex: none; font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .04em; padding: 2px 8px; border-radius: 999px;
+  background: rgba(255, 59, 92, .16); color: var(--accent, #ff3b5c);
+}
+.lib-track-tag--solta { background: rgba(255, 255, 255, .08); color: var(--muted, #9aa0a6); }
+.lib-track audio { flex: none; height: 30px; max-width: 240px; }

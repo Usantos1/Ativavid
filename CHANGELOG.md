@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.02
+
+- **A trilha do plano B agora combina com o clima do vídeo.** Faixas com
+  etiqueta no nome (`viral--`, `humor--`, `educacional--`…) são casadas com
+  o tipo do vídeo em três degraus: mesmo tipo → mesmo clima
+  (agitado/médio/calmo) → qualquer uma, com rodízio dentro do degrau.
+- **A tela Biblioteca mostra as trilhas**: lista com play, etiqueta de clima
+  e tamanho, botão "Adicionar músicas" (upload cai direto em
+  `Biblioteca/Trilhas` preservando a etiqueta). Música nunca entra no
+  b-roll de imagens.
+
 ## 3.01
 
 - **Trilha sonora ganhou plano B: a sua biblioteca de músicas.** Quando a

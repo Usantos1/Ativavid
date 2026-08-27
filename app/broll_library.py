@@ -19,6 +19,7 @@ def library_root(projects_root: Path | None = None) -> Path:
     root.mkdir(parents=True, exist_ok=True)
     (root / "images").mkdir(exist_ok=True)
     (root / "clips").mkdir(exist_ok=True)
+    (root / "Trilhas").mkdir(exist_ok=True)
     return root
 
 
@@ -26,14 +27,20 @@ def _slug(name: str) -> str:
     return re.sub(r"[^\w\-]+", "-", (name or "asset").lower())[:48].strip("-") or "asset"
 
 
+AUDIO_EXTS = {".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"}
+
+
 def list_assets(projects_root: Path | None = None) -> dict[str, Any]:
     root = library_root(projects_root)
     items: list[dict[str, Any]] = []
-    for kind, folder in (("image", root / "images"), ("clip", root / "clips")):
+    for kind, folder in (("image", root / "images"), ("clip", root / "clips"),
+                         ("track", root / "Trilhas")):
+        sufixos = AUDIO_EXTS if kind == "track" else {
+            ".jpg", ".jpeg", ".png", ".webp", ".mp4", ".mov", ".webm"}
         for p in sorted(folder.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True):
             if not p.is_file():
                 continue
-            if p.suffix.lower() not in {".jpg", ".jpeg", ".png", ".webp", ".mp4", ".mov", ".webm"}:
+            if p.suffix.lower() not in sufixos:
                 continue
             items.append({
                 "id": p.stem,
@@ -76,18 +83,34 @@ def add_bytes(
         raise ValueError("arquivo vazio")
     ext = Path(filename).suffix.lower() or ".jpg"
     if kind is None:
-        kind = "clip" if ext in {".mp4", ".mov", ".webm"} else "image"
-    if ext not in {".jpg", ".jpeg", ".png", ".webp", ".mp4", ".mov", ".webm"}:
+        if ext in AUDIO_EXTS:
+            kind = "track"
+        else:
+            kind = "clip" if ext in {".mp4", ".mov", ".webm"} else "image"
+    if ext not in {".jpg", ".jpeg", ".png", ".webp", ".mp4", ".mov",
+                   ".webm"} | AUDIO_EXTS:
         raise ValueError("formato não suportado")
     root = library_root(projects_root)
-    folder = root / ("clips" if kind == "clip" else "images")
-    dest = folder / f"{_slug(Path(filename).stem)}-{int(time.time())}{ext}"
+    if kind == "track":
+        folder = root / "Trilhas"
+        stem = Path(filename).stem
+        if "--" in stem:
+            rot, resto = stem.split("--", 1)
+            stem = f"{_slug(rot)}--{_slug(resto)}"
+        else:
+            stem = _slug(stem)
+        dest = folder / f"{stem}{ext}"
+        if dest.exists():
+            dest = folder / f"{stem}-{int(time.time())}{ext}"
+    else:
+        folder = root / ("clips" if kind == "clip" else "images")
+        dest = folder / f"{_slug(Path(filename).stem)}-{int(time.time())}{ext}"
     dest.write_bytes(data)
     return {
         "ok": True,
         "id": dest.stem,
         "name": dest.name,
-        "kind": "clip" if kind == "clip" else "image",
+        "kind": kind,
         "path": str(dest),
         "rel": f"{folder.name}/{dest.name}",
     }
@@ -97,7 +120,8 @@ def pick_for_query(query: str, projects_root: Path | None = None, limit: int = 3
     """Heurística simples: nome do arquivo contém palavra da query."""
     q = (query or "").lower()
     words = [w for w in re.findall(r"[a-zà-ÿ0-9]{3,}", q) if w]
-    items = list_assets(projects_root)["items"]
+    items = [i for i in list_assets(projects_root)["items"]
+             if i["kind"] != "track"]
     if not words:
         return items[:limit]
     scored = []
