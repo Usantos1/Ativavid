@@ -1198,6 +1198,11 @@ body.view-estilo-on .ws-head {
   color: var(--text);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+  /* Nome de arquivo nao tem espaco para quebrar: sem isto a coluna
+     estica, o card transborda e o botao "..." sai da tela (27/08 —
+     "como vou apagar estes sem o menu?"). */
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 /* Inicio -> fim do processamento, nos cards que nao sao o "pronto". */

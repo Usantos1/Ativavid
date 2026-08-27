@@ -533,8 +533,12 @@ function fichaHtml(j) {
   if (ini) linhas.push(["Início", ini]);
   if (fin) linhas.push(["Final", fin]);
   if (!linhas.length) return "";
+  // title com o valor inteiro: a ficha e apertada e um texto longo pode
+  // quebrar em varias linhas — passar o mouse mostra tudo de uma vez.
   return `<dl class="pc-ficha">${linhas.map(([k, v]) =>
-    `<div><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd></div>`).join("")}</dl>`;
+    `<div><dt>${escapeHtml(k)}</dt><dd${String(v).length > 40
+      ? ` title="${escapeHtml(v)}"` : ""}>${escapeHtml(v)}</dd></div>`)
+    .join("")}</dl>`;
 }
 
 /** "21/08 08:22 → 08:33". So repete a data quando o dia virou. */

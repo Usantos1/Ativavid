@@ -80,6 +80,15 @@ def _estado_de_publicacao(job: dict, edit: Path) -> None:
         job["publicacaoErro"] = str(d.get("error") or "")[:120]
 
 
+# Etiqueta de clima do arquivo de trilha -> palavra que o usuario reconhece.
+_CLIMA_LABEL = {
+    "viral": "viral", "humor": "humor", "venda": "venda",
+    "anuncio": "anúncio", "resenha": "resenha",
+    "informativo": "informativo", "educacional": "educacional",
+    "institucional": "institucional", "padrao": "padrão",
+}
+
+
 def _aviso_de_trilha(job: dict, edit: Path) -> None:
     """"Sem trilha" no card. Video pedia musica de IA, a geracao falhou e ate
     25/08 nada avisava (caso real: creditos do ElevenLabs esgotados — o
@@ -97,8 +106,14 @@ def _aviso_de_trilha(job: dict, edit: Path) -> None:
             job["trilhaNota"] = ("Trilha composta pela IA local (MusicGen) "
                                  "— o ElevenLabs estava indisponível")
         else:
-            job["trilhaNota"] = (f"Trilha da sua biblioteca: {fonte[:70]} "
-                                 "(a IA de música falhou nesta geração)")
+            # O NOME DO ARQUIVO nao serve de recado: "anuncio--20260822-
+            # 193504_a001_08221324_cf96c4.mp3" nao diz nada ao usuario, nao
+            # quebra linha e estourava a largura do card. O que importa e o
+            # clima da faixa, que e o prefixo antes do "--".
+            clima = _CLIMA_LABEL.get(fonte.split("--", 1)[0].lower(), "")
+            job["trilhaNota"] = (
+                f"Trilha da sua biblioteca{f' ({clima})' if clima else ''} "
+                "— a IA de música falhou nesta geração")
     ec = str(t.get("endCardSkip") or "").strip()
     if ec:
         job["cardFinalNota"] = f"Card final desligado: {ec[:110]}"

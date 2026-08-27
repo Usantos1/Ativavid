@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.20
+
+- **O botão "..." dos cards voltou ao lugar.** A nota da trilha trazia o
+  nome do arquivo — uma palavra longa sem espaços, que não quebrava linha e
+  esticava o card até empurrar o menu (apagar, abrir pasta) para fora. Agora
+  a ficha quebra textos longos, e a nota diz o que interessa: "Trilha da sua
+  biblioteca (anúncio)" em vez do nome do arquivo.
+
 ## 3.19
 
 - **"O que saiu do corte" agora vem fechado.** Aberto, ele ocupava meia

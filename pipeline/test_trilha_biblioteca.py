@@ -109,7 +109,9 @@ def test_o_card_conta_que_a_trilha_veio_da_biblioteca(tmp_path):
     job = {}
     _aviso_de_trilha(job, tmp_path)
     assert "biblioteca" in job["trilhaNota"]
-    assert "lofi.mp3" in job["trilhaNota"]
+    # o NOME do arquivo saiu da nota na 3.20 (estourava a largura do card e
+    # nao dizia nada ao usuario) — o que fica e o clima da faixa
+    assert "lofi.mp3" not in job["trilhaNota"]
     # e o "sem trilha" continua mandando quando as DUAS coisas falharam
     (tmp_path / "timing.json").write_text(
         json.dumps({"musicaFonte": "x.mp3", "musicaSkip": "tudo caiu"}),
