@@ -1110,11 +1110,13 @@
 
   <dialog id="dlgUpdate" class="dlg dlg-update">
     <h3 id="updDlgTitle">Atualização obrigatória</h3>
-    <p class="hint" id="updDlgHint">Baixe o instalador e atualize o ATIVAVID para continuar.</p>
+    <p class="hint" id="updDlgHint">O ATIVAVID baixa e instala sozinho: ele fecha e reabre já atualizado.</p>
     <p class="hint mono" id="updDlgMeta"></p>
     <div class="dlg-actions">
+      <!-- O botao que abria o site saiu daqui a pedido do usuario (27/08):
+           atualizar e dentro do app. O site continua sendo a REDE de
+           seguranca (openUpdateDownload), so quando o download falha. -->
       <button type="button" class="ghost-btn" id="btnUpdLater">Agora não</button>
-      <button type="button" class="ghost-btn" id="btnUpdDownload">Baixar pelo navegador</button>
       <button type="button" class="export-btn" id="btnUpdInstalar">Atualizar agora</button>
     </div>
   </dialog>

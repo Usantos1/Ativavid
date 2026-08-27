@@ -1434,6 +1434,39 @@ function openUpdateDialog(lic) {
   if (!dlg.open) dlg.showModal();
 }
 
+/**
+ * Atualizar é DENTRO do app: o servidor baixa o instalador e o executa (o
+ * instalador derruba o ATIVAVID e o reabre). O navegador só entra se o
+ * download falhar.
+ *
+ * Esta função existe porque o conserto anterior pegou UMA das portas: a
+ * pastilha de versão na barra de título continuou mandando para o GitHub
+ * ("o botão ao lado do sol e lua ainda baixa em navegador" — 27/08), com
+ * a mesma lógica copiada em outro lugar. Agora toda porta chama daqui.
+ */
+async function instalarAtualizacao(btn) {
+  const rotulo = btn ? btn.textContent : "";
+  if (btn) { btn.disabled = true; btn.textContent = "Baixando…"; }
+  else toast("Baixando a atualização…", 8000);
+  try {
+    const res = await api("/api/update/open", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "instalar" }),
+    });
+    if (!res.ok) throw new Error(res.error || "não deu para baixar");
+    if (btn) btn.textContent = "Instalador aberto ✓";
+    toast(res.message
+      || "Instalador aberto — o app fecha e reabre sozinho.", 6000);
+    return true;
+  } catch (err) {
+    toast(`${err.message} — abrindo o navegador`, 6000);
+    await openUpdateDownload(state.license).catch(() => {});
+    if (btn) { btn.disabled = false; btn.textContent = rotulo; }
+    return false;
+  }
+}
+
 async function openUpdateDownload(lic) {
   const L = lic || state.license || {};
   const upd = L.update || {};
@@ -4119,36 +4152,13 @@ function wireForms() {
       if (dlg?.open) dlg.close();
     };
   }
-  const btnUpdNow = $("#btnUpdDownload");
-  if (btnUpdNow) {
-    btnUpdNow.onclick = () => openUpdateDownload(state.license);
-  }
+
   // "Atualizar agora": o servidor baixa o exe e o executa — o instalador
   // derruba o app e o reabre. Um clique no lugar do ciclo
   // navegador -> download -> achar o exe -> rodar.
   const btnUpdInstalar = $("#btnUpdInstalar");
   if (btnUpdInstalar) {
-    btnUpdInstalar.onclick = async () => {
-      btnUpdInstalar.disabled = true;
-      btnUpdInstalar.textContent = "Baixando…";
-      try {
-        const res = await api("/api/update/open", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "instalar" }),
-        });
-        if (res.ok) {
-          btnUpdInstalar.textContent = "Instalador aberto ✓";
-          toast(res.message || "Instalador aberto — o app fecha e reabre sozinho.", 6000);
-        } else {
-          throw new Error(res.error || "não deu para baixar");
-        }
-      } catch (err) {
-        toast(`${err.message} — use "Baixar pelo navegador"`, 6000);
-        btnUpdInstalar.disabled = false;
-        btnUpdInstalar.textContent = "Atualizar agora";
-      }
-    };
+    btnUpdInstalar.onclick = () => instalarAtualizacao(btnUpdInstalar);
   }
   const btnUpdLater = $("#btnUpdLater");
   if (btnUpdLater) {
@@ -4185,40 +4195,7 @@ function wireForms() {
   // sozinha: dois caminhos para a mesma coisa, e o pior deles em Ajustes.
   const btnUpdateOpen = $("#btnUpdateOpen");
   if (btnUpdateOpen) {
-    btnUpdateOpen.onclick = async () => {
-      const rotuloOriginal = btnUpdateOpen.textContent;
-      btnUpdateOpen.disabled = true;
-      btnUpdateOpen.textContent = "Baixando…";
-      try {
-        const res = await api("/api/update/open", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "instalar" }),
-        });
-        if (!res.ok) throw new Error(res.error || "não deu para baixar");
-        btnUpdateOpen.textContent = "Instalador aberto ✓";
-        toast(res.message
-          || "Instalador aberto — o app fecha e reabre sozinho.", 6000);
-        return;
-      } catch (err) {
-        toast(`${err.message} — abrindo o navegador`, 6000);
-      }
-      // Reserva: navegador, o caminho antigo.
-      try {
-        const check = await api("/api/update/check").catch(() => ({}));
-        const url =
-          check.downloadUrl ||
-          check.releaseUrl ||
-          "https://github.com/Usantos1/Ativavid/releases/latest";
-        await api("/api/update/open", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "release", url }),
-        });
-      } catch { /* o toast do erro já contou */ }
-      btnUpdateOpen.disabled = false;
-      btnUpdateOpen.textContent = rotuloOriginal;
-    };
+    btnUpdateOpen.onclick = () => instalarAtualizacao(btnUpdateOpen);
   }
   const btnBrandAct = $("#btnBrandActivate");
   if (btnBrandAct) {
@@ -4991,13 +4968,7 @@ async function wireTitlebar() {
               },
             });
           }
-          try {
-            await fetch("/api/update/open", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ url: up.downloadUrl || up.releaseUrl || "" }),
-            });
-          } catch { /* ignore */ }
+          if (!up.force) await instalarAtualizacao();
         } else {
           toast(up.message || "Você está no build atual");
         }

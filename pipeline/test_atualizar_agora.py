@@ -83,13 +83,52 @@ def test_o_botao_de_ajustes_instala_no_app_e_nao_abre_o_navegador():
     js = (RAIZ / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
     i = js.find('const btnUpdateOpen = $("#btnUpdateOpen");')
     assert i > 0
-    corpo = js[i:i + 2200]
+    assert "instalarAtualizacao(btnUpdateOpen)" in js[i:i + 300], \
+        "o botao de Ajustes saiu do caminho unico"
+    # e o caminho unico tenta instalar primeiro; navegador so no catch
+    j = js.find("async function instalarAtualizacao(")
+    corpo = js[j:j + 1400]
     i_instalar = corpo.find('action: "instalar"')
-    i_release = corpo.find('action: "release"')
-    assert i_instalar > 0, "o botao de Ajustes nao instala pelo app"
-    assert i_release > i_instalar, \
+    i_navegador = corpo.find("openUpdateDownload(")
+    assert 0 < i_instalar < i_navegador, \
         "o navegador tem de ser a RESERVA, nunca a primeira tentativa"
     assert "Baixando…" in corpo, "sem retorno visual durante o download"
+
+
+def test_TODAS_as_portas_de_atualizar_instalam_no_app():
+    """3.08 consertou UMA porta e a pastilha de versao na barra de titulo
+    continuou mandando para o GitHub ("o botao ao lado do sol e lua ainda
+    baixa em navegador" — 27/08), porque a logica estava COPIADA em tres
+    lugares. Agora existe uma funcao so; toda porta chama ela."""
+    js = (RAIZ / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
+    assert js.count("async function instalarAtualizacao(") == 1
+    for porta in ("btnUpdateOpen.onclick = () => instalarAtualizacao(",
+                  "btnUpdInstalar.onclick = () => instalarAtualizacao("):
+        assert porta in js, f"porta fora do caminho unico: {porta}"
+    # pastilha de versao (barra de titulo)
+    i = js.find("if (up.updateAvailable) {")
+    assert i > 0
+    trecho = js[i:i + 900]
+    assert "instalarAtualizacao()" in trecho, "a pastilha nao instala no app"
+    assert 'body: JSON.stringify({ url:' not in trecho,         "a pastilha ainda abre o navegador"
+
+
+def test_nao_ha_botao_de_navegador_na_janela_de_aviso():
+    """Pedido direto: "ali nao quero pelo navegador"."""
+    html = (RAIZ / "assets" / "studio" / "index.html").read_text(encoding="utf-8")
+    assert "Baixar pelo navegador" not in html
+    assert 'id="btnUpdDownload"' not in html
+    js = (RAIZ / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
+    assert 'btnUpdDownload' not in js, "sobrou fio solto para o botao removido"
+
+
+def test_o_navegador_continua_como_rede_de_seguranca():
+    """Sem botao, mas o abridor segue existindo para quando o download
+    falhar (proxy de empresa, antivirus) — senao o usuario fica sem saida."""
+    js = (RAIZ / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
+    i = js.find("async function instalarAtualizacao(")
+    corpo = js[i:i + 1400]
+    assert "catch" in corpo and "openUpdateDownload(" in corpo
 
 
 def test_o_rotulo_do_botao_promete_o_que_ele_faz():

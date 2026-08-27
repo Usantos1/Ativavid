@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.11
+
+- **Atualizar é sempre dentro do app, por qualquer caminho.** A pastilha de
+  versão na barra de título ainda abria o navegador (a correção da 3.08 só
+  pegou o botão de Configurações, porque a lógica estava copiada em três
+  lugares). Agora as três portas chamam o mesmo instalador interno.
+- O botão "Baixar pelo navegador" saiu da janela de aviso. O navegador
+  continua sendo a rede de segurança silenciosa: só entra se o download
+  dentro do app falhar.
+
 ## 3.10
 
 - **Os avisos agora aparecem no topo, no centro da tela**, com cara de
