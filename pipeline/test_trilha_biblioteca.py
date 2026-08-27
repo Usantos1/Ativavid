@@ -408,3 +408,65 @@ def test_a_origem_distingue_motor_de_nuvem():
     assert i > 0
     assert '"mg" if _fonte_atual.startswith("motor:") else "ia"' in \
         s[i:i + 300], "o nome do arquivo tem de dizer quem compos"
+
+
+# ---------- tempero do pedido: cada video, um timbre (3.09) ----------
+
+def test_videos_diferentes_ganham_temperos_diferentes():
+    """"Parece muito o mesmo" (27/08): 5 trilhas do mesmo clima saiam com o
+    timbre irmao porque o pedido era um texto fixo por tipo."""
+    p = {"contentType": "viral"}
+    vibes = {rf._music_vibe_for(p, False, semente=f"proj-{i}")
+             for i in range(20)}
+    assert len(vibes) >= 8, f"pouca variedade: {len(vibes)} em 20"
+
+
+def test_o_mesmo_projeto_pede_sempre_a_mesma_coisa():
+    """O reaproveitamento compara o vibe gravado com o novo. Se o tempero
+    mudasse a cada rodada, REFAZER a Fase 2 geraria musica nova toda vez —
+    o ralo que queimou 346k creditos do ElevenLabs em 26/08."""
+    p = {"contentType": "humor"}
+    a = rf._music_vibe_for(p, False, semente="20260827-153000_IMG_1")
+    b = rf._music_vibe_for(p, False, semente="20260827-153000_IMG_1")
+    assert a == b
+
+
+def test_sem_semente_o_pedido_continua_o_antigo():
+    p = {"contentType": "viral"}
+    assert rf._music_vibe_for(p, False) == rf._MUSIC_VIBES["viral"]
+
+
+def test_o_tempero_respeita_o_clima():
+    """Video calmo nao pode ganhar guitarra distorcida; video agitado nao
+    pode ganhar caixinha de musica."""
+    agitados = set(rf._MUSIC_TEMPEROS["agitado"])
+    calmos = set(rf._MUSIC_TEMPEROS["calmo"])
+    for i in range(30):
+        edu = rf._music_vibe_for({"contentType": "educational"}, False,
+                                 semente=f"e{i}")
+        assert not any(x in edu for x in agitados), edu
+        vir = rf._music_vibe_for({"contentType": "viral"}, False,
+                                 semente=f"v{i}")
+        assert not any(x in vir for x in calmos), vir
+
+
+def test_o_bpm_muda_mas_fica_no_juizo():
+    import re as _re
+    for i in range(40):
+        v = rf._music_vibe_for({"contentType": "viral"}, False,
+                               semente=f"b{i}")
+        m = _re.search(r"(\d{2,3})\s*bpm", v)
+        assert m, v
+        assert 70 <= int(m.group(1)) <= 150
+
+
+def test_longform_tempera_como_calmo():
+    v = rf._music_vibe_for({}, True, semente="longo-1")
+    assert "cinematic" in v
+    assert any(x in v for x in rf._MUSIC_TEMPEROS["calmo"])
+
+
+def test_a_semente_e_o_projeto():
+    s = (RAIZ / "pipeline" / "run_fast.py").read_text(encoding="utf-8")
+    assert "semente=edit_dir.parent.name" in s, \
+        "sem semente estavel por projeto o reaproveitamento quebra"

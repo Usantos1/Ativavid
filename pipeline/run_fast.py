@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import atexit
+import hashlib
 import json
 import os
 import re
@@ -2467,16 +2468,64 @@ def _attach_brand_font_file(ed: dict, public) -> None:
     print(f"[fonte] {src.name} → {dest.name} (fonte da marca)", flush=True)
 
 
-def _music_vibe_for(preset: dict, is_longform: bool) -> str:
+# Tempero por video. O vibe fixo por tipo dava sempre a MESMA "banda":
+# 5 trilhas seguidas do mesmo clima saiam com timbre irmao (o usuario
+# ouviu e apontou em 27/08). Cada video sorteia um instrumento em
+# destaque, uma textura e um empurrao no andamento — o clima nao muda,
+# so a roupa.
+#
+# O sorteio e DETERMINISTICO pela semente (nome da pasta do projeto):
+# refazer a Fase 2 do mesmo video devolve o mesmo pedido, senao o
+# reaproveitamento da trilha quebraria e cada refazer geraria musica nova
+# — exatamente o ralo que queimou 346k creditos em 26/08.
+_MUSIC_TEMPEROS = {
+    "agitado": ["distorted electric guitar riffs", "brass stabs",
+                "gritty analog synth lead", "hand percussion and claps",
+                "deep sub bass and trap hats", "funk guitar skank"],
+    "medio": ["warm electric piano", "muted trumpet", "clean electric guitar",
+              "vibraphone", "nylon guitar", "soft rhodes and shaker"],
+    "calmo": ["felt piano", "soft cello pad", "acoustic guitar arpeggio",
+              "music box bells", "warm analog pad", "gentle marimba"],
+}
+_MUSIC_TEXTURAS = ["airy and spacious mix", "warm tape-saturated mix",
+                   "dry punchy mix", "lush reverb", "lo-fi vinyl texture",
+                   "clean modern mix"]
+
+
+def _temperar_vibe(base: str, semente: str, clima: str) -> str:
+    """Acrescenta instrumento, textura e ajuste de bpm ao pedido base."""
+    if not semente:
+        return base
+    h = hashlib.md5(semente.encode("utf-8", "ignore")).digest()
+    opcoes = _MUSIC_TEMPEROS.get(clima) or _MUSIC_TEMPEROS["agitado"]
+    instrumento = opcoes[h[0] % len(opcoes)]
+    textura = _MUSIC_TEXTURAS[h[1] % len(_MUSIC_TEXTURAS)]
+    desvio = (h[2] % 13) - 6  # -6..+6 bpm
+    saida = base
+    if desvio:
+        # o bpm do texto base vira o bpm temperado ("124 bpm" -> "130 bpm")
+        m = re.search(r"(\d{2,3})\s*bpm", saida)
+        if m:
+            novo = max(70, min(150, int(m.group(1)) + desvio))
+            saida = saida[:m.start()] + f"{novo} bpm" + saida[m.end():]
+    return f"{saida}, featuring {instrumento}, {textura}"
+
+
+def _music_vibe_for(preset: dict, is_longform: bool,
+                    semente: str = "") -> str:
     if is_longform:
-        return "calm cinematic instrumental bed, soft piano and pads, 90 bpm, no vocals"
+        return _temperar_vibe(
+            "calm cinematic instrumental bed, soft piano and pads, 90 bpm, "
+            "no vocals", semente, "calmo")
     try:
         from app.content_type import normalize_content_type
 
         ct = normalize_content_type(preset.get("contentType")) or ""
     except Exception:
         ct = str(preset.get("contentType") or "").strip().lower()
-    return _MUSIC_VIBES.get(ct, _MUSIC_DEFAULT)
+    base = _MUSIC_VIBES.get(ct, _MUSIC_DEFAULT)
+    rotulo = _TRILHA_ROTULO_PT.get(ct, ct or "padrao").lower()
+    return _temperar_vibe(base, semente, _TRILHA_CLIMA.get(rotulo, "agitado"))
 
 
 def _sync_template_src(template: Path, dest: Path) -> None:
@@ -3116,7 +3165,8 @@ def run(
     _music_via: dict = {}
     music_tmp = edit_dir / "_trilha_ai.mp3"
     music_tmp.unlink(missing_ok=True)
-    music_vibe = _music_vibe_for(preset, is_longform)
+    music_vibe = _music_vibe_for(preset, is_longform,
+                                 semente=edit_dir.parent.name)
     if elems.get("musicAI"):
         # O J-cut e o polimento só ENCURTAM a timeline, então a duração
         # planejada é >= a final e a trilha nunca sai curta (+2s de margem).

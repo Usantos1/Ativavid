@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.09
+
+- **Cada vídeo ganha uma trilha com timbre próprio.** O pedido de música
+  antes era um texto fixo por tipo de vídeo, e vídeos do mesmo tipo saíam
+  com a mesma "banda". Agora cada projeto sorteia instrumento em destaque,
+  textura e um ajuste de andamento — o clima continua o mesmo, muda a
+  roupa. O sorteio é fixo por projeto, então refazer a Fase 2 continua
+  reaproveitando a trilha em vez de gerar (e cobrar) outra.
+
 ## 3.08
 
 - **Atualizar não abre mais o navegador.** Em Configurações → Atualizações,
