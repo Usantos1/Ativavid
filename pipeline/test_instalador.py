@@ -52,3 +52,20 @@ def test_setup_refresca_o_path_depois_do_winget():
         "a barra do .local/bin foi comida de novo"
     assert "FECHE e reabra o PowerShell" not in s, \
         "conselho impossivel num script que roda uma vez pelo instalador"
+
+
+def test_do_post_tem_o_involucro_de_higiene_do_socket():
+    """Cliente em trial (26/08): rota respondeu 403 sem ler o corpo e o
+    keep-alive seguinte nasceu quebrado ('Bad request syntax ...mp4"]}POST').
+    Segunda mordida da mesma classe (a primeira foi o Unsupported method do
+    llm-proxy). O involucro pre-le o corpo para buffer e restaura o rfile
+    no finally — rota nenhuma consegue mais envenenar a conexao."""
+    for nome in ("app/local_server.py", "app/desktop_server.py"):
+        s = (RAIZ / nome).read_text(encoding="utf-8")
+        assert "def _do_POST_rotas" in s, f"{nome}: involucro sumiu"
+        i = s.find("def do_POST")
+        corpo = s[i:s.find("def _do_POST_rotas")]
+        assert "BytesIO" in corpo and "finally" in corpo, f"{nome}: buffer/restauro"
+        assert "close_connection = True" in corpo, \
+            f"{nome}: multipart grande precisa fechar a conexao"
+        assert "self._do_POST_rotas()" in corpo

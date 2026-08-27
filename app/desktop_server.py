@@ -394,6 +394,36 @@ class DesktopHandler(ps.Handler):
             restante -= len(pedaco)
 
     def do_POST(self) -> None:  # noqa: N802
+        """Involucro de higiene do socket — ver _do_POST_rotas para as rotas.
+
+        QUALQUER rota que respondia cedo (403 de licenca, validacao) sem ler
+        o corpo deixava os bytes no socket, e a proxima requisicao do
+        keep-alive nascia quebrada: "Bad request syntax ('...mp4"]}}POST
+        /api/jobs')" na tela de um CLIENTE em trial (26/08) — segunda vez
+        que a classe do defeito morde (a primeira foi o "Unsupported method"
+        do llm-proxy). Drenar rota a rota nao escala; aqui o corpo e
+        pre-lido para um buffer e o rfile original volta no finally, entao
+        rota nenhuma consegue mais envenenar a conexao. Multipart/upload
+        grande nao e bufferizado: a conexao fecha ao responder.
+        """
+        try:
+            _clen = int(self.headers.get("Content-Length") or 0)
+        except (TypeError, ValueError):
+            _clen = 0
+        _ctype = self.headers.get("Content-Type", "") or ""
+        _orig = self.rfile
+        if 0 < _clen <= 32_000_000 and "multipart" not in _ctype:
+            import io as _io
+
+            self.rfile = _io.BytesIO(_orig.read(_clen))
+        elif _clen:
+            self.close_connection = True
+        try:
+            self._do_POST_rotas()
+        finally:
+            self.rfile = _orig
+
+    def _do_POST_rotas(self) -> None:
         raw = self.path.split("?", 1)[0]
 
         # CSRF: um site aberto no navegador não pode mandar POST para o app.

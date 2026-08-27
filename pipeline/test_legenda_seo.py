@@ -79,3 +79,30 @@ def test_campos_de_lista_ocupam_a_linha_inteira():
             f"{campo} voltou a ficar espremido"
     css = (RAIZ / "assets" / "preview" / "app.css").read_text(encoding="utf-8")
     assert "grid-column: 1 / -1" in css
+
+
+def test_rodape_fixo_monta_na_ordem_certa(monkeypatch):
+    """Estrategia do dono (26/08): corpo VARIAVEL (IA, por video) -> rodape
+    institucional FIXO -> 5 hashtags. Rodape e hashtags sao montagem
+    deterministica; a IA e proibida de escreve-los e, se teimar, cai fora."""
+    import pipeline.run_fast as rf
+
+    preset = {"postHashtags": "#PrimeCamp #Campinas",
+              "postRodape": "PIN Prime Camp — Campinas/SP",
+              "postSeo": "Campinas; conserto",
+              "endCardCopy": {}}
+
+    def chat_falso(messages, model=None):
+        assert "NÃO escreva rodapé" in messages[0]["content"]
+        # IA teimosa: repete o rodape e inventa hashtags
+        return ("Gancho do vídeo\nCorpo variável.\n\n"
+                "PIN Prime Camp — Campinas/SP\n\n#viral", "gemini-web")
+
+    import app.llm_session as ls
+    monkeypatch.setattr(ls, "chat", chat_falso)
+    out = rf._llm_polish_legenda("rascunho", spoken="fala", preset=preset)
+    blocos = out.strip().split("\n\n")
+    assert blocos[-1] == "#PrimeCamp #Campinas", blocos
+    assert blocos[-2] == "PIN Prime Camp — Campinas/SP", blocos
+    assert out.count("PIN Prime Camp") == 1, "rodape duplicado"
+    assert "#viral" not in out

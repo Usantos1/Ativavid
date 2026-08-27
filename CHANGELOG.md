@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.98
+
+- **Erro "Bad request syntax" ao importar — consertado na raiz.** Em algumas
+  situações (ex.: licença em validação), o servidor respondia sem consumir a
+  requisição e a conexão reaproveitada quebrava a importação seguinte com um
+  erro ilegível. Aconteceu com um cliente em trial. Agora nenhuma rota
+  consegue mais envenenar a conexão — e a mensagem real (ex.: estado da
+  licença) aparece no lugar do erro de sintaxe
+
+- **Rodapé fixo do post.** Campo novo na tela de Estilo: um bloco
+  institucional (endereço, serviços, cidade) que sai no FIM de toda legenda,
+  entre o texto do vídeo e as hashtags. A legenda agora monta sempre na
+  ordem: corpo variável escrito pela IA sobre o vídeo → rodapé fixo da marca
+  → suas hashtags. A IA é proibida de mexer no rodapé e nas hashtags
+
 ## 2.97
 
 - **A trilha de IA parou de ser cobrada em dobro.** Cada "Salvar e refazer",

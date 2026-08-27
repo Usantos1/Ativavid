@@ -1448,9 +1448,15 @@ def _legenda_from_edl(edit_dir: Path, spoken: str, preset: dict) -> str:
     fixas = [t if t.startswith("#") else "#" + t
              for t in re.split(r"[\s,;]+", str(preset.get("postHashtags") or "").strip())
              if t.strip("#").strip()]
+    rodape = str(preset.get("postRodape") or "").strip()
+    if rodape:
+        lines.append("")
+        lines.append(rodape)
     if fixas:
         lines.append("")
         lines.append(" ".join(fixas[:12]))
+        return "\n".join(lines).strip() + "\n"
+    if rodape:
         return "\n".join(lines).strip() + "\n"
 
     # Niche-first tags; #reels only as filler if we have room
@@ -1483,6 +1489,7 @@ def _llm_polish_legenda(draft: str, *, spoken: str, preset: dict) -> str | None:
         return None
     copy = preset.get("endCardCopy") or {}
     seo = str(preset.get("postSeo") or "").strip()
+    rodape = str(preset.get("postRodape") or "").strip()
     fixas = [t if t.startswith("#") else "#" + t
              for t in re.split(r"[\s,;]+", str(preset.get("postHashtags") or "").strip())
              if t.strip("#").strip()][:12]
@@ -1499,9 +1506,10 @@ def _llm_polish_legenda(draft: str, *, spoken: str, preset: dict) -> str | None:
            "ligado ao vídeo; não liste palavras-chave, não soe anúncio, não "
            "repita a frase do gancho."
            if seo else "")
-        + ("\nHASHTAGS: termine com EXATAMENTE estas hashtags, nesta ordem, "
-           "sem adicionar outras."
-           if fixas else
+        + ("\nNÃO escreva rodapé/assinatura da loja nem hashtags — eles são "
+           "adicionados automaticamente depois. Escreva SÓ o gancho e o corpo "
+           "ligados a ESTE vídeo."
+           if (fixas or rodape) else
            "\nNo máximo 4 hashtags de nicho (evite #viral #fyp).")
     )
     user = (
@@ -1526,12 +1534,20 @@ def _llm_polish_legenda(draft: str, *, spoken: str, preset: dict) -> str | None:
     # teto de hashtags acompanha a lista fixa do dono (que pode passar de 6)
     if text.count("#") > max(6, len(fixas) + 2):
         return None
-    if fixas:
-        # a IA e obrigada a fechar com as fixas; se derrapou, conserta aqui
-        faltando = [t for t in fixas if t.lower() not in text.lower()]
-        if faltando:
-            corpo = re.sub(r"(?:^|\n)\s*#[^\n]*$", "", text.rstrip()).rstrip()
-            text = corpo + "\n\n" + " ".join(fixas)
+    if fixas or rodape:
+        # A IA escreve SO a parte variavel; rodape e hashtags sao montados
+        # AQUI, deterministicamente (estrategia do dono, nao palpite):
+        # corpo -> rodape fixo -> hashtags. Linhas de hashtag e copias do
+        # rodape que a IA teimou em escrever caem fora antes.
+        corpo = re.sub(r"(?:\n\s*#[^\n]*)+\s*$", "", text.rstrip()).rstrip()
+        if rodape and rodape in corpo:
+            corpo = corpo.replace(rodape, "").rstrip()
+        partes = [corpo]
+        if rodape:
+            partes.append(rodape)
+        if fixas:
+            partes.append(" ".join(fixas))
+        text = "\n\n".join(pt for pt in partes if pt)
     return text if text.endswith("\n") else text + "\n"
 
 

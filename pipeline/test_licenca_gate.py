@@ -81,8 +81,11 @@ def _rotas_post_do_codigo() -> set[str]:
     rotas: set[str] = set()
     for nome in ("app/local_server.py", "app/desktop_server.py", "helpers/preview_server.py"):
         texto = (REPO / nome).read_text(encoding="utf-8")
-        # do_POST até o fim do método (próximo "\n    def ")
-        i = texto.find("def do_POST")
+        # As rotas moram em _do_POST_rotas desde o involucro de higiene do
+        # socket (26/08); no preview_server seguem no do_POST.
+        i = texto.find("def _do_POST_rotas")
+        if i < 0:
+            i = texto.find("def do_POST")
         if i < 0:
             continue
         fim = texto.find("\n    def ", i + 10)
