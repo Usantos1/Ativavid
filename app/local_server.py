@@ -941,6 +941,51 @@ def save_preset(data: dict) -> None:
         pass
 
 
+# Instalacao do motor de musica: um download de ~4,8 GB nao cabe numa
+# requisicao. A rota dispara a thread e devolve na hora; a tela pergunta o
+# progresso de tempos em tempos, como ja faz com o render.
+_MUSICA_INSTALL = {"rodando": False, "fracao": 0.0, "texto": "",
+                   "erro": "", "ok": False}
+
+
+def _musica_estado_completo(projects_root) -> dict:
+    from app import musica_local
+
+    d = dict(musica_local.estado(projects_root))
+    d.update({k: _MUSICA_INSTALL[k]
+              for k in ("rodando", "fracao", "texto", "erro")})
+    return d
+
+
+def _musica_instalar_em_fundo(projects_root) -> None:
+    from app import musica_local
+
+    if _MUSICA_INSTALL["rodando"]:
+        return
+    _MUSICA_INSTALL.update({"rodando": True, "fracao": 0.0, "erro": "",
+                            "texto": "Preparando…", "ok": False})
+
+    def _andar(fracao: float, texto: str) -> None:
+        _MUSICA_INSTALL["fracao"] = round(float(fracao), 3)
+        _MUSICA_INSTALL["texto"] = texto
+
+    def _trabalho() -> None:
+        try:
+            ok, motivo = musica_local.instalar(
+                raiz_projetos=projects_root, progresso=_andar)
+        except Exception as e:  # noqa: BLE001 — nunca derruba o servidor
+            ok, motivo = False, f"{type(e).__name__}: {e}"
+        _MUSICA_INSTALL.update({
+            "rodando": False, "ok": bool(ok),
+            "fracao": 1.0 if ok else _MUSICA_INSTALL["fracao"],
+            "texto": "Motor de música pronto" if ok else "",
+            "erro": "" if ok else str(motivo)[:200],
+        })
+
+    threading.Thread(target=_trabalho, daemon=True,
+                     name="musica-instalar").start()
+
+
 def run_doutor() -> dict:
     from app.win_process import hide_console_kwargs
 
@@ -1799,6 +1844,9 @@ class StudioHandler(BaseHTTPRequestHandler):
                 pass
             self._json({"recovered": jobs, "ids": [j["id"] for j in jobs]})
             return
+        if path == "/api/musica/motor":
+            self._json(_musica_estado_completo(self.projects_root))
+            return
         if path == "/api/update/check":
             from app.settings_store import load_settings
             from app.update_check import check_update
@@ -2504,6 +2552,12 @@ class StudioHandler(BaseHTTPRequestHandler):
                 self._json({"ok": False, "error": friendly_llm_error(e), "needsSession": True}, 502)
             return
 
+        if path == "/api/musica/motor":
+            body = self._read_json() or {}
+            if str(body.get("action") or "instalar") == "instalar":
+                _musica_instalar_em_fundo(self.projects_root)
+            self._json(_musica_estado_completo(self.projects_root))
+            return
         if path == "/api/update/open":
             from app.update_check import (
                 baixar_e_instalar,

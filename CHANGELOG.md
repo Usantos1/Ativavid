@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.23
+
+- **A IA local de música agora se instala pelo aplicativo.** Em
+  Configurações → Música dos vídeos aparece o estado (instalada, não
+  instalada ou indisponível por falta de placa NVIDIA) e um botão que baixa
+  as 4,8 GB uma única vez, com barra de progresso — o download acontece em
+  segundo plano e nunca no meio de um vídeo. Antes, esse motor só existia
+  se alguém o montasse à mão.
+
 ## 3.22
 
 - **Dá para posicionar a agulha clicando no próprio take.** Depois do

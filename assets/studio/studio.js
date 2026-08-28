@@ -3576,6 +3576,28 @@ function wireForms() {
       loadSistema().catch(() => {});
     };
   }
+  // Motor local de musica: 4,8 GB que NAO vem no instalador. Sem esta tela o
+  // cliente escolhia "IA local primeiro" e nada acontecia — o launcher saia
+  // com "motor nao instalado" e a trilha vinha da nuvem, em silencio.
+  const btnMotor = $("#btnInstalarMotorMusica");
+  if (btnMotor && !btnMotor.dataset.wired) {
+    btnMotor.dataset.wired = "1";
+    btnMotor.onclick = async () => {
+      btnMotor.disabled = true;
+      try {
+        await api("/api/musica/motor", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "instalar" }),
+        });
+        toast("Baixando a IA local de música — pode deixar rodando", 6000);
+        acompanharMotorMusica();
+      } catch (e) {
+        toast(e.message || "Não deu para começar a instalação");
+        btnMotor.disabled = false;
+      }
+    };
+  }
   const btnSaveMusic = $("#btnSaveMusicEngine");
   if (btnSaveMusic) {
     btnSaveMusic.onclick = async () => {
@@ -4384,6 +4406,9 @@ function applySistemaData(data) {
     $("#sysMetricProxy").textContent = perf.proxyEnabled ? `${perf.proxyHeight}p` : "off";
   }
   if ($("#perfProfile") && s.performanceProfile) $("#perfProfile").value = s.performanceProfile || "auto";
+  pintarMotorMusica().then((d) => {
+    if (d && d.rodando) acompanharMotorMusica();
+  }).catch(() => {});
   if ($("#musicEngine")) {
     const me = s.musicEngine || "auto";
     $("#musicEngine").value = me;
@@ -4499,6 +4524,61 @@ async function loadHardwareCard() {
     const data = await res.json().catch(() => ({}));
     if (res.ok && data.public) applyHardwareCard(data.public);
   } catch { /* ignore */ }
+}
+
+/** Estado do motor local de musica no card de Configuracoes. */
+async function pintarMotorMusica() {
+  const linha = $("#musicMotorEstado");
+  const btn = $("#btnInstalarMotorMusica");
+  const barra = $("#musicMotorBarra");
+  if (!linha || !btn) return null;
+  let d = {};
+  try {
+    d = await api("/api/musica/motor");
+  } catch {
+    linha.textContent = "";
+    return null;
+  }
+  const gb = (d.mbTotal / 1000).toFixed(1).replace(".", ",");
+  if (d.rodando) {
+    linha.textContent = d.texto || "Baixando…";
+    btn.classList.add("hidden");
+    if (barra) {
+      barra.classList.remove("hidden");
+      const span = barra.querySelector("span");
+      if (span) span.style.width = `${Math.round((d.fracao || 0) * 100)}%`;
+    }
+  } else if (d.instalado) {
+    linha.textContent = `IA local instalada (${d.gb} GB) — compõe sem gastar créditos.`;
+    btn.classList.add("hidden");
+    barra?.classList.add("hidden");
+  } else if (!d.gpu) {
+    linha.textContent = "IA local indisponível: precisa de placa NVIDIA "
+      + "(sem ela, uma trilha levaria uns 9 minutos).";
+    btn.classList.add("hidden");
+    barra?.classList.add("hidden");
+  } else {
+    linha.textContent = d.erro
+      ? `A instalação falhou: ${d.erro}`
+      : `IA local não instalada — são ${gb} GB, baixados uma vez só.`;
+    btn.classList.remove("hidden");
+    btn.disabled = false;
+    barra?.classList.add("hidden");
+  }
+  return d;
+}
+
+/** Enquanto baixa, pergunta o progresso — a instalacao leva minutos. */
+function acompanharMotorMusica() {
+  clearInterval(acompanharMotorMusica._t);
+  acompanharMotorMusica._t = setInterval(async () => {
+    const d = await pintarMotorMusica();
+    if (!d || !d.rodando) {
+      clearInterval(acompanharMotorMusica._t);
+      if (d && d.instalado) toast("IA local de música pronta ✓", 5000);
+      else if (d && d.erro) toast(`Instalação falhou: ${d.erro}`, 8000);
+    }
+  }, 3000);
 }
 
 async function loadSistema() {
