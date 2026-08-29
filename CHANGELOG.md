@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.60
+
+- **Efeito sonoro na mão.** Leve a agulha até o ponto, abra o seletor de mídia,
+  aba **Biblioteca**, e escolha um som da sua pasta **Efeitos**: ele vira um
+  bloco na faixa de som da linha do tempo e toca ali no vídeo. O bloco é
+  arrastável; o que vale é o começo, porque o efeito toca inteiro.
+- **Som deixou de aparecer como cartão quebrado** no seletor — ele tentava
+  mostrar uma miniatura de um .mp3. Agora tem cartão próprio.
+- **Trilha ficou de fora do seletor** de propósito: música de fundo dura
+  minutos e se escolhe no estilo, não como bloco na agulha.
+
 ## 3.59
 
 - **A mídia que você põe à mão agora aparece no vídeo.** A tela sabia inserir

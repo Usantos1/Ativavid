@@ -3891,9 +3891,13 @@ function renderChips() {
   // TEXT and IMAGE get their own tracks — a headline and a photo are different
   // kinds of edit, and mixing them on one lane hid the images entirely.
   const isText = (c) => c.kind === 'hook' || c.kind === 'word';
+  const isSfx = (c) => c.kind === 'sfx';
   const groups = [
     { icon: 'text', cls: 'teal', items: visiveis.filter(({ c }) => isText(c)) },
-    { icon: 'inserts', cls: 'orange', items: visiveis.filter(({ c }) => !isText(c)) },
+    { icon: 'inserts', cls: 'orange', items: visiveis.filter(({ c }) => !isText(c) && !isSfx(c)) },
+    // faixa propria: som e imagem sao coisas diferentes de editar, e
+    // misturados numa fileira so o efeito some entre as fotos
+    { icon: 'music', cls: 'olive', items: visiveis.filter(({ c }) => isSfx(c)) },
   ];
 
   for (const g of groups) {
@@ -5203,10 +5207,16 @@ async function loadLibraryResults() {
   }
   box.innerHTML = '';
   items.forEach((it) => {
+    // Trilha e musica de FUNDO, de minutos: um bloco dela na agulha nao e
+    // um efeito. Ela se escolhe no estilo, nao aqui.
+    if (it.kind === 'track') return;
     const card = el('button', 'img-card', box);
     const thumb = `/api/library/file?rel=${encodeURIComponent(it.rel)}`;
     if (it.kind === 'clip') {
       card.innerHTML = `<div class="img-clip-ph">▶</div><span class="img-credit">${it.name}</span>`;
+    } else if (it.kind === 'sfx') {
+      // som nao tem miniatura: o cartao dizia `<img src=...mp3>` e saia quebrado
+      card.innerHTML = `<div class="img-clip-ph som">♪</div><span class="img-credit">${it.name}</span>`;
     } else {
       card.innerHTML = `<img src="${thumb}" alt=""><span class="img-credit">${it.name}</span>`;
     }
@@ -5229,9 +5239,33 @@ async function pickLibraryAsset(it) {
     return;
   }
   if (!data.ok && !data.src) { toast(data.error || 'Falha', 3000); return; }
+  if ((data.kind || it.kind) === 'sfx') {
+    pushSfxFromRef(data.src || data.ref, it.name);
+    toggleImgPicker(false);
+    toast('✓ Efeito na agulha — arraste na linha do tempo e Salvar', 4000);
+    return;
+  }
   pushInsertFromRef(data.src || data.ref, it.name, it.name);
   toggleImgPicker(false);
   toast('✓ Entrou na agulha — arraste na linha do tempo e Salvar', 4000);
+}
+
+/* Um efeito e um PONTO, nao um intervalo: ele toca inteiro a partir do
+ * instante. O bloco tem largura fixa so para dar onde pegar e arrastar —
+ * o que viaja no salvar e o comeco. */
+const SFX_BLOCO_S = 0.6;
+
+function pushSfxFromRef(src, label) {
+  pushHistory();
+  const start = Math.max(0, renderedToDraft(video.currentTime));
+  const end = start + SFX_BLOCO_S;
+  S.insertsDraft.push({
+    kind: 'sfx', label: label || (src || '').split('/').pop(),
+    start, end, orig: { start, end },
+    isNew: true, src, volume: 0.5,
+  });
+  renderAll(); refreshHeader();
+  scheduleAutosave();
 }
 
 function pushInsertFromRef(src, label, credit) {
@@ -5539,6 +5573,10 @@ async function saveEditsAndReturnToQueue() {
       })),
       newInserts: S.insertsDraft.filter(keepNew).map((c) => ({
         src: c.src, credit: c.credit || '', start: +c.start.toFixed(3), end: +c.end.toFixed(3),
+      })),
+      // Efeito posto na mao: so o instante importa (o som toca inteiro).
+      sfxManual: S.insertsDraft.filter((c) => c.kind === 'sfx' && c.src).map((c) => ({
+        src: c.src, atSec: +c.start.toFixed(3), volume: +(c.volume ?? 0.5),
       })),
       splitInserts: limpa ? [] : S.insertsDraft.filter((c) => c.kind === 'split').map((c) => ({
         ref: c.ref, label: c.label, start: +c.start.toFixed(3), end: +c.end.toFixed(3),

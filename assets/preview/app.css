@@ -3535,3 +3535,11 @@ body.styles-wide .setup-actions .btn.primary {
   border: 1px solid var(--hl-accent, #ff5200);
   border-radius: 4px;
 }
+
+/* Cartao de EFEITO no seletor de midia: som nao tem miniatura. Antes o
+   cartao tentava `<img src=...mp3>` e saia quebrado. */
+.img-clip-ph.som {
+  font-size: 26px;
+  color: var(--hl-accent, #ff7713);
+  background: color-mix(in srgb, var(--hl-accent, #ff7713) 12%, transparent);
+}

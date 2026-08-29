@@ -327,16 +327,23 @@ def copy_into_public(src: Path, public_dir: Path) -> dict[str, Any]:
     if not src.is_file():
         raise ValueError("arquivo não encontrado")
     public_dir = Path(public_dir)
-    dest_dir = public_dir / "library"
+    # Som vai para public/sfx, junto dos efeitos que o app ja usa: e de la
+    # que os DOIS motores tocam (`Renderizador._gravar_sfx` e o `Sfx` do
+    # template). Em library/ ele seria copiado e nunca tocado.
+    som = src.suffix.lower() in {".mp3", ".wav", ".m4a", ".ogg", ".aac"}
+    pasta = "sfx" if som else "library"
+    dest_dir = public_dir / pasta
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest = dest_dir / src.name
     if not dest.exists() or dest.stat().st_size != src.stat().st_size:
         shutil.copy2(src, dest)
-    kind = "clip" if dest.suffix.lower() in {".mp4", ".mov", ".webm"} else "image"
+    kind = ("sfx" if som else
+            "clip" if dest.suffix.lower() in {".mp4", ".mov", ".webm"}
+            else "image")
     return {
         "ok": True,
-        "ref": f"library/{dest.name}",
-        "src": f"library/{dest.name}",
+        "ref": f"{pasta}/{dest.name}",
+        "src": f"{pasta}/{dest.name}",
         "kind": kind,
         "path": str(dest),
     }
