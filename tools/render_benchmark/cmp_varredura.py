@@ -108,7 +108,10 @@ def main() -> None:
     alvos = [(k, f) for k, f in alvos if 0 <= f < total]
 
     shutil.rmtree(TRAB, ignore_errors=True)
-    TRAB.mkdir(parents=True)
+    # rmtree com ignore_errors deixa restos quando o node_modules esta
+    # em uso (junction aberto por outro processo): sem exist_ok, rodar
+    # a varredura duas vezes seguidas quebrava no mkdir.
+    TRAB.mkdir(parents=True, exist_ok=True)
     ov = prepare_overlay_remotion(edit / "remotion", TRAB / "remotion")
     print(f"renderizando {len(alvos)} stills...", flush=True)
     for _, f in alvos:
@@ -117,7 +120,8 @@ def main() -> None:
             continue
         r = subprocess.run(
             resolve_remotion_argv(ov, "still", "Overlay", str(png), f"--frame={f}"),
-            cwd=str(ov), capture_output=True, text=True, **NOWIN)
+            cwd=str(ov), capture_output=True, text=True,
+            encoding="utf-8", errors="replace", **NOWIN)
         if r.returncode != 0 or not png.exists():
             print(f"  still {f} falhou")
 

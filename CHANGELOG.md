@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.27
+
+- **Um vídeo não quebra mais por causa de sobra de outro.** Quando a pasta
+  de trabalho do render não conseguia ser apagada (acontece com dois vídeos
+  processando ao mesmo tempo), o vídeo seguinte morria na hora de montar os
+  gráficos. Agora a sobra é limpa peça por peça e o render segue.
+
 ## 3.26
 
 - **O plano B da IA não some mais dependendo de como o app foi iniciado.**

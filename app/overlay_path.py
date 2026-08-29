@@ -593,18 +593,28 @@ def _hide() -> dict:
 
 def prepare_overlay_remotion(src_remotion: Path, dest: Path) -> Path:
     """Cópia de trabalho com Overlay.tsx. src/ do projeto permanece intacto."""
+    # `rmtree(ignore_errors=True)` NAO garante pasta vazia: o node_modules
+    # daqui e um junction para o cache, e se outro processo (o render do
+    # video vizinho, um editor aberto) o mantiver ocupado, o apagamento
+    # falha em silencio. Com `mkdir(parents=True)` puro isso virava
+    # FileExistsError e o render MORRIA — achado rodando a varredura de
+    # paridade duas vezes seguidas (29/08). Cada peca e limpa e recopiada;
+    # o que sobrar de fora nao atrapalha.
     if dest.exists():
         shutil.rmtree(dest, ignore_errors=True)
-    dest.mkdir(parents=True)
+    dest.mkdir(parents=True, exist_ok=True)
     for name in ("src", "public", "package.json", "remotion.config.ts", "tsconfig.json"):
         p = src_remotion / name
+        alvo = dest / name
         if p.is_dir():
             # A composição Overlay é só gráfica (sem cut.mp4/OffthreadVideo);
             # copiar os .mp4 do public/ duplicaria o vídeo inteiro à toa.
             ignore = shutil.ignore_patterns("*.mp4") if name == "public" else None
-            shutil.copytree(p, dest / name, ignore=ignore)
+            if alvo.exists():
+                shutil.rmtree(alvo, ignore_errors=True)
+            shutil.copytree(p, alvo, ignore=ignore, dirs_exist_ok=True)
         elif p.exists():
-            shutil.copy2(p, dest / name)
+            shutil.copy2(p, alvo)
     nm = dest / "node_modules"
     src_nm = src_remotion / "node_modules"
     if src_nm.exists() and not nm.exists():
