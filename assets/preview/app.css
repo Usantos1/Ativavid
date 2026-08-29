@@ -1361,15 +1361,20 @@ kbd {
 .rhythm-preset.on { border-color: var(--interact); }
 #autoControls.is-collapsed { display: none; }
 
-/* As quatro cores lado a lado. 206px e a largura real de um cartao (dois
-   seletores de 32px + o campo do hexadecimal + o respiro do cartao); com
-   auto-fit a fileira vira 2x2 sozinha quando a janela nao da os 876px, sem
-   media query nenhuma. */
+/* As quatro cores lado a lado. O espaco de verdade nao e a largura da
+   coluna: o bloco Visual come 66px de respiro, entao na tela do usuario
+   (coluna de ~906px) a grade recebe 840. Quatro cartoes com 12px de vao
+   pedem no maximo 201px cada — com 206 a fileira virava 3+1, que foi
+   exatamente a queixa dele. O cartao encolhe junto (campo do hexadecimal e
+   respiro mais curtos) para caber sem cortar nada. */
 .cores-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(206px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(196px, 1fr));
   gap: 12px;
 }
+.cores-grid .setup-group { padding: 13px 12px 14px; }
+.cores-grid .hex-input { width: 5.2em; }
+.cores-grid .swatches { gap: 7px; }
 /* Num cartao estreito a nota ("aplicada", "ver enfase") disputava a linha
    com o titulo e quebrava "COR DA / HEADLINE" no meio. Uma embaixo da
    outra, o titulo tem o cartao inteiro e cabe numa linha so. */

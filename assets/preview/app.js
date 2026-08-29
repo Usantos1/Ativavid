@@ -3266,10 +3266,11 @@ function renderSetup() {
         prev.innerHTML = NONE_ICON;
       }
       else prev.innerHTML = o.mock || '';
-      // Only the abstract mockups get a title — a card that renders the real
-      // caption or headline is already labelled by itself. "Nenhuma" renders
-      // nothing to read, so it needs the label just as much as a mockup does.
-      if (o.mock || o.none) el('div', 'opt-name', card).textContent = o.name;
+      // Todo cartao leva o nome. A regra antiga era "a amostra JA e o
+      // rotulo", e com quatro estilos isso bastava; hoje sao 15 headlines e
+      // 11 legendas, e sem nome o usuario nao consegue nem PEDIR o que
+      // quer — nem achar de novo o que gostou da ultima vez.
+      el('div', 'opt-name', card).textContent = o.name;
       el('div', 'opt-mark', card);
     }
     // the ghost only earns its space where there is a single option to explain

@@ -6,10 +6,13 @@ uma faixa da largura inteira com duas bolinhas no canto esquerdo e o resto
 vazio — quatro faixas empilhadas. Print do usuário em 29/08: "na imagem
 deve ser 4 widgets na mesma linha e não um em cada linha".
 
-Medido na tela: o cartão precisa de ~206px (dois seletores de 32px, o
-campo do hexadecimal e o respiro). Quatro cabem em 860px, e a coluna do
-usuário — tela em 125% — tem ~906px. Abaixo de 860 a própria grade vira
-2×2, sem media query.
+Medido NA TELA, e no lugar certo: quem manda não é a coluna do editor
+(~906px) e sim a grade dentro do bloco Visual, que recebe 840 — o respiro
+do bloco come 66. Medir pela coluna deixava o cartão com 206px, e a
+fileira quebrava em 3+1 na frente dele mesmo com o teste passando. Quatro
+cartões com 12px de vão pedem 201 cada, e o cartão encolhe até isso sem
+cortar nada (campo do hexadecimal e respiro mais curtos). Abaixo de 840 a
+grade vira 2×2 sozinha, sem media query.
 """
 from __future__ import annotations
 
@@ -41,8 +44,11 @@ def test_a_grade_poe_quatro_lado_a_lado():
     m = re.search(r"minmax\((\d+)px", bloco)
     assert m, bloco
     largura = int(m.group(1))
-    # 4 cartões + 3 vãos de 12px têm de caber nos ~906px do usuário
-    assert largura * 4 + 36 <= 906, largura
+    # 840, não 906: a coluna do editor tem ~906px na tela do usuário, mas o
+    # bloco Visual come 66px de respiro e a grade recebe 840 — medido na
+    # tela. Com o número da coluna o teste passava e a fileira quebrava em
+    # 3+1 na frente dele.
+    assert largura * 4 + 36 <= 840, largura
     assert "auto-fit" in bloco, bloco
 
 

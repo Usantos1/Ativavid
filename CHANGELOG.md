@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.54
+
+- **As quatro cores voltaram a caber numa fileira.** Na 3.52 eu medi pela
+  largura da coluna (906px), mas quem manda é a grade dentro do bloco Visual,
+  que recebe 840 — na sua tela a fileira quebrava em 3+1. O cartão agora
+  encolhe até 201px sem cortar nada.
+- **Todo estilo mostra o nome.** Com 15 headlines e 11 legendas, cartão sem
+  nome vira adivinhação: não dava para pedir "usa o Vazado" nem achar de novo
+  o que você tinha gostado. Antes só os desenhos de layout tinham rótulo.
+
 ## 3.53
 
 - **Três layouts de vídeo novos.** *Vinheta* (bordas escurecidas, o rosto
