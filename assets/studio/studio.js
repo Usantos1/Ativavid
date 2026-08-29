@@ -529,6 +529,7 @@ function fichaHtml(j) {
   // Trecho que pedia tempo inexistente no arquivo. Sem esta linha o
   // defeito e mudo: o video sai pronto com pedaco sem som e travado.
   if (j.corteNota) linhas.push(["Corte", j.corteNota]);
+  if (j.fonteNota) linhas.push(["Fonte", j.fonteNota]);
   if (j.trilhaNota) linhas.push(["Trilha", j.trilhaNota]);
   if (j.cardFinalNota) linhas.push(["Marca", j.cardFinalNota]);
   if (j.publicadoLink) linhas.push(["Instagram", "publicado ✓"]);
@@ -577,6 +578,7 @@ function cardSig(j, opts) {
     j.trilhaNota || "",
     j.corteQualidade || "",
     j.corteNota || "",
+    j.fonteNota || "",
     j.cardFinalNota || "",
     versoesDaFonte(j).length,
     j.stage, j.message, j.reason || "", j.localPoster || j.thumbUrl, links.editor, links.estilo, links.final,

@@ -1206,7 +1206,7 @@ function nudgeTakeEdge(i, side, dir) {
 
   const d = side === 'l' ? r.start - r.orig.start : r.end - r.orig.end;
   const frames = Math.round(d * (S.fps || 30));
-  toast(`${side === 'l' ? 'IN' : 'OUT'} ${fmt(side === 'l' ? r.start : r.end)}  ` +
+  toast(`${side === 'l' ? 'começo' : 'fim'} ${fmt(side === 'l' ? r.start : r.end)}  ` +
         `(${frames >= 0 ? '+' : ''}${frames}f)`, 1100);
 }
 
@@ -2744,15 +2744,43 @@ function renderNotes() {
   }
   const btn = $('btnMark');
   btn.classList.toggle('armed', S.pendingIn != null);
-  $('markText').textContent = S.pendingIn != null ? 'OUT' : 'IN';
+  $('markText').textContent = S.pendingIn != null ? 'Até aqui' : 'Marcar';
+  ajustarBarraNumaLinha();
 }
+
+/* ---- a barra cabe sempre numa linha -------------------------------------
+ * Ela pede 1175px com todos os rotulos. Abaixo disso o botao da ponta
+ * ficava de fora (ou, antes, a barra quebrava em duas fileiras — print do
+ * usuario em 29/08). Mede-se SEMPRE no estado largo: tira a classe, olha
+ * se cabe, poe de volta se nao couber. Assim nao existe zona de indecisao
+ * em que a barra pisca entre os dois estados.
+ * Quem e observado e a COLUNA, nao a barra: mexer na classe da barra
+ * mudaria o tamanho dela e chamaria o observador de novo, em laco. */
+function ajustarBarraNumaLinha() {
+  const bar = $('transportBar');
+  if (!bar) return;
+  bar.classList.remove('compacta', 'minima');
+  if (bar.scrollWidth <= bar.clientWidth + 1) return;
+  // 1o: sai o rotulo dos botoes secundarios, fica o icone
+  bar.classList.add('compacta');
+  if (bar.scrollWidth <= bar.clientWidth + 1) return;
+  // 2o (janela bem estreita): saem a duracao total e a regua do zoom.
+  // Os botoes − 100% + e fit ficam — e Ctrl+scroll continua dando zoom.
+  bar.classList.add('minima');
+}
+
+if (typeof ResizeObserver !== 'undefined') {
+  const alvo = document.getElementById('editorCol');
+  if (alvo) new ResizeObserver(() => ajustarBarraNumaLinha()).observe(alvo);
+}
+window.addEventListener('load', ajustarBarraNumaLinha);
 
 function toggleMark() {
   const t = renderedToDraft(video.currentTime || 0);
   if (S.pendingIn == null) {
     S.pendingIn = t;
     renderNotes();
-    toast('IN marcado — leve a agulha ao fim do trecho e marque o OUT', 2600);
+    toast('Começo marcado — leve a agulha ao fim do trecho e marque de novo', 2600);
     return;
   }
   const start = Math.min(S.pendingIn, t);
@@ -5215,7 +5243,7 @@ window.addEventListener('storage', (e) => {
 });
 
 
-// ---------- desktop: marcação IN/OUT → aplicar + fila ----------
+// ---------- desktop: trecho marcado → aplicar + fila ----------
 // Elementos que a nota pode estar mandando mexer. Se ela NOMEIA um deles, e
 // instrucao sobre o take, nao ordem de apagar o take: "tira o zoom daqui" quer
 // dizer tira o zoom, e a nota antiga apagava o trecho inteiro.
@@ -6479,7 +6507,7 @@ function beatProtectSpan(beat) {
 async function applyProtectAction(kind) {
   if (kind === 'clear') {
     const span = currentProtectSpan();
-    if (!span) { toast('Marque IN/OUT ou selecione um take'); return; }
+    if (!span) { toast('Marque um trecho ou selecione um take'); return; }
     S.protectedRanges = (S.protectedRanges || []).filter((pr) => {
       const a0 = pr.draftStart != null ? +pr.draftStart : +pr.start;
       const a1 = pr.draftEnd != null ? +pr.draftEnd : +pr.end;
@@ -6494,7 +6522,7 @@ async function applyProtectAction(kind) {
     : kind === 'cta' ? beatProtectSpan('CTA')
     : currentProtectSpan();
   if (!span) {
-    toast(kind === 'selection' ? 'Marque IN/OUT ou selecione um take' : 'Não achei esse trecho');
+    toast(kind === 'selection' ? 'Marque um trecho ou selecione um take' : 'Não achei esse trecho');
     return;
   }
   S.protectedRanges = [...(S.protectedRanges || []), {

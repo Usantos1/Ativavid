@@ -226,6 +226,8 @@ def write_timing(edit_dir: Path) -> dict:
     # o usuario procura defeito na gravacao dele.
     if _RENDER_META.get("trechosForaDaFonte"):
         payload["trechosForaDaFonte"] = _RENDER_META["trechosForaDaFonte"]
+    if _RENDER_META.get("fonteSemAcento"):
+        payload["fonteSemAcento"] = _RENDER_META["fonteSemAcento"]
     try:
         (edit_dir / "timing.json").write_text(
             json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8"
@@ -2956,6 +2958,48 @@ _MUSIC_DEFAULT = (
 )
 
 
+_ACENTOS_PT = "ÁÃÂÀÉÊÍÓÔÕÚÇáãâàéêíóôõúç!?"
+
+
+def _acentos_que_faltam(arquivo: Path) -> str:
+    """Letras do portugues que a fonte nao desenha DE VERDADE.
+
+    Fonte de demonstracao nao deixa a letra faltando: ela MAPEIA o acento
+    para um carimbo ("DEMO"). Por isso comparar com o glifo de ausente
+    (.notdef) nao acha nada — a assinatura e outra: varios caracteres
+    DIFERENTES saem com o desenho identico.
+
+    Caso real (29/08): a Integral CF demo escrevia "N[DEMO]O MORRE[DEMO]"
+    onde devia sair "NAO MORRE!" — e isso so apareceria no video pronto,
+    na frente do cliente dele.
+    """
+    try:
+        from PIL import ImageFont
+
+        f = ImageFont.truetype(str(arquivo), 64)
+
+        def _desenho(ch: str) -> tuple:
+            # `bytes(mask)`, nao `mask.tobytes()`: o objeto do Pillow nao tem
+            # esse metodo, e o try/except abaixo engolia o AttributeError —
+            # a checagem dizia "nenhum acento faltando" para uma fonte que
+            # carimbava DEMO em todos eles.
+            m = f.getmask(ch)
+            return (m.size, bytes(m))
+
+        ausente = _desenho("")
+        grupos: dict[tuple, list[str]] = {}
+        for c in _ACENTOS_PT:
+            grupos.setdefault(_desenho(c), []).append(c)
+        faltam: list[str] = []
+        for desenho, chars in grupos.items():
+            # o proprio .notdef, ou um carimbo que serve a varias letras
+            if desenho == ausente or len(chars) >= 3:
+                faltam.extend(chars)
+        return "".join(c for c in _ACENTOS_PT if c in faltam)
+    except Exception:  # noqa: BLE001 - checagem nunca derruba o render
+        return ""
+
+
 def _attach_brand_font_file(ed: dict, public) -> None:
     """Fonte própria da marca (id "arquivo"): copia o .ttf/.otf de
     ~/ATIVAVID/Fontes para public/fonts/ e aponta ed["brandFontFile"].
@@ -2987,6 +3031,12 @@ def _attach_brand_font_file(ed: dict, public) -> None:
     shutil.copy2(src, dest)
     ed["brandFontFile"] = f"fonts/{dest.name}"
     print(f"[fonte] {src.name} → {dest.name} (fonte da marca)", flush=True)
+    faltam = _acentos_que_faltam(src)
+    if faltam:
+        _RENDER_META["fonteSemAcento"] = {"arquivo": src.name, "faltam": faltam}
+        print(f"[fonte] ATENCAO: {src.name} nao tem {faltam} — nessas letras "
+              f"a fonte desenha o simbolo dela (fonte de demonstracao costuma "
+              f"carimbar 'DEMO')", flush=True)
 
 
 # Tempero por video. O vibe fixo por tipo dava sempre a MESMA "banda":

@@ -1,5 +1,20 @@
 # Changelog
 
+## 3.50
+
+- **A barra do preview cabe numa linha só.** Ela quebrava em duas fileiras e o
+  zoom caía sozinho embaixo. Agora é uma linha; quando a janela aperta, os
+  botões secundários viram só ícone (o nome continua no passar do mouse) em
+  vez de sumir para fora da tela.
+- **Fim do "IN" e do "OUT".** O botão de marcar um trecho agora diz **Marcar**
+  e, com o trecho aberto, **Até aqui** — o mesmo que ele faz, sem nome de
+  ilha de edição. O texto de ajuda do **M** mudou junto.
+- **Fonte sem acento não passa mais calada.** Se a fonte que você escolher não
+  desenhar Á, Ç, Ã ou "!", o card avisa antes: fonte de demonstração costuma
+  carimbar "DEMO" no lugar do acento, e isso só apareceria no vídeo pronto.
+  Testado na Integral CF demo (carimba todos) e nas 15 fontes do app (nenhum
+  alarme falso).
+
 ## 3.49
 
 - **Os ajustes da headline ficam junto dela.** "Onde a headline fica", "Legenda

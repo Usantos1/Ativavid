@@ -130,6 +130,14 @@ def _aviso_de_trilha(job: dict, edit: Path) -> None:
     ec = str(t.get("endCardSkip") or "").strip()
     if ec:
         job["cardFinalNota"] = f"Card final desligado: {ec[:110]}"
+    ft = t.get("fonteSemAcento") or {}
+    if isinstance(ft, dict) and ft.get("faltam"):
+        # Sai no VIDEO, na frente do cliente dele: a fonte desenha o simbolo
+        # dela onde deveria ter acento. Fonte de demonstracao carimba "DEMO".
+        job["fonteNota"] = (
+            f"A fonte {str(ft.get('arquivo') or '')[:40]} não tem "
+            f"{str(ft.get('faltam'))[:14]} — nessas letras o vídeo sai com o "
+            "símbolo da fonte. Use a versão completa (comprada) ou outra fonte.")
     fora = t.get("trechosForaDaFonte") or []
     if isinstance(fora, list) and fora:
         # Sem esta nota o defeito e MUDO: o video sai pronto, com pedaco

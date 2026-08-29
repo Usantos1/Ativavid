@@ -587,8 +587,8 @@
     <span id="timeNow" class="time">0:00.00</span>
     <span class="time dim">/</span>
     <span id="timeTotal" class="time dim">0:00.00</span>
-    <button id="btnMark" class="btn mark" title="Marcar IN / OUT (tecla M)">
-      <span id="markIcon"></span><span id="markText">IN</span>
+    <button id="btnMark" class="btn mark" title="Marcar o trecho a corrigir: uma vez no começo, outra no fim (tecla M)">
+      <span id="markIcon"></span><span id="markText">Marcar</span>
     </button>
     <button id="btnUndo" class="btn icon" title="Desfazer (Ctrl+Z)" disabled></button>
     <button id="btnRedo" class="btn icon" title="Refazer (Ctrl+Shift+Z)" disabled></button>
@@ -607,7 +607,7 @@
     </button>
     <div class="protect-wrap" id="protectWrap">
       <button id="btnProtect" class="btn cover-btn" title="Proteger trecho — a IA não corta este range" aria-haspopup="menu" aria-expanded="false">
-        <span id="protectIcon"></span><span>Proteger trecho</span>
+        <span id="protectIcon"></span><span>Proteger</span>
       </button>
       <div id="protectMenu" class="protect-menu hidden" role="menu">
         <button type="button" data-protect="selection" role="menuitem">Proteger seleção</button>
@@ -619,7 +619,6 @@
     <input id="appendCtaFile" type="file" accept="video/mp4,video/quicktime,video/x-m4v,.mp4,.mov,.m4v" hidden>
     <div class="spacer"></div>
     <span class="transport-divider"></span>
-    <span class="dim small">zoom</span>
     <button id="btnZoomOut" class="btn ghost small" title="Afastar (Ctrl + scroll também funciona)">−</button>
     <button id="btnZoom100" class="btn ghost small" title="Zoom 100% — escala visual, sem mudar o tempo">100%</button>
     <button id="btnZoomIn" class="btn ghost small" title="Aproximar (Ctrl + scroll também funciona)">+</button>
@@ -736,7 +735,7 @@
     <section class="help-section">
       <h3 class="help-sec-title">Corte</h3>
       <ul class="help-list">
-        <li><span class="help-keys"><kbd>M</kbd></span><span>marca <b>IN</b>, depois <b>OUT</b> — aí escreva o ajuste</span></li>
+        <li><span class="help-keys"><kbd>M</kbd></span><span>marca o <b>começo</b> do trecho, depois o <b>fim</b> — aí escreva o ajuste</span></li>
         <li><span class="help-keys"><kbd>delete</kbd></span><span>exclui o take selecionado</span></li>
         <li><span class="help-keys"><kbd>S</kbd></span><span>corta o take na agulha</span></li>
         <li><span class="help-keys"><kbd>alt</kbd><kbd>←</kbd><kbd>→</kbd></span><span>borda <b>final</b>, 1 frame</span></li>

@@ -685,9 +685,15 @@ body.applying-corrections .player-frame {
 .transport {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-  padding: 8px 14px;
+  /* UMA linha. Com `wrap` o zoom caia sozinho para uma segunda fileira e a
+     barra virava dois blocos soltos (print do usuario, 29/08). O que cede
+     quando a janela aperta e a regua do zoom, la embaixo — nunca um botao. */
+  flex-wrap: nowrap;
+  /* 8px de folga entre 20 controles custavam 19px: com eles a barra pedia
+     1175px e nao cabia na janela do usuario (1130), o que fazia os rotulos
+     recolherem cedo demais. */
+  gap: 7px;
+  padding: 8px 12px;
   border-radius: 12px;
   width: 100%;
   max-width: none;
@@ -759,7 +765,9 @@ body.applying-corrections .player-frame {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 7px 12px;
+  white-space: nowrap;
+  flex: 0 0 auto;
+  padding: 7px 8px;
   font-size: 12px;
   font-weight: 700;
 }
@@ -1170,11 +1178,15 @@ kbd {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 7px 12px;
+  white-space: nowrap;
+  flex: 0 0 auto;
+  padding: 7px 10px;
   font-size: 12px;
   font-weight: 700;
-  letter-spacing: 1px;
-  margin-left: 4px;
+  /* rotulo virou palavra ("Marcar" / "Ate aqui"): o espacamento de sigla
+     que servia ao "IN" agora so afasta as letras. */
+  letter-spacing: 0.2px;
+  margin-left: 2px;
   border-color: rgba(255, 84, 112, 0.35);
   background: rgba(255, 84, 112, 0.1);
   color: var(--rose-fg);
@@ -3427,3 +3439,24 @@ body.styles-wide .setup-actions .btn.primary {
   outline-offset: 1px;
 }
 .dlg-app .dlg-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* --- a barra cabe numa linha so ------------------------------------------
+ * Ordem de quem cede espaco quando a janela aperta: a regua do zoom encolhe
+ * ate 56px, o espacador some, e os botoes nunca mudam de tamanho — texto
+ * cortado no meio e pior que regua curta. */
+.transport > .btn,
+.transport > .protect-wrap,
+.transport > .time,
+.transport > .transport-divider { flex: 0 0 auto; }
+.transport .spacer { flex: 1 1 0; min-width: 0; }
+.transport #zoom { flex: 0 1 110px; min-width: 40px; }
+.transport .time { white-space: nowrap; }
+
+/* --- barra apertada: fica o icone, sai o rotulo (ver ajustarBarraNumaLinha)
+ * O `title` de cada botao continua dizendo o que ele faz. */
+.transport.compacta .cover-btn { padding: 7px 9px; }
+.transport.compacta .cover-btn > span:not([id]) { display: none; }
+.transport.compacta #btnZoom100 { padding: 5px 6px; }
+.transport.minima #timeTotal,
+.transport.minima .time.dim,
+.transport.minima #zoom { display: none; }
