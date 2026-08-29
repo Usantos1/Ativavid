@@ -473,6 +473,18 @@ def _coverage(start: float, end: float, ranges: list[dict]) -> float:
     )
 
 
+# Ao restaurar uma frase, pedacos de fala separados por MENOS que isto
+# entram juntos (a pausa fica no video). Era 0,80s, e isso brigava com o
+# resto do app: o corte remove pausa a partir de 0,40s (MIN_SILENCE_DROP em
+# run_fast) e a ficha ACUSA pausa a partir de 0,40s (_SILENCIO_MIN_S) — ou
+# seja, a restauracao devolvia silencio que o proprio corte tiraria e
+# depois o app avisava o usuario sobre ele. Medido no projeto C014 (o plano
+# da IA pedia dois blocos longos): com 0,80 sobravam 5 pausas somando 2,74s
+# num corte de 40,7s; com 0,40 sobra ZERO e o corte cai para 38,2s, ao
+# preco de 5 pontos de corte a mais (estilo dinamico ja e assim).
+COLA_PAUSA_S = 0.40
+
+
 def _speech_inside(
     start: float, end: float, regions: list[tuple[float, float]]
 ) -> list[tuple[float, float]]:
@@ -486,7 +498,7 @@ def _speech_inside(
     bits.sort()
     merged = [list(bits[0])]
     for a, b in bits[1:]:
-        if a <= merged[-1][1] + 0.80:
+        if a <= merged[-1][1] + COLA_PAUSA_S:
             merged[-1][1] = max(merged[-1][1], b)
         else:
             merged.append([a, b])

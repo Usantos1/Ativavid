@@ -1,5 +1,20 @@
 # Changelog
 
+## 3.32
+
+- **As pausas mortas que sobravam no meio do vídeo sumiram.** Quando a IA
+  pedia para manter uma frase inteira, o app devolvia o trecho junto com as
+  pausas de dentro — e depois avisava você, na ficha do vídeo, sobre essas
+  mesmas pausas. Eram três medidas discordando: o corte tira pausa a partir
+  de 0,4s, o aviso acusa a partir de 0,4s, mas a restauração colava tudo que
+  fosse menor que 0,8s. Agora as três combinam.
+- Medido em 6 vídeos seus: **11,2s de silêncio morto viraram 2,1s**. Num
+  deles (o mesmo vídeo renderizado dos dois jeitos) foram 3 pausas somando
+  1,6s para nenhuma, com o vídeo saindo 2,4s mais curto e sem nenhuma emenda
+  estourada.
+- O preço é ter mais pontos de corte — o vídeo fica mais seco e mais rápido.
+  Nos vídeos que já não tinham pausa sobrando, nada muda.
+
 ## 3.31
 
 - **A Biblioteca foi refeita: cada acervo tem a sua aba.** Imagens, trilhas
