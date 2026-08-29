@@ -23,6 +23,16 @@ def _clamp(n: float, lo: float = 35, hi: float = 98) -> int:
 MODOS_PRESERVADORES = ("complete", "intact", "light")
 
 
+def _seg(v: float) -> str:
+    """Segundos como o usuario le: virgula decimal e a unidade junto."""
+    return f"{v:.1f}".replace(".", ",") + "s"
+
+
+def _mmss(v: float) -> str:
+    """Posicao no video pronto — para achar o trecho sem procurar."""
+    return f"{int(v // 60)}:{int(v % 60):02d}"
+
+
 def _hook_score(ranges: list[dict], *, preserva: bool = False) -> tuple[int, str | None]:
     if not ranges:
         return 48, "Sem takes para avaliar a abertura."
@@ -46,7 +56,17 @@ def _hook_score(ranges: list[dict], *, preserva: bool = False) -> tuple[int, str
         score += 8
     else:
         score -= 8
-        tip = tip or "A abertura está longa ou curta demais para prender nos primeiros segundos."
+        # Dizer QUAL dos dois, e quanto. "longa ou curta demais" saiu em 103
+        # dos 185 videos do usuario sem dizer para que lado nem de quanto —
+        # conselho que nao da para atender e conselho que se aprende a
+        # ignorar. O numero medido cabe na mesma linha.
+        tip = tip or (
+            f"A abertura tem {_seg(hd)} — corte antes: as primeiras falas "
+            "prendem melhor entre 1,5 e 3,5s."
+            if hd > 5.0 else
+            f"A abertura tem só {_seg(hd)} — curta demais para o espectador "
+            "entender o gancho."
+        )
     quote = str(first.get("quote") or "").strip()
     if len(quote) >= 16:
         score += 6
@@ -67,7 +87,8 @@ def _clarity_score(ranges: list[dict], *, transcript_ok: bool, spoken: str) -> t
         score -= 10
         return _clamp(score), "Pouca fala aproveitada — o sentido pode ter ficado raso."
     if filled / n < 0.5:
-        return _clamp(score - 8), "Vários takes sem fala clara."
+        return _clamp(score - 8), (
+            f"{n - filled} dos {n} takes entraram sem fala clara.")
     return _clamp(score), None
 
 
@@ -96,7 +117,9 @@ def _rhythm_score(
         # tambem nao se aplica. Sobram so as pausas (que complete/light
         # removem de fato) — o resto vira nota neutra sem dica.
         score = max(70.0, 88.0 - min(18, silence_flags * 5))
-        tip = "Há pausas longas que dá para enxugar." if silence_flags else None
+        tip = (f"{silence_flags} pausa{'s' if silence_flags > 1 else ''} longa"
+               f"{'s' if silence_flags > 1 else ''} que dá para enxugar."
+               if silence_flags else None)
         return _clamp(score), tip
     durs = [_take_dur(r) for r in ranges if _take_dur(r) > 0.05]
     tip = None
@@ -104,16 +127,25 @@ def _rhythm_score(
         avg = sum(durs) / len(durs)
         if avg > 9:
             score -= 10
-            tip = "Os takes estão longos — o ritmo pode cansar."
+            tip = (f"Os takes estão longos ({_seg(avg)} em média) — o ritmo "
+                   "pode cansar.")
         elif avg < 0.65 and n >= 6:
             score -= 12
-            tip = "Cortes demais: o vídeo ficou picado."
+            tip = (f"Cortes demais: {n} takes de {_seg(avg)} em média — o "
+                   "vídeo ficou picado.")
         elif max(durs) > 14:
             score -= 6
-            tip = tip or "Tem um trecho longo demais no meio."
+            # QUAL trecho, e onde ele começa no vídeo pronto: sem isso o
+            # usuário tem de procurar o trecho longo no olho.
+            i = durs.index(max(durs))
+            comeco = sum(durs[:i])
+            tip = tip or (
+                f"O {i + 1}º trecho tem {_seg(max(durs))} — começa em "
+                f"{_mmss(comeco)} e segura o ritmo.")
     score -= min(18, silence_flags * 5)
     if silence_flags and not tip:
-        tip = "Há pausas longas que dá para enxugar."
+        tip = (f"{silence_flags} pausa{'s' if silence_flags > 1 else ''} longa"
+               f"{'s' if silence_flags > 1 else ''} que dá para enxugar.")
     return _clamp(score), tip
 
 
@@ -133,7 +165,8 @@ def _cta_score(ranges: list[dict]) -> tuple[int, str | None]:
         score = 72
     else:
         score = 60
-        tip = "O fechamento está longo demais."
+        tip = (f"O fechamento tem {_seg(cd)} — o CTA rende mais entre 1 e "
+               "4 segundos.")
     if named[-1] is last:
         score += 6
     else:

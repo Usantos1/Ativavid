@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.56
+
+- **As dicas da nota agora dizem onde e quanto.** Passei os 185 vídeos já
+  entregues e vi a mesma frase genérica repetida: "a abertura está longa ou
+  curta demais" saiu em 103 deles, sem dizer para que lado nem de quanto.
+  Agora sai *"A abertura tem 9,0s — corte antes: as primeiras falas prendem
+  melhor entre 1,5 e 3,5s"*. O trecho longo do meio diz **qual** trecho e em
+  que minuto ele começa; o fechamento e as pausas dizem o tamanho e a
+  quantidade.
+
 ## 3.55
 
 - **O preview mostra o layout escolhido.** Degradê, Vinheta, Cinema e Borda da
