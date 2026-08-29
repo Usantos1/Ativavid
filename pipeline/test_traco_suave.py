@@ -133,3 +133,20 @@ def test_marca_texto_fica_na_tela_depois_de_entrar():
     j = s.index("esq, topo, larg_f, alt_f = TRACO_CAIXA")
     trecho = s[i:j]          # so o bloco do marcador, antes do circulo
     assert "_faixa(1.0, (o_fim," in trecho, "sem o estagio de permanencia"
+
+
+def test_preview_fecha_o_laco_do_risco():
+    """O laço do preview tem que fechar, como o do vídeo final.
+
+    `strokeDasharray={1}` com `non-scaling-stroke` faz o Chrome medir o
+    tracejado na tela esticada: o traço aceso acabava antes do fim e o laço
+    ficava aberto no arco de baixo (medido: o preview desenhava 0–0,42 e
+    0,78–1,00 do caminho, tinta 9400 contra 15946 do motor próprio). Sem o
+    tracejado depois que a animação termina, o preview passou a 16218 de
+    tinta e 0,92 de sobreposição com o motor próprio.
+    """
+    from pathlib import Path
+    s = (Path(__file__).resolve().parent.parent / "assets" / "shortform" /
+         "src" / "PencilOutline.tsx").read_text(encoding="utf-8")
+    assert "strokeDasharray={p >= 1 ? undefined : 1}" in s
+    assert "strokeDashoffset={p >= 1 ? undefined : 1 - p}" in s

@@ -45,8 +45,16 @@ export const PencilOutline: React.FC<{progress: number; color?: string}> = ({
         strokeLinejoin="round"
         vectorEffect="non-scaling-stroke"
         pathLength={1}
-        strokeDasharray={1}
-        strokeDashoffset={1 - p}
+        // Enquanto anima, o tracejado desenha o laco aos poucos. Quando
+        // termina, ele SAI: com `non-scaling-stroke` o Chrome mede o
+        // tracejado na tela ja esticada, e `strokeDasharray={1}` acabava
+        // antes do fim do caminho — o laco ficava com um buraco no arco de
+        // baixo e nunca fechava (medido em 29/08: o preview desenhava so de
+        // 0 a 0,42 e de 0,78 a 1,00 do caminho). O video final, que sai do
+        // renderizador proprio, sempre fechou o laco: era o preview que
+        // mostrava outra coisa.
+        strokeDasharray={p >= 1 ? undefined : 1}
+        strokeDashoffset={p >= 1 ? undefined : 1 - p}
         style={{filter: 'drop-shadow(0 3px 8px rgba(0,0,0,0.45))'}}
       />
     </svg>

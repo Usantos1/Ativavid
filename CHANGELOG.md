@@ -2,6 +2,11 @@
 
 ## 3.30
 
+- **No preview, o círculo de ênfase não fechava.** O laço parava no meio do
+  arco de baixo e ficava aberto — só no preview: o vídeo final sempre saiu
+  com o laço fechado. Ou seja, o que você via ao editar não era o que ia
+  para o vídeo. Agora os dois fecham (medido: a sobreposição entre o preview
+  e o vídeo subiu de 0,66 para 0,92 do desenho).
 - **O marca-texto sumia depois de entrar.** No estilo marca-texto, a faixa
   amarela era desenhada só durante a animação de entrada e depois
   desaparecia — a palavra ficava sem realce pelo resto da legenda. Agora ela
