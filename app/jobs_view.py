@@ -130,6 +130,17 @@ def _aviso_de_trilha(job: dict, edit: Path) -> None:
     ec = str(t.get("endCardSkip") or "").strip()
     if ec:
         job["cardFinalNota"] = f"Card final desligado: {ec[:110]}"
+    fora = t.get("trechosForaDaFonte") or []
+    if isinstance(fora, list) and fora:
+        # Sem esta nota o defeito e MUDO: o video sai pronto, com pedaco
+        # sem som e travado, e a culpa parece ser da gravacao.
+        fontes = sorted({str(f.get("fonte") or "?") for f in fora
+                         if isinstance(f, dict)})
+        quantos = len(fora)
+        job["corteNota"] = (
+            f"{quantos} trecho{'s' if quantos > 1 else ''} pedia"
+            f"{'m' if quantos > 1 else ''} tempo que o arquivo não tem "
+            f"({', '.join(fontes)[:60]}) — foram tirados do corte")
 
 
 def _resumo_do_corte(job: dict, edit: Path) -> None:

@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.36
+
+- **Trecho que pede um pedaço que o arquivo não tem agora é barrado — e
+  aparece na ficha.** Esse tipo de erro nunca deu mensagem: o vídeo saía
+  "pronto", com um pedaço mudo e travado, e a culpa parecia ser da gravação.
+  Foi o que aconteceu no seu vídeo de 3 partes. A causa daquele caso já foi
+  corrigida na 3.35; esta versão fecha a porta para a família inteira do
+  problema, venha o engano de onde vier.
+- O trecho que passa do fim do arquivo é aparado; o que está inteiro fora é
+  removido; e a ficha do vídeo passa a dizer, em uma linha, quantos trechos
+  foram tirados e de qual arquivo.
+
 ## 3.35
 
 - **Vídeo em várias partes: consertado o corte que ficava mudo e travado.**

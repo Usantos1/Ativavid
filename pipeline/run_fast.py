@@ -221,6 +221,11 @@ def write_timing(edit_dir: Path) -> dict:
         payload["musicaMotorRecusa"] = _RENDER_META["musicaMotorRecusa"]
     if _RENDER_META.get("endCardSkip"):
         payload["endCardSkip"] = _RENDER_META["endCardSkip"]
+    # Trecho que pedia tempo inexistente na fonte. Isto tem de chegar na
+    # FICHA: o video sai "pronto" com pedaco mudo e travado, e sem uma nota
+    # o usuario procura defeito na gravacao dele.
+    if _RENDER_META.get("trechosForaDaFonte"):
+        payload["trechosForaDaFonte"] = _RENDER_META["trechosForaDaFonte"]
     try:
         (edit_dir / "timing.json").write_text(
             json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8"
@@ -2265,6 +2270,58 @@ def _momento_do_take(nome: str, palavras: list[tuple[str, float, float]],
     return None
 
 
+def _aparar_fora_da_fonte(ranges: list[dict],
+                          duracoes: dict[str, float]) -> list[dict]:
+    """Tira do corte o que pede tempo que o arquivo NAO tem.
+
+    Isto nunca da erro: o ffmpeg, pedido a partir de um instante que nao
+    existe, entrega silencio e quadro congelado, e o video sai "pronto".
+    Caso real (29/08, job de 3 partes do usuario): `Parte 1.mov` tem 6,1s e
+    o EDL trazia 12 trechos dessa fonte indo ate 137,5s — tempos da
+    `parte 2`. O video saiu com 28s, 23,4s deles mudos e travados, e so a
+    ficha de qualidade estranhou.
+
+    A causa daquele caso foi consertada (o casamento de take por nome), mas
+    a familia do defeito e maior do que ela: qualquer engano de relogio
+    entre takes cai aqui. Um trecho fora da fonte nunca e conteudo — e
+    sempre erro de conta. Entao ele e aparado, ou removido se nao sobrar
+    nada, e o motivo vai para o log e para a ficha.
+    """
+    if not ranges or not duracoes:
+        return ranges
+    fora: list[dict] = []
+    limpos: list[dict] = []
+    for r in ranges:
+        dur = duracoes.get(str(r.get("source") or ""))
+        if not dur:
+            limpos.append(r)
+            continue
+        try:
+            ini, fim = float(r["start"]), float(r["end"])
+        except (KeyError, TypeError, ValueError):
+            limpos.append(r)
+            continue
+        if fim <= dur + 0.05:
+            limpos.append(r)
+            continue
+        novo_fim = min(fim, dur)
+        if novo_fim - ini < 0.30:
+            fora.append({"fonte": r.get("source"), "de": round(ini, 2),
+                         "ate": round(fim, 2), "acao": "removido"})
+            continue
+        fora.append({"fonte": r.get("source"), "de": round(ini, 2),
+                     "ate": round(fim, 2), "acao": f"aparado em {novo_fim:.2f}"})
+        limpos.append(dict(r, end=round(novo_fim, 3)))
+    if fora:
+        _RENDER_META["trechosForaDaFonte"] = fora[:8]
+        for f in fora[:5]:
+            print(f"[corte] fora da fonte: {f['fonte']} {f['de']}-{f['ate']}s "
+                  f"({f['acao']})", flush=True)
+        print(f"[corte] {len(fora)} trecho(s) pediam tempo que a fonte nao "
+              f"tem — o video sairia mudo e travado neles", flush=True)
+    return limpos
+
+
 def _attach_auto_broll(edit_data: dict, public: Path, preset: dict, transcript: str, duration: float) -> dict:
     """Auto image cards / B-roll.
 
@@ -3161,6 +3218,7 @@ def run(
     # Analise de voz de CADA fonte, pela chave do range: o nivelamento
     # precisa medir cada take contra ele mesmo (ver _equilibrar_ganhos).
     vozes_por_fonte: dict[str, dict] = {}
+    duracoes_por_fonte: dict[str, float] = {}
     dur = 0.0
     spoken = ""
     source_key = "SRC"
@@ -3262,6 +3320,7 @@ def run(
             print(f"[warn] {src.name}: color confidence low (profile={color.get('profile')})", flush=True)
         g = resolve_color_grade(color, preset)
         vozes_por_fonte[key] = voice_i
+        duracoes_por_fonte[key] = dur_i
         if idx == 0:
             grade_field = g
             regions = regions_i
@@ -3473,6 +3532,12 @@ def run(
         if str(r.get("beat") or "").upper() in ("HOOK", "CTA", "KEEP"):
             continue
         r["beat"] = "HOOK" if i == 0 else ("CTA" if i == len(ranges) - 1 and len(ranges) > 2 else f"B{i}")
+
+    ranges = _aparar_fora_da_fonte(ranges, duracoes_por_fonte)
+    if not ranges:
+        raise NeedsReview(
+            "no_speech",
+            "todos os trechos pediam tempo que as fontes nao tem")
 
     if not allow_landscape and intent_mode not in ("complete", "intact"):
         total_keep = sum(max(0.0, float(r["end"]) - float(r["start"])) for r in ranges)

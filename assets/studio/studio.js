@@ -526,6 +526,9 @@ function fichaHtml(j) {
   // Nota (nao erro): o plano veio do Groq porque as sessoes web cairam.
   if (j.iaNota) linhas.push(["IA", j.iaNota]);
   if (j.corteQualidade) linhas.push(["Revisar no corte", j.corteQualidade]);
+  // Trecho que pedia tempo inexistente no arquivo. Sem esta linha o
+  // defeito e mudo: o video sai pronto com pedaco sem som e travado.
+  if (j.corteNota) linhas.push(["Corte", j.corteNota]);
   if (j.trilhaNota) linhas.push(["Trilha", j.trilhaNota]);
   if (j.cardFinalNota) linhas.push(["Marca", j.cardFinalNota]);
   if (j.publicadoLink) linhas.push(["Instagram", "publicado ✓"]);
@@ -573,6 +576,7 @@ function cardSig(j, opts) {
     j.publicacaoErro || "",
     j.trilhaNota || "",
     j.corteQualidade || "",
+    j.corteNota || "",
     j.cardFinalNota || "",
     versoesDaFonte(j).length,
     j.stage, j.message, j.reason || "", j.localPoster || j.thumbUrl, links.editor, links.estilo, links.final,
