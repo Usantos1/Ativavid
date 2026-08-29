@@ -1003,4 +1003,63 @@ def guard_ranges(
         if not _covers(out, a, b, min_overlap=0.2):
             out = _insert_range(out, a, b, "KEEP", "protected-range")
 
+    return tirar_pausa_morta(out, regions, mode)
+
+
+def tirar_pausa_morta(
+    ranges: list[dict],
+    regions: list[tuple[float, float]],
+    mode: str,
+) -> list[dict]:
+    """Divide qualquer trecho na pausa morta que sobrou dentro dele.
+
+    A 3.32 acertou a RESTAURACAO de frase (ela colava pausa de ate 0,80s),
+    mas sobrava um segundo caminho: o trecho que a IA pediu e que passa
+    inteiro pelo `_normalize_ranges` nunca era dividido — e as pausas de
+    dentro dele ficavam no video. Medido em 6 projetos reais depois da
+    3.32: sobravam 2,14s em dois deles (pausas de 0,40 a 0,45s), e a ficha
+    seguia avisando sobre elas.
+
+    A regra vale para QUEM QUER QUE tenha feito o trecho, e por isso mora
+    no fim da guarda: em modo que corta, silencio de 0,40s ou mais nao
+    sobrevive. Nenhuma palavra e perdida — o corte cai no silencio, entre
+    as falas, e as bordas do trecho original ficam de pe (o lead/trail que
+    protege a primeira e a ultima silaba).
+
+    `intact` (Sem cortes) sai fora: la o video inteiro e o produto.
+    """
+    if mode == "intact" or not regions or not ranges:
+        return ranges
+    out: list[dict] = []
+    for rg in ranges:
+        try:
+            a0, b0 = float(rg["start"]), float(rg["end"])
+        except (KeyError, TypeError, ValueError):
+            out.append(rg)
+            continue
+        falas = [(max(x, a0), min(y, b0)) for x, y in regions
+                 if min(y, b0) - max(x, a0) > 0.05]
+        if len(falas) < 2:
+            out.append(rg)
+            continue
+        pedacos: list[list[float]] = [[falas[0][0], falas[0][1]]]
+        for ini, fim in falas[1:]:
+            if ini - pedacos[-1][1] >= COLA_PAUSA_S:
+                pedacos.append([ini, fim])
+            else:
+                pedacos[-1][1] = fim
+        if len(pedacos) < 2:
+            out.append(rg)
+            continue
+        # as pontas do trecho original ficam: elas ja carregam a folga que
+        # protege a primeira e a ultima silaba
+        pedacos[0][0], pedacos[-1][1] = a0, b0
+        for i, (ini, fim) in enumerate(pedacos):
+            if fim - ini < 0.20:
+                continue
+            novo = dict(rg, start=round(ini, 3), end=round(fim, 3))
+            if i:
+                novo["reason"] = (str(rg.get("reason") or "")
+                                  + " · sem-pausa-morta").strip(" ·")[:200]
+            out.append(novo)
     return out

@@ -6,7 +6,7 @@
 ; Atalho → ATIVAVID.vbs (sem janela CMD).
 
 #define MyAppName "ATIVAVID"
-#define MyAppVersion "3.32"
+#define MyAppVersion "3.33"
 #define MyAppPublisher "ATIVAVID"
 #define MyAppURL "https://github.com/fillrochaa/edvid"
 #define MyAppExeName "ATIVAVID.vbs"

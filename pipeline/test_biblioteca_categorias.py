@@ -130,3 +130,31 @@ def test_clima_da_biblioteca_bate_com_o_do_pipeline():
     rf = importlib.import_module("pipeline.run_fast")
     for rotulo, clima in bl.CLIMA_TRILHA.items():
         assert rf._TRILHA_CLIMA.get(rotulo) == clima, rotulo
+
+
+def test_video_tem_acervo_proprio_com_categoria_de_take():
+    """Take de apoio (reação, meme, CTA) e foto de produto são coisas
+    diferentes: ficavam na mesma aba e as categorias não serviam para
+    nenhum dos dois."""
+    from pathlib import Path
+    RAIZ = Path(__file__).resolve().parent.parent
+    html = (RAIZ / "assets" / "studio" / "index.html").read_text(encoding="utf-8")
+    assert 'data-libtab="clip"' in html
+    assert 'id="libraryVideoInput"' in html and 'id="libCountClip"' in html
+    js = (RAIZ / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
+    assert 'kinds: ["clip"]' in js and 'kinds: ["image"]' in js
+    assert "viral" in bl.CATEGORIAS_CLIPE and "meme" in bl.CATEGORIAS_CLIPE
+    assert "cta" in bl.CATEGORIAS_CLIPE and "humor" in bl.CATEGORIAS_CLIPE
+
+
+def test_so_um_som_toca_por_vez():
+    """Tocar a terceira trilha deixava as duas anteriores tocando por cima
+    (print do usuário com três ao mesmo tempo) — comparar duas músicas
+    ficava impossível. `play` não borbulha: o listener é de captura."""
+    from pathlib import Path
+    js = (Path(__file__).resolve().parent.parent / "assets" / "studio"
+          / "studio.js").read_text(encoding="utf-8")
+    i = js.index('painel.addEventListener("play"')
+    trecho = js[i:i + 400]
+    assert "querySelectorAll(\"audio, video\")" in trecho, trecho
+    assert "m.pause()" in trecho and "}, true)" in trecho, trecho

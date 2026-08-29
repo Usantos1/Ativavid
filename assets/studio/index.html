@@ -340,6 +340,9 @@
             <button type="button" class="lib-tab is-on" data-libtab="image" role="tab">
               Imagens <span class="lib-tab-n" id="libCountImage">0</span>
             </button>
+            <button type="button" class="lib-tab" data-libtab="clip" role="tab">
+              Vídeos <span class="lib-tab-n" id="libCountClip">0</span>
+            </button>
             <button type="button" class="lib-tab" data-libtab="track" role="tab">
               Trilhas sonoras <span class="lib-tab-n" id="libCountTrack">0</span>
             </button>
@@ -354,7 +357,8 @@
             <div class="lib-bar-actions">
               <button type="button" class="export-btn export-btn--sm" id="btnLibraryAdd">Adicionar</button>
               <button type="button" class="ghost-btn" id="btnLibraryRefresh">Abrir pasta</button>
-              <input type="file" id="libraryFileInput" accept="image/*,video/mp4,video/quicktime,video/webm" multiple hidden>
+              <input type="file" id="libraryFileInput" accept="image/*" multiple hidden>
+              <input type="file" id="libraryVideoInput" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm" multiple hidden>
               <input type="file" id="libraryMusicInput" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac" multiple hidden>
               <input type="file" id="librarySfxInput" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac" multiple hidden>
             </div>

@@ -54,3 +54,39 @@ def test_sem_regiao_devolve_o_trecho_inteiro():
     """Sem dado de fala, preservar é mais seguro do que cortar."""
     assert _speech_inside(1.0, 3.0, []) == [(1.0, 3.0)]
     assert _speech_inside(1.0, 1.05, []) == []
+
+
+def test_pausa_morta_nao_sobrevive_a_guarda():
+    """A regra vale para QUALQUER trecho, não só para o restaurado.
+
+    Depois da 3.32 sobrava um segundo caminho: o trecho que a IA pediu e
+    que passa inteiro pelo `_normalize_ranges` nunca era dividido. Medido
+    em 6 projetos reais: 2,14s de pausa continuavam no vídeo (0,40 a
+    0,45s cada) e a ficha seguia avisando sobre elas.
+    """
+    from app.editing_intent import tirar_pausa_morta
+    regioes = [(0.0, 2.0), (2.6, 5.0), (5.2, 7.0)]
+    trecho = [{"source": "S", "start": 0.0, "end": 7.0, "beat": "B",
+               "quote": "", "reason": "IA", "gain_db": 0.0}]
+    out = tirar_pausa_morta(trecho, regioes, "dynamic")
+    assert len(out) == 2, out                    # 0,6s corta; 0,2s nao
+    assert out[0]["start"] == 0.0 and out[0]["end"] == 2.0
+    assert out[1]["start"] == 2.6 and out[1]["end"] == 7.0
+    assert "sem-pausa-morta" in out[1]["reason"]
+
+
+def test_sem_cortes_nao_ganha_corte_nenhum():
+    """`intact` é 'quero o vídeo inteiro' — nem o silêncio sai de lá."""
+    from app.editing_intent import tirar_pausa_morta
+    regioes = [(0.0, 2.0), (3.0, 7.0)]
+    trecho = [{"source": "S", "start": 0.0, "end": 7.0, "beat": "HOOK",
+               "quote": "", "reason": "sem cortes", "gain_db": 0.0}]
+    assert tirar_pausa_morta(trecho, regioes, "intact") == trecho
+
+
+def test_sem_dado_de_fala_nao_mexe():
+    from app.editing_intent import tirar_pausa_morta
+    trecho = [{"source": "S", "start": 0.0, "end": 7.0, "beat": "B",
+               "quote": "", "reason": "IA", "gain_db": 0.0}]
+    assert tirar_pausa_morta(trecho, [], "dynamic") == trecho
+    assert tirar_pausa_morta([], [(0.0, 1.0)], "dynamic") == []

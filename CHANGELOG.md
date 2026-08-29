@@ -1,5 +1,23 @@
 # Changelog
 
+## 3.33
+
+- **Só um som toca por vez na Biblioteca.** Dar play numa trilha pausa a que
+  estava tocando — antes três ficavam tocando por cima uma da outra e não
+  dava para comparar duas músicas.
+- **Aba de Vídeos.** Os takes de apoio saíram de dentro das imagens e ganharam
+  acervo próprio, com categorias que dizem o PAPEL do take: viral, meme,
+  humor, reação, CTA, abertura, transição, produto, bancada. É por aí que
+  você acha o take na hora — "deu uma patada" → humor. Cada take toca na
+  própria tela, para você lembrar o que é antes de classificar.
+- **Nenhuma pausa morta sobrevive ao corte, venha ela de onde vier.** A 3.32
+  consertou as pausas que voltavam quando a IA mandava manter uma frase
+  inteira; sobrava um segundo caminho — o trecho que a IA pede e que o app
+  aceita inteiro nunca era dividido. Agora a regra vale para qualquer trecho
+  nos modos que cortam. Medido em 6 vídeos seus: **os 2,1s que ainda
+  sobravam foram a zero**, e num render completo do vídeo que mais sofria o
+  resultado foi zero pausa, zero take baixo e zero emenda estourada.
+
 ## 3.32
 
 - **As pausas mortas que sobravam no meio do vídeo sumiram.** Quando a IA

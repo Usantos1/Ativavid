@@ -4783,11 +4783,20 @@ const LIB_ABAS = {
   image: {
     titulo: "imagens",
     um: "imagem",
-    kinds: ["image", "clip"],
+    kinds: ["image"],
     botao: "Adicionar imagens",
     input: "#libraryFileInput",
     vazio: "Nenhuma imagem ainda. Coloque fotos dos seus produtos, da bancada e dos consertos aqui \u2014 a IA usa como b-roll no meio do v\u00eddeo.",
     pe: "As imagens viram <strong>b-roll</strong>: a IA escolhe pelo que a frase est\u00e1 dizendo. A categoria entra no nome do arquivo (<code>produto--iphone.jpg</code>) e serve para voc\u00ea achar; a IA casa pelo nome inteiro.",
+  },
+  clip: {
+    titulo: "v\u00eddeos",
+    um: "v\u00eddeo",
+    kinds: ["clip"],
+    botao: "Adicionar v\u00eddeos",
+    input: "#libraryVideoInput",
+    vazio: "Nenhum take ainda. Guarde aqui os v\u00eddeos curtos de apoio \u2014 rea\u00e7\u00e3o, meme, piada, o CTA que voc\u00ea grava separado \u2014 para a IA usar no meio da fala.",
+    pe: "Os v\u00eddeos entram como <strong>take de apoio</strong> no meio do v\u00eddeo. A categoria diz o PAPEL do take (rea\u00e7\u00e3o, meme, humor, CTA) e \u00e9 por onde voc\u00ea acha na hora: \u201cdeu uma patada\u201d \u2192 take de humor. A IA casa pelo nome do arquivo, ent\u00e3o vale nomear o que o take mostra (<code>humor--cavalo-patada.mp4</code>).",
   },
   track: {
     titulo: "trilhas",
@@ -4839,7 +4848,8 @@ async function loadLibraryUi() {
   state.libraryData = lib;
   const tudo = lib.items || [];
   const conta = (ks) => tudo.filter((i) => ks.includes(i.kind)).length;
-  if ($("#libCountImage")) $("#libCountImage").textContent = conta(["image", "clip"]);
+  if ($("#libCountImage")) $("#libCountImage").textContent = conta(["image"]);
+  if ($("#libCountClip")) $("#libCountClip").textContent = conta(["clip"]);
   if ($("#libCountTrack")) $("#libCountTrack").textContent = conta(["track"]);
   if ($("#libCountSfx")) $("#libCountSfx").textContent = conta(["sfx"]);
   renderLibraryAba();
@@ -4913,8 +4923,8 @@ function renderLibraryAba() {
     ? Object.fromEntries(Object.entries(lib.clima || {}).map(([k, v]) => [k, `clima ${v}`]))
     : Object.fromEntries([...new Set([...vagas, ...contagem.keys()])].map(
         (k) => [k, vagas.includes(k) ? "entra no v\u00eddeo" : "s\u00f3 guardado"]));
-  painel.innerHTML = aba === "image"
-    ? libGradeImagens(filtrados)
+  painel.innerHTML = (aba === "image" || aba === "clip")
+    ? libGradeImagens(filtrados, aba)
     : libListaAudio(filtrados, aba, notas, ordem);
 }
 
@@ -4936,13 +4946,15 @@ function libSeletorCategoria(it, opcoes) {
   return `<select class="lib-cat" data-librel="${escapeHtml(it.rel)}" title="Categoria \u2014 renomeia o arquivo">${ops.join("")}</select>`;
 }
 
-function libGradeImagens(itens) {
+function libGradeImagens(itens, aba) {
   if (!itens.length) return "";
-  const opcoes = ((state.libraryData || {}).categorias || {}).image || [];
+  const opcoes = ((state.libraryData || {}).categorias || {})[aba || "image"] || [];
   return `<div class="lib-grid">${itens.map((it) => {
     const src = `/api/library/file?rel=${encodeURIComponent(it.rel)}`;
+    // Take se assiste: video da biblioteca vem com controle, para o
+    // usuario lembrar o que e o take antes de escolher a categoria.
     const midia = it.kind === "clip"
-      ? `<video class="lib-thumb" src="${src}" muted preload="metadata"></video>`
+      ? `<video class="lib-thumb" src="${src}" controls preload="metadata"></video>`
       : `<img class="lib-thumb" src="${src}" alt="" loading="lazy">`;
     return `<figure class="lib-item" title="${escapeHtml(it.name)}">
       ${midia}
@@ -5135,6 +5147,17 @@ function wireBiblioteca() {
   const painel = $("#libraryPanel");
   if (painel && !painel.dataset.wired) {
     painel.dataset.wired = "1";
+    // Um play por vez. Sem isto, ouvir a terceira trilha deixava as duas
+    // anteriores tocando por cima (o usuario mandou print com tres ao
+    // mesmo tempo) — e comparar duas musicas fica impossivel. `play` nao
+    // borbulha, por isso o listener e de captura.
+    painel.addEventListener("play", (ev) => {
+      const alvo = ev.target;
+      if (!alvo || !("pause" in alvo)) return;
+      for (const m of painel.querySelectorAll("audio, video")) {
+        if (m !== alvo && !m.paused) m.pause();
+      }
+    }, true);
     painel.addEventListener("change", async (ev) => {
       const sel = ev.target.closest(".lib-cat");
       if (!sel) return;
@@ -5164,7 +5187,8 @@ function wireBiblioteca() {
       if (input) input.click();
     };
   }
-  for (const id of ["#libraryFileInput", "#libraryMusicInput", "#librarySfxInput"]) {
+  for (const id of ["#libraryFileInput", "#libraryVideoInput",
+                    "#libraryMusicInput", "#librarySfxInput"]) {
     const input = $(id);
     if (!input || input.dataset.wired) continue;
     input.dataset.wired = "1";
@@ -5172,7 +5196,7 @@ function wireBiblioteca() {
       const files = [...(input.files || [])];
       if (!files.length) return;
       const aba = state.libAba || "image";
-      const kind = aba === "image" ? "" : aba;   // imagem/clipe: pela extensao
+      const kind = (aba === "image" || aba === "clip") ? "" : aba;  // pela extensao
       const cat = (state.libCat && state.libCat !== "\u2205") ? state.libCat : "";
       const qs = [kind ? `kind=${kind}` : "",
                   cat ? `categoria=${encodeURIComponent(cat)}` : ""]

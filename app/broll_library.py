@@ -51,6 +51,12 @@ CLIMA_TRILHA = {
 # escrever qualquer palavra; estas so aparecem como atalho na tela.
 CATEGORIAS_IMAGEM = ("produto", "bancada", "loja", "cliente", "antes-depois",
                      "peca", "marca")
+# Videos curtos sao TAKES de apoio: entram no meio da fala como reacao,
+# piada ou prova. A categoria e o que o usuario vai procurar na hora
+# ("deu uma patada" -> take de humor), entao ela fala do PAPEL do take no
+# video, nao do assunto.
+CATEGORIAS_CLIPE = ("viral", "meme", "humor", "reacao", "cta", "abertura",
+                    "transicao", "produto", "bancada")
 # Efeitos: a familia sai do proprio nome do arquivo (os 9 embutidos do app
 # nunca tiveram rotulo e nao vao ser renomeados — sao asset do produto).
 _FAMILIAS_SFX = (
@@ -152,6 +158,7 @@ def list_assets(projects_root: Path | None = None) -> dict[str, Any]:
         "categorias": {
             "track": list(CATEGORIAS_TRILHA),
             "image": list(CATEGORIAS_IMAGEM),
+            "clip": list(CATEGORIAS_CLIPE),
             "sfx": list(SFX_VAGAS),
         },
         "clima": dict(CLIMA_TRILHA),
