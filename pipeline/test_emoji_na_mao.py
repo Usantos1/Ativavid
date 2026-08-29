@@ -144,3 +144,31 @@ def test_a_previa_so_mostra_o_que_foi_posto_na_mao():
     assert "c.isNew" in bloco
     # som não tem o que mostrar
     assert "'sfx'" not in bloco
+
+
+def test_o_emoji_se_arrasta_e_a_roda_muda_o_tamanho():
+    """Ele nascia no centro-alto e ficava lá: tirar do rosto de quem fala
+    exigia mexer no arquivo. O gesto é o mesmo da manchete e da legenda."""
+    js = (REPO / "assets" / "preview" / "app.js").read_text(encoding="utf-8")
+    i = js.index("function emojiArrastavel")
+    bloco = js[i:i + 2600]
+    # guarda de tremor: clique não pode virar arrasto de 1px
+    assert "Math.abs(dx) < 4 && Math.abs(dy) < 4" in bloco
+    # preso ao quadro
+    assert "Math.max(0.02, Math.min(0.98" in bloco
+    # a roda é multiplicativa: o passo tem de valer igual em emoji pequeno
+    # e grande
+    assert "* fator" in bloco and "1.08" in bloco
+    assert "Math.max(0.06, Math.min(0.7" in bloco
+    # e o resultado vai para o bloco, que é o que viaja no salvar
+    assert "c.x =" in bloco and "c.y =" in bloco and "c.size =" in bloco
+
+
+def test_a_camada_deixa_pegar_so_o_emoji():
+    """A camada inteira é transparente ao ponteiro (senão come o clique do
+    vídeo); só o emoji recebe."""
+    css = (REPO / "assets" / "preview" / "app.css").read_text(encoding="utf-8")
+    i = css.index(".midia-overlay {")
+    assert "pointer-events: none" in css[i:i + 260]
+    j = css.index(".midia-previa-emoji {")
+    assert "pointer-events: auto" in css[j:j + 400]

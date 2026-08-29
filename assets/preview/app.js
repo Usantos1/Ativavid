@@ -3246,6 +3246,7 @@ function desenharMidiaNoPreview() {
       // `size` e fracao da LARGURA, como nos dois motores
       d.style.fontSize = `${(c.size ?? 0.22) * box.clientWidth}px`;
       d.textContent = c.char || '';
+      emojiArrastavel(d, c, box);
       continue;
     }
     const card = el('div', 'midia-previa-card', box);
@@ -3256,6 +3257,74 @@ function desenharMidiaNoPreview() {
     }
     el('div', 'midia-previa-nome', card).textContent = c.label || '';
   }
+}
+
+/* O emoji se arrasta sobre o video e a roda muda o tamanho — o mesmo gesto
+ * da manchete e da legenda. Ele nascia no centro-alto e ficava la: tirar do
+ * rosto de quem fala exigia mexer no arquivo.
+ * A posicao vive no proprio bloco e viaja no salvar; `x`/`y` sao fracao do
+ * quadro, que e o que os dois motores desenham. */
+function emojiArrastavel(d, c, box) {
+  if (d.dataset.arrasta) return;
+  d.dataset.arrasta = '1';
+  d.classList.add('movivel');
+  let arr = null;
+
+  d.addEventListener('pointerdown', (e) => {
+    if (S.applying || e.button !== 0) return;
+    const r = box.getBoundingClientRect();
+    arr = { x0: e.clientX, y0: e.clientY, cx: c.x ?? 0.5, cy: c.y ?? 0.34,
+            larg: r.width, alt: r.height, moveu: false };
+    d.setPointerCapture(e.pointerId);
+    e.preventDefault();
+    e.stopPropagation();
+  });
+
+  d.addEventListener('pointermove', (e) => {
+    if (!arr) return;
+    const dx = e.clientX - arr.x0;
+    const dy = e.clientY - arr.y0;
+    if (!arr.moveu && Math.abs(dx) < 4 && Math.abs(dy) < 4) return;  // tremor
+    arr.moveu = true;
+    d.classList.add('dragging');
+    // preso ao quadro: emoji fora da tela e emoji que ninguem ve
+    const nx = Math.max(0.02, Math.min(0.98, arr.cx + dx / arr.larg));
+    const ny = Math.max(0.02, Math.min(0.98, arr.cy + dy / arr.alt));
+    d.style.left = `${nx * 100}%`;
+    d.style.top = `${ny * 100}%`;
+    d.dataset.nx = String(nx);
+    d.dataset.ny = String(ny);
+  });
+
+  const soltar = (e) => {
+    if (!arr) return;
+    const moveu = arr.moveu;
+    arr = null;
+    d.classList.remove('dragging');
+    try { d.releasePointerCapture(e.pointerId); } catch { /* ja solto */ }
+    if (!moveu) return;
+    pushHistory();
+    c.x = +Number(d.dataset.nx || c.x || 0.5).toFixed(4);
+    c.y = +Number(d.dataset.ny || c.y || 0.34).toFixed(4);
+    refreshHeader();
+    scheduleAutosave();
+    toast('Emoji movido — Salvar para valer no vídeo', 2200);
+  };
+  d.addEventListener('pointerup', soltar);
+  d.addEventListener('pointercancel', soltar);
+
+  // roda = tamanho. O passo e multiplicativo para o ajuste ser igual em
+  // emoji pequeno e grande.
+  d.addEventListener('wheel', (e) => {
+    if (S.applying) return;
+    e.preventDefault();
+    const fator = e.deltaY < 0 ? 1.08 : 1 / 1.08;
+    const novo = Math.max(0.06, Math.min(0.7, (c.size ?? 0.22) * fator));
+    c.size = +novo.toFixed(4);
+    d.style.fontSize = `${c.size * box.clientWidth}px`;
+    refreshHeader();
+    scheduleAutosave();
+  }, { passive: false });
 }
 
 function aplicarLayoutNoPreview() {

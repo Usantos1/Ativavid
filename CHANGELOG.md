@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.64
+
+- **O emoji se arrasta na tela.** Pegue e leve para onde quiser sobre o vídeo
+  — antes ele nascia no centro-alto e ficava lá, mesmo tapando o rosto de
+  quem fala. A **roda do mouse** sobre ele muda o tamanho.
+- A posição e o tamanho vão junto no Salvar, e são exatamente os que o vídeo
+  vai usar.
+
 ## 3.63
 
 - **Você vê o emoji e a imagem antes de renderizar.** O que você põe à mão

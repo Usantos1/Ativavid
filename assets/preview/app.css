@@ -3570,6 +3570,18 @@ body.styles-wide .setup-actions .btn.primary {
   transform: translate(-50%, -50%);
   line-height: 1;
   filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.45));
+  /* a camada inteira e transparente ao ponteiro; o emoji nao, senao nao
+     da para pega-lo para arrastar */
+  pointer-events: auto;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.midia-previa-emoji.dragging { cursor: grabbing; }
+.midia-previa-emoji.movivel:hover {
+  outline: 2px dashed color-mix(in srgb, var(--hl-accent, #ff7713) 60%, transparent);
+  outline-offset: 6px;
+  border-radius: 8px;
 }
 .midia-previa-card {
   position: absolute;
