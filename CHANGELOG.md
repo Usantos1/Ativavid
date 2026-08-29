@@ -2,6 +2,13 @@
 
 ## 3.35
 
+- **Vídeo em várias partes: consertado o corte que ficava mudo e travado.**
+  Quando o nome do arquivo tinha espaço (`Parte 1.mov`), o app trocava as
+  falas de um take pelas de outro — e montava o corte pedindo pedaços que
+  não existem naquele arquivo. Resultado: só a primeira parte tinha som, a
+  segunda travava no meio e a agulha do preview não chegava no fim, porque a
+  timeline ficava com o triplo da duração real. No seu vídeo de 3 partes:
+  eram 12 trechos pedindo tempo inexistente; agora são zero.
 - **O take agora entra na hora da palavra que ele ilustra.** Antes o app
   pegava as três palavras mais repetidas do vídeo inteiro e espalhava os
   takes em fatias iguais — o take caía em qualquer lugar menos no momento

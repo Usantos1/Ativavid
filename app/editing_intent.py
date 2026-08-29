@@ -433,8 +433,34 @@ _HUMOR_HINTS = (
 )
 
 
+def _chave_de_take(nome: str) -> str:
+    """Compara nome de take ignorando espaco, `_`, `-`, caixa e acento."""
+    import re as _re
+    import unicodedata as _u
+    t = "".join(c for c in _u.normalize("NFD", (nome or "").lower())
+                if _u.category(c) != "Mn")
+    return _re.sub(r"[^0-9a-z]+", "", t)
+
+
 def load_packed_phrases(edit_dir: Path, stem: str | None = None) -> list[dict]:
-    """Lê takes_packed.md (não transcripts/*.json)."""
+    """Lê takes_packed.md (não transcripts/*.json).
+
+    O titulo da secao e o NOME DO ARQUIVO, e ele pode ter espaco:
+    `## Parte 1  (duration: 4.8s, 1 phrases)`. A versao antiga fazia
+    `line[3:].split()[0]` e guardava a chave "Parte" — que nunca casava com
+    o stem "Parte 1". Ai o plano B pegava a secao MAIS LONGA de outro take
+    e a guarda restaurava as frases da `parte 2` como se fossem da
+    `Parte 1`.
+
+    Caso real (29/08, job de 3 partes): `Parte 1.mov` tem 6,1s, mas o EDL
+    saiu com 12 trechos de Parte_1 indo ate 137,5s — tempos que so existem
+    na parte 2. O video ficou 23,4s mudo e travado, e a ficha acusou
+    "1 pausa de 23,4s" e um trecho 64 dB abaixo.
+
+    Por isso o plano B agora so vale quando ha UMA secao de take: com
+    varias, sem casar o nome, devolve vazio — a guarda deixa o corte como
+    esta, que e infinitamente melhor do que pedir um pedaco que nao existe.
+    """
     path = Path(edit_dir) / "takes_packed.md"
     if not path.exists():
         return []
@@ -443,7 +469,8 @@ def load_packed_phrases(edit_dir: Path, stem: str | None = None) -> list[dict]:
     current = ""
     for line in text.splitlines():
         if line.startswith("## "):
-            current = line[3:].split()[0].strip()
+            # `## <nome do arquivo>  (duration: ...)` — o nome pode ter espaco
+            current = line[3:].split("  (")[0].strip()
             sections.setdefault(current, [])
             continue
         m = PHRASE_RE.search(line)
@@ -454,12 +481,16 @@ def load_packed_phrases(edit_dir: Path, stem: str | None = None) -> list[dict]:
             "end": float(m.group(2)),
             "text": m.group(3).strip(),
         })
-    if stem and stem in sections and sections[stem]:
-        return sections[stem]
-    usable = [(k, v) for k, v in sections.items() if k.lower() not in ("cut", "base") and v]
-    if not usable:
-        return []
-    return max(usable, key=lambda kv: kv[1][-1]["end"] - kv[1][0]["start"])[1]
+    if stem:
+        alvo = _chave_de_take(stem)
+        for k, v in sections.items():
+            if v and _chave_de_take(k) == alvo:
+                return v
+    usable = [(k, v) for k, v in sections.items()
+              if k.lower() not in ("cut", "base") and v]
+    if len(usable) == 1:
+        return usable[0][1]
+    return []
 
 
 def _overlap(a0: float, a1: float, b0: float, b1: float) -> float:
@@ -1030,8 +1061,16 @@ def tirar_pausa_morta(
     """
     if mode == "intact" or not regions or not ranges:
         return ranges
+    # As `regions` sao de UMA fonte so (a de indice 0 em run_fast) e o
+    # relogio de cada take comeca do zero de novo. Dividir um trecho da
+    # `parte 2` pelas pausas da `Parte 1` cortaria no lugar errado — o
+    # mesmo cuidado que `_insert_range` ja toma.
+    alvo = ranges[0].get("source")
     out: list[dict] = []
     for rg in ranges:
+        if (rg.get("source") or alvo) != alvo:
+            out.append(rg)
+            continue
         try:
             a0, b0 = float(rg["start"]), float(rg["end"])
         except (KeyError, TypeError, ValueError):
