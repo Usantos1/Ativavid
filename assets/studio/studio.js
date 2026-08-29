@@ -4850,6 +4850,16 @@ async function loadLibraryUi() {
   }
   state.libraryRoot = lib.root || "";
   state.libraryData = lib;
+  // O estilo decide se o b-roll entra. Sem isto a tela deixava o usuario
+  // guardar take achando que ia aparecer no video — e no estilo dele
+  // (layout limpo + b-roll no padrao) o pipeline zera os inserts.
+  try {
+    const pack = await api("/api/brand-presets");
+    const presets = pack.presets || [];
+    const ativo = presets.find((p) => p.id === (pack.activeId
+      || (pack.active && pack.active.id))) || pack.active || presets[0];
+    state.libEstilo = (ativo && ativo.style) || {};
+  } catch { state.libEstilo = null; }
   const tudo = lib.items || [];
   const conta = (ks) => tudo.filter((i) => ks.includes(i.kind)).length;
   if ($("#libCountImage")) $("#libCountImage").textContent = conta(["image"]);
@@ -4902,7 +4912,7 @@ function renderLibraryAba() {
     empty.classList.toggle("hidden", itens.length > 0);
   }
   const pe = $("#libraryFoot");
-  if (pe) pe.innerHTML = cfg.pe;
+  if (pe) pe.innerHTML = cfg.pe + libAvisoDoBroll(aba, itens.length);
   const hint = $("#libraryHint");
   if (hint) {
     const nome = filtro === "\u2205" ? "sem categoria" : filtro;
@@ -4930,6 +4940,31 @@ function renderLibraryAba() {
   painel.innerHTML = (aba === "image" || aba === "clip")
     ? libGradeImagens(filtrados, aba)
     : libListaAudio(filtrados, aba, notas, ordem);
+}
+
+/* Guardar take nao basta: no layout limpo com o b-roll no padrao o
+ * pipeline NAO insere nada (é o talking-head limpo). Quem tem take na
+ * Biblioteca precisa saber disso na hora, nao depois do vídeo pronto. */
+function libAvisoDoBroll(aba, quantos) {
+  if (aba !== "clip" || !quantos) return "";
+  const st = state.libEstilo;
+  if (!st) return "";
+  const modo = String(st.brollMode || "quando_necessario").toLowerCase().trim();
+  const layout = String(st.edit || "limpa").toLowerCase().trim();
+  const limpo = ["limpa", "clean", "limpo", "moldura", "barra", "desfocado",
+                 "degrade"].includes(layout);
+  const desligado = ["off", "nenhum", "none", "desligado"].includes(modo);
+  const padrao = ["quando_necessario", "auto", ""].includes(modo);
+  if (!desligado && !(limpo && padrao)) return "";
+  const porque = desligado
+    ? "o b-roll está desligado no seu estilo"
+    : "seu estilo usa o quadro limpo e o b-roll está em \u201cQuando necessário\u201d";
+  const sujeito = quantos > 1
+    ? `Estes ${quantos} takes n\u00e3o v\u00e3o entrar`
+    : "Este take n\u00e3o vai entrar";
+  return `<span class="lib-alerta">${sujeito} nos v\u00eddeos: ${porque}. `
+    + `Para us\u00e1-${quantos > 1 ? "los" : "lo"}, mude o b-roll para <strong>Sempre</strong> ou `
+    + `<strong>Raro</strong> em Estilos.</span>`;
 }
 
 function libTamanho(bytes) {

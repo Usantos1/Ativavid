@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.39
+
+- **A Biblioteca avisa quando os takes guardados não vão entrar no vídeo.**
+  No estilo com quadro limpo e b-roll em "Quando necessário" — que é o
+  padrão — o app não insere nada, de propósito. Quem guardasse takes só
+  descobriria isso depois do vídeo pronto. Agora a aba Vídeos diz na hora
+  que eles não vão entrar e o que mudar em Estilos para usá-los.
+
 ## 3.38
 
 - **Vídeo com take de apoio voltou a usar o renderizador rápido.** Desde que

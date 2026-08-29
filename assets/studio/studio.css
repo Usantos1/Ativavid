@@ -3460,6 +3460,12 @@ body.home-working .hero-import .hero-inner { padding: 10px 0; }
   background: rgba(255, 255, 255, .08); color: var(--muted, #9aa0a6);
 }
 .lib-item-cat { padding: 0 10px 9px; }
+.lib-alerta {
+  display: block; margin-top: 10px; padding: 9px 12px; border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--accent, #ff3b5c) 45%, transparent);
+  background: color-mix(in srgb, var(--accent, #ff3b5c) 12%, transparent);
+  color: var(--text);
+}
 video.lib-thumb { aspect-ratio: 9 / 16; max-height: 260px; object-fit: contain;
   background: #000; }
 .lib-track-uso {
