@@ -3254,9 +3254,12 @@ class StudioHandler(BaseHTTPRequestHandler):
                 # `jobs: []` e a tela apagava o card sem dizer nada — o lote
                 # sumia. Com nome de pasta acentuado, que e o caso do usuario,
                 # uma falha no multipart cai exatamente aqui.
+                motivo = getattr(self, "_erro_import", "")
                 self._json({
                     "ok": False,
-                    "error": "nao consegui ler nenhum video desse envio",
+                    "error": (f"não consegui ler nenhum vídeo desse envio: "
+                              f"{motivo}" if motivo else
+                              "não consegui ler nenhum vídeo desse envio"),
                     "jobs": [],
                 }, 422)
                 return
@@ -3336,6 +3339,29 @@ class StudioHandler(BaseHTTPRequestHandler):
             duration_hint=duration_hint,
         )
 
+    def _registrar_import(self, via: str, arquivos: list, resultado: str) -> None:
+        """Uma linha por tentativa de importacao, em import-log.jsonl.
+
+        Em 29/08 o usuario relatou "subi as 3 partes e deu erro" e a
+        maquina nao tinha NADA: nenhum projeto criado, nenhum log. Sem
+        rastro, diagnosticar vira adivinhacao. A linha guarda so o nome, o
+        tamanho e o desfecho — nada do conteudo.
+        """
+        try:
+            alvo = self.projects_root / ".ativavid" / "import-log.jsonl"
+            alvo.parent.mkdir(parents=True, exist_ok=True)
+            linha = {
+                "at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                "via": via,
+                "arquivos": [{"nome": Path(str(n)).name[:80],
+                              "bytes": int(t or 0)} for n, t in arquivos[:12]],
+                "resultado": resultado[:200],
+            }
+            with alvo.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(linha, ensure_ascii=False) + "\n")
+        except (OSError, ValueError):
+            pass          # diagnostico nunca derruba importacao
+
     def _ingest_paths(
         self,
         paths: list[str],
@@ -3345,7 +3371,21 @@ class StudioHandler(BaseHTTPRequestHandler):
     ) -> list[dict]:
         grupos = agrupar_import(paths, merge=merge)
         if not grupos:
+            faltando = [x for x in paths if not Path(str(x)).exists()]
+            self._erro_import = (
+                f"{len(faltando)} de {len(paths)} arquivo(s) nao foram "
+                "encontrados no disco"
+                if faltando else
+                f"nenhum dos {len(paths)} arquivo(s) e um video reconhecido "
+                f"({', '.join(sorted({Path(str(x)).suffix.lower() or '(sem extensao)' for x in paths}))[:60]})")
+            self._registrar_import("caminhos", [(str(x), 0) for x in paths],
+                                   self._erro_import)
             return []
+        self._registrar_import(
+            "caminhos",
+            [(str(f), (f.stat().st_size if f.exists() else 0))
+             for _, arqs in grupos for f in arqs],
+            f"ok · {len(grupos)} job(s)")
         # Um titulo explicito (o usuario nomeou o lote) so faz sentido quando e
         # UM video so; com varios, cada um fica com o nome da sua pasta.
         unico = title if len(grupos) == 1 else None
@@ -3375,12 +3415,23 @@ class StudioHandler(BaseHTTPRequestHandler):
         try:
             arquivos, campos = mp.parse(self.rfile, ctype, n, temp)
         except mp.MultipartError as e:
+            # O motivo morria neste print. Num app empacotado nao ha console:
+            # o usuario via so "nao consegui ler nenhum video desse envio" e
+            # eu nao tinha como saber se foi envio interrompido, delimitador
+            # quebrado ou arquivo grande demais.
             print(f"[upload] recusado: {e}", flush=True)
+            self._erro_import = str(e)
+            self._registrar_import("upload", [], f"recusado: {e}")
             shutil.rmtree(temp, ignore_errors=True)
             return []
         if not arquivos:
+            self._erro_import = "nenhum arquivo veio no envio"
+            self._registrar_import("upload", [], "sem arquivos")
             shutil.rmtree(temp, ignore_errors=True)
             return []
+        self._registrar_import(
+            "upload", [(n, (Path(c).stat().st_size if Path(c).exists() else 0))
+                       for n, c in arquivos], "ok")
 
         intent = None
         if campos.get("intent"):

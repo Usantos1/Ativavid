@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.42
+
+- **Quando a importação falha, o app diz por quê.** Antes, qualquer causa
+  mostrava a mesma frase ("não consegui ler nenhum vídeo desse envio").
+  Agora vem o motivo: envio interrompido no meio, arquivo que não é vídeo
+  (com a extensão), ou arquivo que não está mais no disco.
+- **E fica registrado.** Cada tentativa de importação grava uma linha em
+  `Projetos/.ativavid/import-log.jsonl` com a hora, os nomes dos arquivos,
+  os tamanhos e o desfecho. Só isso — nada do conteúdo dos vídeos. Assim,
+  se der erro de novo, dá para saber o que aconteceu sem depender de
+  reproduzir na hora.
+
 ## 3.41
 
 - **"Transcrição ruim ou vazia" agora diz o que está errado.** Antes, três
