@@ -1,5 +1,20 @@
 # Changelog
 
+## 3.45
+
+- **A atualização agora mostra a barra de progresso.** Você clica, vê o
+  download enchendo (com os MB), depois "Instalando…" — e o app só fecha no
+  fim, na hora de reabrir. Antes ele sumia na hora e você ficava sem saber
+  se estava acontecendo alguma coisa.
+- **As caixas de seleção pararam de abrir brancas no tema escuro.** A lista
+  do menu é desenhada pelo Windows, não pelo app, e faltava dizer a ele que
+  o tema é escuro. Aproveitei e deixei todas com a mesma altura, o mesmo
+  canto e a mesma seta — eram quatro estilos diferentes espalhados.
+- **A tela de Configurações ficou alinhada.** Os cartões da mesma linha
+  agora têm a mesma altura, com os botões no rodapé; a última linha não
+  estica mais os cartões; e a barra "Avançado" termina na mesma linha que
+  eles.
+
 ## 3.44
 
 - **O aviso de versão nova agora mostra o que muda.** Em vez de só "Nova

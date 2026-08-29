@@ -1857,6 +1857,12 @@ class StudioHandler(BaseHTTPRequestHandler):
         if path == "/api/musica/motor":
             self._json(_musica_estado_completo(self.projects_root))
             return
+        if path == "/api/update/progresso":
+            from app.update_check import progresso_da_atualizacao
+
+            self._json(progresso_da_atualizacao())
+            return
+
         if path == "/api/update/check":
             from app.settings_store import load_settings
             from app.update_check import check_update
@@ -2590,7 +2596,15 @@ class StudioHandler(BaseHTTPRequestHandler):
                 self._json(open_setup())
                 return
             if action == "instalar":
-                self._json(baixar_e_instalar())
+                # Em thread: a tela precisa da resposta AGORA para comecar a
+                # mostrar a barra. Segurando ate o fim do download, a janela
+                # ficava parada em "Baixando…" sem numero nenhum.
+                import threading
+
+                threading.Thread(target=baixar_e_instalar, daemon=True,
+                                 name="atualizacao").start()
+                self._json({"ok": True, "assincrono": True,
+                            "message": "Baixando a atualização…"})
                 return
             url = (body.get("url") or "").strip()
             if not url:

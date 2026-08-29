@@ -17,10 +17,19 @@ JS = (REPO / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
 UP = (REPO / "app" / "update_check.py").read_text(encoding="utf-8")
 
 
-def test_o_instalador_roda_em_silencio():
+def test_o_instalador_roda_sem_perguntar_mas_com_barra():
+    """`/SILENT`, não `/VERYSILENT`.
+
+    Os dois não perguntam nada; a diferença é que `/VERYSILENT` esconde até
+    a barra de progresso. O usuário testou a 3.43 e pediu o contrário:
+    "quero ver a barra de progresso, sumir apenas quando terminar e for
+    reabrir" — sem ela, entre o clique e o app voltar havia um buraco de
+    segundos com a tela vazia.
+    """
     i = UP.index("def baixar_e_instalar")
     trecho = UP[i:UP.index("\ndef ", i + 10)]
-    assert '"/VERYSILENT"' in trecho, trecho[-500:]
+    assert '"/SILENT"' in trecho, trecho[-500:]
+    assert '"/VERYSILENT"' not in trecho, "a barra some de novo"
     assert '"/SUPPRESSMSGBOXES"' in trecho
 
 

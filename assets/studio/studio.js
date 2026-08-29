@@ -1497,6 +1497,50 @@ function openUpdateDialog(lic) {
  * ("o botão ao lado do sol e lua ainda baixa em navegador" — 27/08), com
  * a mesma lógica copiada em outro lugar. Agora toda porta chama daqui.
  */
+/* Enche a barra ate o instalador assumir. O app so fecha no FIM (o
+ * instalador derruba ele para trocar os arquivos), entao a barra cobre
+ * justamente o buraco que existia entre o clique e o app voltar. */
+async function acompanharAtualizacao() {
+  const caixa = $("#updDlgBarra");
+  const fill = $("#updDlgBarraFill");
+  const txt = $("#updDlgBarraTxt");
+  const tubo = caixa && caixa.querySelector(".upd-barra-tubo");
+  if (!caixa || !fill) return;
+  caixa.hidden = false;
+  const notas = $("#updDlgNotas");
+  if (notas) notas.hidden = true;
+  for (let i = 0; i < 1200; i += 1) {          // ~6 min de teto
+    let p = null;
+    try { p = await api("/api/update/progresso"); } catch { /* segue */ }
+    if (p) {
+      if (p.estado === "baixando") {
+        const pct = Number(p.pct || 0);
+        if (p.total > 0) {
+          if (tubo) tubo.classList.remove("indeterminada");
+          fill.style.width = `${Math.max(2, pct)}%`;
+          const mb = (n) => (Number(n || 0) / 1048576).toFixed(0);
+          if (txt) txt.textContent = `Baixando… ${pct}% (${mb(p.baixado)} de ${mb(p.total)} MB)`;
+        } else {
+          if (tubo) tubo.classList.add("indeterminada");
+          if (txt) txt.textContent = "Baixando…";
+        }
+      } else if (p.estado === "instalando") {
+        if (tubo) tubo.classList.remove("indeterminada");
+        fill.style.width = "100%";
+        if (txt) {
+          txt.textContent = "Instalando… o ATIVAVID fecha e reabre sozinho.";
+        }
+        return true;
+      } else if (p.estado === "erro") {
+        if (txt) txt.textContent = `Falhou: ${p.erro || "erro no download"}`;
+        return false;
+      }
+    }
+    await new Promise((r) => setTimeout(r, 400));
+  }
+  return false;
+}
+
 async function instalarAtualizacao(btn) {
   const rotulo = btn ? btn.textContent : "";
   if (btn) { btn.disabled = true; btn.textContent = "Baixando…"; }
@@ -1508,10 +1552,13 @@ async function instalarAtualizacao(btn) {
       body: JSON.stringify({ action: "instalar" }),
     });
     if (!res.ok) throw new Error(res.error || "não deu para baixar");
-    if (btn) btn.textContent = res.silencioso ? "Atualizando…" : "Instalador aberto ✓";
+    if (btn) btn.textContent = "Atualizando…";
     const h = $("#updDlgHint");
-    if (h && res.silencioso) {
-      h.textContent = "Atualizando… o ATIVAVID vai fechar e reabrir sozinho.";
+    if (h) h.textContent = "Não feche o ATIVAVID — ele fecha e reabre sozinho.";
+    if (res.assincrono) {
+      const foi = await acompanharAtualizacao();
+      if (!foi) throw new Error("o download não terminou");
+      return true;
     }
     toast(res.message
       || "Instalador aberto — o app fecha e reabre sozinho.", 6000);

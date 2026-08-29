@@ -1,5 +1,10 @@
 /* ATIVAVID hub — shell full-screen + sidebar */
 :root {
+  /* A lista que abre num <select> e desenhada pelo SISTEMA, nao pelo CSS:
+     sem `color-scheme` ela abre BRANCA sobre o app escuro (o usuario mandou
+     print em 29/08). Declarado na raiz, vale para select, input de data,
+     barra de rolagem e qualquer outro controle nativo. */
+  color-scheme: dark;
   --bg: #0a0a0b;
   --bg2: #101014;
   --panel: #16161a;
@@ -33,6 +38,7 @@
   background: var(--bg);
 }
 :root[data-theme="light"] {
+  color-scheme: light;
   --bg: #eef0f4;
   --bg2: #e4e7ee;
   --panel: #ffffff;
@@ -1364,12 +1370,40 @@ body.view-estilo-on .ws-head {
 .ia-form input[type="text"],
 .ia-form input[type="email"],
 .ia-form input[type="number"],
-.ia-form select {
+/* ---- Caixas de selecao: uma cara so ----------------------------------
+   Havia quatro estilos diferentes espalhados (Estilos, Importar, Chaves,
+   Marca) — bordas, cantos e alturas que nao batiam entre telas. A seta
+   tambem era a do sistema, que muda de desenho conforme o tema e nao
+   acompanha a cor do app. */
+select {
+  appearance: none;
+  -webkit-appearance: none;
   border: 1px solid var(--line);
-  background: var(--panel2);
+  background-color: var(--panel2);
   color: var(--text);
   border-radius: 10px;
-  padding: 10px 12px;
+  padding: 10px 34px 10px 12px;
+  font: inherit;
+  cursor: pointer;
+  /* seta propria, na cor do texto (o `%23` e o `#` do hex dentro da URL) */
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8' fill='none' stroke='%239a9aa3' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><path d='M1 1.5 6 6.5 11 1.5'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 11px 7px;
+}
+select:hover { border-color: var(--line2); }
+select:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent, #e30004) 55%, transparent);
+  outline-offset: 1px;
+}
+select:disabled { opacity: .55; cursor: default; }
+
+.ia-form select {
+  border: 1px solid var(--line);
+  background-color: var(--panel2);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 10px 34px 10px 12px;
 }
 
 /* ---- Chaves & IA (layout amplo + passo a passo) ---- */
@@ -1480,7 +1514,7 @@ body.view-estilo-on .ws-head {
 .keys-field input[type="text"],
 .keys-field input[type="url"] {
   border: 1px solid var(--line);
-  background: var(--surface-ink);
+  background-color: var(--surface-ink);
   color: var(--text);
   border-radius: 10px;
   padding: 10px 12px;
@@ -1865,9 +1899,12 @@ body.view-estilo-on .ws-head {
   flex-direction: column;
   gap: clamp(14px, 1.6vw, 20px);
   width: 100%;
-  /* A tela é para ser usada inteira: o conteúdo ocupa a largura toda. Cards
-     grandes demais se resolvem com mais colunas, não estreitando a página. */
-  max-width: none;
+  /* A COLUNA inteira tem a mesma largura da grade de cards. Antes a grade
+     parava em 1160px e a barra "Avançado" atravessava a tela toda, com a
+     borda direita 700px além dos cards — desalinho que salta aos olhos numa
+     tela larga. Cards grandes demais se resolvem com mais colunas, não
+     estreitando a página; o teto aqui é o mesmo da grade, não um recuo. */
+  max-width: 1160px;
   min-width: 0;
 }
 
@@ -1926,14 +1963,20 @@ body.view-estilo-on .ws-head {
 .sys-grid,
 .lic-grid {
   display: grid;
-  /* 250px em vez de 280: por 2px os 4 cards não cabiam numa linha e o último
-     caía sozinho, deixando dois terços da linha vazios. */
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
-  gap: 12px;
-  /* `stretch` dava a todo card a altura do mais alto da linha: um card de uma
-     linha ("Detectando GPU…") virava um retângulo vazio do tamanho do card de
-     Projetos, com o botão solto lá no fundo. Cada card tem a sua altura. */
-  align-items: start;
+  /* `auto-fill`, não `auto-fit`: com `auto-fit` as colunas vazias colapsam e
+     os cards da ÚLTIMA linha esticam — dois cards ficavam com o dobro da
+     largura dos de cima, e a tela parecia montada no olho. Com `auto-fill` a
+     coluna é sempre a mesma. */
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+  gap: 14px;
+  /* Altura igual por LINHA. O `align-items: start` de antes deixava as bordas
+     de baixo em alturas diferentes (o card de Diagnóstico terminava 200px
+     acima do de Projetos), que é o que dá a impressão de "cards jogados". O
+     vazio que se temia sumiu porque a ação de cada card desce para o rodapé:
+     o espaço extra fica ENTRE o texto e os botões, não depois deles. */
+  align-items: stretch;
+  /* O teto mora no `.sys-shell` (a coluna inteira), para a barra "Avançado"
+     terminar na mesma linha que os cards. */
   width: 100%;
 }
 
@@ -1943,6 +1986,8 @@ body.view-estilo-on .ws-head {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  /* Piso para o card de uma frase só não nascer achatado ao lado dos outros. */
+  min-height: 170px;
   padding: 16px 16px 14px;
   border-radius: 14px;
   border: 1px solid color-mix(in srgb, var(--text) 9%, transparent);
@@ -1981,10 +2026,23 @@ body.view-estilo-on .ws-head {
   margin-top: 8px;
   padding-top: 4px;
 }
-.sys-card .panel-actions:last-of-type {
+/* A ÚLTIMA linha de ações desce para o rodapé do card: é isso que alinha os
+   botões de todos os cards da mesma linha, mesmo com textos de tamanhos
+   diferentes. */
+.sys-card .panel-actions:last-of-type,
+.sys-block .panel-actions:last-of-type {
   margin-top: auto;
   padding-top: 12px;
 }
+/* Botões da mesma altura e quebrando junto — três ações em duas fileiras
+   desencontradas era metade da bagunça no card de Projetos. */
+.sys-card .panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.sys-card .panel-actions > button { flex: 0 1 auto; }
 .sys-block--wide,
 .lic-block--wide {
   grid-column: 1 / -1;
@@ -2431,7 +2489,7 @@ body.view-estilo-on .ws-head {
 .import-field { display: grid; gap: 4px; font-size: 13px; }
 .import-field input,
 .import-field select {
-  background: var(--bg);
+  background-color: var(--bg);
   border: 1px solid var(--line);
   color: var(--text);
   border-radius: 10px;
@@ -2794,16 +2852,14 @@ body.view-estilo-on .ws-head {
 .brand-group-row input[type="text"] {
   min-width: 150px;
   border: 1px solid var(--line);
-  background: var(--panel2);
+  background-color: var(--panel2);
   color: var(--text);
   border-radius: 10px;
   padding: 10px 12px;
   font: inherit;
-  /* o dropdown NATIVO do select segue o tema (senão abre claro no dark) */
-  color-scheme: dark;
+  /* `color-scheme` mora no `:root` (uma fonte de verdade): declarado aqui
+     tambem, um dia as duas discordariam. */
 }
-[data-theme="light"] .brand-group-row select,
-[data-theme="light"] .brand-group-row input[type="text"] { color-scheme: light; }
 .brand-group-row select:focus,
 .brand-group-row input[type="text"]:focus {
   outline: 2px solid color-mix(in srgb, var(--accent, #e30004) 55%, transparent);
@@ -3451,15 +3507,32 @@ body.home-working .hero-import .hero-inner { padding: 10px 0; }
 }
 .lib-grupo-clima { font-size: 11.5px; font-weight: 600; color: var(--muted); }
 .lib-cat {
-  flex: none; max-width: 150px; border: 1px solid var(--line);
-  background: var(--panel2); color: var(--muted); border-radius: 8px;
-  padding: 3px 6px; font: inherit; font-size: 11.5px;
+  flex: none; max-width: 150px; border-radius: 8px;
+  color: var(--muted);
+  padding: 3px 22px 3px 8px; font-size: 11.5px;
+  background-position: right 6px center;
+  background-size: 9px 6px;
 }
 .lib-cat:hover { color: var(--text); }
 .lib-track-tag--app {
   background: rgba(255, 255, 255, .08); color: var(--muted, #9aa0a6);
 }
 .lib-item-cat { padding: 0 10px 9px; }
+.upd-barra { margin: 12px 0 2px; display: grid; gap: 6px; }
+.upd-barra-tubo {
+  height: 8px; border-radius: 999px; overflow: hidden;
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+}
+.upd-barra-tubo > i {
+  display: block; height: 100%; width: 0%; border-radius: 999px;
+  background: var(--accent, #ff3b5c);
+  transition: width .25s ease;
+}
+.upd-barra-tubo.indeterminada > i {
+  width: 35%; animation: upd-vaivem 1.1s ease-in-out infinite alternate;
+}
+@keyframes upd-vaivem { from { margin-left: 0; } to { margin-left: 65%; } }
+
 .dlg-notas {
   margin: 10px 0 4px; padding: 10px 12px 10px 26px; border-radius: 10px;
   background: color-mix(in srgb, var(--text) 6%, transparent);

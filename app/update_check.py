@@ -263,7 +263,19 @@ def open_url(url: str) -> dict[str, Any]:
         return {"ok": False, "error": str(e)}
 
 
-def baixar_e_instalar() -> dict[str, Any]:
+_PROGRESSO: dict[str, Any] = {"estado": "parado", "baixado": 0, "total": 0,
+                              "erro": "", "versao": ""}
+
+
+def progresso_da_atualizacao() -> dict[str, Any]:
+    """Quanto já baixou — a tela pergunta a cada instante para a barra."""
+    d = dict(_PROGRESSO)
+    t, b = int(d.get("total") or 0), int(d.get("baixado") or 0)
+    d["pct"] = int(b * 100 / t) if t > 0 else 0
+    return d
+
+
+def baixar_e_instalar(assincrono: bool = False) -> dict[str, Any]:
     """Baixa o instalador da versao nova e o executa — UM clique.
 
     O ciclo manual era: aviso de versao -> abrir o navegador -> baixar ->
@@ -288,13 +300,26 @@ def baixar_e_instalar() -> dict[str, Any]:
     destino = Path(tempfile.gettempdir()) / "ativavid-update" / nome
     destino.parent.mkdir(parents=True, exist_ok=True)
     tmp = destino.with_suffix(".part")
+    _PROGRESSO.update({"estado": "baixando", "baixado": 0, "total": 0,
+                       "erro": "", "versao": str(info.get("latestVersion") or "")})
     try:
+        # Pedaco a pedaco para a tela poder mostrar a barra: com
+        # `copyfileobj` o app ficava mudo do clique ate o instalador abrir,
+        # e o usuario nao tinha como saber se estava acontecendo algo.
         with urllib.request.urlopen(url, timeout=180) as resp, open(tmp, "wb") as f:
-            shutil.copyfileobj(resp, f)
+            _PROGRESSO["total"] = int(resp.headers.get("Content-Length") or 0)
+            while True:
+                pedaco = resp.read(256 * 1024)
+                if not pedaco:
+                    break
+                f.write(pedaco)
+                _PROGRESSO["baixado"] = int(_PROGRESSO["baixado"]) + len(pedaco)
         tmp.replace(destino)
     except OSError as e:
+        _PROGRESSO.update({"estado": "erro", "erro": str(e)[:200]})
         return {"ok": False, "error": f"download falhou: {e}"}
     if destino.stat().st_size < 1_000_000:
+        _PROGRESSO.update({"estado": "erro", "erro": "instalador pequeno demais"})
         return {"ok": False, "error": "o instalador baixado veio pequeno demais — tente pelo navegador"}
     # SILENCIOSO: o usuario pediu "atualizar so dando o Ok, sem estas
     # etapas" (29/08, comparando com o CapCut). Com /VERYSILENT o unico
@@ -303,8 +328,13 @@ def baixar_e_instalar() -> dict[str, Any]:
     # e o reabre pelo [Run] (que perdeu o `skipifsilent` por isto).
     import subprocess
 
-    flags = ["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART",
+    # `/SILENT` (e nao `/VERYSILENT`): sem pergunta nenhuma, mas COM a
+    # barra de progresso do instalador. O usuario pediu para "ver a barra
+    # e o app sumir so quando terminar" — sem ela, entre o clique e o app
+    # voltar havia um buraco de segundos sem nada na tela.
+    flags = ["/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART",
              "/CLOSEAPPLICATIONS", "/NOCANCEL"]
+    _PROGRESSO.update({"estado": "instalando"})
     try:
         subprocess.Popen([str(destino), *flags], close_fds=True)
     except OSError:

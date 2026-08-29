@@ -26,6 +26,10 @@ def _preparar(monkeypatch, tmp_path, url, corpo=b"x" * 2_000_000):
     import urllib.request
 
     class _Resp(io.BytesIO):
+        # `headers` porque o download passou a ler Content-Length: e dele que
+        # sai a porcentagem da barra de progresso.
+        headers = {"Content-Length": str(len(corpo))}
+
         def __enter__(self): return self
         def __exit__(self, *a): return False
 
