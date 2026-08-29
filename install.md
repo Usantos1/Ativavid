@@ -28,7 +28,7 @@ ATIVAVID runs in three phases: **Phase 1** = clean cut + color grade + optional 
 Must exist on this machine:
 
 1. The `ativa-vid` repo cloned somewhere stable (upstream source: `fillrochaa/edvid`).
-2. `ffmpeg` on `$PATH` (plus optional `yt-dlp` for online sources). — Phase 1
+2. `ffmpeg` on `$PATH`. — Phase 1
 3. A Groq API key in `.env` at the repo root (for Whisper transcription). — Phase 1
 4. **Node.js 18+ and npm** on `$PATH` (for Remotion). — Phase 2
 5. The **`remotion-best-practices` skill** installed and discoverable (clone https://github.com/remotion-dev/skills and symlink `skills/remotion` into the agent's skills dir). — Phase 2
@@ -94,27 +94,23 @@ If `uv` is missing: `brew install uv` (macOS), `winget install astral-sh.uv` (Wi
 
 `pyproject.toml` lists `requests`, `pillow`, `numpy`, and `opencv-python-headless==4.10.0.84` (the last one powers the Phase-2 dynamic-camera face/eye tracking in `face_track.py` — keep it pinned to the 4.10 line; 5.x dropped `CascadeClassifier` and breaks Haar detection). No console scripts — helpers are invoked directly as `python helpers/<name>.py`.
 
-### 3. Install ffmpeg (+ optional yt-dlp)
+### 3. Install ffmpeg
 
-`ffmpeg` and `ffprobe` are hard requirements for Phase 1. `yt-dlp` is only needed if the user wants to pull sources from URLs. Phase 2 uses Remotion (Node.js) — set up in step 6.
+`ffmpeg` and `ffprobe` are hard requirements for Phase 1. Phase 2 uses Remotion (Node.js) — set up in step 6.
 
 ```bash
 # macOS
 command -v ffmpeg >/dev/null || brew install ffmpeg
-command -v yt-dlp >/dev/null || brew install yt-dlp     # optional
 
 # Debian / Ubuntu
 # sudo apt-get update && sudo apt-get install -y ffmpeg
-# pip install yt-dlp
 
 # Arch
-# sudo pacman -S ffmpeg yt-dlp
 ```
 
 ```powershell
 # Windows (PowerShell)
 winget install Gyan.FFmpeg
-winget install yt-dlp.yt-dlp     # optional
 ```
 
 If `brew` / `apt` / `pacman` requires a sudo prompt, tell the user the exact command and wait. Do not invent a password. On Windows, `winget` may need the user to accept a source agreement on first run — let them answer it themselves, then reopen PowerShell so the new `$PATH` takes effect.
@@ -295,7 +291,6 @@ Tell the user, in one short message:
 - Helpers run under `uv run python helpers/<name>.py`. A bare `python` won't see the `.venv` that `uv sync` builds — this is the most common post-install failure.
 - If `.env` exists but the key is empty, treat it the same as missing — don't assume existence means validity.
 - `ffmpeg` from static builds works fine. Any modern (≥ 4.x) build is enough.
-- `yt-dlp` is optional. Don't block install on it; install lazily the first time a user asks to pull from a URL.
 - Node.js 18+ and the `remotion-best-practices` skill are required for Phase 2 (captions, motion graphics, images). Phase 1 (cut + grade) works without them, so a user who only wants a clean cut can start immediately — but set up step 6 so Phase 2 is ready when the cut is approved.
 - Remotion projects are scaffolded per-video by copying the skill's own template (`assets/shortform/` or `assets/longform/`) into `<videos_dir>/edit/remotion/` and running `npm install` there — see the references. Nothing is installed globally, and `create-video` is not used: the template carries the compositions the skill knows how to fill, with the Remotion version pinned so an upstream release can't break a render.
 - Never run transcription as part of install verification unless the user explicitly asks — Groq usage draws on the user's quota.

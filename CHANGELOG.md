@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.46
+
+- **Trocar a categoria de um arquivo na Biblioteca voltou a funcionar.** Dava
+  "unknown route": a tela chamava uma rota que o app não repassava. Pelo
+  mesmo motivo, a barra de progresso da atualização (3.45) também não teria
+  funcionado — as duas foram corrigidas, e agora um teste confere todas as
+  rotas de uma vez.
+- **O yt-dlp saiu do produto.** Ele só serviria para editar a partir de um
+  link, coisa que o app não faz, e o diagnóstico ficava acusando falta dele
+  em toda instalação.
+
 ## 3.45
 
 - **A atualização agora mostra a barra de progresso.** Você clica, vê o

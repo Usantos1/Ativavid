@@ -89,12 +89,6 @@ def checar_programas() -> None:
             "sem headline e sem imagens — a Fase 2 inteira nao roda.",
             "winget install OpenJS.NodeJS.LTS")
 
-    if not shutil.which("yt-dlp"):
-        diz(AVISO, "yt-dlp nao encontrado",
-            "So faz falta pra editar a partir de um LINK (YouTube, etc). "
-            "Video que ja esta no computador nao precisa disso.",
-            "winget install yt-dlp.yt-dlp")
-
 
 # -------------------------------------------------------------------- chaves
 def _ler_env(arq: Path, valores: dict[str, str]) -> None:
