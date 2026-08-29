@@ -1905,6 +1905,12 @@ kbd {
 .fast-chk.on .chk-box { border-color: var(--rose-fg); background: var(--rose-fg); }
 .fast-chk.on .chk-name { color: var(--rose-fg); }
 
+/* Os ajustes que acompanham uma ESCOLHA VISUAL (os cartoes de estilo de
+   headline logo acima) ficam colados nela, nao num bloco distante: eu tinha
+   posto "onde a headline fica" no bloco Conteudo e o usuario procurou no
+   Visual e perguntou "cade?". */
+.auto-grid--inline { margin-top: 12px; }
+
 .auto-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));

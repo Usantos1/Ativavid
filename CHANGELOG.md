@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.49
+
+- **Os ajustes da headline ficam junto dela.** "Onde a headline fica", "Legenda
+  começa" e "Headline fica na tela" estavam no bloco Conteúdo, várias telas
+  abaixo — quem escolhia o estilo da headline no Visual não os encontrava.
+  Agora aparecem logo abaixo dos modelos de headline.
+
 ## 3.48
 
 - **Estilo novo: "Abertura em cheio".** A headline abre no centro da tela e

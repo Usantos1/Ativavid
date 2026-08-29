@@ -298,6 +298,27 @@
       <div class="setup-group setup-group--wide">
         <div class="group-head"><span class="group-title">Estilo de headline</span></div>
         <div id="optHeadline" class="opt-grid"></div>
+        <div class="auto-grid auto-grid--inline">
+          <label class="auto-field">Onde a headline fica
+            <select id="autoHlPos">
+              <option value="padrao" selected>No alto (padrão)</option>
+              <option value="centro">No centro da tela</option>
+            </select>
+          </label>
+          <label class="auto-field">Legenda começa
+            <select id="autoLegendaApos">
+              <option value="" selected>Junto com a fala</option>
+              <option value="1">Depois que a headline sai</option>
+            </select>
+          </label>
+          <label class="auto-field">Headline fica na tela
+            <select id="autoHlDuration">
+              <option value="curta" selected>Alguns segundos</option>
+              <option value="media">O dobro do tempo</option>
+              <option value="inteira">O vídeo inteiro</option>
+            </select>
+          </label>
+        </div>
       </div>
 
       <div class="setup-group setup-group--wide">
@@ -466,25 +487,6 @@
               <option value="padrao" selected>Suave</option>
               <option value="pop">Com peso</option>
               <option value="deslizar">Deslizando</option>
-            </select>
-          </label>
-          <label class="auto-field">Headline fica na tela
-            <select id="autoHlDuration">
-              <option value="curta" selected>Alguns segundos</option>
-              <option value="media">O dobro do tempo</option>
-              <option value="inteira">O vídeo inteiro</option>
-            </select>
-          </label>
-          <label class="auto-field">Onde a headline fica
-            <select id="autoHlPos">
-              <option value="padrao" selected>No alto (padrão)</option>
-              <option value="centro">No centro da tela</option>
-            </select>
-          </label>
-          <label class="auto-field">Legenda começa
-            <select id="autoLegendaApos">
-              <option value="" selected>Junto com a fala</option>
-              <option value="1">Depois que a headline sai</option>
             </select>
           </label>
           <label class="auto-field">Fonte da headline
