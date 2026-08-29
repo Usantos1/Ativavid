@@ -31,7 +31,24 @@ GROQ_MODELO = (os.environ.get("ATIVAVID_GROQ_MODEL") or "").strip() or "openai/g
 
 
 def _groq_key() -> str:
-    return (os.environ.get("GROQ_API_KEY") or "").strip()
+    """A chave do ambiente OU a do .env do usuario.
+
+    O app exporta as chaves ao iniciar, entao no uso normal o ambiente
+    basta. Mas quem roda um helper por fora (pipeline chamado direto,
+    diagnostico, um teste) ficava sem chave — e o plano B de parse do
+    planejador some CALADO: a IA principal devolve JSON quebrado, o Groq
+    nao e chamado porque "nao ha chave", e o video sai sem IA. Ler o mesmo
+    arquivo que o resto do gateway ja le custa nada e fecha essa porta.
+    """
+    do_ambiente = (os.environ.get("GROQ_API_KEY") or "").strip()
+    if do_ambiente:
+        return do_ambiente
+    try:
+        from app.local_server import load_env_keys
+
+        return (load_env_keys().get("GROQ_API_KEY") or "").strip()
+    except Exception:  # noqa: BLE001 — sem chave e resposta valida
+        return ""
 
 
 def ensure_local_base_url(port: int) -> None:

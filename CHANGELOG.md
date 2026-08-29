@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.26
+
+- **O plano B da IA não some mais dependendo de como o app foi iniciado.**
+  A chave do Groq (usada quando a IA principal responde algo ilegível) só
+  era procurada no ambiente do processo; agora também é lida do seu arquivo
+  de chaves. Sem isso, um vídeo podia sair "sem IA" com a chave certa
+  guardada.
+- **A espera pela IA local de música cabe no prazo do vídeo**: antes ela
+  podia passar do tempo que o render aguarda e o esforço era jogado fora
+  bem quando o motor ia liberar.
+
 ## 3.25
 
 - **O aviso de pausa volta a aparecer em "Edição leve" e "Vídeo completo".**

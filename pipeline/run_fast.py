@@ -1813,7 +1813,12 @@ _MOTOR_ESPERA_S = 12
 # metade das trilhas caiu para a biblioteca, e a fila do motor e a
 # explicacao mais provavel.
 _MOTOR_NA_FILA = 7        # codigo do launcher para "outro esta compondo"
-_MOTOR_TENTATIVAS_FILA = 22
+# 18 voltas x 12s = 216s, DENTRO dos 240s que o render espera pelo fio
+# antecipado (music_thread.join(timeout=240)). Com 22 voltas a espera
+# passava do prazo: o render desistia com o fio ainda tentando, caia no
+# caminho sincrono (uma tentativa so) e a trilha vinha da biblioteca
+# mesmo com o motor prestes a liberar.
+_MOTOR_TENTATIVAS_FILA = 18
 
 
 def _tentar_musicgen(destino: Path, vibe: str, length_sec: int,

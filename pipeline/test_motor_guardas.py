@@ -176,3 +176,30 @@ def test_sem_motivo_gravado_a_nota_nao_acusa_falha(tmp_path):
     _aviso_de_trilha(job, tmp_path)
     assert "não compôs" in job["trilhaNota"]
     assert "falhou" not in job["trilhaNota"]
+
+
+def test_a_espera_na_fila_cabe_no_prazo_do_render():
+    """O render espera o fio antecipado por 240s (music_thread.join). Se a
+    espera na fila passar disso, o esforco morre fora de hora: o render
+    desiste com o fio ainda tentando, cai no caminho sincrono (uma
+    tentativa so) e a trilha vem da biblioteca com o motor prestes a
+    liberar."""
+    import re
+    import pipeline.run_fast as rf
+    s = (RAIZ / "pipeline" / "run_fast.py").read_text(encoding="utf-8")
+    prazos = {int(m) for m in re.findall(r"music_thread\.join\(timeout=(\d+)\)", s)}
+    assert prazos, "nao achei o prazo do fio antecipado"
+    espera = rf._MOTOR_TENTATIVAS_FILA * rf._MOTOR_ESPERA_S
+    assert espera < min(prazos), f"espera {espera}s x prazo {min(prazos)}s"
+
+
+def test_o_teto_do_motor_cabe_no_teto_do_pipeline():
+    """O launcher desiste em 240s e o pipeline corta em 300s: o de dentro
+    tem de ser sempre menor, senao quem mata e o de fora e a mensagem de
+    erro fica errada."""
+    import re
+    import pipeline.run_fast as rf
+    s = (RAIZ / "helpers" / "musicgen_local.py").read_text(encoding="utf-8")
+    m = re.search(r"TIMEOUT_S = (\d+)", s)
+    assert m
+    assert int(m.group(1)) < rf._MOTOR_TETO_S
