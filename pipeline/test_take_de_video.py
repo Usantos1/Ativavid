@@ -51,17 +51,36 @@ def test_template_toca_o_take():
     assert "muted" in trecho, "o som do take passaria por cima da fala"
 
 
-def test_motor_proprio_recusa_insert_de_video_em_vez_de_ignorar():
-    """Ele só sabe desenhar imagem parada: recusar custa tempo de render,
-    fingir que sabe custa o take (sai vídeo sem o b-roll, calado)."""
+def test_motor_proprio_desenha_o_take_em_vez_de_recusar():
+    """Ele desenhava so imagem parada e recusava o job (que caia no
+    Remotion, medido em 217s de render). Agora extrai os quadros do take
+    uma vez, ja no tamanho do cartao, e desenha quadro a quadro."""
     from app.render_proprio import motivo_nao_suportado
     base = {"captions": {"enabled": False, "style": "karaoke"},
             "width": 1080, "height": 1920}
     com_video = dict(base, inserts=[{"src": "pexels/lib-cavalo.mp4",
-                                     "start": 1.0, "end": 3.0}])
+                                     "start": 1.0, "end": 3.0,
+                                     "kind": "video"}])
     motivo = motivo_nao_suportado(com_video, REPO / "assets")
-    assert motivo and "insert de video" in motivo, motivo
-    com_foto = dict(base, inserts=[{"src": "pexels/lib-produto.jpg",
-                                    "start": 1.0, "end": 3.0}])
-    assert "insert de video" not in (motivo_nao_suportado(com_foto,
-                                                          REPO / "assets") or "")
+    assert "insert de video" not in (motivo or ""), motivo
+
+
+def test_o_take_curto_congela_no_ultimo_quadro():
+    """Take menor que a janela do insert: o template mostra o ultimo
+    quadro do video, e o motor tem de fazer o mesmo — nao pode piscar
+    nem voltar ao inicio."""
+    s = (REPO / "app" / "render_proprio.py").read_text(encoding="utf-8")
+    i = s.index("def _desenhar_insert")
+    trecho = s[i:i + 1600]
+    assert "min(len(lista) - 1" in trecho, trecho[:400]
+
+
+def test_os_quadros_do_take_saem_no_tamanho_do_cartao():
+    """Extrair em 1080p e reduzir a cada quadro seria desperdicio; e o
+    `cover` tem de ser o mesmo do template (scale+crop, sem deformar)."""
+    s = (REPO / "app" / "render_proprio.py").read_text(encoding="utf-8")
+    i = s.index("def _quadros_do_take")
+    trecho = s[i:i + 1400]
+    assert "force_original_aspect_ratio=increase" in trecho
+    assert "crop={INSERT_W}:{INSERT_H}" in trecho
+    assert "fps={self.fps" in trecho, "sem alinhar o take ao relogio do video"

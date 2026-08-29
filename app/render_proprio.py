@@ -365,14 +365,6 @@ def motivo_nao_suportado(edit_data: dict[str, Any], public: Path) -> str | None:
         return "emoji nas legendas (Segoe UI Emoji ausente)"
     if int(edit_data.get("width") or 1080) != 1080 or int(edit_data.get("height") or 1920) != 1920:
         return f"resolucao {edit_data.get('width')}x{edit_data.get('height')}"
-    for it in edit_data.get("inserts") or []:
-        # Take de VIDEO no b-roll: o InsertCard do template toca ele com
-        # OffthreadVideo e este motor so sabe desenhar imagem parada.
-        # Recusar custa tempo de render; fingir que sabe custa o take.
-        alvo = str(it.get("src") or "").lower()
-        if (str(it.get("kind") or "").lower() == "video"
-                or alvo.endswith((".mp4", ".mov", ".webm"))):
-            return "insert de video (take da Biblioteca)"
     for tr in edit_data.get("transitions") or []:
         if tr.get("type") != "flash":
             return f"transicao '{tr.get('type')}'"
@@ -431,6 +423,8 @@ class Camada:
     dim_fade: int = 10
     caixa: tuple[int, int, int, int] | None = None
     insert: tuple | None = None      # (imagem do cartao, quadros) — Ken-Burns
+    # take de VIDEO: (pasta dos quadros ja no tamanho do cartao, mascara)
+    insert_quadros: tuple | None = None
     cache_chave: tuple | None = None
     cache_tela: np.ndarray | None = None
     cache_pronto: np.ndarray | None = None
@@ -2841,6 +2835,42 @@ class Renderizador:
             inicio_f=0, enter=enter, sobe=sobe))
 
     # ----- b-roll / inserts (InsertCard.tsx) --------------------------------
+    def _quadros_do_take(self, cam: Path, total: int) -> Path | None:
+        """Extrai o take ja no tamanho do cartao, uma vez, para o disco.
+
+        Guardar os quadros em memoria custaria 1,5 MB cada (780x500 RGBA):
+        um take de 2,5s levaria ~117 MB. Em JPEG no disco sao ~60 KB por
+        quadro, e so os quadros da janela do insert sao lidos.
+        """
+        destino = cam.parent / f".f-{cam.stem[:24]}"
+        pronto = destino / "ok.txt"
+        if pronto.is_file():
+            return destino
+        import shutil
+
+        shutil.rmtree(destino, ignore_errors=True)
+        destino.mkdir(parents=True, exist_ok=True)
+        # `fps` alinha o take ao relogio do video; scale+crop e o `cover`
+        vf = (f"fps={self.fps:.6f},scale={INSERT_W}:{INSERT_H}:"
+              f"force_original_aspect_ratio=increase,"
+              f"crop={INSERT_W}:{INSERT_H}")
+        try:
+            r = subprocess.run(
+                ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+                 "-i", str(cam), "-an",
+                 "-vf", vf, "-frames:v", str(max(1, total)), "-q:v", "3",
+                 str(destino / "%04d.jpg")],
+                capture_output=True, text=True, timeout=180, **NOWIN)
+        except (OSError, subprocess.SubprocessError) as e:
+            print(f"  [warn] take nao extraido ({str(e)[:60]})", flush=True)
+            return None
+        quadros = sorted(destino.glob("*.jpg"))
+        if r.returncode != 0 or not quadros:
+            print(f"  [warn] take sem quadros: {cam.name}", flush=True)
+            return None
+        pronto.write_text(str(len(quadros)), encoding="utf-8")
+        return destino
+
     def _montar_inserts(self):
         """Uma camada por insert. A imagem entra em `cover` no cartao e o
         arredondamento ja vem no alpha; o resto (escala, opacidade, subida)
@@ -2854,15 +2884,21 @@ class Renderizador:
             if not cam.exists():
                 print(f"  [warn] insert ausente: {src}", flush=True)
                 continue
-            try:
-                im = Image.open(cam).convert("RGBA")
-            except OSError:
-                print(f"  [warn] insert ilegivel: {src}", flush=True)
-                continue
             ini = int(round(float(it.get("start") or 0.0) * self.fps))
             fim = int(round(float(it.get("end") or 0.0) * self.fps))
             total = fim - ini
             if total <= 0:
+                continue
+            # Take de VIDEO (Biblioteca): o cartao toca o take, nao uma foto
+            video = cam.suffix.lower() in (".mp4", ".mov", ".webm")
+            pasta = self._quadros_do_take(cam, total) if video else None
+            if video and pasta is None:
+                continue
+            try:
+                im = (Image.open(sorted(pasta.glob("*.jpg"))[0]).convert("RGBA")
+                      if video else Image.open(cam).convert("RGBA"))
+            except (OSError, IndexError):
+                print(f"  [warn] insert ilegivel: {src}", flush=True)
                 continue
             # objectFit: cover — recorta o excedente, nao deforma
             esc = max(INSERT_W / im.width, INSERT_H / im.height)
@@ -2888,6 +2924,7 @@ class Renderizador:
             s_rgba = np.zeros((*sombra.shape, 4), dtype=np.uint8)
             s_rgba[..., 3] = (sombra * 255).astype(np.uint8)   # preta
             leg.insert = (im, total, Image.fromarray(s_rgba, "RGBA"))
+            leg.insert_quadros = (pasta, masc) if video else None
             camadas.append(leg)
             self.eventos_sfx.append(("whoosh.mp3", ini / self.fps, 0.09))
         return camadas
@@ -2895,6 +2932,29 @@ class Renderizador:
     def _desenhar_insert(self, leg, fl: float, buf, sujo, mesclar) -> None:
         im, total, sombra_im = leg.insert
         f = max(0.0, fl)
+        # Take de video: o quadro do cartao muda a cada quadro do video.
+        # Take mais curto que a janela congela no ultimo (e o que o
+        # OffthreadVideo do template faz quando o video acaba).
+        quadros = getattr(leg, "insert_quadros", None)
+        if quadros:
+            pasta, masc = quadros
+            lista = getattr(leg, "_take_lista", None)
+            if lista is None:
+                lista = sorted(pasta.glob("*.jpg"))
+                leg._take_lista = lista
+            if lista:
+                idx = min(len(lista) - 1, max(0, int(f)))
+                if getattr(leg, "_take_idx", None) != idx:
+                    try:
+                        q = Image.open(lista[idx]).convert("RGBA")
+                        q.putalpha(masc)
+                        im = q
+                        leg._take_idx = idx
+                        leg._take_im = q
+                    except OSError:
+                        im = getattr(leg, "_take_im", None) or im
+                else:
+                    im = getattr(leg, "_take_im", None) or im
         # entra em 9 quadros (Easing.out cubic), sai nos ultimos 7
         ent = min(1.0, f / 9.0)
         ent = 1.0 - (1.0 - ent) ** 3
