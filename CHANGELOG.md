@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.38
+
+- **Vídeo com take de apoio voltou a usar o renderizador rápido.** Desde que
+  os takes de vídeo passaram a entrar (3.34), esses vídeos caíam no
+  renderizador antigo: no mesmo vídeo de teste, 217 segundos contra 69 — e é
+  o caminho onde um render já morreu por causa de um quadro lento. Agora o
+  renderizador rápido desenha o take direto no cartão.
+- O take entra no cartão do mesmo jeito de antes (mesmo enquadramento, mesmo
+  arredondamento) e, se ele for mais curto que a janela, congela no último
+  quadro em vez de piscar.
+
 ## 3.37
 
 - **Render não morre mais porque a máquina estava ocupada.** Havia um prazo
