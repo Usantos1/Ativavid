@@ -72,8 +72,14 @@ export type EditData = {
     // "misto": line 1 light white, line 2 heavy orange.
     // "sombra": white text with a hard un-blurred offset in the accent.
     // "sublinhado": white text over a thick accent bar under each line.
+    // "faixa": faixa da cor da marca de ponta a ponta, uma por linha.
+    // "fita": as caixas do realce, tortas em sentidos opostos.
+    // "neon": letra branca com brilho da marca em volta.
+    // "vazado": caixa cheia com a letra RECORTADA — o video aparece nela.
+    // "gradiente": a letra vai de branco (topo) a cor da marca (base).
     style?: 'outline' | 'card' | 'realce' | 'misto' | 'sombra' | 'sublinhado'
-      | 'pilula' | 'manchete' | 'carimbo' | 'pergunta';
+      | 'pilula' | 'manchete' | 'carimbo' | 'pergunta'
+      | 'faixa' | 'fita' | 'neon' | 'vazado' | 'gradiente';
     // "pergunta": two-phase hook. `lines` is the QUESTION (shown from 0);
     // at answerAtSec the ANSWER pops in and holds until endSec. The pipeline
     // aims answerAtSec at the end of the first kept range — where the speech
@@ -751,6 +757,13 @@ const HL_STYLES: Record<string, HlStyle> = {
   // (pílula no accent). O cap fica abaixo dos irmãos porque as duas fases
   // dividem a mesma banda e a resposta ganha padding próprio.
   pergunta: {weights: [800, 900], cap: 84, safeW: 840, lh: 1.05, top: 300},
+  // Os cinco de 29/08. Geometria igual a de `HL_STYLES` no render_proprio.py
+  // e no app.js — as tres tabelas sao a MESMA tabela, escrita tres vezes.
+  faixa: {weights: [900, 900], cap: 78, safeW: 900, lh: 1.06, top: 300},
+  fita: {weights: [900, 900], cap: 84, safeW: 800, lh: 1.05, top: 300},
+  neon: {weights: [900, 900], cap: 92, safeW: 880, lh: 1.02, top: 310},
+  vazado: {weights: [900, 900], cap: 86, safeW: 820, lh: 1.04, top: 300},
+  gradiente: {weights: [900, 900], cap: 96, safeW: 900, lh: 1.0, top: 305},
 };
 
 const hlWidth = (text: string, size: number, weight: number) =>
@@ -824,7 +837,8 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
   const styleId = H.style ?? 'outline';
   const S = HL_STYLES[styleId] ?? HL_STYLES.outline;
   const raw = (H.text ?? (H.lines || []).join(' ')).trim();
-  const isUpper = styleId === 'card' || styleId === 'manchete' || styleId === 'carimbo';
+  const isUpper = styleId === 'card' || styleId === 'manchete' || styleId === 'carimbo'
+    || styleId === 'faixa' || styleId === 'vazado';
   const lines = twoLines(isUpper ? raw.toUpperCase() : raw, S.weights);
   // fontSizePx is a CEILING, never a fixed size. As a hard override it silently
   // defeats the whole point: at a size the text cannot fit in, the line wraps and
@@ -1034,6 +1048,148 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
     );
   }
 
+  // ---- os cinco de 29/08 (gemeos em render_proprio.py) ----
+  if (styleId === 'faixa') {
+    return (
+      <AbsoluteFill style={envolucro}>
+        <Sfx src="whoosh.mp3" volume={0.1} />
+        <div style={{...shell, display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 8, width: '100%'}}>
+          {lines.filter(Boolean).map((l, i) => (
+            <div
+              key={i}
+              style={{
+                background: H.accent ?? '#ff5200',
+                color: '#fff',
+                fontWeight: hookWeight(900),
+                fontSize: size,
+                padding: '0.08em 24px 0.16em',
+                boxShadow: '0 10px 28px rgba(0,0,0,0.45)',
+              }}
+            >
+              {l}
+            </div>
+          ))}
+        </div>
+      </AbsoluteFill>
+    );
+  }
+
+  if (styleId === 'fita') {
+    return (
+      <AbsoluteFill style={envolucro}>
+        <Sfx src="whoosh.mp3" volume={0.1} />
+        <div style={{...shell, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12}}>
+          {lines.filter(Boolean).map((l, i) => (
+            <div
+              key={i}
+              style={{
+                background: H.accent ?? '#ff5200',
+                color: '#fff',
+                fontWeight: hookWeight(900),
+                fontSize: size,
+                padding: '0.08em 0.34em 0.16em',
+                borderRadius: 6,
+                transform: `rotate(${i === 0 ? -2.4 : 1.8}deg)`,
+                boxShadow: '0 12px 30px rgba(0,0,0,0.5)',
+              }}
+            >
+              {l}
+            </div>
+          ))}
+        </div>
+      </AbsoluteFill>
+    );
+  }
+
+  if (styleId === 'neon') {
+    const ac = H.accent ?? '#ff5200';
+    return (
+      <AbsoluteFill style={envolucro}>
+        <Sfx src="whoosh.mp3" volume={0.1} />
+        <div
+          style={{
+            ...shell,
+            color: '#fff',
+            fontWeight: hookWeight(900),
+            fontSize: size,
+            textShadow: `0 0 12px ${ac}, 0 0 28px ${ac}, 0 0 52px ${ac}, 0 6px 16px rgba(0,0,0,0.45)`,
+          }}
+        >
+          {lines.filter(Boolean).map((l, i) => (<div key={i}>{l}</div>))}
+        </div>
+      </AbsoluteFill>
+    );
+  }
+
+  if (styleId === 'vazado') {
+    // A letra e um BURACO na caixa: o video aparece dentro dela. Em CSS isso
+    // nao existe (mix-blend-mode nao recorta o fundo da pagina), entao o
+    // desenho e uma mascara SVG — o retangulo e pintado onde a mascara e
+    // branca, e a letra, preta, vira vazio.
+    const ac = H.accent ?? '#ff5200';
+    const padX = size * 0.3;
+    const alt = size * lh + size * 0.24;
+    return (
+      <AbsoluteFill style={envolucro}>
+        <Sfx src="whoosh.mp3" volume={0.1} />
+        <div style={{...shell, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10}}>
+          {lines.filter(Boolean).map((l, i) => {
+            const larg = hlWidth(l, size, 900) + 2 * padX;
+            return (
+              <svg key={i} width={larg} height={alt} style={{filter: 'drop-shadow(0 12px 30px rgba(0,0,0,0.45))'}}>
+                <defs>
+                  <mask id={`vaz${i}`}>
+                    <rect x={0} y={0} width={larg} height={alt} rx={10} fill="#fff" />
+                    <text
+                      x={larg / 2}
+                      y={alt / 2}
+                      fill="#000"
+                      textAnchor="middle"
+                      dominantBaseline="central"
+                      fontFamily={HL_FF}
+                      fontWeight={hookWeight(900)}
+                      fontSize={size}
+                      letterSpacing={-1}
+                    >
+                      {l}
+                    </text>
+                  </mask>
+                </defs>
+                <rect x={0} y={0} width={larg} height={alt} rx={10} fill={ac} mask={`url(#vaz${i})`} />
+              </svg>
+            );
+          })}
+        </div>
+      </AbsoluteFill>
+    );
+  }
+
+  if (styleId === 'gradiente') {
+    const ac = H.accent ?? '#ff5200';
+    return (
+      <AbsoluteFill style={envolucro}>
+        <Sfx src="whoosh.mp3" volume={0.1} />
+        <div style={{...shell, filter: 'drop-shadow(0 8px 22px rgba(0,0,0,0.5))'}}>
+          {lines.filter(Boolean).map((l, i) => (
+            <div
+              key={i}
+              style={{
+                fontWeight: hookWeight(900),
+                fontSize: size,
+                backgroundImage: `linear-gradient(180deg, #fff 0%, ${ac} 100%)`,
+                WebkitBackgroundClip: 'text',
+                backgroundClip: 'text',
+                color: 'transparent',
+              }}
+            >
+              {l}
+            </div>
+          ))}
+        </div>
+      </AbsoluteFill>
+    );
+  }
+
   if (styleId === 'realce') {
     return (
       <AbsoluteFill style={envolucro}>
@@ -1191,13 +1347,42 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
 const VIDEO_LAYOUT = String((D as any).videoLayout ?? 'limpa');
 const LAYOUT_ACCENT: string = D.hook?.accent ?? '#ff5200';
 
+// Os layouts que sao so TINTA por cima do quadro cheio. Cada um tem gemeo
+// em `camada_do_layout` (app/render_proprio.py) — os numeros aqui e la sao
+// os mesmos de proposito; mudou um, muda o outro, senao o mesmo estilo sai
+// de um jeito no motor rapido e de outro aqui.
 export const LayoutScrim: React.FC = () => {
-  if (VIDEO_LAYOUT !== 'degrade') return null;
-  return (
-    <AbsoluteFill
-      style={{background: 'linear-gradient(180deg, rgba(0,0,0,0) 52%, rgba(0,0,0,0.74) 100%)'}}
-    />
-  );
+  if (VIDEO_LAYOUT === 'degrade') {
+    return (
+      <AbsoluteFill
+        style={{background: 'linear-gradient(180deg, rgba(0,0,0,0) 52%, rgba(0,0,0,0.74) 100%)'}}
+      />
+    );
+  }
+  if (VIDEO_LAYOUT === 'vinheta') {
+    return (
+      <AbsoluteFill
+        style={{background: 'radial-gradient(ellipse at center, rgba(0,0,0,0) 45%, rgba(0,0,0,0.62) 100%)'}}
+      />
+    );
+  }
+  if (VIDEO_LAYOUT === 'cinema') {
+    // duas tarjas de 10% — o corte de cinema dentro do 9:16
+    return (
+      <AbsoluteFill>
+        <div style={{position: 'absolute', top: 0, left: 0, right: 0, height: '10%', background: '#000'}} />
+        <div style={{position: 'absolute', bottom: 0, left: 0, right: 0, height: '10%', background: '#000'}} />
+      </AbsoluteFill>
+    );
+  }
+  if (VIDEO_LAYOUT === 'borda') {
+    return (
+      <AbsoluteFill>
+        <div style={{position: 'absolute', inset: 26, border: `6px solid ${LAYOUT_ACCENT}`, borderRadius: 28}} />
+      </AbsoluteFill>
+    );
+  }
+  return null;
 };
 
 const VideoStage: React.FC = () => {

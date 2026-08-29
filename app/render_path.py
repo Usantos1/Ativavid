@@ -92,7 +92,8 @@ def classify_render_path(
     # Layouts que TRANSFORMAM o vídeo (moldura/barra/desfocado) precisam do
     # Remotion compondo o próprio vídeo — não dá para colar por cima no
     # FFmpeg. "degrade" é só um scrim gráfico e continua overlay-elegível.
-    if str(data.get("videoLayout") or "limpa") in ("moldura", "barra", "desfocado"):
+    from app.video_layouts import transforma_o_video
+    if transforma_o_video(data.get("videoLayout")):
         full.append("video_layout")
     behind = data.get("behind") or []
     if behind:

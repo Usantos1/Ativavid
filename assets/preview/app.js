@@ -216,6 +216,56 @@ const STYLE_CATALOG = {
         <rect x="40" y="96.5" width="10" height="2.4" rx="1.2" fill="rgba(255,255,255,.5)"/>
       </svg>`,
     },
+    {
+      id: 'vinheta',
+      name: 'Vinheta',
+      mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
+        <defs><radialGradient id="gVin" cx="50%" cy="50%" r="70%">
+          <stop offset="0.45" stop-color="rgba(0,0,0,0)"/>
+          <stop offset="1" stop-color="rgba(0,0,0,.82)"/>
+        </radialGradient></defs>
+        <rect x=".5" y=".5" width="65" height="117" rx="7" fill="#0b0e13" stroke="rgba(255,255,255,.12)"/>
+        <rect x="3" y="3" width="60" height="112" rx="5" fill="rgba(255,255,255,.10)"/>
+        <circle cx="33" cy="44" r="13" fill="rgba(255,255,255,.18)"/>
+        <path d="M12 112a21 21 0 0142 0z" fill="rgba(255,255,255,.18)"/>
+        <rect x="3" y="3" width="60" height="112" rx="5" fill="url(#gVin)"/>
+        <rect x="12" y="74" width="42" height="11" rx="5.5" fill="#0b0e13" stroke="rgba(9,181,183,.65)"/>
+        <rect x="16" y="78.5" width="12" height="2.4" rx="1.2" fill="rgba(9,181,183,.9)"/>
+        <rect x="30" y="78.5" width="8" height="2.4" rx="1.2" fill="rgba(255,255,255,.5)"/>
+        <rect x="40" y="78.5" width="10" height="2.4" rx="1.2" fill="rgba(255,255,255,.5)"/>
+      </svg>`,
+    },
+    {
+      id: 'cinema',
+      name: 'Cinema',
+      mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
+        <rect x=".5" y=".5" width="65" height="117" rx="7" fill="#0b0e13" stroke="rgba(255,255,255,.12)"/>
+        <rect x="3" y="3" width="60" height="112" rx="5" fill="rgba(255,255,255,.09)"/>
+        <circle cx="33" cy="46" r="13" fill="rgba(255,255,255,.18)"/>
+        <path d="M12 105a21 21 0 0142 0z" fill="rgba(255,255,255,.18)"/>
+        <path d="M3 8a5 5 0 015-5h50a5 5 0 015 5v6H3z" fill="#000"/>
+        <path d="M3 104h60v6a5 5 0 01-5 5H8a5 5 0 01-5-5z" fill="#000"/>
+        <rect x="12" y="80" width="42" height="11" rx="5.5" fill="#0b0e13" stroke="rgba(9,181,183,.65)"/>
+        <rect x="16" y="84.5" width="12" height="2.4" rx="1.2" fill="rgba(9,181,183,.9)"/>
+        <rect x="30" y="84.5" width="8" height="2.4" rx="1.2" fill="rgba(255,255,255,.5)"/>
+        <rect x="40" y="84.5" width="10" height="2.4" rx="1.2" fill="rgba(255,255,255,.5)"/>
+      </svg>`,
+    },
+    {
+      id: 'borda',
+      name: 'Borda da marca',
+      mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
+        <rect x=".5" y=".5" width="65" height="117" rx="7" fill="#0b0e13" stroke="rgba(255,255,255,.12)"/>
+        <rect x="3" y="3" width="60" height="112" rx="5" fill="rgba(255,255,255,.08)"/>
+        <circle cx="33" cy="46" r="13" fill="rgba(255,255,255,.18)"/>
+        <path d="M12 115a21 21 0 0142 0z" fill="rgba(255,255,255,.18)"/>
+        <rect x="6.5" y="6.5" width="53" height="105" rx="4" fill="none" stroke="rgba(255,119,19,.85)" stroke-width="2"/>
+        <rect x="12" y="74" width="42" height="11" rx="5.5" fill="#0b0e13" stroke="rgba(9,181,183,.65)"/>
+        <rect x="16" y="78.5" width="12" height="2.4" rx="1.2" fill="rgba(9,181,183,.9)"/>
+        <rect x="30" y="78.5" width="8" height="2.4" rx="1.2" fill="rgba(255,255,255,.5)"/>
+        <rect x="40" y="78.5" width="10" height="2.4" rx="1.2" fill="rgba(255,255,255,.5)"/>
+      </svg>`,
+    },
   ],
   // No names on purpose: the sample headline IS the label. Ids and geometry
   // mirror HL_STYLES in the template's Main.tsx — keep the two in step.
@@ -233,6 +283,11 @@ const STYLE_CATALOG = {
     {id: 'manchete', name: 'Manchete', hl: 'manchete'},
     {id: 'carimbo', name: 'Carimbo', hl: 'carimbo'},
     {id: 'pergunta', name: 'Pergunta → Resposta', hl: 'pergunta'},
+    {id: 'faixa', name: 'Faixa cheia', hl: 'faixa'},
+    {id: 'fita', name: 'Fita', hl: 'fita'},
+    {id: 'neon', name: 'Neon', hl: 'neon'},
+    {id: 'vazado', name: 'Vazado', hl: 'vazado'},
+    {id: 'gradiente', name: 'Degradê na letra', hl: 'gradiente'},
     // opts out of the hook entirely (hook.enabled:false in edit-data.json) — a
     // real final look (talking-head cut, images placed by hand later), not a
     // placeholder, so it earns its own card and label like the mockups do.
@@ -463,6 +518,11 @@ const HL_STYLES = {
   manchete: { weights: [800, 800], cap: 54, safeW: 780, lh: 1.14 },
   carimbo: { weights: [900, 900], cap: 80, safeW: 720, lh: 1.05 },
   pergunta: { weights: [800, 900], cap: 84, safeW: 840, lh: 1.05 },
+  faixa: { weights: [900, 900], cap: 78, safeW: 900, lh: 1.06 },
+  fita: { weights: [900, 900], cap: 84, safeW: 800, lh: 1.05 },
+  neon: { weights: [900, 900], cap: 92, safeW: 880, lh: 1.02 },
+  vazado: { weights: [900, 900], cap: 86, safeW: 820, lh: 1.04 },
+  gradiente: { weights: [900, 900], cap: 96, safeW: 900, lh: 1.0 },
 };
 
 // Measured in RENDER units (1080-wide), scaled to the box only at the end — the
@@ -516,7 +576,8 @@ function buildHeadlineDemo(host, styleId) {
   const S = HL_STYLES[styleId];
   host.innerHTML = '';
   const wrap = el('div', 'cap-demo', host);
-  const upperHl = styleId === 'card' || styleId === 'manchete' || styleId === 'carimbo';
+  const upperHl = styleId === 'card' || styleId === 'manchete' || styleId === 'carimbo'
+    || styleId === 'faixa' || styleId === 'vazado';
   const raw = upperHl ? HEADLINE_TEXT.toUpperCase() : HEADLINE_TEXT;
   const lines = hlTwoLines(raw, S.weights);
   const size = hlFit(lines, S) * s;
@@ -583,6 +644,31 @@ function buildHeadlineDemo(host, styleId) {
     a.textContent = 'Aguenta. Olha isso';
     return;
   }
+  if (styleId === 'faixa' || styleId === 'fita' || styleId === 'vazado') {
+    // os tres sao caixa cheia; muda o corte, o giro e quem fica no buraco
+    for (const [i, l] of lines.entries()) {
+      if (!l) continue;
+      const b = el('div', `hl-block hl-${styleId}-line`, box);
+      b.style.fontSize = `${size}px`;
+      if (styleId === 'faixa') b.style.borderRadius = '0';
+      if (styleId === 'fita') {
+        b.style.borderRadius = `${6 * s}px`;
+        b.style.transform = `rotate(${i === 0 ? -2.4 : 1.8}deg)`;
+      }
+      if (styleId === 'vazado') b.style.borderRadius = `${10 * s}px`;
+      b.textContent = l;
+    }
+    return;
+  }
+  if (styleId === 'gradiente') {
+    for (const l of lines) {
+      if (!l) continue;
+      const d = el('div', 'hl-gradiente-line', box);
+      d.style.fontSize = `${size}px`;
+      d.textContent = l;
+    }
+    return;
+  }
   if (styleId === 'realce') {
     for (const l of lines) {
       if (!l) continue;
@@ -615,6 +701,10 @@ function buildHeadlineDemo(host, styleId) {
   }
   if (styleId === 'outline') {
     box.style.webkitTextStroke = `${12 * s}px #000`;
+  }
+  if (styleId === 'neon') {
+    const g = Math.max(4 * s, size * 0.16);
+    box.style.textShadow = `0 0 ${g}px var(--hl-accent), 0 0 ${g * 2.3}px var(--hl-accent), 0 0 ${g * 4.3}px var(--hl-accent)`;
   }
   if (styleId === 'sombra') {
     // same offset formula as the template, scaled to the card

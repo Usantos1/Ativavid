@@ -251,8 +251,17 @@ def test_headline_quebra_em_duas_linhas_por_largura(tmp_path):
     assert abs(a - b) / max(a, b) < 0.4
 
 
-def test_headline_maiuscula_so_em_tres_estilos():
-    assert set(Renderizador.HL_MAIUSCULA) == {"card", "manchete", "carimbo"}
+def test_headline_maiuscula_bate_com_o_template():
+    """Caixa alta e escolha de ESTILO, e tem de ser a mesma nos dois motores:
+    o mesmo texto sairia "É assim" num caminho e "É ASSIM" no outro."""
+    esperado = {"card", "manchete", "carimbo", "faixa", "vazado"}
+    assert set(Renderizador.HL_MAIUSCULA) == esperado
+    tsx = (Path(__file__).resolve().parent.parent / "assets" / "shortform"
+           / "src" / "Main.tsx").read_text(encoding="utf-8")
+    i = tsx.index("const isUpper =")
+    linha = tsx[i:tsx.index(";", i)]
+    for nome in esperado:
+        assert f"'{nome}'" in linha, nome
 
 def test_contador_e_logo_agora_sao_suportados(tmp_path):
     """Portados na v2.26 — deixaram de derrubar para o Remotion."""

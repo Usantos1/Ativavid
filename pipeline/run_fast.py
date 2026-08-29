@@ -2185,11 +2185,7 @@ def build_edit_data(cut: Path, preset: dict, hook: list[str], duration: float, f
             "logo": None,
             "sign": None,
         },
-        "videoLayout": (
-            edit_style_norm
-            if edit_style_norm in ("limpa", "split", "split2", "moldura", "barra", "desfocado", "degrade")
-            else "limpa"
-        ),
+        "videoLayout": _layout_valido(edit_style_norm),
         "captions": {
             "enabled": cap_enabled,
             "style": captions if cap_enabled else "karaoke",
@@ -2394,11 +2390,11 @@ def _attach_auto_broll(edit_data: dict, public: Path, preset: dict, transcript: 
         print("[broll] desligado no estilo", flush=True)
         return edit_data
     explicit = mode not in ("quando_necessario", "", "auto")
-    if edit_style in ("limpa", "clean", "limpo", "moldura", "barra", "desfocado", "degrade") and not explicit:
+    if edit_style in _QUADRO_CHEIO and not explicit:
         edit_data["inserts"] = []
         print("[broll] estilo limpa + b-roll no padrão — sem inserts automáticos", flush=True)
         return edit_data
-    if edit_style in ("limpa", "clean", "limpo", "moldura", "barra", "desfocado", "degrade"):
+    if edit_style in _QUADRO_CHEIO:
         print(f"[broll] estilo limpa, mas b-roll={mode} pedido — inserts ligados", flush=True)
     # 1) biblioteca local
     try:
@@ -2957,6 +2953,27 @@ _MUSIC_DEFAULT = (
     "120 bpm, warm confident mood, no vocals"
 )
 
+
+# Layouts de video: a lista mora em app/video_layouts.py. Repetida aqui, um
+# id novo que esquecesse UMA das copias simplesmente nao acontecia no video,
+# calado — foi assim que o "degrade" passou meses sem sair no motor rapido.
+def _layout_valido(nome: object) -> str:
+    from app.video_layouts import normalizar
+    return normalizar(nome)
+
+
+def _layout_pede_remotion(nome: object) -> bool:
+    """Divide a tela ou transforma o video -> caminho lento."""
+    from app.video_layouts import DIVIDEM, transforma_o_video
+    return str(nome or "").lower() in DIVIDEM or transforma_o_video(nome)
+
+
+def _quadro_cheio() -> frozenset:
+    from app.video_layouts import QUADRO_CHEIO
+    return QUADRO_CHEIO
+
+
+_QUADRO_CHEIO = _quadro_cheio()
 
 _ACENTOS_PT = "ÁÃÂÀÉÊÍÓÔÕÚÇáãâàéêíóôõúç!?"
 
@@ -3757,7 +3774,7 @@ def run(
             overlay_flag = False
         overlay_candidate = (
             not bool(elems.get("tracking"))
-            and str(preset.get("edit") or "").lower() not in ("split", "split2", "moldura", "barra", "desfocado")
+            and not _layout_pede_remotion(preset.get("edit"))
         )
         if attach_to_edl and (experimental_on() or (overlay_flag and overlay_candidate)):
             try:

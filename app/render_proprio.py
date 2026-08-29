@@ -385,6 +385,18 @@ def motivo_nao_suportado(edit_data: dict[str, Any], public: Path) -> str | None:
     return None
 
 
+def _cor_hex(h: str) -> np.ndarray:
+    """#rrggbb -> array 0..1. Usado fora da classe (camada do layout)."""
+    t = str(h or "#ffffff").lstrip("#")
+    if len(t) == 3:
+        t = "".join(c * 2 for c in t)
+    try:
+        return np.array([int(t[i:i + 2], 16) / 255.0 for i in (0, 2, 4)],
+                        dtype=np.float32)
+    except ValueError:
+        return np.ones(3, dtype=np.float32)
+
+
 # ---------------------------------------------------------------- modelo ----
 @dataclass
 class Palavra:
@@ -554,6 +566,11 @@ class Renderizador:
         self.cues = d if isinstance(d, list) else (d.get("cues") or [])
         self.camadas: list[Camada] = []
         self.eventos_sfx: list[tuple[str, float, float]] = []   # (arquivo, seg, volume)
+        # Tinta do layout (degrade/vinheta/cinema/borda): estatica, entao ela
+        # e o FUNDO do buffer — ver `_gravar_video`.
+        self.fundo = camada_do_layout(
+            edit_data.get("videoLayout"), self.w, self.h,
+            (edit_data.get("hook") or {}).get("accent") or "#ff5200")
         self._montar_tudo()
 
     # ------------------------------------------------------------ fontes ----
@@ -1244,8 +1261,13 @@ class Renderizador:
         "manchete":   ((800, 800), 54, 780, 1.14, 0),
         "carimbo":    ((900, 900), 80, 720, 1.05, 300),
         "pergunta":   ((800, 900), 84, 840, 1.05, 300),
+        "faixa":       ((900, 900), 78, 900, 1.06, 300),
+        "fita":        ((900, 900), 84, 800, 1.05, 300),
+        "neon":        ((900, 900), 92, 880, 1.02, 310),
+        "vazado":      ((900, 900), 86, 820, 1.04, 300),
+        "gradiente":   ((900, 900), 96, 900, 1.00, 305),
     }
-    HL_MAIUSCULA = ("card", "manchete", "carimbo")
+    HL_MAIUSCULA = ("card", "manchete", "carimbo", "faixa", "vazado")
     # peso -> arquivo Poppins
     HL_FONTE = {400: 1, 500: 1, 600: 3, 700: 3, 800: 3, 900: 4}
 
@@ -1289,7 +1311,7 @@ class Renderizador:
     def _hl_bloco_texto(self, leg, texto, tam, peso, x0, y_topo, alt_cx,
                         cor, especs, k_sombra=0.5, contorno=None,
                         fundo=None, raio=0, pad_xy=(0, 0, 0), enter=8,
-                        sobe=24.0, rot=0.0, borda=None):
+                        sobe=24.0, rot=0.0, borda=None, vazar=False):
         """Uma linha de headline: fundo opcional, contorno opcional, texto.
 
         Concentra o que os 9 estilos tem em comum — o que muda entre eles e
@@ -1367,8 +1389,16 @@ class Renderizador:
             if base_sombra is None:
                 base_sombra = ct
 
-        rgb = rgb * (1 - t_a[..., None]) + self._cor(cor) * t_a[..., None]
-        alpha = np.maximum(alpha, t_a)
+        if vazar:
+            # A letra nao e pintada: ela e TIRADA da caixa, e por esse buraco
+            # aparece o video. A sombra sai da peca JA FURADA — com ela vindo
+            # da caixa cheia, o borrao escuro ficava dentro do buraco e as
+            # letras saiam sujas (visto no par contra o Remotion, 29/08).
+            alpha = np.clip(alpha - t_a, 0.0, 1.0)
+            base_sombra = alpha
+        else:
+            rgb = rgb * (1 - t_a[..., None]) + self._cor(cor) * t_a[..., None]
+            alpha = np.maximum(alpha, t_a)
         if base_sombra is None:
             base_sombra = t_a
         sombra = self._sombra_de(base_sombra, especs, k=k_sombra) if especs \
@@ -1553,6 +1583,105 @@ class Renderizador:
                     leg.palavras[-1].janela = (at + q, at + q + 1) if q < 7 \
                         else (at + 7, 1e9)
                 y2 += a_alt_cx + 10
+            return leg
+
+        if estilo == "faixa":
+            # de ponta a ponta: o respiro lateral e o que sobra da largura
+            y = top
+            for l in linhas:
+                larg = self._larg_hl(l, tam, 900)
+                pad_x = max(24.0, (self.w - larg) / 2)
+                alt = self._hl_bloco_texto(
+                    leg, l, tam, 900, (self.w - (larg + 2 * pad_x)) / 2, y,
+                    alt_cx, "#ffffff", [(0, 10, 28, 0.45)], fundo=accent,
+                    raio=0, pad_xy=(pad_x, 0.08 * tam, 0.16 * tam),
+                    sobe=sobe, enter=enter_hl)
+                y += alt + 8
+            return leg
+
+        if estilo == "fita":
+            # as caixas do realce, tortas em sentidos opostos
+            y = top
+            for i, l in enumerate(linhas):
+                pad = (0.34 * tam, 0.08 * tam, 0.16 * tam)
+                larg_b = self._larg_hl(l, tam, 900) + 2 * pad[0]
+                alt = self._hl_bloco_texto(
+                    leg, l, tam, 900, (self.w - larg_b) / 2, y, alt_cx,
+                    "#ffffff", [(0, 12, 30, 0.5)], fundo=accent, raio=6,
+                    pad_xy=pad, sobe=sobe, enter=enter_hl,
+                    rot=(-2.4 if i == 0 else 1.8))
+                y += alt + 12
+            return leg
+
+        if estilo == "neon":
+            # duas passadas na MESMA geometria: a de baixo vira brilho, a de
+            # cima e a letra branca. Chamar o mesmo ajudante garante que as
+            # duas caem no mesmo pixel — calcular a posicao do brilho na mao
+            # erraria por causa do `folga` e do centro da caixa.
+            y = top
+            for l in linhas:
+                larg = self._larg_hl(l, tam, 900)
+                x = (self.w - larg) / 2
+                self._hl_bloco_texto(
+                    leg, l, tam, 900, x, y, alt_cx, accent, [],
+                    sobe=sobe, enter=enter_hl)
+                brilho = leg.palavras[-1]
+                # text-shadow 0 0 12/28/52px (sigma = raio/2 no Chrome). As
+                # tres sombras sao EMPILHADAS uma sobre a outra, nao a maior
+                # das tres: medido contra o Remotion, pegar a maior dava 0,35
+                # da tinta dele — um brilho fraco e curto demais.
+                base_br = brilho.alpha.copy()
+                acc = np.zeros_like(base_br)
+                for raio in (12, 28, 52):
+                    b_r = self._sombra_de(base_br, [(0, 0, raio, 1.0)], k=0.5)
+                    acc = acc + b_r - acc * b_r
+                brilho.alpha[:] = np.clip(acc, 0.0, 1.0)
+                # a cor tem de cobrir TUDO que o borrao alcancou: ela so
+                # existia dentro da letra, e o brilho espalhado saia preto
+                # (o par contra o Remotion mostrou halo preto onde devia ser
+                # vermelho — a razao de tinta dizia 1,003 e nao viu nada).
+                brilho.rgb[:] = self._cor(accent)
+                alt = self._hl_bloco_texto(
+                    leg, l, tam, 900, x, y, alt_cx, "#ffffff",
+                    [(0, 6, 16, 0.45)], sobe=sobe, enter=enter_hl)
+                y += alt
+            return leg
+
+        if estilo == "vazado":
+            y = top
+            for l in linhas:
+                pad = (0.3 * tam, 0.08 * tam, 0.16 * tam)
+                larg_b = self._larg_hl(l, tam, 900) + 2 * pad[0]
+                alt = self._hl_bloco_texto(
+                    leg, l, tam, 900, (self.w - larg_b) / 2, y, alt_cx,
+                    "#ffffff", [(0, 12, 30, 0.45)], fundo=accent, raio=10,
+                    pad_xy=pad, sobe=sobe, enter=enter_hl, vazar=True)
+                y += alt + 10
+            return leg
+
+        if estilo == "gradiente":
+            y = top
+            for l in linhas:
+                larg = self._larg_hl(l, tam, 900)
+                alt = self._hl_bloco_texto(
+                    leg, l, tam, 900, (self.w - larg) / 2, y, alt_cx,
+                    "#ffffff", [(0, 8, 22, 0.5)], sobe=sobe, enter=enter_hl)
+                pal = leg.palavras[-1]
+                # o degrade corre pela LETRA, nao pela imagem inteira: a peca
+                # tem 56px de folga em volta, e usar a altura toda achataria
+                # a faixa de cor no meio dos glifos.
+                ys = np.nonzero(pal.alpha.max(axis=1) > 0.02)[0]
+                if len(ys):
+                    y0, y1 = int(ys[0]), int(ys[-1])
+                    t = np.zeros(pal.alpha.shape[0], dtype=np.float32)
+                    if y1 > y0:
+                        t[y0:y1 + 1] = np.linspace(0.0, 1.0, y1 - y0 + 1,
+                                                   dtype=np.float32)
+                    t[y1 + 1:] = 1.0
+                    tt = t[:, None, None]
+                    pal.rgb[:] = (pal.rgb * (1 - tt)
+                                  + self._cor(accent)[None, None, :] * tt)
+                y += alt
             return leg
 
         if estilo == "realce":
@@ -3277,7 +3406,8 @@ class Renderizador:
                ["-c:v", "qtrle"]),
              str(alvo)],
             stdin=subprocess.PIPE, **NOWIN)
-        buf = np.zeros((self.h, self.w, 4), dtype=np.uint8)
+        buf = (self.fundo.copy() if self.fundo is not None
+               else np.zeros((self.h, self.w, 4), dtype=np.uint8))
         sujo = [0, 0, 0, 0]
         ass_ant, bytes_ant = None, None
         try:
@@ -3288,9 +3418,16 @@ class Renderizador:
                     continue
                 ass_ant = ass
                 if sujo[2] > sujo[0] and sujo[3] > sujo[1]:
-                    buf[sujo[1]:sujo[3], sujo[0]:sujo[2]] = 0
+                    # limpar = voltar para a tinta do layout, nao para zero
+                    buf[sujo[1]:sujo[3], sujo[0]:sujo[2]] = (
+                        0 if self.fundo is None
+                        else self.fundo[sujo[1]:sujo[3], sujo[0]:sujo[2]])
                 sujo[:] = [0, 0, 0, 0]
-                primeira = True
+                # `primeira` copia por cima em vez de mesclar — de graca
+                # quando o buffer esta zerado, mas com camada de layout isso
+                # APAGARIA a tinta dela onde a legenda passa (a vinheta saiu
+                # com um retangulo claro em volta da headline, 29/08).
+                primeira = self.fundo is None
                 for leg in self.camadas:
                     if leg.inicio_f <= f <= leg.fim_f:
                         if leg.dim:
@@ -3372,6 +3509,60 @@ def render_overlay_proprio(public: Path, edit_data: dict[str, Any], *,
     r = Renderizador(public, edit_data, frames=frames, fps=fps,
                      width=width, height=height)
     return r.render(out)
+
+
+# ------------------------------------------------------ camada do layout ----
+def camada_do_layout(layout: str, w: int, h: int,
+                     accent: str = "#ff5200") -> np.ndarray | None:
+    """RGBA (h,w,4) da tinta que o layout poe POR CIMA do quadro cheio.
+
+    Espelho do `LayoutScrim` do Main.tsx — os numeros aqui e la sao os
+    mesmos de proposito; mudou um, muda o outro. `None` = nada a desenhar
+    (quadro limpo, ou um layout que TRANSFORMA o video e por isso vai pelo
+    Remotion).
+    """
+    from app.video_layouts import normalizar
+
+    nome = normalizar(layout)
+    buf = np.zeros((h, w, 4), dtype=np.float32)
+
+    if nome == "degrade":
+        # linear-gradient(180deg, transparent 52%, rgba(0,0,0,.74) 100%)
+        y = np.arange(h, dtype=np.float32) / max(1, h - 1)
+        t = np.clip((y - 0.52) / 0.48, 0.0, 1.0)
+        buf[..., 3] = (t * 0.74)[:, None]
+        return (buf * 255.0 + 0.5).astype(np.uint8)
+
+    if nome == "vinheta":
+        # radial-gradient(ellipse at center, transparent 45%, rgba(0,0,0,.62))
+        # O raio da elipse padrao do CSS vai ate o CANTO mais distante, por
+        # isso a distancia normalizada divide por raiz de 2.
+        yy = (np.arange(h, dtype=np.float32) - (h - 1) / 2) / ((h - 1) / 2)
+        xx = (np.arange(w, dtype=np.float32) - (w - 1) / 2) / ((w - 1) / 2)
+        d = np.sqrt(yy[:, None] ** 2 + xx[None, :] ** 2) / np.float32(2 ** 0.5)
+        buf[..., 3] = np.clip((d - 0.45) / 0.55, 0.0, 1.0) * 0.62
+        return (buf * 255.0 + 0.5).astype(np.uint8)
+
+    if nome == "cinema":
+        # duas tarjas pretas de 10% — o corte 2.39:1 dentro do 9:16
+        faixa = int(round(h * 0.10))
+        buf[:faixa, :, 3] = 1.0
+        buf[h - faixa:, :, 3] = 1.0
+        return (buf * 255.0 + 0.5).astype(np.uint8)
+
+    if nome == "borda":
+        # moldura fina na cor da marca, 26px para dentro, 6px de traco
+        from PIL import Image as _I, ImageDraw as _D
+
+        m = _I.new("L", (w, h), 0)
+        _D.Draw(m).rounded_rectangle(
+            [26, 26, w - 27, h - 27], radius=28, outline=255, width=6)
+        cor = _cor_hex(accent)
+        buf[..., :3] = cor
+        buf[..., 3] = np.asarray(m, dtype=np.float32) / 255.0
+        return (buf * 255.0 + 0.5).astype(np.uint8)
+
+    return None
 
 
 # ------------------------------------------------------- passada única ------
@@ -3494,7 +3685,8 @@ def render_final_uma_passada(
              "-frames:v", str(frames), "-t", f"{duration_sec:.6f}",
              "-movflags", "+faststart", str(prenorm)],
             stdin=subprocess.PIPE, **NOWIN)
-        buf = np.zeros((r.h, r.w, 4), dtype=np.uint8)
+        buf = (r.fundo.copy() if r.fundo is not None
+               else np.zeros((r.h, r.w, 4), dtype=np.uint8))
         sujo = [0, 0, 0, 0]
         ass_ant, bytes_ant = None, None
         try:
@@ -3505,9 +3697,16 @@ def render_final_uma_passada(
                     continue
                 ass_ant = ass
                 if sujo[2] > sujo[0] and sujo[3] > sujo[1]:
-                    buf[sujo[1]:sujo[3], sujo[0]:sujo[2]] = 0
+                    # limpar = voltar para a tinta do layout, nao para zero
+                    buf[sujo[1]:sujo[3], sujo[0]:sujo[2]] = (
+                        0 if r.fundo is None
+                        else r.fundo[sujo[1]:sujo[3], sujo[0]:sujo[2]])
                 sujo[:] = [0, 0, 0, 0]
-                primeira = True
+                # `primeira` copia por cima em vez de mesclar — de graca
+                # quando o buffer esta zerado, mas com camada de layout isso
+                # APAGARIA a tinta dela onde a legenda passa (a vinheta saiu
+                # com um retangulo claro em volta da headline, 29/08).
+                primeira = r.fundo is None
                 for leg in r.camadas:
                     if leg.inicio_f <= f <= leg.fim_f:
                         if leg.dim:

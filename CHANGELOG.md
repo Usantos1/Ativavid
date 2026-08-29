@@ -1,5 +1,21 @@
 # Changelog
 
+## 3.53
+
+- **Três layouts de vídeo novos.** *Vinheta* (bordas escurecidas, o rosto
+  ganha foco), *Cinema* (as duas tarjas pretas) e *Borda da marca* (moldura
+  fina na sua cor). Os três são tinta por cima do quadro cheio, de propósito:
+  assim o render continua no motor rápido, ao contrário de Moldura, Barra
+  inferior e Fundo desfocado, que obrigam o caminho lento.
+- **Cinco estilos de headline novos.** *Faixa cheia* (a faixa corta a tela de
+  ponta a ponta), *Fita* (as caixas tortas), *Neon* (letra branca com brilho
+  da sua cor), *Vazado* (caixa cheia com a letra recortada — o vídeo aparece
+  dentro dela) e *Degradê na letra* (branco em cima, sua cor embaixo).
+- **O "Degradê" voltou a acontecer.** O motor rápido — que faz cerca de 18 de
+  cada 20 renders — nunca olhou o layout escolhido: quem marcava Degradê
+  recebia o vídeo sem degradê nenhum, sem aviso. Agora os dois motores
+  desenham a mesma coisa, conferido quadro a quadro.
+
 ## 3.52
 
 - **As quatro cores do estilo ficam lado a lado.** Cor da headline, de ênfase,

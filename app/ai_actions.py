@@ -298,10 +298,11 @@ def apply_actions_to_edits(
             # Quem decide é o brollMode (mesma regra do pipeline): em `limpa`
             # com b-roll no padrão fica só a nota; b-roll pedido de propósito
             # ("Sempre"/"Raro") coloca o insert mesmo em quadro cheio.
+            from app.video_layouts import QUADRO_CHEIO as _QUADRO_CHEIO
             edit_style = (style.get("edit") or "limpa").lower().strip()
             _bm = str(style.get("brollMode") or "quando_necessario").lower().strip()
             _broll_ok = _bm not in ("off", "nenhum", "none", "desligado") and (
-                edit_style not in ("limpa", "clean", "limpo", "moldura", "barra", "desfocado", "degrade")
+                edit_style not in _QUADRO_CHEIO
                 or _bm not in ("quando_necessario", "", "auto")
             )
             if _broll_ok and a.get("query"):

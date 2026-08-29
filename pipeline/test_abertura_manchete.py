@@ -85,5 +85,17 @@ def test_o_centro_chega_aos_dois_motores():
     assert "self.h - len(linhas) * lh * tam" in rp[i:i + 240], rp[i:i + 240]
     tsx = (REPO / "assets" / "shortform" / "src" / "Main.tsx").read_text(encoding="utf-8")
     assert "const envolucro" in tsx and "H.centro" in tsx
-    assert tsx.count("<AbsoluteFill style={envolucro}>") == 9, (
-        "alguma variante de headline ficou sem o centro")
+    # Contado, nao fixo: o numero cresce a cada estilo novo, e o que importa
+    # e que nenhum ramo abra o quadro com estilo proprio — quem faz isso
+    # ignora o "centro" e a manchete nasce no alto mesmo com ele marcado.
+    # So o corpo do HookInner: `flex-end` tambem aparece em outras partes
+    # do arquivo, que nao tem nada com a manchete.
+    corpo = tsx[tsx.index("const HookInner"):tsx.index("const HookIntro")]
+    ramos = corpo.count("if (styleId === '")
+    # um envolucro por ramo, mais o caso de sobra, menos a `manchete` — que
+    # ancora na BASE de proposito
+    assert corpo.count("<AbsoluteFill style={envolucro}>") == ramos, (
+        f"{ramos} ramos de headline, "
+        f"{corpo.count('<AbsoluteFill style={envolucro}>')} com o centro")
+    assert corpo.count("justifyContent: 'flex-end', alignItems: 'center'") == 1, (
+        "so a manchete ancora na base; um segundo caso ficaria sem o centro")

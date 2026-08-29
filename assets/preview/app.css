@@ -1748,7 +1748,25 @@ kbd {
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
 }
 .hl-realce { display: flex; flex-direction: column; align-items: center; gap: 2px; }
-.hl-realce .hl-block {
+.hl-fita, .hl-vazado { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+/* a faixa e a unica que corta a largura toda — a amostra tem de mostrar
+   isso, senao ela fica identica ao realce no seletor */
+.hl-faixa {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  left: 0;
+  right: 0;
+}
+.hl-faixa .hl-block { border-radius: 0; }
+/* A caixa cheia da amostra: nasceu no `realce` e agora serve tambem a
+   faixa, a fita e o vazado — o seletor estava preso a UM estilo, e os tres
+   novos apareciam no seletor como texto solto, sem caixa nenhuma. */
+.hl-realce .hl-block,
+.hl-faixa .hl-block,
+.hl-fita .hl-block,
+.hl-vazado .hl-block {
   background: var(--hl-accent);
   color: #fff;
   font-weight: 900;
@@ -3467,3 +3485,17 @@ body.styles-wide .setup-actions .btn.primary {
 .transport.so-icone #markText { display: none; }
 #btnFit { padding: 6px 8px; }
 #btnFit svg { width: 14px; height: 14px; display: block; }
+
+/* Amostras dos estilos de headline de 29/08 (ver buildHeadlineDemo). Cada
+   uma imita o que o render faz: faixa corta a largura toda, fita gira, o
+   vazado pinta a letra da cor do quadro (no video ali aparece o próprio
+   vídeo) e o gradiente pinta a letra de branco a cor da marca. */
+.hl-faixa-line { width: 100%; }
+.hl-vazado-line { color: #0b0e13; }
+.hl-gradiente-line {
+  background-image: linear-gradient(180deg, #fff 0%, var(--hl-accent) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-weight: 900;
+}
