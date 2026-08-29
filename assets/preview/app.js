@@ -3851,7 +3851,10 @@ function renderChips() {
   // only on Fase 2 — you could see the wrong word and not reach it.
   const showCaps = phase2 || S.captions.length > 0;
   $('trkCaptions').classList.toggle('hidden', !showCaps);
-  insertTracksEl.classList.toggle('hidden', !phase2);
+  // Na Edicao o bloco de faixas so aparece quando ha midia posta na mao —
+  // sem isso a faixa nasce vazia e come altura da linha do tempo.
+  const temManual = S.insertsDraft.some((c) => c.isNew);
+  insertTracksEl.classList.toggle('hidden', !phase2 && !temManual);
   insertTracksEl.innerHTML = '';
   if (!showCaps) return;
 
@@ -3874,16 +3877,23 @@ function renderChips() {
     });
   }
 
-  // Inserts stay Fase-2 only: they describe the Phase-2 render, and on the
-  // Fase-1 cut there is nothing for them to sit against.
-  if (!phase2) return;
+  // Na Visual entram todos os inserts; na Edicao, so os que o usuario poe
+  // na mao. Os da IA vem do edit-data no relogio do video FINAL, e desenha-
+  // los sobre o corte em edicao os poria no lugar errado. O que e posto na
+  // mao ja nasce em tempo de rascunho (`pushInsertFromRef`), que e o
+  // relogio desta tela.
+  const soManuais = !phase2;
+  const visiveis = soManuais
+    ? S.insertsDraft.map((c, i) => ({ c, i })).filter(({ c }) => c.isNew)
+    : S.insertsDraft.map((c, i) => ({ c, i }));
+  if (soManuais && !visiveis.length) return;
 
   // TEXT and IMAGE get their own tracks — a headline and a photo are different
   // kinds of edit, and mixing them on one lane hid the images entirely.
   const isText = (c) => c.kind === 'hook' || c.kind === 'word';
   const groups = [
-    { icon: 'text', cls: 'teal', items: S.insertsDraft.map((c, i) => ({ c, i })).filter(({ c }) => isText(c)) },
-    { icon: 'inserts', cls: 'orange', items: S.insertsDraft.map((c, i) => ({ c, i })).filter(({ c }) => !isText(c)) },
+    { icon: 'text', cls: 'teal', items: visiveis.filter(({ c }) => isText(c)) },
+    { icon: 'inserts', cls: 'orange', items: visiveis.filter(({ c }) => !isText(c)) },
   ];
 
   for (const g of groups) {
@@ -4744,6 +4754,13 @@ panel.addEventListener('pointermove', (e) => {
       if (moved) {
         pushHistory(drag.preSnapshot);
         if (drag.type === 'trim') persistEdl();
+        // Todo arrasto termina em clique: sem esta marca, soltar o bloco do
+        // gancho abriria o editor da manchete por cima do que acabou de ser
+        // movido (a manchete sobre o video ja usava a mesma guarda).
+        if (String(drag.type).startsWith('chip')) {
+          const alvo = panel.querySelector(`.chip[data-i="${drag.i}"]`);
+          if (alvo) alvo.dataset.acabouDeArrastar = '1';
+        }
       }
     }
     if (drag && drag.type === 'clip-range') {
@@ -5114,7 +5131,12 @@ function setImgTab(tab) {
 
 $('btnImage').innerHTML = ICON.imgSearch;
 $('btnImage').addEventListener('click', () => {
-  if (S.tab !== 2) { toast('A busca de imagem é da aba Final (Visual)', 2200); return; }
+  // Vale na Edicao tambem: e la que o usuario monta a linha do tempo, e o
+  // bloco entra em tempo de rascunho — o relogio daquela tela.
+  if (S.tab !== 1 && S.tab !== 2) {
+    toast('Abra a Edição ou o Visual para inserir mídia', 2200);
+    return;
+  }
   toggleImgPicker(true);
 });
 $('imgClose').addEventListener('click', () => toggleImgPicker(false));
@@ -5209,7 +5231,7 @@ async function pickLibraryAsset(it) {
   if (!data.ok && !data.src) { toast(data.error || 'Falha', 3000); return; }
   pushInsertFromRef(data.src || data.ref, it.name, it.name);
   toggleImgPicker(false);
-  toast('✓ Inserido da biblioteca — arraste e Salvar', 4000);
+  toast('✓ Entrou na agulha — arraste na linha do tempo e Salvar', 4000);
 }
 
 function pushInsertFromRef(src, label, credit) {
@@ -5794,6 +5816,23 @@ if ($('btnApply')) {
     }, data.applyTask);
   });
 }
+
+/* O bloco GANCHO da linha do tempo abre o mesmo editor da manchete que o
+ * clique sobre o video. Ele ja mostrava o texto e o intervalo (0:00 ->
+ * 0:04) e nao fazia nada — o usuario tinha de achar a manchete no quadro
+ * certo do video para poder troca-la. */
+panel.addEventListener('click', (e) => {
+  const chip = e.target.closest('.chip.insert');
+  if (!chip || chip.dataset.i == null) return;
+  if (chip.dataset.acabouDeArrastar === '1') {
+    chip.dataset.acabouDeArrastar = '0';
+    return;
+  }
+  const c = S.insertsDraft[+chip.dataset.i];
+  if (!c || c.kind !== 'hook') return;
+  e.stopPropagation();
+  beginHeadlineEdit();
+});
 
 if ($('hlOverlay')) {
   $('hlOverlay').addEventListener('click', (e) => {

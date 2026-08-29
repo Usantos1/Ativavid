@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.58
+
+- **A manchete se edita pela linha do tempo.** Clique no bloco **GANCHO** e o
+  editor abre — antes era preciso achar a manchete sobre o vídeo, no quadro
+  certo. Arrastar o bloco continua movendo, sem abrir o editor.
+- **Mídia na agulha também na tela de Edição.** O botão de imagem só
+  funcionava no Visual; agora entra pela Edição, que é onde você monta a
+  linha do tempo. Vale imagem, clipe da Biblioteca ou arquivo seu, e o bloco
+  entra na posição da agulha, arrastável. Na Edição aparece só o que você põe
+  à mão: os inserts que a IA colocou seguem no Visual, porque o relógio deles
+  é o do vídeo final.
+
 ## 3.57
 
 - **Escrever legenda na mão.** Leve a agulha até um trecho sem legenda e
