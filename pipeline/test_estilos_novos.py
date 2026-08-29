@@ -50,6 +50,34 @@ def test_a_headline_nova_existe_nos_tres_lugares():
         assert nome in Renderizador.HL_STYLES, f"{nome}: falta no motor próprio"
 
 
+def test_toda_headline_do_catalogo_existe_nos_dois_motores():
+    """Vale para o catalogo INTEIRO, nao so para os cinco de hoje: e assim
+    que o proximo estilo nao nasce pela metade. Quem so existe no template
+    faz o job cair no caminho lento calado; quem so existe no motor proprio
+    sai diferente quando o job vai para o Remotion."""
+    for nome in _ids_da_tela("headlines"):
+        if nome == "nenhuma":            # opta por NAO ter headline
+            continue
+        assert nome in Renderizador.HL_STYLES, f"{nome}: falta no motor próprio"
+        desenha = (f"styleId === '{nome}'" in MAIN
+                   or f"HL_STYLES.{nome}" in MAIN)
+        assert desenha, f"{nome}: falta desenho no Remotion"
+
+
+def test_todo_layout_do_catalogo_tem_dono():
+    """Cada layout ou TRANSFORMA o video (e vai para o Remotion) ou e so
+    camada (e os dois motores desenham). Um id que nao seja nem um nem
+    outro nao acontece em lugar nenhum — foi o caso do "degrade"."""
+    from app.video_layouts import DIVIDEM
+
+    for nome in _ids_da_tela("edits"):
+        if nome in ("limpa", *DIVIDEM):
+            continue
+        camada = camada_do_layout(nome, 100, 100) is not None
+        transforma = nome in TRANSFORMAM
+        assert camada != transforma, f"{nome}: nem camada nem transformador"
+
+
 def test_a_geometria_e_a_mesma_nos_tres():
     """Teto, largura segura e entrelinha diferentes = mesmo estilo em dois
     tamanhos, conforme o caminho que o job pegar."""
