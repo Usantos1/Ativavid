@@ -554,6 +554,10 @@
         <div class="sz-side sz-right"></div>
         <span class="sz-label">zona segura</span>
       </div>
+      <!-- Camada do layout (degradê, vinheta, cinema, borda). Fica ABAIXO
+           da headline e da legenda, como no render: elas sao desenhadas por
+           cima da tinta do layout. -->
+      <div id="layoutOverlay" class="layout-overlay" aria-hidden="true"></div>
       <div id="hlOverlay" class="hl-overlay hidden" title="Clique para editar a headline deste vídeo"></div>
       <!-- WYSIWYG caption layer. Only meaningful BEFORE the Fase-2 render,
            where the video has no burned-in captions yet: seeing the wrong word

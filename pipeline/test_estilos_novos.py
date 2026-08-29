@@ -157,6 +157,38 @@ def test_todo_quadro_cheio_dispensa_broll_automatico():
         assert nome not in QUADRO_CHEIO, nome
 
 
+def test_a_previa_do_preview_usa_os_mesmos_numeros():
+    """A tinta do layout existe em TRÊS lugares: o preview (CSS), o template
+    (Main.tsx) e o motor próprio. Se uma cópia mudar sozinha, o preview
+    passa a prometer uma coisa e o vídeo entrega outra — que é pior do que
+    não ter prévia nenhuma."""
+    css = (REPO / "assets" / "preview" / "app.css").read_text(encoding="utf-8")
+    i = css.index(".layout-overlay {")
+    bloco = css[i:i + 1600]
+    # degradê: mesma parada em 52% e mesma opacidade 0,74
+    assert "rgba(0, 0, 0, 0) 52%" in bloco and "rgba(0, 0, 0, 0.74) 100%" in bloco
+    assert "rgba(0,0,0,0) 52%" in MAIN and "rgba(0,0,0,0.74) 100%" in MAIN
+    # vinheta: 45% limpo, 0,62 no canto
+    assert "rgba(0, 0, 0, 0) 45%" in bloco and "rgba(0, 0, 0, 0.62) 100%" in bloco
+    assert "rgba(0,0,0,0) 45%" in MAIN and "rgba(0,0,0,0.62) 100%" in MAIN
+    # cinema: tarja de 10%
+    assert "#000 10%" in bloco and "#000 90%" in bloco
+    assert "height: '10%'" in MAIN
+
+
+def test_a_previa_so_existe_para_o_que_e_tinta():
+    """Layout que transforma o vídeo (moldura, barra, desfocado, tela
+    dividida) mudaria o ENQUADRAMENTO; imitar isso com CSS mentiria sobre o
+    corte, e mentira aqui é pior que ausência."""
+    js = (REPO / "assets" / "preview" / "app.js").read_text(encoding="utf-8")
+    i = js.index("LAYOUTS_COM_PREVIA = [")
+    lista = js[i:js.index("]", i)]
+    for nome in CAMADA:
+        assert f"'{nome}'" in lista, nome
+    for nome in TRANSFORMAM:
+        assert f"'{nome}'" not in lista, nome
+
+
 def test_a_camada_tem_a_forma_que_o_css_descreve():
     """Os números do `camada_do_layout` e do `LayoutScrim` são os mesmos."""
     deg = camada_do_layout("degrade", 100, 1000)[..., 3] / 255.0

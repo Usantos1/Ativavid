@@ -3504,3 +3504,34 @@ body.styles-wide .setup-actions .btn.primary {
   color: transparent;
   font-weight: 900;
 }
+
+/* --- previa do layout do video -------------------------------------------
+ * Mesmos numeros do `LayoutScrim` (Main.tsx) e do `camada_do_layout`
+ * (render_proprio.py). Tres copias da mesma medida: mudou uma, mudam as
+ * tres. Fica sob a headline e a legenda (z-index 4 e 5), como no render. */
+.layout-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+  border-radius: inherit;
+  overflow: hidden;
+}
+.layout-overlay.layout-degrade {
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0) 52%, rgba(0, 0, 0, 0.74) 100%);
+}
+.layout-overlay.layout-vinheta {
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 45%, rgba(0, 0, 0, 0.62) 100%);
+}
+/* as duas tarjas de 10% — paradas de proposito (hard stop) */
+.layout-overlay.layout-cinema {
+  background: linear-gradient(180deg, #000 0%, #000 10%, rgba(0, 0, 0, 0) 10%,
+              rgba(0, 0, 0, 0) 90%, #000 90%, #000 100%);
+}
+/* a borda e desenhada por um filho, porque a espessura muda com o tamanho
+   do preview (6px valem para 1080 de largura) — quem calcula e o JS */
+.layout-overlay.layout-borda .layout-borda-linha {
+  position: absolute;
+  border: 1px solid var(--hl-accent, #ff5200);
+  border-radius: 4px;
+}

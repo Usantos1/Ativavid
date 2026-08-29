@@ -1,5 +1,18 @@
 # Changelog
 
+## 3.55
+
+- **O preview mostra o layout escolhido.** Degradê, Vinheta, Cinema e Borda da
+  marca agora aparecem por cima do vídeo na hora em que você clica — antes o
+  cartão era a única pista e você só via o resultado depois do render. Os
+  layouts que mexem no enquadramento (Moldura, Barra inferior, Fundo
+  desfocado) continuam sem prévia de propósito: imitá-los por aqui mentiria
+  sobre o corte.
+- **A ficha passa a registrar o áudio do vídeo entregue.** Quando o motor
+  rápido é reprovado e o vídeo é refeito, o pico registrado era o da
+  tentativa, não o da entrega — um vídeo entregue em −1,3 dBTP ficava gravado
+  como −0,7.
+
 ## 3.54
 
 - **As quatro cores voltaram a caber numa fileira.** Na 3.52 eu medi pela

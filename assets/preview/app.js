@@ -3181,6 +3181,39 @@ function updateCircleAccentNote() {
 /* Separate from renderSetup so the live colour drag can refresh it without
  * rebuilding every demo. Skipping it there left the footer naming the previous
  * colour while the previews already showed the new one. */
+/* ---- previa do layout do video ------------------------------------------
+ * O cartao de layout era a unica pista do que ia acontecer: quem escolhia
+ * "Vinheta" so via o resultado depois de ~6 min de render. Aqui a mesma
+ * tinta do render aparece por cima do preview, como ja acontecia com a
+ * legenda e a headline.
+ * Os que TRANSFORMAM o video (moldura, barra, desfocado, tela dividida)
+ * ficam de fora: imitar o enquadramento deles por CSS mentiria sobre o
+ * corte, e mentira aqui e pior que ausencia. */
+const LAYOUTS_COM_PREVIA = ['degrade', 'vinheta', 'cinema', 'borda'];
+
+function aplicarLayoutNoPreview() {
+  const box = $('layoutOverlay');
+  if (!box) return;
+  const nome = String((S.style && S.style.edit) || 'limpa').toLowerCase();
+  box.className = 'layout-overlay';
+  box.innerHTML = '';
+  if (LAYOUTS_COM_PREVIA.indexOf(nome) < 0) return;
+  box.classList.add(`layout-${nome}`);
+  if (nome !== 'borda') return;
+  // 26px de recuo, 6px de traco e canto 28 valem para o quadro de 1080 de
+  // largura; no preview tudo isso encolhe junto.
+  const esc = box.clientWidth / 1080;
+  const linha = el('div', 'layout-borda-linha', box);
+  linha.style.inset = `${Math.round(26 * esc)}px`;
+  linha.style.borderWidth = `${Math.max(1, 6 * esc).toFixed(1)}px`;
+  linha.style.borderRadius = `${Math.round(28 * esc)}px`;
+}
+
+if (typeof ResizeObserver !== 'undefined') {
+  const palco = document.querySelector('.player-frame');
+  if (palco) new ResizeObserver(() => aplicarLayoutNoPreview()).observe(palco);
+}
+
 function updateSummary() {
   const on = STYLE_CATALOG.elements.filter((e) => S.style.elements[e.id]);
   const accentBit = HL_ACCENT_USERS.includes(S.style.headline)
@@ -3285,6 +3318,7 @@ function renderSetup() {
   applyCircleAccent();
 
   radios($('optEdit'), 'edits', S.style.edit);
+  aplicarLayoutNoPreview();
   radios($('optHeadline'), 'headlines', S.style.headline);
   radios($('optCaptions'), 'captions', S.style.captions);
   renderAccents();
