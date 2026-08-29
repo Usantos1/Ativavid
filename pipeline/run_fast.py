@@ -4625,7 +4625,17 @@ def run(
         try:
             from app.overlay_compose import garantir_true_peak
 
-            garantir_true_peak(final)
+            _au_final = garantir_true_peak(final)
+            # A medicao de DEPOIS do conserto tem de ir para a ficha. Sem
+            # isto ela guardava o pico que o caminho rapido mediu ANTES de
+            # cair: o job de 27/08 ficou registrado em -0,7 dBTP com o
+            # arquivo entregue em -1,3. Uma varredura nos proprios dados
+            # concluiu "14 videos estourados" que nao existiam — a ficha
+            # tem de dizer o que foi ENTREGUE, nao o que se tentou.
+            if _au_final.get("truePeakDb") is not None:
+                _RENDER_META["truePeak"] = _au_final.get("truePeakDb")
+            if _au_final.get("integratedLufs") is not None:
+                _RENDER_META["LUFS"] = _au_final.get("integratedLufs")
         except Exception as e:  # noqa: BLE001
             print(f"[warn] true peak: {e}", flush=True)
     other = time.perf_counter() - _t_job - sum(_TIMING.values())
