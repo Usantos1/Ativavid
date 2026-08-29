@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.28
+
+- **O traço de ênfase (o círculo e o marca-texto) saiu do serrilhado.** Ele
+  era desenhado sem suavização e a borda ficava em degraus — visível porque
+  o círculo é uma elipse deitada. Agora é desenhado em resolução maior e
+  reduzido, com a mesma suavidade do preview do navegador (medido: 541
+  pixels de transição contra 649 do navegador; antes eram zero). Sem custo
+  de tempo no render.
+
 ## 3.27
 
 - **Um vídeo não quebra mais por causa de sobra de outro.** Quando a pasta

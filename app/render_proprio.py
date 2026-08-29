@@ -135,6 +135,29 @@ TRACO_CURVAS = [
 ]
 TRACO_VB = (312.0, 150.0)
 TRACO_PX = 9
+# O `ImageDraw.line` do PIL NAO suaviza: a borda sai em degraus, e num traco
+# quase horizontal (o circulo de enfase e uma elipse deitada) o serrilhado
+# aparece na tela. Medido em 29/08 contra o Remotion no MESMO quadro: o
+# navegador tinha 649 pixels de meio-tom na borda e o motor proprio ZERO.
+# Desenhar 3x maior e reduzir por media de area da a suavizacao que falta.
+TRACO_SS = 3
+
+
+def _mascara_linha(pontos, lt: int, at: int, tx0: float, ty0: float,
+                   largura: float):
+    """Mascara "L" do traco, com borda suave (supersampling 3x)."""
+    lt, at = max(1, int(lt)), max(1, int(at))
+    grande = Image.new("L", (lt * TRACO_SS, at * TRACO_SS), 0)
+    if len(pontos) >= 2:
+        dr = ImageDraw.Draw(grande)
+        desl = [((x - tx0) * TRACO_SS, (y - ty0) * TRACO_SS)
+                for x, y in pontos]
+        dr.line(desl, fill=255,
+                width=max(1, int(round(largura * TRACO_SS))), joint="curve")
+        raio = largura * TRACO_SS / 2
+        for x, y in (desl[0], desl[-1]):
+            dr.ellipse([x - raio, y - raio, x + raio, y + raio], fill=255)
+    return grande.resize((lt, at), Image.BOX)
 TRACO_COR = "#39E508"
 # Marca-texto (MarkerHighlight.tsx): banda unica com leve inclinacao, no
 # MESMO viewBox 312x150 do traco — geometria compartilhada entre motores.
@@ -1106,14 +1129,7 @@ class Renderizador:
                             pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * t,
                             pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * t))
                         break
-                img = Image.new("L", (lt, at), 0)
-                if len(sub) >= 2:
-                    dr = ImageDraw.Draw(img)
-                    desl = [(x - tx0, y - ty0) for x, y in sub]
-                    dr.line(desl, fill=255, width=larg_px, joint="curve")
-                    r = larg_px / 2
-                    for x, y in (desl[0], desl[-1]):
-                        dr.ellipse([x - r, y - r, x + r, y + r], fill=255)
+                img = _mascara_linha(sub, lt, at, tx0, ty0, larg_px)
                 alpha = (np.asarray(img, dtype=np.float32) / 255.0
                          * MARCADOR_ALPHA)
                 sem_sombra = np.zeros_like(alpha)
@@ -1166,14 +1182,7 @@ class Renderizador:
                     sub.append((pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * t,
                                 pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * t))
                     break
-            img = Image.new("L", (lt, at), 0)
-            if len(sub) >= 2:
-                dr = ImageDraw.Draw(img)
-                desl = [(x - tx0, y - ty0) for x, y in sub]
-                dr.line(desl, fill=255, width=TRACO_PX, joint="curve")
-                r = TRACO_PX / 2
-                for x, y in (desl[0], desl[-1]):
-                    dr.ellipse([x - r, y - r, x + r, y + r], fill=255)
+            img = _mascara_linha(sub, lt, at, tx0, ty0, TRACO_PX)
             alpha = np.asarray(img, dtype=np.float32) / 255.0
             sombra = self._sombra_de(alpha, [TRACO_SOMBRA])
             rgb = np.broadcast_to(cor, (at, lt, 3)).copy()
