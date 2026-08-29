@@ -7,6 +7,10 @@
   desaparecia — a palavra ficava sem realce pelo resto da legenda. Agora ela
   entra e fica, e bate exatamente com o preview (a faixa começa e termina
   nos mesmos pixels em todos os quadros conferidos).
+- **E a faixa do marca-texto estava 130 pixels mais estreita** que a do
+  preview (65 de cada lado). A ponta arredondada dela é esticada junto com
+  o desenho, virando uma elipse — nós desenhávamos um círculo. O erro caiu
+  para 2 pixels.
 - **O círculo de ênfase volta ao tamanho que tinha até a 3.28.** A mudança
   de tamanho da 3.29 estava errada e foi desfeita. O que enganou a medição:
   no preview o arco de baixo do laço passa ATRÁS das letras e não aparece,

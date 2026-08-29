@@ -86,3 +86,50 @@ def test_supersampling_suficiente_para_a_diagonal():
     contra 0,241 do navegador; 6x dá 0,239."""
     import app.render_proprio as rp
     assert rp.TRACO_SS >= 6
+
+
+def test_ponta_do_marca_texto_e_elipse_e_nao_circulo():
+    """A ponta da faixa do marca-texto acompanha o estica do SVG.
+
+    O SVG do marca-texto usa `preserveAspectRatio="none"` e nao usa
+    `vectorEffect`, entao o navegador estica a ponta arredondada na
+    horizontal junto com a caixa. Com ponta redonda a faixa saia 65px
+    curta de CADA lado contra o preview (tinta 0,838); com a elipse o erro
+    caiu para 2px (tinta 0,986). O circulo continua com ponta redonda: la
+    o SVG segura a espessura com `non-scaling-stroke`.
+    """
+    import numpy as np
+
+    from app.render_proprio import _mascara_linha
+
+    pontos = [(60.0, 40.0), (240.0, 40.0)]
+    redonda = np.asarray(_mascara_linha(pontos, 300, 80, 0, 0, 30))
+    elipse = np.asarray(_mascara_linha(pontos, 300, 80, 0, 0, 30, raio_x=60))
+
+    def extremos(m):
+        xs = np.nonzero((m > 127).any(axis=0))[0]
+        ys = np.nonzero((m > 127).any(axis=1))[0]
+        return int(xs.min()), int(xs.max()), int(ys.max() - ys.min())
+
+    e_r, d_r, alt_r = extremos(redonda)
+    e_e, d_e, alt_e = extremos(elipse)
+    # a elipse estica so na horizontal: mesma espessura, mais larga
+    assert abs(alt_e - alt_r) <= 2, (alt_r, alt_e)
+    assert e_r - e_e >= 25 and d_e - d_r >= 25, (e_r, e_e, d_r, d_e)
+
+
+def test_marca_texto_fica_na_tela_depois_de_entrar():
+    """A faixa do marca-texto some depois da animacao de entrada?
+
+    Ela era montada so como os pedacos da entrada (janelas de ~10 quadros)
+    e nao tinha o estagio final de permanencia que o circulo ja tinha —
+    entao o realce aparecia e sumia. Este teste le o codigo porque montar
+    um render completo aqui custaria minutos.
+    """
+    from pathlib import Path
+    s = (Path(__file__).resolve().parent.parent / "app" / "render_proprio.py"
+         ).read_text(encoding="utf-8")
+    i = s.index("esq, topo, larg_f, alt_f = MARCADOR_CAIXA")
+    j = s.index("esq, topo, larg_f, alt_f = TRACO_CAIXA")
+    trecho = s[i:j]          # so o bloco do marcador, antes do circulo
+    assert "_faixa(1.0, (o_fim," in trecho, "sem o estagio de permanencia"

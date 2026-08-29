@@ -148,8 +148,18 @@ TRACO_SS = 6
 
 
 def _mascara_linha(pontos, lt: int, at: int, tx0: float, ty0: float,
-                   largura: float):
-    """Mascara "L" do traco, com borda suave (supersampling 3x)."""
+                   largura: float, raio_x: float | None = None):
+    """Mascara "L" do traco, com borda suave (supersampling).
+
+    `raio_x` e o raio HORIZONTAL da ponta arredondada, quando ele nao e
+    igual ao vertical. O marca-texto precisa disso: o SVG dele e esticado
+    com `preserveAspectRatio="none"` e SEM `vectorEffect`, entao o
+    navegador estica a ponta redonda junto — ela vira uma elipse, mais
+    larga que alta. Desenhando ponta redonda a faixa saia 130px mais
+    estreita que a do preview (65 de cada lado, medido). O circulo NAO
+    passa por isso: la o SVG usa `vectorEffect="non-scaling-stroke"`, que
+    segura a espessura em pixels de tela, e a ponta e redonda mesmo.
+    """
     lt, at = max(1, int(lt)), max(1, int(at))
     grande = Image.new("L", (lt * TRACO_SS, at * TRACO_SS), 0)
     if len(pontos) >= 2:
@@ -158,9 +168,10 @@ def _mascara_linha(pontos, lt: int, at: int, tx0: float, ty0: float,
                 for x, y in pontos]
         dr.line(desl, fill=255,
                 width=max(1, int(round(largura * TRACO_SS))), joint="curve")
-        raio = largura * TRACO_SS / 2
+        ry = largura * TRACO_SS / 2
+        rx = ry if raio_x is None else raio_x * TRACO_SS
         for x, y in (desl[0], desl[-1]):
-            dr.ellipse([x - raio, y - raio, x + raio, y + raio], fill=255)
+            dr.ellipse([x - rx, y - ry, x + rx, y + ry], fill=255)
     return grande.resize((lt, at), Image.BOX)
 TRACO_COR = "#39E508"
 # Marca-texto (MarkerHighlight.tsx): banda unica com leve inclinacao, no
@@ -1109,11 +1120,15 @@ class Renderizador:
             o_ini = local + 2
             o_fim = max(min(o_ini + 10, leg.saida_f - 1, dur - 2), o_ini + 3)
             larg_px = max(6, int(round(MARCADOR_LARG_VB / TRACO_VB[1] * bh)))
-            marg = larg_px + 8
-            tx0 = int(min(x for x, _ in pts) - marg)
-            ty0 = int(min(y for _, y in pts) - marg)
-            lt = int(max(x for x, _ in pts) + marg) - tx0
-            at = int(max(y for _, y in pts) + marg) - ty0
+            # a ponta e esticada na horizontal junto com o SVG (ver
+            # `_mascara_linha`): ela mede meia espessura na ESCALA X
+            raio_x = MARCADOR_LARG_VB / 2 / TRACO_VB[0] * bw
+            marg_x = int(raio_x) + 8
+            marg_y = larg_px + 8
+            tx0 = int(min(x for x, _ in pts) - marg_x)
+            ty0 = int(min(y for _, y in pts) - marg_y)
+            lt = int(max(x for x, _ in pts) + marg_x) - tx0
+            at = int(max(y for _, y in pts) + marg_y) - ty0
             cor = self._cor(self.cor_marcador)
             acum = [0.0]
             for i in range(1, len(pts)):
@@ -1139,7 +1154,8 @@ class Renderizador:
                             pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * t,
                             pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * t))
                         break
-                img = _mascara_linha(sub, lt, at, tx0, ty0, larg_px)
+                img = _mascara_linha(sub, lt, at, tx0, ty0,
+                                    larg_px, raio_x)
                 alpha = (np.asarray(img, dtype=np.float32) / 255.0
                          * MARCADOR_ALPHA)
                 sem_sombra = np.zeros_like(alpha)
