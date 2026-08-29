@@ -13,7 +13,8 @@ Usage:
     python helpers/ingest_url.py <url> --dest . --section 44:10-        # to the end
     python helpers/ingest_url.py <url> --simulate                       # metadata only
 
-Requires yt-dlp on PATH (brew install yt-dlp). Long downloads are silent
+Requires yt-dlp on PATH (winget install yt-dlp.yt-dlp no
+Windows, brew install yt-dlp no macOS). Long downloads are silent
 (quiet mode so stdout stays parseable) — run in the background for big files.
 """
 from __future__ import annotations
@@ -84,7 +85,9 @@ def main() -> None:
     args = ap.parse_args()
 
     if shutil.which("yt-dlp") is None:
-        sys.exit("yt-dlp not on PATH — install with: brew install yt-dlp")
+        sys.exit("yt-dlp nao esta no PATH — instale com: "
+                 "winget install yt-dlp.yt-dlp (Windows) "
+                 "ou brew install yt-dlp (macOS)")
 
     h = args.max_height
     fmt = (f"bv*[height<={h}][ext=mp4]+ba[ext=m4a]/bv*[height<={h}]+ba"
