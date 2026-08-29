@@ -1528,6 +1528,11 @@ class Worker:
             reason = result.get("reason") or "needs_review"
             detail = result.get("detail") or ""
             label = REASON_LABELS.get(reason, reason)
+            # Quando o pipeline sabe O QUE esta errado, quem manda e ele:
+            # "confira o audio" nao diz o que conferir, e as causas por tras
+            # do mesmo rotulo sao diferentes (audio quase mudo x video de 3s).
+            if reason == "bad_transcript" and detail and len(detail) <= 220:
+                label = f"{label.split(' — ')[0]}: {detail}"
             self.store.update(
                 job_id,
                 status="needs_review",

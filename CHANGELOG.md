@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.41
+
+- **"Transcrição ruim ou vazia" agora diz o que está errado.** Antes, três
+  vídeos parados na Fila mostravam a mesma frase — "confira o áudio" — com
+  causas diferentes. Agora o app mede o áudio e conta: *"o áudio está quase
+  mudo (volume médio -53 dB, pico -33 dB — fala normal fica perto de -20
+  dB). Confira se o microfone gravou."* ou *"o vídeo tem só 3s e quase
+  nenhuma fala — curto demais para virar um corte."*
+
 ## 3.40
 
 - **As chaves passam a ser lidas de onde a tela de Integrações grava.**

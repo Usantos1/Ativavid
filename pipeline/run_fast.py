@@ -1066,6 +1066,53 @@ def transcript_text(edit_dir: Path, stem: str) -> str:
     return (data.get("text") or "").strip()
 
 
+def _nivel_do_audio(src: Path) -> tuple[float, float]:
+    """(volume medio, pico) em dB. (0, 0) quando nao da para medir."""
+    try:
+        r = subprocess.run(
+            [_ffmpeg_exe(), "-hide_banner", "-nostats", "-i", str(src),
+             "-vn", "-af", "volumedetect", "-f", "null", "-"],
+            capture_output=True, text=True, timeout=120)
+    except (OSError, subprocess.SubprocessError):
+        return (0.0, 0.0)
+    txt = r.stderr or ""
+    m = re.search(r"mean_volume:\s*(-?[\d.]+)", txt)
+    pk = re.search(r"max_volume:\s*(-?[\d.]+)", txt)
+    return (float(m.group(1)) if m else 0.0,
+            float(pk.group(1)) if pk else 0.0)
+
+
+def motivo_da_transcricao_ruim(src: Path, texto: str,
+                               duracao: float | None = None) -> str:
+    """Por que a transcricao saiu vazia — na lingua do usuario.
+
+    "Transcricao ruim ou vazia — confira o audio" nao diz o que conferir.
+    Caso real (29/08): tres jobs pararam com essa frase e as causas eram
+    DIFERENTES — dois videos com o audio quase mudo (media -42 e -53 dB,
+    quando fala normal fica perto de -20) e um de 3 segundos com uma
+    palavra so. Medir custa um ffmpeg de segundos e troca "confira o
+    audio" por uma instrucao.
+    """
+    try:
+        dur = float(duracao) if duracao else _ffprobe_duration(src)
+    except Exception:  # noqa: BLE001
+        dur = 0.0
+    media, pico = _nivel_do_audio(src)
+    if media and media <= -40.0:
+        return (f"o áudio está quase mudo (volume médio {media:.0f} dB, "
+                f"pico {pico:.0f} dB — fala normal fica perto de -20 dB). "
+                "Confira se o microfone gravou.")
+    if dur and dur < 6.0:
+        return (f"o vídeo tem só {dur:.0f}s e quase nenhuma fala"
+                + (f" (\"{texto.strip()[:40]}\")" if texto.strip() else "")
+                + " — curto demais para virar um corte.")
+    if not texto.strip():
+        return ("não foi reconhecida nenhuma fala no áudio. Se o vídeo tem "
+                "voz, veja se ela não está abafada ou em outro idioma.")
+    return (f"a transcrição saiu quebrada (\"{texto.strip()[:60]}\") — "
+            "confira o áudio do vídeo.")
+
+
 def transcript_looks_bad(text: str) -> bool:
     if len(text) < 8:
         return True
@@ -3303,7 +3350,9 @@ def run(
         spoken_i = transcript_text(edit_dir, stem) or transcript_text(edit_dir, key)
         if transcript_looks_bad(spoken_i):
             if idx == 0:
-                raise NeedsReview("bad_transcript", f"{src.name}: {spoken_i[:200] or '(empty)'}")
+                raise NeedsReview(
+                    "bad_transcript",
+                    motivo_da_transcricao_ruim(src, spoken_i, dur_i))
             print(f"[warn] {src.name}: sem fala — take extra, seguindo", flush=True)
             spoken_i = ""
         spoken_parts.append(spoken_i)
