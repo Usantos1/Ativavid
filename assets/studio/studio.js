@@ -19,6 +19,9 @@ const state = {
   projFilter: "todos",
   projBusca: "",
   libraryRoot: "",
+  libraryData: null,
+  libAba: "image",
+  libCat: "",
   presetBrandId: "padrao",
 };
 
@@ -4761,86 +4764,232 @@ function falhaDaTela(hostId, msg, recarregar) {
   host.append(txt, btn);
 }
 
+// Onde cada efeito do app toca hoje - conferido no template (StackedCaptions,
+// Main e CustomGraphics). Os quatro sem uso ficam marcados como sobressalentes
+// em vez de sumirem: eles existem na pasta e o cliente ia ouvir e nao entender.
+const SFX_USO = {
+  "caption-click.mp3": "cada palavra da legenda",
+  "caption-scratch.mp3": "o risco da \u00eanfase",
+  "whoosh.mp3": "entrada de manchete e cart\u00e3o",
+  "pop.mp3": "bolha de conversa e formas",
+  "cut-click.mp3": "gr\u00e1fico entrando no corte",
+  "click.mp3": "sobressalente (nada usa hoje)",
+  "click1.mp3": "sobressalente (nada usa hoje)",
+  "click2.mp3": "sobressalente (nada usa hoje)",
+  "tictac.mp3": "sobressalente (nada usa hoje)",
+};
+
+const LIB_ABAS = {
+  image: {
+    titulo: "imagens",
+    um: "imagem",
+    kinds: ["image", "clip"],
+    botao: "Adicionar imagens",
+    input: "#libraryFileInput",
+    vazio: "Nenhuma imagem ainda. Coloque fotos dos seus produtos, da bancada e dos consertos aqui \u2014 a IA usa como b-roll no meio do v\u00eddeo.",
+    pe: "As imagens viram <strong>b-roll</strong>: a IA escolhe pelo que a frase est\u00e1 dizendo. A categoria entra no nome do arquivo (<code>produto--iphone.jpg</code>) e serve para voc\u00ea achar; a IA casa pelo nome inteiro.",
+  },
+  track: {
+    titulo: "trilhas",
+    um: "trilha",
+    kinds: ["track"],
+    botao: "Adicionar m\u00fasicas",
+    input: "#libraryMusicInput",
+    vazio: "Nenhuma trilha ainda. Toda m\u00fasica que a IA comp\u00f5e entra aqui sozinha \u2014 e m\u00fasicas suas (royalty-free) tamb\u00e9m podem ser adicionadas.",
+    pe: "As trilhas s\u00e3o o <strong>plano B da m\u00fasica</strong>: quando a IA falha (cr\u00e9ditos, rede), o v\u00eddeo usa uma daqui \u2014 escolhida pela categoria, que \u00e9 o tipo do v\u00eddeo. Trocar a categoria muda de verdade em que v\u00eddeo a m\u00fasica pode entrar.",
+  },
+  sfx: {
+    titulo: "efeitos",
+    um: "efeito",
+    kinds: ["sfx"],
+    botao: "Adicionar efeitos",
+    input: "#librarySfxInput",
+    vazio: "Nenhum efeito seu ainda \u2014 os do app aparecem na lista acima.",
+    pe: "Os efeitos marcados <strong>do app</strong> s\u00e3o os que os v\u00eddeos usam hoje \u2014 d\u00e1 para ouvir todos aqui. A categoria de um efeito seu \u00e9 a <strong>vaga</strong> que ele ocupa: um arquivo em <code>whoosh</code> entra no lugar do whoosh nos pr\u00f3ximos v\u00eddeos, e o mesmo vale para clique, risco, pop e corte.",
+  },
+};
+
 /**
- * Biblioteca. O acervo já existia (/api/library alimenta o b-roll da IA),
- * mas só aparecia como um botão "abrir pasta" perdido dentro de Estilos —
- * aqui ele ganha tela própria. Nada de backend novo.
+ * Biblioteca: tres acervos com papeis DIFERENTES no video - imagem vira
+ * b-roll, trilha e o plano B da musica, efeito e o som do corte. Antes era
+ * uma grade de imagens com as trilhas empilhadas embaixo; com 171 faixas a
+ * tela virava um rolo unico sem como achar nada. Agora cada acervo tem aba
+ * propria e as CATEGORIAS viram filtro.
+ *
+ * A categoria nao e enfeite de tela: ela mora no nome do arquivo
+ * ("viral--x.mp3"), que e o mesmo contrato que o pipeline le para casar a
+ * musica com o tipo do video. Trocar aqui renomeia o arquivo - e muda a
+ * escolha do render.
  */
 async function loadLibraryUi() {
-  const grid = $("#libraryGrid");
-  if (!grid) return;
+  const painel = $("#libraryPanel");
+  if (!painel) return;
   let lib = { items: [], root: "" };
   try {
     lib = await api("/api/library");
   } catch {
-    grid.innerHTML = "";
-    $("#libraryHint").textContent = "A biblioteca não respondeu.";
+    painel.innerHTML = "";
+    $("#libraryHint").textContent = "A biblioteca nao respondeu.";
     falhaDaTela("libraryEmpty",
-      "Não deu para ler a biblioteca — o ATIVAVID pode estar iniciando ou ter sido fechado.",
+      "Nao deu para ler a biblioteca \u2014 o ATIVAVID pode estar iniciando ou ter sido fechado.",
       loadLibraryUi);
     return;
   }
   state.libraryRoot = lib.root || "";
+  state.libraryData = lib;
   const tudo = lib.items || [];
-  const trilhas = tudo.filter((i) => i.kind === "track");
-  const itens = tudo.filter((i) => i.kind !== "track");
+  const conta = (ks) => tudo.filter((i) => ks.includes(i.kind)).length;
+  if ($("#libCountImage")) $("#libCountImage").textContent = conta(["image", "clip"]);
+  if ($("#libCountTrack")) $("#libCountTrack").textContent = conta(["track"]);
+  if ($("#libCountSfx")) $("#libCountSfx").textContent = conta(["sfx"]);
+  renderLibraryAba();
+}
+
+function renderLibraryAba() {
+  const painel = $("#libraryPanel");
+  const lib = state.libraryData || { items: [] };
+  const aba = state.libAba || "image";
+  const cfg = LIB_ABAS[aba];
+  if (!painel || !cfg) return;
+  for (const b of document.querySelectorAll("#libraryTabs .lib-tab")) {
+    b.classList.toggle("is-on", b.dataset.libtab === aba);
+  }
+  const itens = (lib.items || []).filter((i) => cfg.kinds.includes(i.kind));
+  const contagem = new Map();
+  for (const it of itens) {
+    const k = it.categoria || "";
+    contagem.set(k, (contagem.get(k) || 0) + 1);
+  }
+  // Ordem: primeiro as categorias que o PIPELINE conhece, depois as que o
+  // usuario inventou, e "sem categoria" por ultimo.
+  const oficiais = ((lib.categorias || {})[aba] || []).filter((k) => contagem.has(k));
+  const extras = [...contagem.keys()].filter((k) => k && !oficiais.includes(k)).sort();
+  const ordem = [...oficiais, ...extras];
+  if (contagem.has("")) ordem.push("");
+  const chips = $("#libraryChips");
+  if (chips) {
+    const marcada = state.libCat || "";
+    chips.innerHTML = [
+      `<button type="button" class="lib-chip${marcada ? "" : " is-on"}" data-libcat="">Todas <span class="lib-chip-n">${itens.length}</span></button>`,
+      ...ordem.map((k) => {
+        const on = marcada && marcada === (k || "\u2205") ? " is-on" : "";
+        const valor = k || "\u2205";
+        return `<button type="button" class="lib-chip${on}" data-libcat="${escapeHtml(valor)}">${escapeHtml(k || "sem categoria")} <span class="lib-chip-n">${contagem.get(k)}</span></button>`;
+      }),
+    ].join("");
+  }
+  const filtro = state.libCat || "";
+  const filtrados = !filtro
+    ? itens
+    : itens.filter((i) => (i.categoria || "\u2205") === filtro);
   const empty = $("#libraryEmpty");
-  if (empty) empty.classList.toggle("hidden", tudo.length > 0);
+  if (empty) {
+    empty.textContent = cfg.vazio;
+    empty.classList.toggle("hidden", itens.length > 0);
+  }
+  const pe = $("#libraryFoot");
+  if (pe) pe.innerHTML = cfg.pe;
   const hint = $("#libraryHint");
   if (hint) {
-    const imgs = itens.filter((i) => i.kind === "image").length;
-    const clips = itens.length - imgs;
-    const partes = [];
-    if (imgs) partes.push(`${imgs} imagem(ns)`);
-    if (clips) partes.push(`${clips} clipe(s)`);
-    if (trilhas.length) partes.push(`${trilhas.length} trilha(s)`);
-    hint.textContent = tudo.length
-      ? `${partes.join(" · ")} · imagens viram b-roll; trilhas são o plano B da música`
-      : "Coloque fotos dos seus produtos aqui para a IA usar como b-roll.";
+    const nome = filtro === "\u2205" ? "sem categoria" : filtro;
+    hint.textContent = itens.length
+      ? (filtro
+          ? `${filtrados.length} em "${nome}", de ${itens.length} ${cfg.titulo}`
+          : `${itens.length} ${itens.length === 1 ? cfg.um : cfg.titulo} \u00b7 ${state.libraryRoot || ""}`)
+      : "";
   }
-  renderLibraryTracks(trilhas);
-  grid.innerHTML = itens.map((it) => {
+  const btn = $("#btnLibraryAdd");
+  if (btn) {
+    btn.textContent = cfg.botao;
+    btn.title = filtro && filtro !== "\u2205"
+      ? `Entra na categoria "${filtro}"`
+      : "Entra sem categoria \u2014 da para classificar depois";
+  }
+  // O cabecalho de cada grupo diz o que aquela categoria FAZ: trilha
+  // mostra o clima que o pipeline usa para escolher; efeito mostra se a
+  // categoria e uma das VAGAS do video ou se o arquivo so fica guardado.
+  const vagas = (lib.categorias || {}).sfx || [];
+  const notas = aba === "track"
+    ? Object.fromEntries(Object.entries(lib.clima || {}).map(([k, v]) => [k, `clima ${v}`]))
+    : Object.fromEntries([...new Set([...vagas, ...contagem.keys()])].map(
+        (k) => [k, vagas.includes(k) ? "entra no v\u00eddeo" : "s\u00f3 guardado"]));
+  painel.innerHTML = aba === "image"
+    ? libGradeImagens(filtrados)
+    : libListaAudio(filtrados, aba, notas, ordem);
+}
+
+function libTamanho(bytes) {
+  return bytes > 1048576
+    ? `${(bytes / 1048576).toFixed(1)} MB`
+    : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+/* O seletor troca a CATEGORIA renomeando o arquivo (e o que o pipeline le).
+ * Item que veio do app nao tem seletor: e asset do produto, nao do usuario. */
+function libSeletorCategoria(it, opcoes) {
+  if (it.origem === "app") return "";
+  const lista = [...new Set([...(opcoes || []), it.categoria].filter(Boolean))];
+  const ops = [
+    `<option value=""${it.categoria ? "" : " selected"}>sem categoria</option>`,
+    ...lista.map((k) => `<option value="${escapeHtml(k)}"${k === it.categoria ? " selected" : ""}>${escapeHtml(k)}</option>`),
+  ];
+  return `<select class="lib-cat" data-librel="${escapeHtml(it.rel)}" title="Categoria \u2014 renomeia o arquivo">${ops.join("")}</select>`;
+}
+
+function libGradeImagens(itens) {
+  if (!itens.length) return "";
+  const opcoes = ((state.libraryData || {}).categorias || {}).image || [];
+  return `<div class="lib-grid">${itens.map((it) => {
     const src = `/api/library/file?rel=${encodeURIComponent(it.rel)}`;
-    const kb = it.bytes > 1048576
-      ? `${(it.bytes / 1048576).toFixed(1)} MB`
-      : `${Math.max(1, Math.round(it.bytes / 1024))} KB`;
     const midia = it.kind === "clip"
       ? `<video class="lib-thumb" src="${src}" muted preload="metadata"></video>`
       : `<img class="lib-thumb" src="${src}" alt="" loading="lazy">`;
     return `<figure class="lib-item" title="${escapeHtml(it.name)}">
       ${midia}
-      <figcaption><span class="lib-name">${escapeHtml(it.name)}</span><span class="lib-size">${kb}</span></figcaption>
+      <figcaption><span class="lib-name">${escapeHtml(it.name)}</span><span class="lib-size">${libTamanho(it.bytes)}</span></figcaption>
+      <div class="lib-item-cat">${libSeletorCategoria(it, opcoes)}</div>
     </figure>`;
-  }).join("");
+  }).join("")}</div>`;
 }
 
-/* Trilhas: lista compacta com play. A etiqueta e o prefixo "rotulo--" do
- * nome — e o que o pipeline usa para casar a musica com o clima do video. */
-function renderLibraryTracks(trilhas) {
-  const box = $("#libraryTracks");
-  const head = $("#libraryTracksHead");
-  if (!box || !head) return;
-  head.classList.toggle("hidden", !trilhas.length);
-  if (!trilhas.length) { box.innerHTML = ""; return; }
-  const hintT = $("#libraryTracksHint");
-  if (hintT) {
-    hintT.textContent = `${trilhas.length} faixa(s) · usadas quando a IA de música falha, escolhidas pelo clima do vídeo`;
-  }
-  box.innerHTML = trilhas.map((it) => {
+/* Audio (trilha e efeito) em lista com play. Vendo TODAS, agrupa por
+ * categoria: sem isso, 171 faixas viram um rolo unico. */
+function libListaAudio(itens, aba, notas, ordem) {
+  if (!itens.length) return "";
+  const opcoes = ((state.libraryData || {}).categorias || {})[aba] || [];
+  const linha = (it) => {
     const src = `/api/library/file?rel=${encodeURIComponent(it.rel)}`;
-    const kb = it.bytes > 1048576
-      ? `${(it.bytes / 1048576).toFixed(1)} MB`
-      : `${Math.max(1, Math.round(it.bytes / 1024))} KB`;
-    const rotulo = it.name.includes("--") ? it.name.split("--")[0] : "";
-    const chip = rotulo
-      ? `<span class="lib-track-tag">${escapeHtml(rotulo)}</span>`
-      : `<span class="lib-track-tag lib-track-tag--solta">rodízio</span>`;
+    const chip = it.origem === "app"
+      ? `<span class="lib-track-tag lib-track-tag--app">do app</span>`
+      : "";
+    const uso = it.origem === "app" && SFX_USO[it.name]
+      ? `<span class="lib-track-uso">${escapeHtml(SFX_USO[it.name])}</span>`
+      : "";
     return `<div class="lib-track" title="${escapeHtml(it.name)}">
       ${chip}
       <span class="lib-track-name">${escapeHtml(it.name)}</span>
-      <span class="lib-size">${kb}</span>
+      ${uso}
+      <span class="lib-size">${libTamanho(it.bytes)}</span>
+      ${libSeletorCategoria(it, opcoes)}
       <audio controls preload="none" src="${src}"></audio>
     </div>`;
+  };
+  if (state.libCat) return `<div class="lib-tracks">${itens.map(linha).join("")}</div>`;
+  const grupos = new Map();
+  for (const it of itens) {
+    const k = it.categoria || "";
+    if (!grupos.has(k)) grupos.set(k, []);
+    grupos.get(k).push(it);
+  }
+  // mesma ordem dos chips: chip e grupo lado a lado nao podem discordar
+  const chaves = (ordem || []).filter((k) => grupos.has(k));
+  for (const k of grupos.keys()) if (!chaves.includes(k)) chaves.push(k);
+  return chaves.map((k) => {
+    const cl = notas[k] ? `<span class="lib-grupo-clima">${escapeHtml(notas[k])}</span>` : "";
+    return `<section class="lib-grupo">
+      <h3 class="lib-grupo-tit">${escapeHtml(k || "sem categoria")} <span class="lib-grupo-clima">${grupos.get(k).length}</span> ${cl}</h3>
+      <div class="lib-tracks">${grupos.get(k).map(linha).join("")}</div>
+    </section>`;
   }).join("");
 }
 
@@ -4960,25 +5109,83 @@ function wirePresets() {
 }
 
 function wireBiblioteca() {
-  const pares = [["#btnLibraryUpload", "#libraryFileInput"],
-                 ["#btnLibraryUploadMusic", "#libraryMusicInput"]];
-  for (const [b, i] of pares) {
-    const btn = $(b);
-    const input = $(i);
-    if (!btn || !input || btn.dataset.wired) continue;
+  const abas = $("#libraryTabs");
+  if (abas && !abas.dataset.wired) {
+    abas.dataset.wired = "1";
+    abas.addEventListener("click", (ev) => {
+      const b = ev.target.closest(".lib-tab");
+      if (!b) return;
+      state.libAba = b.dataset.libtab || "image";
+      state.libCat = "";          // filtro de outra aba nao vale nesta
+      renderLibraryAba();
+    });
+  }
+  const chips = $("#libraryChips");
+  if (chips && !chips.dataset.wired) {
+    chips.dataset.wired = "1";
+    chips.addEventListener("click", (ev) => {
+      const b = ev.target.closest(".lib-chip");
+      if (!b) return;
+      state.libCat = b.dataset.libcat || "";
+      renderLibraryAba();
+    });
+  }
+  // Trocar a categoria RENOMEIA o arquivo no disco: e assim que o pipeline
+  // le (o plano B da musica escolhe pelo prefixo do nome).
+  const painel = $("#libraryPanel");
+  if (painel && !painel.dataset.wired) {
+    painel.dataset.wired = "1";
+    painel.addEventListener("change", async (ev) => {
+      const sel = ev.target.closest(".lib-cat");
+      if (!sel) return;
+      const rel = sel.dataset.librel;
+      const categoria = sel.value || "";
+      sel.disabled = true;
+      try {
+        const r = await api("/api/library/categoria", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rel, categoria }),
+        });
+        toast(categoria ? `Agora e "${categoria}"` : "Categoria removida");
+        if (r && r.name) await loadLibraryUi();
+      } catch (err) {
+        toast(err.message || "Nao deu para trocar a categoria");
+        sel.disabled = false;
+      }
+    });
+  }
+  const btn = $("#btnLibraryAdd");
+  if (btn && !btn.dataset.wired) {
     btn.dataset.wired = "1";
-    btn.onclick = () => input.click();
+    btn.onclick = () => {
+      const cfg = LIB_ABAS[state.libAba || "image"];
+      const input = $(cfg.input);
+      if (input) input.click();
+    };
+  }
+  for (const id of ["#libraryFileInput", "#libraryMusicInput", "#librarySfxInput"]) {
+    const input = $(id);
+    if (!input || input.dataset.wired) continue;
+    input.dataset.wired = "1";
     input.onchange = async () => {
       const files = [...(input.files || [])];
       if (!files.length) return;
+      const aba = state.libAba || "image";
+      const kind = aba === "image" ? "" : aba;   // imagem/clipe: pela extensao
+      const cat = (state.libCat && state.libCat !== "\u2205") ? state.libCat : "";
+      const qs = [kind ? `kind=${kind}` : "",
+                  cat ? `categoria=${encodeURIComponent(cat)}` : ""]
+        .filter(Boolean).join("&");
       let ok = 0;
       for (const f of files) {
         const fd = new FormData();
         fd.append("file", f, f.name);
         try {
-          const res = await fetch("/api/library/upload", { method: "POST", body: fd });
+          const res = await fetch(`/api/library/upload${qs ? "?" + qs : ""}`,
+                                  { method: "POST", body: fd });
           if (res.ok) ok += 1;
-        } catch { /* segue para o próximo */ }
+        } catch { /* segue para o proximo */ }
       }
       input.value = "";
       toast(ok ? `${ok} arquivo(s) na biblioteca` : "Nada foi enviado");

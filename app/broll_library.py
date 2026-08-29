@@ -20,6 +20,7 @@ def library_root(projects_root: Path | None = None) -> Path:
     (root / "images").mkdir(exist_ok=True)
     (root / "clips").mkdir(exist_ok=True)
     (root / "Trilhas").mkdir(exist_ok=True)
+    (root / "Efeitos").mkdir(exist_ok=True)
     return root
 
 
@@ -28,15 +29,105 @@ def _slug(name: str) -> str:
 
 
 AUDIO_EXTS = {".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"}
+IMG_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
+VID_EXTS = {".mp4", ".mov", ".webm"}
+
+# A CATEGORIA de um arquivo e o prefixo "rotulo--" do nome. Isto NAO e
+# enfeite de tela: e o mesmo contrato que o plano B da musica usa para
+# casar a trilha com o clima do video (`_trilha_etiqueta` em run_fast).
+# Por isso a tela escreve e le exatamente o mesmo formato — renomear pela
+# Biblioteca muda de verdade o que o pipeline escolhe.
+CATEGORIAS_TRILHA = ("viral", "humor", "venda", "anuncio", "resenha",
+                     "informativo", "educacional", "institucional", "padrao")
+# espelho de _TRILHA_CLIMA (run_fast) para os rotulos em portugues — o
+# teste test_biblioteca_categorias trava os dois juntos
+CLIMA_TRILHA = {
+    "viral": "agitado", "humor": "agitado", "venda": "agitado",
+    "anuncio": "agitado", "padrao": "agitado",
+    "resenha": "medio", "informativo": "medio",
+    "educacional": "calmo", "institucional": "calmo",
+}
+# Categorias sugeridas para as imagens de b-roll. Livre: o usuario pode
+# escrever qualquer palavra; estas so aparecem como atalho na tela.
+CATEGORIAS_IMAGEM = ("produto", "bancada", "loja", "cliente", "antes-depois",
+                     "peca", "marca")
+# Efeitos: a familia sai do proprio nome do arquivo (os 9 embutidos do app
+# nunca tiveram rotulo e nao vao ser renomeados — sao asset do produto).
+_FAMILIAS_SFX = (
+    # "corte" antes de "clique": cut-click.mp3 casa com os dois
+    ("corte", ("cut-click", "corte")),
+    ("clique", ("click", "clique", "tap")),
+    ("pop", ("pop",)),
+    ("whoosh", ("whoosh", "swoosh", "swipe")),
+    ("risco", ("scratch", "risco")),
+    ("relogio", ("tictac", "tick", "clock")),
+    ("impacto", ("impact", "boom", "hit", "punch")),
+)
+SFX_APP_REL = "app-sfx"      # prefixo de `rel` dos efeitos embutidos
+# A categoria do efeito e a VAGA que ele ocupa no video: um arquivo em
+# "whoosh--meu.mp3" entra no lugar do whoosh do app. Sem isto, "Adicionar
+# efeitos" seria um botao que guarda arquivo e nao muda vídeo nenhum.
+SFX_VAGAS = {
+    "clique": "caption-click.mp3",
+    "risco": "caption-scratch.mp3",
+    "whoosh": "whoosh.mp3",
+    "pop": "pop.mp3",
+    "corte": "cut-click.mp3",
+}
+
+
+def categoria_de(nome: str) -> str:
+    """O rotulo antes de `--`, ou "" quando o arquivo nao tem categoria."""
+    return nome.split("--", 1)[0].lower().strip() if "--" in nome else ""
+
+
+def familia_sfx(nome: str) -> str:
+    rot = categoria_de(nome)
+    if rot:
+        return rot
+    base = nome.lower()
+    for fam, chaves in _FAMILIAS_SFX:
+        if any(k in base for k in chaves):
+            return fam
+    return "outros"
+
+
+def sfx_do_app() -> list[dict[str, Any]]:
+    """Os efeitos que ja vem no app (assets/shortform/public/sfx).
+
+    Entram na Biblioteca como somente-leitura: o cliente precisa OUVIR o
+    que o video usa (o clique da legenda, o whoosh do corte) para decidir
+    se quer somar os proprios — antes eles nao apareciam em lugar nenhum.
+    """
+    pasta = REPO / "assets" / "shortform" / "public" / "sfx"
+    itens: list[dict[str, Any]] = []
+    if not pasta.is_dir():
+        return itens
+    for f in sorted(pasta.iterdir()):
+        if not f.is_file() or f.suffix.lower() not in AUDIO_EXTS:
+            continue
+        itens.append({
+            "id": f.stem,
+            "name": f.name,
+            "kind": "sfx",
+            "categoria": familia_sfx(f.name),
+            "origem": "app",
+            "path": str(f),
+            "rel": f"{SFX_APP_REL}/{f.name}",
+            "bytes": f.stat().st_size,
+            "mtime": int(f.stat().st_mtime),
+        })
+    return itens
 
 
 def list_assets(projects_root: Path | None = None) -> dict[str, Any]:
     root = library_root(projects_root)
     items: list[dict[str, Any]] = []
     for kind, folder in (("image", root / "images"), ("clip", root / "clips"),
-                         ("track", root / "Trilhas")):
-        sufixos = AUDIO_EXTS if kind == "track" else {
-            ".jpg", ".jpeg", ".png", ".webp", ".mp4", ".mov", ".webm"}
+                         ("track", root / "Trilhas"),
+                         ("sfx", root / "Efeitos")):
+        folder.mkdir(parents=True, exist_ok=True)
+        sufixos = AUDIO_EXTS if kind in ("track", "sfx") else IMG_EXTS | VID_EXTS
         for p in sorted(folder.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True):
             if not p.is_file():
                 continue
@@ -46,12 +137,25 @@ def list_assets(projects_root: Path | None = None) -> dict[str, Any]:
                 "id": p.stem,
                 "name": p.name,
                 "kind": kind,
+                "categoria": (familia_sfx(p.name) if kind == "sfx"
+                              else categoria_de(p.name)),
+                "origem": "usuario",
                 "path": str(p),
                 "rel": f"{folder.name}/{p.name}",
                 "bytes": p.stat().st_size,
                 "mtime": int(p.stat().st_mtime),
             })
-    return {"root": str(root), "items": items}
+    items.extend(sfx_do_app())
+    return {
+        "root": str(root),
+        "items": items,
+        "categorias": {
+            "track": list(CATEGORIAS_TRILHA),
+            "image": list(CATEGORIAS_IMAGEM),
+            "sfx": list(SFX_VAGAS),
+        },
+        "clima": dict(CLIMA_TRILHA),
+    }
 
 
 def add_file(src: Path, *, kind: str = "image", projects_root: Path | None = None) -> dict[str, Any]:
@@ -77,6 +181,7 @@ def add_bytes(
     data: bytes,
     *,
     kind: str | None = None,
+    categoria: str | None = None,
     projects_root: Path | None = None,
 ) -> dict[str, Any]:
     if not data:
@@ -86,42 +191,117 @@ def add_bytes(
         if ext in AUDIO_EXTS:
             kind = "track"
         else:
-            kind = "clip" if ext in {".mp4", ".mov", ".webm"} else "image"
-    if ext not in {".jpg", ".jpeg", ".png", ".webp", ".mp4", ".mov",
-                   ".webm"} | AUDIO_EXTS:
+            kind = "clip" if ext in VID_EXTS else "image"
+    if kind in ("track", "sfx") and ext not in AUDIO_EXTS:
+        raise ValueError("trilha e efeito precisam ser áudio")
+    if ext not in IMG_EXTS | VID_EXTS | AUDIO_EXTS:
         raise ValueError("formato não suportado")
     root = library_root(projects_root)
-    if kind == "track":
-        folder = root / "Trilhas"
-        stem = Path(filename).stem
-        if "--" in stem:
-            rot, resto = stem.split("--", 1)
-            stem = f"{_slug(rot)}--{_slug(resto)}"
-        else:
-            stem = _slug(stem)
-        dest = folder / f"{stem}{ext}"
-        if dest.exists():
-            dest = folder / f"{stem}-{int(time.time())}{ext}"
-    else:
-        folder = root / ("clips" if kind == "clip" else "images")
-        dest = folder / f"{_slug(Path(filename).stem)}-{int(time.time())}{ext}"
+    folder = {"track": root / "Trilhas", "sfx": root / "Efeitos",
+              "clip": root / "clips"}.get(kind, root / "images")
+    stem = Path(filename).stem
+    rot = _slug(categoria) if categoria else categoria_de(stem)
+    if "--" in stem:
+        stem = stem.split("--", 1)[1]
+    stem = _slug(stem)
+    # Audio guarda o nome como veio (o rodizio da trilha compara por NOME);
+    # imagem/clipe leva carimbo porque duas fotos podem ter o mesmo nome.
+    if kind not in ("track", "sfx"):
+        stem = f"{stem}-{int(time.time())}"
+    nome = f"{rot}--{stem}{ext}" if rot else f"{stem}{ext}"
+    dest = folder / nome
+    if dest.exists():
+        base = f"{rot}--{stem}" if rot else stem
+        dest = folder / f"{base}-{int(time.time())}{ext}"
     dest.write_bytes(data)
     return {
         "ok": True,
         "id": dest.stem,
         "name": dest.name,
         "kind": kind,
+        "categoria": categoria_de(dest.name),
         "path": str(dest),
         "rel": f"{folder.name}/{dest.name}",
     }
+
+
+def set_categoria(rel: str, categoria: str,
+                  projects_root: Path | None = None) -> dict[str, Any]:
+    """Troca a categoria de um arquivo da biblioteca RENOMEANDO ele.
+
+    A categoria mora no nome porque e assim que o pipeline le (o plano B da
+    musica escolhe por `rotulo--`); guardar num json a parte criaria uma
+    segunda verdade que sai de sincronia na primeira vez que o usuario
+    mexer na pasta pelo Explorer.
+    """
+    root = library_root(projects_root).resolve()
+    rel = (rel or "").replace("\\", "/").lstrip("/")
+    if not rel or ".." in rel.split("/"):
+        raise ValueError("arquivo inválido")
+    alvo = (root / rel).resolve()
+    try:
+        alvo.relative_to(root)
+    except ValueError:
+        raise ValueError("fora da biblioteca") from None
+    if not alvo.is_file():
+        raise ValueError("arquivo não encontrado")
+    rot = _slug(categoria) if categoria else ""
+    resto = alvo.stem.split("--", 1)[1] if "--" in alvo.stem else alvo.stem
+    nome = f"{rot}--{resto}{alvo.suffix}" if rot else f"{resto}{alvo.suffix}"
+    novo = alvo.with_name(nome)
+    if novo != alvo:
+        if novo.exists():
+            novo = alvo.with_name(
+                f"{Path(nome).stem}-{int(time.time())}{alvo.suffix}")
+        alvo.rename(novo)
+    return {
+        "ok": True,
+        "name": novo.name,
+        "categoria": categoria_de(novo.name),
+        "rel": f"{novo.parent.name}/{novo.name}",
+        "path": str(novo),
+    }
+
+
+def aplicar_sfx_do_usuario(public_dir: Path,
+                           projects_root: Path | None = None) -> list[str]:
+    """Poe os efeitos do usuario por cima dos do app na pasta do projeto.
+
+    Os dois motores (Remotion e o proprio) leem o som em
+    `remotion/public/sfx`, entao trocar o arquivo ali vale para os dois. A
+    troca e por PROJETO — o template embarcado nunca e alterado.
+
+    Devolve os nomes trocados. Falha aqui nunca pode derrubar um render:
+    som e enfeite, video e o produto.
+    """
+    trocados: list[str] = []
+    try:
+        pasta = library_root(projects_root) / "Efeitos"
+        destino = Path(public_dir) / "sfx"
+        if not pasta.is_dir() or not destino.is_dir():
+            return trocados
+        for vaga, alvo in SFX_VAGAS.items():
+            cands = sorted(
+                (f for f in pasta.iterdir()
+                 if f.is_file() and f.suffix.lower() in AUDIO_EXTS
+                 and categoria_de(f.name) == vaga),
+                key=lambda f: f.stat().st_mtime, reverse=True)
+            if not cands:
+                continue
+            shutil.copy2(cands[0], destino / alvo)
+            trocados.append(f"{alvo} <- {cands[0].name}")
+    except OSError:
+        return trocados
+    return trocados
 
 
 def pick_for_query(query: str, projects_root: Path | None = None, limit: int = 3) -> list[dict[str, Any]]:
     """Heurística simples: nome do arquivo contém palavra da query."""
     q = (query or "").lower()
     words = [w for w in re.findall(r"[a-zà-ÿ0-9]{3,}", q) if w]
+    # b-roll e IMAGEM/CLIPE: som (trilha, efeito) nunca pode virar figura
     items = [i for i in list_assets(projects_root)["items"]
-             if i["kind"] != "track"]
+             if i["kind"] in ("image", "clip")]
     if not words:
         return items[:limit]
     scored = []

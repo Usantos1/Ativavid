@@ -2773,6 +2773,24 @@ def _sync_template_src(template: Path, dest: Path) -> None:
         print(f"[scaffold] template src sincronizado ({synced} arquivo(s))", flush=True)
 
 
+def _sfx_do_usuario(dest: Path, edit_dir: Path) -> None:
+    """Efeito que o usuario poe na Biblioteca entra no lugar do do app.
+
+    A vaga e a categoria do arquivo ("whoosh--meu.mp3" troca o whoosh).
+    Roda no scaffold porque e ali que a pasta `public/sfx` do projeto
+    nasce — e os DOIS motores tocam o som a partir dela.
+    """
+    try:
+        from app.broll_library import aplicar_sfx_do_usuario
+        raiz = edit_dir.parent.parent
+        trocados = aplicar_sfx_do_usuario(dest / "public", raiz)
+        if trocados:
+            print(f"[scaffold] efeitos do usuario: {', '.join(trocados)}",
+                  flush=True)
+    except Exception as e:  # noqa: BLE001
+        print(f"[warn] efeitos do usuario: {str(e)[:80]}", flush=True)
+
+
 def scaffold_remotion(edit_dir: Path, *, track: str = "shortform") -> Path:
     dest = edit_dir / "remotion"
     src = LONGFORM if track == "longform" else SHORTFORM
@@ -2798,11 +2816,14 @@ def scaffold_remotion(edit_dir: Path, *, track: str = "shortform") -> Path:
             _seed_remotion_chrome(dest)
         except Exception as e:  # noqa: BLE001
             print(f"[warn] seed chrome: {e}", flush=True)
+        _sfx_do_usuario(dest, edit_dir)
         return dest
 
     if dest.exists():
         _clear_dir_windows(dest)
     shutil.copytree(src, dest, ignore=shutil.ignore_patterns("node_modules"))
+
+    _sfx_do_usuario(dest, edit_dir)
 
     try:
         pkg_path = dest / "package.json"

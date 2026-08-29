@@ -332,34 +332,37 @@
 
         <!-- BIBLIOTECA — arquivos reutilizáveis (hoje: imagens de b-roll) -->
         <section class="view hidden" id="view-biblioteca" data-view-panel="biblioteca">
+          <!-- Tres acervos com papeis DIFERENTES no video (imagem vira
+               b-roll, trilha e o plano B da musica, efeito e o som do
+               corte): misturados numa lista so, o usuario nao tinha como
+               achar nada entre 171 arquivos. -->
+          <div class="lib-tabs" role="tablist" id="libraryTabs">
+            <button type="button" class="lib-tab is-on" data-libtab="image" role="tab">
+              Imagens <span class="lib-tab-n" id="libCountImage">0</span>
+            </button>
+            <button type="button" class="lib-tab" data-libtab="track" role="tab">
+              Trilhas sonoras <span class="lib-tab-n" id="libCountTrack">0</span>
+            </button>
+            <button type="button" class="lib-tab" data-libtab="sfx" role="tab">
+              Efeitos sonoros <span class="lib-tab-n" id="libCountSfx">0</span>
+            </button>
+          </div>
           <div class="lib-bar">
             <div class="lib-bar-copy">
               <p class="hint" id="libraryHint">Carregando…</p>
             </div>
             <div class="lib-bar-actions">
-              <button type="button" class="export-btn export-btn--sm" id="btnLibraryUpload">Adicionar imagens</button>
-              <button type="button" class="export-btn export-btn--sm" id="btnLibraryUploadMusic">Adicionar músicas</button>
+              <button type="button" class="export-btn export-btn--sm" id="btnLibraryAdd">Adicionar</button>
               <button type="button" class="ghost-btn" id="btnLibraryRefresh">Abrir pasta</button>
-              <input type="file" id="libraryFileInput" accept="image/*" multiple hidden>
+              <input type="file" id="libraryFileInput" accept="image/*,video/mp4,video/quicktime,video/webm" multiple hidden>
               <input type="file" id="libraryMusicInput" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac" multiple hidden>
+              <input type="file" id="librarySfxInput" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac" multiple hidden>
             </div>
           </div>
-          <div class="lib-grid" id="libraryGrid"></div>
-          <div class="lib-tracks-head hidden" id="libraryTracksHead">
-            <h3>Trilhas sonoras</h3>
-            <p class="hint" id="libraryTracksHint"></p>
-          </div>
-          <div class="lib-tracks" id="libraryTracks"></div>
-          <div class="hub-empty hidden" id="libraryEmpty">
-            Nenhuma imagem ainda. Coloque fotos dos seus produtos aqui para a IA usar como b-roll.
-          </div>
-          <p class="lib-soon">
-            As <strong>imagens</strong> viram b-roll nos vídeos. As <strong>trilhas</strong> são o
-            plano B da música: quando a IA falha (créditos, rede), o vídeo usa uma daqui —
-            escolhida pelo clima do vídeo. Nomeie como <code>viral--nome.mp3</code>,
-            <code>humor--</code>, <code>educacional--</code>… para casar tipo a tipo;
-            sem prefixo, entra no rodízio geral.
-          </p>
+          <div class="lib-chips" id="libraryChips"></div>
+          <div class="lib-painel" id="libraryPanel"></div>
+          <div class="hub-empty hidden" id="libraryEmpty"></div>
+          <p class="lib-soon" id="libraryFoot"></p>
         </section>
 
         <!-- PRESETS — combinações salvas por marca -->

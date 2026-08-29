@@ -205,8 +205,14 @@ def test_list_assets_inclui_trilhas_e_broll_nao_as_pega(tmp_path):
     root = bl.library_root(projetos)
     (root / "images" / "produto.jpg").write_bytes(b"x" * 10)
     (root / "Trilhas" / "viral--phonk.mp3").write_bytes(b"x" * 10)
-    kinds = {i["name"]: i["kind"] for i in bl.list_assets(projetos)["items"]}
-    assert kinds == {"produto.jpg": "image", "viral--phonk.mp3": "track"}
+    pack = bl.list_assets(projetos)
+    meus = {i["name"]: i["kind"] for i in pack["items"]
+            if i["origem"] == "usuario"}
+    assert meus == {"produto.jpg": "image", "viral--phonk.mp3": "track"}
+    # os efeitos do APP entram na listagem (a tela toca eles), marcados
+    # como tal — nunca se misturam com o acervo do usuario
+    assert any(i["kind"] == "sfx" and i["origem"] == "app"
+               for i in pack["items"])
     # musica NUNCA vira b-roll: um video sobre "phonk viral" nao pode
     # receber um mp3 como imagem de apoio
     achados = bl.pick_for_query("phonk viral", projetos)
@@ -226,14 +232,22 @@ def test_upload_de_musica_cai_em_trilhas_e_preserva_etiqueta(tmp_path):
 
 
 def test_a_tela_da_biblioteca_mostra_as_trilhas():
+    """A tela tem acervo proprio para as trilhas.
+
+    Era uma grade de imagens com as trilhas empilhadas embaixo; com 171
+    faixas virou um rolo unico. Agora sao tres abas (imagens, trilhas,
+    efeitos) e as categorias filtram — o que este teste trava e que a aba
+    das trilhas continua existindo e sabendo montar a lista de audio.
+    """
     html = (RAIZ / "assets" / "studio" / "index.html").read_text(encoding="utf-8")
-    assert 'id="btnLibraryUploadMusic"' in html
-    assert 'id="libraryTracks"' in html
+    assert 'data-libtab="track"' in html
+    assert 'id="libraryMusicInput"' in html
+    assert 'id="libraryPanel"' in html and 'id="libraryChips"' in html
     js = (RAIZ / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
-    assert "renderLibraryTracks" in js
-    assert 'kind === "track"' in js
+    assert "libListaAudio" in js
+    assert 'kinds: ["track"]' in js
     css = (RAIZ / "assets" / "studio" / "studio.css").read_text(encoding="utf-8")
-    assert ".lib-track" in css
+    assert ".lib-track" in css and ".lib-tab" in css and ".lib-chip" in css
 
 
 # ---------- junction: a biblioteca REAL e a da raiz dos projetos (3.03) ----------

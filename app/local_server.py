@@ -1881,8 +1881,17 @@ class StudioHandler(BaseHTTPRequestHandler):
             if not rel or ".." in rel.split("/"):
                 self._json({"error": "rel inválido"}, 400)
                 return
-            root = library_root(self.projects_root).resolve()
-            target = (root / rel).resolve()
+            # Os efeitos que ja vem no app moram no codigo, nao na
+            # biblioteca do usuario: para toca-los na tela a raiz permitida
+            # e a pasta de sfx do template (mesma checagem de contencao).
+            from app.broll_library import SFX_APP_REL
+            if rel.split("/", 1)[0] == SFX_APP_REL:
+                root = (REPO / "assets" / "shortform" / "public"
+                        / "sfx").resolve()
+                rel = rel.split("/", 1)[1] if "/" in rel else ""
+            else:
+                root = library_root(self.projects_root).resolve()
+            target = (root / rel).resolve() if rel else root
             try:
                 target.relative_to(root)
             except ValueError:
@@ -2661,6 +2670,19 @@ class StudioHandler(BaseHTTPRequestHandler):
                 self._json({"error": str(e)}, 400)
             return
 
+        if path == "/api/library/categoria":
+            from app.broll_library import set_categoria
+            body = self._read_json() or {}
+            try:
+                self._json(set_categoria(
+                    str(body.get("rel") or ""),
+                    str(body.get("categoria") or ""),
+                    projects_root=self.projects_root,
+                ))
+            except ValueError as e:
+                self._json({"error": str(e)}, 400)
+            return
+
         if path == "/api/library/use":
             from app.broll_library import copy_into_public
             body = self._read_json() or {}
@@ -2705,8 +2727,13 @@ class StudioHandler(BaseHTTPRequestHandler):
                 if not filename:
                     continue
                 payload = part.get_payload(decode=True) or b""
+                _qs = parse_qs(urlparse(self.path).query)
+                _kind = (_qs.get("kind") or [""])[0].strip().lower() or None
+                _cat = (_qs.get("categoria") or [""])[0].strip()
                 try:
-                    saved = add_bytes(filename, payload, projects_root=self.projects_root)
+                    saved = add_bytes(filename, payload, kind=_kind,
+                                      categoria=_cat or None,
+                                      projects_root=self.projects_root)
                 except ValueError as e:
                     self._json({"error": str(e)}, 400)
                     return

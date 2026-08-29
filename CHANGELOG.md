@@ -1,5 +1,26 @@
 # Changelog
 
+## 3.31
+
+- **A Biblioteca foi refeita: cada acervo tem a sua aba.** Imagens, trilhas
+  sonoras e efeitos sonoros estavam na mesma tela, um embaixo do outro — com
+  171 trilhas, achar qualquer coisa virava rolagem. Agora são três abas com
+  a contagem de cada uma.
+- **Categorias viram filtro.** Cada aba mostra as categorias com quantos
+  arquivos tem em cada, e a lista fica agrupada por categoria. Nas trilhas,
+  cada grupo diz o clima que o app usa para escolher a música (agitado,
+  médio, calmo).
+- **Dá para trocar a categoria de um arquivo pela tela.** Isso muda de
+  verdade em que vídeo ele pode entrar — a categoria é o começo do nome do
+  arquivo, que é o que o app lê na hora de escolher a trilha.
+- **Os efeitos sonoros do app agora aparecem e tocam na tela**, cada um
+  dizendo onde é usado (o clique de cada palavra da legenda, o risco da
+  ênfase, o whoosh da manchete). Quatro deles não são usados por nada hoje e
+  estão marcados assim.
+- **E você pode trocar um efeito pelo seu.** A categoria do efeito é a vaga
+  que ele ocupa: um arquivo em `whoosh` entra no lugar do whoosh nos
+  próximos vídeos. Vale para clique, risco, pop, corte e whoosh.
+
 ## 3.30
 
 - **No preview, o círculo de ênfase não fechava.** O laço parava no meio do

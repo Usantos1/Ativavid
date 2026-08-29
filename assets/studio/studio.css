@@ -3403,3 +3403,69 @@ body.home-working .hero-import .hero-inner { padding: 10px 0; }
 }
 .lib-track-tag--solta { background: rgba(255, 255, 255, .08); color: var(--muted, #9aa0a6); }
 .lib-track audio { flex: none; height: 30px; max-width: 240px; }
+
+/* ---- Biblioteca: tres acervos, cada um com suas categorias ---- */
+.lib-tabs {
+  display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 14px;
+  padding: 4px; border-radius: 13px;
+  border: 1px solid var(--hairline);
+  background: color-mix(in srgb, var(--panel) 55%, transparent);
+}
+.lib-tab {
+  flex: 1 1 auto; display: inline-flex; align-items: center;
+  justify-content: center; gap: 7px;
+  padding: 9px 14px; border: 0; border-radius: 10px;
+  background: transparent; color: var(--muted);
+  font: inherit; font-size: 13px; font-weight: 650; cursor: pointer;
+}
+.lib-tab:hover { color: var(--text); }
+.lib-tab.is-on {
+  background: var(--panel2); color: var(--text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .18);
+}
+.lib-tab-n {
+  font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  font-variant-numeric: tabular-nums;
+}
+.lib-tab.is-on .lib-tab-n {
+  background: rgba(255, 59, 92, .16); color: var(--accent, #ff3b5c);
+}
+.lib-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; }
+.lib-chip {
+  display: inline-flex; align-items: baseline; gap: 6px;
+  padding: 5px 11px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--panel2);
+  color: var(--muted); font: inherit; font-size: 12px; font-weight: 620;
+}
+.lib-chip:hover { color: var(--text); }
+.lib-chip.is-on {
+  border-color: transparent; color: #fff;
+  background: var(--accent, #ff3b5c);
+}
+.lib-chip-n { font-size: 11px; opacity: .75; font-variant-numeric: tabular-nums; }
+.lib-grupo { margin: 0 0 18px; }
+.lib-grupo-tit {
+  display: flex; align-items: baseline; gap: 8px; margin: 0 0 7px;
+  font-size: 13px; font-weight: 700;
+}
+.lib-grupo-clima { font-size: 11.5px; font-weight: 600; color: var(--muted); }
+.lib-cat {
+  flex: none; max-width: 150px; border: 1px solid var(--line);
+  background: var(--panel2); color: var(--muted); border-radius: 8px;
+  padding: 3px 6px; font: inherit; font-size: 11.5px;
+}
+.lib-cat:hover { color: var(--text); }
+.lib-track-tag--app {
+  background: rgba(255, 255, 255, .08); color: var(--muted, #9aa0a6);
+}
+.lib-item-cat { padding: 0 10px 9px; }
+.lib-track-uso {
+  flex: none; font-size: 11.5px; color: var(--muted); white-space: nowrap;
+}
+@media (max-width: 900px) { .lib-track-uso { display: none; } }
+@media (max-width: 720px) {
+  .lib-tab { flex: 1 1 100%; }
+  .lib-track { flex-wrap: wrap; }
+  .lib-track audio { max-width: 100%; width: 100%; }
+}
