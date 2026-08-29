@@ -18,6 +18,8 @@ STYLE_KEYS = (
     "brandId", "brandName", "note", "smartEmphasis", "endCardType",
     "captionPosition", "captionSize", "captionFont", "headlineFont",
     "emphasisWords", "postHashtags", "postSeo", "postRodape", "headlineDuration", "headlineAnimation",
+    # Abertura com a manchete sozinha: onde ela fica e se a legenda espera
+    "headlinePos", "legendaAposHeadline",
 )
 
 

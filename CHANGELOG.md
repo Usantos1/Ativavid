@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.48
+
+- **Estilo novo: "Abertura em cheio".** A headline abre no centro da tela e
+  fica sozinha nos primeiros segundos; a legenda só começa quando ela sai.
+  Está pronto como modelo em Estilos, e os dois controles também ficaram
+  soltos para você combinar do seu jeito: "Onde a headline fica" (no alto ou
+  no centro) e "Legenda começa" (junto com a fala ou depois da headline).
+- **As janelas feias do navegador saíram.** Criar preset, renomear, apagar,
+  editar a headline e publicar no Instagram abriam a caixa do Chrome, com o
+  "127.0.0.1 diz" em cima. Agora são janelas do próprio app, no tema.
+
 ## 3.47
 
 - **A tela de estilo do vídeo agora mostra de qual marca ele é — e deixa

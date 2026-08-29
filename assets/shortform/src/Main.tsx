@@ -93,6 +93,7 @@ export type EditData = {
     safeWidth?: number;    // auto-fit width budget (per-style default)
     strokePx?: number;     // outline: black stroke width (default 12)
     paddingTop?: number;   // distance from top (per-style default)
+    centro?: boolean;      // manchete centrada (abertura sozinha no quadro)
     paddingBottom?: number; // manchete only: distance from the base (default 140)
     lineHeight?: number;
   };
@@ -833,6 +834,12 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
   const size = fitHeadline(lines, {...S, cap, safeW: H.safeWidth ?? S.safeW});
   const lh = H.lineHeight ?? S.lh;
   const top = H.paddingTop ?? S.top;
+  // CENTRO: abertura com a manchete SOZINHA no quadro (pedido de 29/08).
+  // Centralizar pelo flex, e nao com um paddingTop calculado, mantem o
+  // bloco no meio com uma ou duas linhas — o calculo erraria em uma delas.
+  const envolucro: React.CSSProperties = H.centro
+    ? {justifyContent: 'center', alignItems: 'center'}
+    : {justifyContent: 'flex-start', alignItems: 'center', paddingTop: top};
   const shell: React.CSSProperties = {
     opacity: op,
     translate: `${slideX.toFixed(1)}px ${y}px`,
@@ -866,7 +873,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
       easing: Easing.out(Easing.back(1.8)),
     });
     return (
-      <AbsoluteFill style={{justifyContent: 'flex-start', alignItems: 'center', paddingTop: top}}>
+      <AbsoluteFill style={envolucro}>
         <Sfx src="whoosh.mp3" volume={0.1} />
         {!inAnswer || qOut > 0.01 ? (
           <div
@@ -932,7 +939,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
     const one = raw;
     const sz = fitHeadline([one, ''], {...S, cap, safeW: H.safeWidth ?? S.safeW});
     return (
-      <AbsoluteFill style={{justifyContent: 'flex-start', alignItems: 'center', paddingTop: top}}>
+      <AbsoluteFill style={envolucro}>
         <div
           style={{
             opacity: op,
@@ -1007,7 +1014,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
     const acc = H.accent ?? '#ff5200';
     const bw = Math.max(6, Math.round(size * 0.09));
     return (
-      <AbsoluteFill style={{justifyContent: 'flex-start', alignItems: 'center', paddingTop: top}}>
+      <AbsoluteFill style={envolucro}>
         <Sfx src="whoosh.mp3" volume={0.12} />
         <div
           style={{
@@ -1029,7 +1036,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
 
   if (styleId === 'realce') {
     return (
-      <AbsoluteFill style={{justifyContent: 'flex-start', alignItems: 'center', paddingTop: top}}>
+      <AbsoluteFill style={envolucro}>
         <Sfx src="whoosh.mp3" volume={0.1} />
         <div style={{...shell, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10}}>
           {lines.filter(Boolean).map((l, i) => (
@@ -1055,7 +1062,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
 
   if (styleId === 'misto') {
     return (
-      <AbsoluteFill style={{justifyContent: 'flex-start', alignItems: 'center', paddingTop: top}}>
+      <AbsoluteFill style={envolucro}>
         <Sfx src="whoosh.mp3" volume={0.1} />
         <div style={{...shell, filter: 'drop-shadow(0 6px 16px rgba(0,0,0,0.55))'}}>
           <div style={{fontWeight: hookWeight(400), fontSize: size, color: '#fff'}}>{lines[0]}</div>
@@ -1067,7 +1074,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
 
   if (styleId === 'card') {
     return (
-      <AbsoluteFill style={{justifyContent: 'flex-start', alignItems: 'center', paddingTop: top}}>
+      <AbsoluteFill style={envolucro}>
         <Sfx src="whoosh.mp3" volume={0.1} />
         <div style={{opacity: op, translate: `${slideX.toFixed(1)}px ${y}px`, scale: String(popScale.toFixed(3)), display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 28}}>
           {H.logo || H.sign ? (
@@ -1091,7 +1098,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
   if (styleId === 'sombra') {
     const off = Math.max(4, Math.round(size * 0.07));
     return (
-      <AbsoluteFill style={{justifyContent: 'flex-start', alignItems: 'center', paddingTop: top}}>
+      <AbsoluteFill style={envolucro}>
         <Sfx src="whoosh.mp3" volume={0.1} />
         <div
           style={{
@@ -1120,7 +1127,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
     // headline actually fits to.
     const barH = Math.max(8, Math.round(size * 0.19));
     return (
-      <AbsoluteFill style={{justifyContent: 'flex-start', alignItems: 'center', paddingTop: top}}>
+      <AbsoluteFill style={envolucro}>
         <Sfx src="whoosh.mp3" volume={0.1} />
         <div style={{...shell, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: Math.round(size * 0.16)}}>
           {lines.filter(Boolean).map((l, i) => (
@@ -1156,7 +1163,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
 
   const stroke = H.strokePx ?? 12;
   return (
-    <AbsoluteFill style={{justifyContent: 'flex-start', alignItems: 'center', paddingTop: top}}>
+    <AbsoluteFill style={envolucro}>
       <Sfx src="whoosh.mp3" volume={0.1} />
       <div
         style={{

@@ -1481,6 +1481,12 @@ class Renderizador:
         linhas, tam = self._hl_linhas(texto, pesos, cap, safe_w)
         lh = float(hook.get("lineHeight") or lh)
         top = _pos(hook, "paddingTop", top0)
+        # CENTRO da tela: a abertura em que a manchete e a unica coisa no
+        # quadro. O calculo mora aqui (e no template) porque so agora se sabe
+        # quantas linhas ela tem e com que tamanho de fonte — um paddingTop
+        # decidido no pipeline erraria em toda manchete de duas linhas.
+        if hook.get("centro"):
+            top = max(0.0, (self.h - len(linhas) * lh * tam) / 2.0)
 
         leg = Camada(0, fim)
         leg.dur_f = fim

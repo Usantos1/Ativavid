@@ -1971,9 +1971,9 @@ function beginHeadlineEdit(ev) {
     return;
   }
   S.editingHeadline = false;
-  const next = window.prompt(
-    answerMode ? 'Resposta desta headline' : 'Headline deste vídeo', cur);
-  if (next != null) commitHeadline(next, answerMode);
+  pedirTexto(answerMode ? 'Resposta desta headline' : 'Headline deste vídeo',
+             cur, 'Salvar')
+    .then((next) => { if (next != null) commitHeadline(next, answerMode); });
 }
 
 function refreshQuickFixes() {
@@ -3258,6 +3258,8 @@ $('setupGo').addEventListener('click', async () => {
     postSeo: S.style.postSeo || null,
     postRodape: S.style.postRodape || null,
     headlineDuration: S.style.headlineDuration || 'curta',
+    headlinePos: S.style.headlinePos || 'padrao',
+    legendaAposHeadline: S.style.legendaAposHeadline || null,
     headlineAnimation: S.style.headlineAnimation || 'padrao',
       exportPreset: S.style.exportPreset || 'reels',
       colorGrade: S.style.colorGrade || 'marca',
@@ -3357,6 +3359,8 @@ $('setupGo').addEventListener('click', async () => {
     postSeo: S.style.postSeo || null,
     postRodape: S.style.postRodape || null,
     headlineDuration: S.style.headlineDuration || 'curta',
+    headlinePos: S.style.headlinePos || 'padrao',
+    legendaAposHeadline: S.style.legendaAposHeadline || null,
     headlineAnimation: S.style.headlineAnimation || 'padrao',
     exportPreset: S.style.exportPreset || 'reels',
     colorGrade: S.style.colorGrade || 'marca',
@@ -3493,6 +3497,8 @@ $('setupSaveDefault').addEventListener('click', async () => {
     postSeo: S.style.postSeo || null,
     postRodape: S.style.postRodape || null,
     headlineDuration: S.style.headlineDuration || 'curta',
+    headlinePos: S.style.headlinePos || 'padrao',
+    legendaAposHeadline: S.style.legendaAposHeadline || null,
     headlineAnimation: S.style.headlineAnimation || 'padrao',
     exportPreset: S.style.exportPreset || 'reels',
     colorGrade: S.style.colorGrade || 'marca',
@@ -5718,6 +5724,8 @@ function refreshAutoControls() {
     ['autoPostRodape', 'postRodape', ''],
     ['autoHlDuration', 'headlineDuration', 'curta'],
     ['autoHlAnim', 'headlineAnimation', 'padrao'],
+    ['autoHlPos', 'headlinePos', 'padrao'],
+    ['autoLegendaApos', 'legendaAposHeadline', ''],
     ['autoContentType', 'contentType', 'informational'],
   ];
   for (const [id, key, def] of map) {
@@ -5736,6 +5744,8 @@ function refreshAutoControls() {
  * ajusta/salva como sempre. Nada aqui cria caminho novo de render. */
 const _tplElems = (o) => ({ tracking: false, zoomAuto: true, zoomCuts: true, flashCut: true, musicAI: true, endCard: false, ...(o || {}) });
 const STYLE_TEMPLATES = [
+  { id: 'abertura_cheia', name: 'Abertura em cheio', desc: 'Headline no centro nos 4s iniciais; legenda entra depois',
+    style: { edit: 'limpa', headline: 'realce', captions: 'stacked', accent: null, emphasisAccent: null, captionAccent: null, rhythm: 'dinamico', intensity: 'medio', speechClean: 'medio', contentType: 'viral', captionChunk: 'frase_curta', captionPosition: 'baixo', captionSize: 'm', headlineDuration: 'curta', headlinePos: 'centro', legendaAposHeadline: '1', elements: _tplElems() } },
   { id: 'venda_agressiva', name: 'Venda agressiva', desc: 'Impacto na palavra, corte rápido, urgência',
     style: { edit: 'limpa', headline: 'realce', captions: 'impacto', accent: '#e30004', emphasisAccent: '#ffd400', captionAccent: null, rhythm: 'rapido', intensity: 'forte', speechClean: 'agressivo', contentType: 'sales', captionChunk: 'frase_curta', captionPosition: 'baixo', captionSize: 'g', elements: _tplElems() } },
   { id: 'educativo_clean', name: 'Educativo clean', desc: 'Pílula de contexto, legenda limpa, ritmo calmo',
@@ -5849,6 +5859,8 @@ function wireAutoControls() {
     ['autoPostSeo', 'postSeo'],
     ['autoPostRodape', 'postRodape'],
     ['autoHlDuration', 'headlineDuration'],
+    ['autoHlPos', 'headlinePos'],
+    ['autoLegendaApos', 'legendaAposHeadline'],
     ['autoHlAnim', 'headlineAnimation'],
     ['autoContentType', 'contentType'],
   ];
@@ -6769,6 +6781,75 @@ function applyPresetToUi(preset) {
   refreshAutoControls();
 }
 
+
+/* ---- Janelas do APP, no lugar das do navegador ---------------------------
+ * `prompt()` e `confirm()` abrem a caixa do Chrome, com o "127.0.0.1:4850
+ * diz" em cima e os botoes do sistema — dentro de um app escuro isso parece
+ * outro programa (o usuario mandou print em 29/08: "esse tipo de janela feia
+ * nao quero"). Estas usam <dialog>, herdam o tema e devolvem Promise. */
+function _escDlg(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[c]);
+}
+
+function _dlgApp(html, aoAbrir) {
+  return new Promise((resolve) => {
+    const d = document.createElement('dialog');
+    d.className = 'dlg dlg-app';
+    d.innerHTML = html;
+    document.body.appendChild(d);
+    const fechar = (v) => {
+      resolve(v);
+      d.close();
+      d.remove();
+    };
+    d.addEventListener('cancel', (e) => { e.preventDefault(); fechar(null); });
+    d.querySelector('[data-nao]')?.addEventListener('click', () => fechar(null));
+    if (aoAbrir) aoAbrir(d, fechar);
+    d.showModal();
+  });
+}
+
+/** Pergunta um texto. Devolve a string ou null (cancelou). */
+function pedirTexto(titulo, valor, rotuloOk) {
+  return _dlgApp(
+    `<h3>${_escDlg(titulo)}</h3>
+     <input type="text" class="dlg-input" id="_dlgTxt" value="${_escDlg(valor || '')}" autocomplete="off">
+     <div class="dlg-actions">
+       <button type="button" class="ghost-btn" data-nao>Cancelar</button>
+       <button type="button" class="export-btn" data-sim>${_escDlg(rotuloOk || 'Salvar')}</button>
+     </div>`,
+    (d, fechar) => {
+      const campo = d.querySelector('#_dlgTxt');
+      const ok = () => {
+        const v = (campo.value || '').trim();
+        fechar(v || null);
+      };
+      d.querySelector('[data-sim]').addEventListener('click', ok);
+      campo.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); ok(); }
+      });
+      setTimeout(() => { campo.focus(); campo.select(); }, 30);
+    },
+  );
+}
+
+/** Pergunta sim/nao. `perigo` deixa o botao de confirmar vermelho. */
+function pedirConfirmacao(titulo, detalhe, rotuloOk, perigo) {
+  return _dlgApp(
+    `<h3>${_escDlg(titulo)}</h3>
+     ${detalhe ? `<p class="hint">${_escDlg(detalhe)}</p>` : ''}
+     <div class="dlg-actions">
+       <button type="button" class="ghost-btn" data-nao>Agora não</button>
+       <button type="button" class="${perigo ? 'danger-btn' : 'export-btn'}" data-sim>${_escDlg(rotuloOk || 'Confirmar')}</button>
+     </div>`,
+    (d, fechar) => {
+      d.querySelector('[data-sim]').addEventListener('click', () => fechar(true));
+    },
+  ).then((v) => v === true);
+}
+
 async function presetAction(action) {
   const sel = $('presetSelect');
   const pack = S.brandPresets || {};
@@ -6776,7 +6857,9 @@ async function presetAction(action) {
   const id = sel?.value;
   let name = '';
   if (action === 'create' || action === 'duplicate' || action === 'rename') {
-    name = window.prompt(action === 'rename' ? 'Novo nome do preset' : 'Nome do preset', '') || '';
+    name = await pedirTexto(
+      action === 'rename' ? 'Novo nome do preset' : 'Nome do preset', '',
+      action === 'rename' ? 'Renomear' : 'Criar') || '';
     if (!name.trim()) return;
   }
   try {

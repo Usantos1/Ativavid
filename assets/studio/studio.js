@@ -2705,9 +2705,11 @@ function wireList() {
         const job = state.jobs.find((x) => x.id === id);
         const titulo = job ? displayTitle(job) : "este vídeo";
         // Publicar e para FORA — confirmacao explicita sempre.
-        if (!window.confirm(`Publicar "${titulo}" no Instagram agora?
-
-A legenda do post (com suas hashtags) vai junto.`)) return;
+        const okPub = await pedirConfirmacao(
+          `Publicar "${titulo}" no Instagram agora?`,
+          "A legenda do post, com as suas hashtags, vai junto.",
+          "Publicar");
+        if (!okPub) return;
         try {
           const r = await api("/api/jobs/publicar-instagram", {
             method: "POST",
@@ -5220,12 +5222,16 @@ function wirePresets() {
       const act = btn.dataset.presetAct;
       try {
         if (act === "delete") {
-          if (!confirm("Apagar este preset?")) return;
+          const okApagar = await pedirConfirmacao(
+            "Apagar este preset?",
+            "Os vídeos já feitos não mudam — só o preset sai da lista.",
+            "Apagar", true);
+          if (!okApagar) return;
           await presetAction("delete", { id });
           toast("Preset apagado");
         } else if (act === "rename") {
           const atual = row.querySelector(".preset-name")?.textContent || "";
-          const nome = prompt("Novo nome do preset:", atual);
+          const nome = await pedirTexto("Novo nome do preset", atual, "Renomear");
           if (!nome || !nome.trim()) return;
           await presetAction("rename", { id, name: nome.trim() });
           toast("Preset renomeado");
@@ -5242,6 +5248,69 @@ function wirePresets() {
       }
     });
   }
+}
+
+
+/* ---- Janelas do APP, no lugar das do navegador ---------------------------
+ * `prompt()` e `confirm()` abrem a caixa do Chrome, com o "127.0.0.1:4850
+ * diz" em cima e os botoes do sistema — dentro de um app escuro isso parece
+ * outro programa (o usuario mandou print em 29/08: "esse tipo de janela feia
+ * nao quero"). Estas usam <dialog>, herdam o tema e devolvem Promise. */
+function _dlgApp(html, aoAbrir) {
+  return new Promise((resolve) => {
+    const d = document.createElement('dialog');
+    d.className = 'dlg dlg-app';
+    d.innerHTML = html;
+    document.body.appendChild(d);
+    const fechar = (v) => {
+      resolve(v);
+      d.close();
+      d.remove();
+    };
+    d.addEventListener('cancel', (e) => { e.preventDefault(); fechar(null); });
+    d.querySelector('[data-nao]')?.addEventListener('click', () => fechar(null));
+    if (aoAbrir) aoAbrir(d, fechar);
+    d.showModal();
+  });
+}
+
+/** Pergunta um texto. Devolve a string ou null (cancelou). */
+function pedirTexto(titulo, valor, rotuloOk) {
+  return _dlgApp(
+    `<h3>${escapeHtml(titulo)}</h3>
+     <input type="text" class="dlg-input" id="_dlgTxt" value="${escapeHtml(valor || '')}" autocomplete="off">
+     <div class="dlg-actions">
+       <button type="button" class="ghost-btn" data-nao>Cancelar</button>
+       <button type="button" class="export-btn" data-sim>${escapeHtml(rotuloOk || 'Salvar')}</button>
+     </div>`,
+    (d, fechar) => {
+      const campo = d.querySelector('#_dlgTxt');
+      const ok = () => {
+        const v = (campo.value || '').trim();
+        fechar(v || null);
+      };
+      d.querySelector('[data-sim]').addEventListener('click', ok);
+      campo.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); ok(); }
+      });
+      setTimeout(() => { campo.focus(); campo.select(); }, 30);
+    },
+  );
+}
+
+/** Pergunta sim/nao. `perigo` deixa o botao de confirmar vermelho. */
+function pedirConfirmacao(titulo, detalhe, rotuloOk, perigo) {
+  return _dlgApp(
+    `<h3>${escapeHtml(titulo)}</h3>
+     ${detalhe ? `<p class="hint">${escapeHtml(detalhe)}</p>` : ''}
+     <div class="dlg-actions">
+       <button type="button" class="ghost-btn" data-nao>Agora não</button>
+       <button type="button" class="${perigo ? 'danger-btn' : 'export-btn'}" data-sim>${escapeHtml(rotuloOk || 'Confirmar')}</button>
+     </div>`,
+    (d, fechar) => {
+      d.querySelector('[data-sim]').addEventListener('click', () => fechar(true));
+    },
+  ).then((v) => v === true);
 }
 
 function wireBiblioteca() {

@@ -2170,6 +2170,13 @@ def build_edit_data(cut: Path, preset: dict, hook: list[str], duration: float, f
                 if str(preset.get("headlineAnimation") or "").lower() in ("pop", "deslizar")
                 else "padrao"
             ),
+            # CENTRO da tela: abertura em que a manchete e a unica coisa na
+            # tela (pedido do usuario, 29/08). Cada motor centraliza com a
+            # altura que ele mesmo mediu — mandar um `paddingTop` calculado
+            # aqui erraria, porque o numero de linhas e o tamanho da fonte so
+            # sao conhecidos na hora de desenhar.
+            "centro": str(preset.get("headlinePos") or "").lower().strip()
+                      in ("centro", "center", "meio"),
             "style": headline if hook_enabled else "outline",
             "lines": hook if hook_enabled else ["", ""],
             "accent": accent,
@@ -2820,6 +2827,66 @@ def _apply_caption_geometry(ed: dict, preset: dict) -> None:
 # IDs do catálogo de fontes do template (assets/shortform/src/fonts.ts).
 # Valor fora do catálogo é descartado — o template ignoraria e a UI mentiria.
 _FONT_IDS = {"poppins", "inter", "montserrat", "playfair", "lora", "anton", "bebas", "archivo", "arquivo"}
+
+
+def _legenda_comeca_depois(public: Path, segundos: float) -> int:
+    """Tira da legenda o que cai ANTES de `segundos`.
+
+    Abertura em que a manchete e a unica coisa na tela: nesses primeiros
+    segundos a legenda repetiria, palavra por palavra, o que a manchete ja
+    esta dizendo em corpo grande. Cortar aqui — e nao no motor — faz os
+    DOIS (Remotion e o proprio) obedecerem, porque os dois leem este mesmo
+    arquivo.
+
+    Uma cue que atravessa a fronteira nao e jogada fora: ela comeca no
+    limite, e as palavras que ficaram atras saem dela.
+    """
+    if segundos <= 0:
+        return 0
+    f = public / "caption-cues.json"
+    if not f.is_file():
+        return 0
+    try:
+        dados = json.loads(f.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError):
+        return 0
+    cues = dados if isinstance(dados, list) else (dados.get("cues") or [])
+    ms = segundos * 1000.0
+    fora: list[dict] = []
+    tirados = 0
+    for c in cues:
+        try:
+            fim = float(c.get("endMs") or 0)
+            ini = float(c.get("startMs") or 0)
+        except (TypeError, ValueError):
+            fora.append(c)
+            continue
+        if fim <= ms:
+            tirados += 1
+            continue
+        if ini < ms:
+            linhas = []
+            for linha in (c.get("lines") or []):
+                palavras = [w for w in linha
+                            if float(w.get("toMs") or 0) > ms]
+                if palavras:
+                    linhas.append(palavras)
+            if not linhas:
+                tirados += 1
+                continue
+            c = dict(c, startMs=ms, lines=linhas)
+            # `lineStyles`/`lineBoost`/`lineEmph` andam junto com as linhas
+            for chave in ("lineStyles", "lineBoost", "lineEmph"):
+                v = c.get(chave)
+                if isinstance(v, list) and len(v) > len(linhas):
+                    c[chave] = v[-len(linhas):]
+            tirados += 1
+        fora.append(c)
+    if tirados:
+        f.write_text(json.dumps(fora, ensure_ascii=False), encoding="utf-8")
+        print(f"[legenda] comeca em {segundos:.1f}s (a manchete fica sozinha "
+              f"antes disso) — {tirados} trecho(s) ajustado(s)", flush=True)
+    return tirados
 
 
 def _hook_end_sec(headline: str, preset: dict, duration: float) -> float:
@@ -4038,6 +4105,17 @@ def run(
             cues = public / "caption-cues.json"
             if not cues.exists():
                 cues.write_text("[]", encoding="utf-8")
+        # ABERTURA SO COM A MANCHETE: o usuario escolheu que a legenda espera
+        # a manchete sair. Roda depois das cues existirem, e vale para os dois
+        # motores (ambos leem caption-cues.json).
+        if str(preset.get("legendaAposHeadline") or "").lower() in (
+                "1", "true", "sim", "yes") or preset.get("legendaAposHeadline") is True:
+            try:
+                _legenda_comeca_depois(
+                    public, _hook_end_sec(
+                        str(preset.get("headline") or "outline"), preset, duration))
+            except Exception as e:  # noqa: BLE001 - legenda nunca derruba render
+                print(f"[legenda] inicio nao ajustado: {str(e)[:70]}", flush=True)
 
     _timing_mark("CAPTIONS", _t_phase)
     _t_phase = time.perf_counter()
