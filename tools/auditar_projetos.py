@@ -15,8 +15,10 @@ Uso:
     uv run python tools/auditar_projetos.py [--raiz E:/ATIVAVID/Projetos]
 
 So leitura: json dos projetos + ffprobe das fontes. Nada e alterado.
-Ultima varredura (29/08, 176 projetos): 19 com alguma marca, todas de
-antes das correcoes — nenhum projeto novo apareceu com defeito.
+Ultima varredura (29/08, noite, 186 projetos): 19 com alguma marca. As 15
+de "rotulo errado" e a de "fora da fonte" sao anteriores as correcoes; a
+de "trecho baixo" e um trecho de 0,9s cujo RMS cai porque a maior parte
+dele e pausa, nao voz fraca (1 em 186 — nao virou conserto).
 """
 import json
 import subprocess
@@ -104,7 +106,13 @@ for proj in projs:
     v = ler(edit / "verificacao.json") or {}
     sil = float(v.get("silencioTotalS") or 0)
     baixos = v.get("takesBaixos") or []
-    if sil >= 1.0:
+    # Em "Sem cortes" (intact) a pausa NAO e defeito: e o que o modo manda
+    # manter — o proprio card do app ja se cala nesse caso (jobs_view). A
+    # ferramenta nao sabia disso e acusou 4,5s num depoimento de 29/08 que
+    # estava exatamente como pedido; gastei meia hora atras de um defeito
+    # que nao existia. Aviso que nao se pode atender ensina a ignorar aviso.
+    modo = str((ler(edit / "job_intent.json") or {}).get("editingIntent") or "").lower()
+    if sil >= 1.0 and modo != "intact":
         problemas.append(f"{sil:.1f}s de pausa sobrando")
         achados["pausa sobrando >= 1s"] += 1
     if baixos:
