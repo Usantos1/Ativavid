@@ -3461,7 +3461,14 @@ body.styles-wide .setup-actions .btn.primary {
 /* 2 — o mesmo texto, so que mais junto. */
 .transport.apertada .cover-btn,
 .transport.apertada .btn.mark { padding: 6px 7px; gap: 4px; font-size: 11px; }
-.transport.apertada { gap: 6px; }
+/* cada folga aqui vale 19px na barra inteira; juntas com o play e os
+   botoes de icone elas tiram 61px, o bastante para a coluna de ~906px do
+   usuario (tela em 125%) ainda mostrar os botoes de zoom junto dos nomes. */
+.transport.apertada { gap: 5px; }
+.transport.apertada #btnPlay { width: 34px; height: 34px; }
+.transport.apertada #btnPlay svg { width: 14px; height: 14px; }
+.transport.apertada .btn.icon { padding: 6px 8px; }
+.transport.apertada #btnZoom100 { padding: 5px 7px; }
 /* 3 — os botoes de zoom, menos o "100%" (que tambem volta ao natural). */
 .transport.sem-zoom #btnZoomOut,
 .transport.sem-zoom #btnZoomIn,
