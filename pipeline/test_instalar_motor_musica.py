@@ -50,9 +50,14 @@ def test_cancelar_para_antes_de_baixar(monkeypatch, tmp_path):
     assert not ok and motivo == "cancelado"
 
 
-def test_modelo_que_falha_nao_perde_a_instalacao(monkeypatch, tmp_path):
-    """O modelo se baixa sozinho na primeira música — falhar nele não pode
-    jogar fora os 2,5 GB de PyTorch que já vieram."""
+def test_modelo_que_falha_e_falha_de_instalacao(monkeypatch, tmp_path):
+    """A 3.23 dava isto por bom ("o modelo vem na primeira musica"). A
+    auditoria mostrou o custo: o modelo pesa 2,3 GB e o launcher desiste em
+    240s — sem ele, a primeira musica de TODO video estoura o prazo, a
+    trilha cai para a biblioteca e parece que o motor nao funciona. Melhor
+    dizer que faltou, com reparo pela mesma tela."""
+    monkeypatch.setattr(musica_local, "pasta_motor",
+                        lambda raiz=None: tmp_path / "MotorMusica")
     monkeypatch.setattr(musica_local, "tem_gpu_nvidia", lambda: True)
     monkeypatch.setattr(musica_local, "_uv", lambda: "uv")
     monkeypatch.setattr(musica_local, "instalado", lambda raiz=None: False)
@@ -63,8 +68,8 @@ def test_modelo_que_falha_nao_perde_a_instalacao(monkeypatch, tmp_path):
         return (False, "sem rede") if "-c" in cmd else (True, "ok")
     monkeypatch.setattr(musica_local, "_rodar", falso)
     ok, motivo = musica_local.instalar(raiz_projetos=tmp_path)
-    assert ok, motivo
-    assert "modelo virá depois" in motivo
+    assert not ok, motivo
+    assert "modelo" in motivo
 
 
 def test_o_progresso_e_pesado_pelo_tamanho():

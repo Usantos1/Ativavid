@@ -1193,6 +1193,10 @@ function renderHomeNow() {
   const titulo = actives.length > 1
     ? `Agora <span class="home-now-count">${actives.length} na fila</span>`
     : "Agora";
+  // Guarda onde a lista estava: o painel repinta a cada tick de progresso e
+  // sem isto a rolagem voltava ao topo sozinha — com a fila longa (o caso
+  // que a 3.16 quis atender) ficava impossivel olhar o fim da lista.
+  const rolagem = host.querySelector(".home-now-list")?.scrollTop || 0;
   host.innerHTML = `<div class="home-now-title">${titulo}</div>`
     + `<div class="home-now-list">` + actives.map((j) => `
     <div class="home-now-row" data-id="${escapeHtml(j.id)}">
@@ -1200,6 +1204,8 @@ function renderHomeNow() {
       <div class="home-now-stage">${escapeHtml(j.message || "Processando…")}</div>
       ${cardProgressHtml(j)}
     </div>`).join("") + `</div>`;
+  const lista = host.querySelector(".home-now-list");
+  if (lista && rolagem) lista.scrollTop = rolagem;
   if (!host.dataset.wired) {
     host.dataset.wired = "1";
     host.addEventListener("click", (e) => {
@@ -4536,7 +4542,8 @@ async function pintarMotorMusica() {
   try {
     d = await api("/api/musica/motor");
   } catch {
-    linha.textContent = "";
+    // Nao apaga o texto: durante a instalacao o servidor pode demorar a
+    // responder, e limpar a linha parecia que o download tinha sumido.
     return null;
   }
   const gb = (d.mbTotal / 1000).toFixed(1).replace(".", ",");
@@ -4552,6 +4559,17 @@ async function pintarMotorMusica() {
     linha.textContent = `IA local instalada (${d.gb} GB) — compõe sem gastar créditos.`;
     btn.classList.add("hidden");
     barra?.classList.add("hidden");
+  } else if (d.incompleta && d.gpu) {
+    // Download interrompido (app fechado, internet caiu): a pasta existe mas
+    // o motor nao esta pronto. Sem este caminho o cliente ficava com um
+    // motor que nunca compoe e nenhum botao para consertar.
+    linha.textContent = d.erro
+      ? `A instalação parou: ${d.erro}. Dá para continuar de onde parou.`
+      : "Instalação incompleta — dá para continuar de onde parou.";
+    btn.textContent = "Continuar instalação";
+    btn.classList.remove("hidden");
+    btn.disabled = false;
+    barra?.classList.add("hidden");
   } else if (!d.gpu) {
     linha.textContent = "IA local indisponível: precisa de placa NVIDIA "
       + "(sem ela, uma trilha levaria uns 9 minutos).";
@@ -4561,6 +4579,7 @@ async function pintarMotorMusica() {
     linha.textContent = d.erro
       ? `A instalação falhou: ${d.erro}`
       : `IA local não instalada — são ${gb} GB, baixados uma vez só.`;
+    btn.textContent = "Instalar IA local";
     btn.classList.remove("hidden");
     btn.disabled = false;
     barra?.classList.add("hidden");
@@ -4571,12 +4590,22 @@ async function pintarMotorMusica() {
 /** Enquanto baixa, pergunta o progresso — a instalacao leva minutos. */
 function acompanharMotorMusica() {
   clearInterval(acompanharMotorMusica._t);
+  let falhas = 0;
   acompanharMotorMusica._t = setInterval(async () => {
     const d = await pintarMotorMusica();
-    if (!d || !d.rodando) {
+    if (!d) {
+      // Um GET perdido nao pode parar o acompanhamento: a instalacao leva
+      // minutos e continua no servidor — a barra e que congelava, dando a
+      // impressao de travamento. So desiste depois de 5 falhas seguidas.
+      if (++falhas < 5) return;
       clearInterval(acompanharMotorMusica._t);
-      if (d && d.instalado) toast("IA local de música pronta ✓", 5000);
-      else if (d && d.erro) toast(`Instalação falhou: ${d.erro}`, 8000);
+      return;
+    }
+    falhas = 0;
+    if (!d.rodando) {
+      clearInterval(acompanharMotorMusica._t);
+      if (d.instalado) toast("IA local de música pronta ✓", 5000);
+      else if (d.erro) toast(`Instalação falhou: ${d.erro}`, 8000);
     }
   }, 3000);
 }

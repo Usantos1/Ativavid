@@ -946,6 +946,10 @@ def save_preset(data: dict) -> None:
 # progresso de tempos em tempos, como ja faz com o render.
 _MUSICA_INSTALL = {"rodando": False, "fracao": 0.0, "texto": "",
                    "erro": "", "ok": False}
+# check-then-act sem trava deixava dois cliques (ou duas abas) dispararem
+# duas instalacoes no MESMO venv — dois `uv pip install` concorrentes no
+# mesmo diretorio corrompem o ambiente.
+_MUSICA_LOCK = threading.Lock()
 
 
 def _musica_estado_completo(projects_root) -> dict:
@@ -960,10 +964,11 @@ def _musica_estado_completo(projects_root) -> dict:
 def _musica_instalar_em_fundo(projects_root) -> None:
     from app import musica_local
 
-    if _MUSICA_INSTALL["rodando"]:
-        return
-    _MUSICA_INSTALL.update({"rodando": True, "fracao": 0.0, "erro": "",
-                            "texto": "Preparando…", "ok": False})
+    with _MUSICA_LOCK:
+        if _MUSICA_INSTALL["rodando"]:
+            return
+        _MUSICA_INSTALL.update({"rodando": True, "fracao": 0.0, "erro": "",
+                                "texto": "Preparando…", "ok": False})
 
     def _andar(fracao: float, texto: str) -> None:
         _MUSICA_INSTALL["fracao"] = round(float(fracao), 3)

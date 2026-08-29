@@ -1,5 +1,31 @@
 # Changelog
 
+## 3.24
+
+Uma auditoria completa das versões 3.15 a 3.23 encontrou defeitos que os
+testes não pegavam. Os que mais importam:
+
+- **Correções feitas no editor voltavam atrás.** Desde a 3.18, um erro de
+  indentação fazia todo vídeo de fonte única passar pelo caminho de "vários
+  takes": o corte que você salvou no preview era reprocessado por cima (o
+  trecho de gancho removido voltava) e o título podia mudar sozinho a cada
+  reprocesso.
+- **A Fila podia ficar em branco.** Um trecho em silêncio absoluto gravava
+  um número infinito no diagnóstico do corte, e a lista inteira de vídeos
+  parava de carregar por causa de um único projeto.
+- **O nivelamento de volume errava o alvo em vídeos com vários takes**:
+  media cada trecho contra a voz do primeiro take, podendo estourar o
+  volume do trecho errado. Agora cada take é medido contra ele mesmo.
+- **Instalação da IA de música interrompida ficava "pronta" para sempre**,
+  sem botão de reparo e sem nunca compor. Agora o app reconhece a
+  instalação pela metade e oferece continuar de onde parou.
+- **Apagar um trecho com o vídeo tocando podia apagar o trecho errado**: a
+  timeline rolava sozinha durante o arrasto. E clicar num trecho já
+  removido não joga mais a reprodução para frente.
+- Miudezas: aviso de "voz mais baixa" não aparece mais para trecho mudo, o
+  painel Agora não perde a rolagem, o progresso da instalação sobrevive a
+  uma falha de rede, e nada de janelas de comando piscando na tela.
+
 ## 3.23
 
 - **A IA local de música agora se instala pelo aplicativo.** Em

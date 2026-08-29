@@ -18,6 +18,7 @@ import argparse
 import atexit
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -214,6 +215,8 @@ def write_timing(edit_dir: Path) -> dict:
         payload["musicaSkip"] = _RENDER_META["musicaSkip"]
     if _RENDER_META.get("musicaFonte"):
         payload["musicaFonte"] = _RENDER_META["musicaFonte"]
+    if _RENDER_META.get("nivelAjustado"):
+        payload["nivelAjustado"] = _RENDER_META["nivelAjustado"]
     if _RENDER_META.get("endCardSkip"):
         payload["endCardSkip"] = _RENDER_META["endCardSkip"]
     try:
@@ -997,12 +1000,27 @@ def _nivel_do_trecho(fases: list[dict], ini: float, fim: float) -> float | None:
     return soma / peso if peso > 0 else None
 
 
-def _equilibrar_ganhos(ranges: list[dict], voice: dict) -> int:
+def _equilibrar_ganhos(ranges: list[dict], vozes: dict) -> int:
     """Da ganho de complemento aos trechos que ficariam abaixo dos demais.
+
+    `vozes` e {chave da fonte: analise de voz DAQUELA fonte}. O agrupamento
+    por fonte nao e detalhe: com varios takes, os tempos de cada um comecam
+    do zero, entao medir um trecho do take 2 contra as frases do take 1
+    compara pedacos de gravacoes diferentes que so por acaso caem no mesmo
+    minuto — e o ganho ia parar no trecho errado (ate +10,5 dB).
 
     Devolve quantos trechos foram ajustados. So SOBE volume, nunca abaixa —
     abaixar mexeria no que ja foi aprovado de ouvido.
     """
+    ajustados = 0
+    for chave, voz in (vozes or {}).items():
+        grupo = [r for r in ranges if str(r.get("source") or "") == str(chave)]
+        ajustados += _equilibrar_grupo(grupo, voz)
+    return ajustados
+
+
+def _equilibrar_grupo(ranges: list[dict], voice: dict) -> int:
+    """Nivela os trechos de UMA fonte contra a voz dessa mesma fonte."""
     fases = [f for f in (voice.get("phrases") or [])
              if f.get("level_db") is not None]
     if not fases or len(ranges) < 3:
@@ -1908,12 +1926,41 @@ def _gravar_diagnostico_do_corte(edit_dir: Path, vdata: dict) -> None:
     nenhum guardou uma linha do que a verificacao viu (varredura 27/08).
     """
     if not vdata:
+        # Verificacao sem resposta (verify_cut falhou/ilegivel): o arquivo do
+        # render ANTERIOR nao pode sobreviver — a ficha passaria a descrever
+        # defeitos de um corte que nao existe mais.
+        (edit_dir / "verificacao.json").unlink(missing_ok=True)
         return
     sil = [(float(x.get("start") or 0), float(x.get("end") or 0))
            for x in (vdata.get("silences") or [])]
     sil = [(a, b) for a, b in sil if b - a >= _SILENCIO_MIN_S]
-    baixos = [x for x in (vdata.get("range_levels") or [])
-              if float(x.get("delta_db") or 0) <= _NIVEL_AVISA_DB]
+    # MESMA guarda do verify_cut: trecho com RMS <= -90 dB e silencio digital
+    # (b-roll mudo, take sem audio), nao voz baixa — sem isto o card acusava
+    # "voz 77 dB mais baixa" em trecho que o proprio verificador marcou "ok".
+    # E delta nao-finito (silencio absoluto -> -inf) e descartado: ele chegava
+    # inteiro no JSON e o `int()` da nota derrubava o /api/jobs, deixando a
+    # Fila em branco a cada atualizacao.
+    baixos = []
+    for x in (vdata.get("range_levels") or []):
+        try:
+            delta = float(x.get("delta_db"))
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(delta) or delta > _NIVEL_AVISA_DB:
+            continue
+        # Silencio COMPROVADO sai (mesma guarda do verify_cut: rms <= -90 e
+        # trecho mudo, b-roll ou take sem audio — nao voz baixa). Sem rms
+        # gravado, o aviso fica: calar por falta de dado esconderia defeito
+        # de verdade.
+        rms = x.get("rms_db")
+        if rms is not None:
+            try:
+                r = float(rms)
+            except (TypeError, ValueError):
+                r = 0.0
+            if not math.isfinite(r) or r <= -90:
+                continue
+        baixos.append(x)
     pops = [j for j in (vdata.get("junctions") or [])
             if any(t in str(j.get("verdict") or "")
                    for t in ("POP", "HOT"))]
@@ -2932,6 +2979,9 @@ def run(
     used_keys: set[str] = set()
     regions = []
     voice: dict = {}
+    # Analise de voz de CADA fonte, pela chave do range: o nivelamento
+    # precisa medir cada take contra ele mesmo (ver _equilibrar_ganhos).
+    vozes_por_fonte: dict[str, dict] = {}
     dur = 0.0
     spoken = ""
     source_key = "SRC"
@@ -3032,6 +3082,7 @@ def run(
         if color.get("confidence") == "low":
             print(f"[warn] {src.name}: color confidence low (profile={color.get('profile')})", flush=True)
         g = resolve_color_grade(color, preset)
+        vozes_por_fonte[key] = voice_i
         if idx == 0:
             grade_field = g
             regions = regions_i
@@ -3190,12 +3241,6 @@ def run(
             )
     else:
         ranges = all_ranges
-    if ranges and intent_mode not in ("intact",):
-        # depois de TODOS os ranges decididos (plano da IA ou heuristica):
-        # o ultimo passo antes do corte e nivelar o que ficou para tras.
-        _n_eq = _equilibrar_ganhos(ranges, voice)
-        if _n_eq:
-            _RENDER_META["nivelAjustado"] = _n_eq
         llm_meta = {"ok": True, "backend": "multi_take_concat", "takes": len(sources)}
         print(f"[multi] {len(sources)} takes · {len(ranges)} ranges", flush=True)
         spoken = cut_spoken_join
@@ -3217,6 +3262,18 @@ def run(
 
     if not ranges:
         raise NeedsReview("no_speech", "nenhum trecho de fala para cortar")
+
+    # Nivelamento: DEPOIS de todos os ranges decididos (plano da IA,
+    # heuristica ou juncao de takes) e antes do corte. Fica fora do `else`
+    # de proposito — vale para todo caminho —, e por isso mesmo NAO pode
+    # levar junto nada do bloco de varias fontes: na 3.18 este `if` engoliu
+    # o bloco do multi-take por indentacao e todo render de fonte unica
+    # passou a sobrescrever llm_meta (o guard_ranges voltava a mexer no
+    # corte que o usuario salvou no preview) e a repedir a headline.
+    if ranges and intent_mode not in ("intact",):
+        _n_eq = _equilibrar_ganhos(ranges, vozes_por_fonte)
+        if _n_eq:
+            _RENDER_META["nivelAjustado"] = _n_eq
 
     if llm_meta.get("backend") not in ("preview_edits", "manual_edl"):
         try:

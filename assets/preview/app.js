@@ -4340,7 +4340,12 @@ function rafLoop() {
     for (const step of capAnims) step(now);
   }
   positionNeedle();
-  if (!video.paused && !video.ended) {
+  // `!drag`: durante um arrasto a timeline nao pode rolar sozinha. O gesto
+  // e ancorado em pixels de tela (drag.x0); se o conteudo desliza no meio,
+  // o mesmo pixel passa a valer outro tempo e o trecho APAGADO nao e o que
+  // ficou marcado. Desde a 3.22 o proprio arrasto leva a agulha junto,
+  // entao ele mesmo disparava a rolagem perto da borda direita.
+  if (!drag && !video.paused && !video.ended) {
     // keep needle visible
     const x = LABEL_W + renderedToDraft(video.currentTime) * S.pps;
     const right = panel.scrollLeft + panel.clientWidth;
@@ -4441,9 +4446,16 @@ panel.addEventListener('pointerdown', (e) => {
     // consigo arrastar a agulha pra cortar mais" (27/08). Cortar precisa da
     // agulha DENTRO do take, entao clicar no take e exatamente onde ela
     // deve ir.
-    seekDraft((e.clientX - timelineEl.getBoundingClientRect().left
-               - LABEL_W) / S.pps);
-    drag = { type: 'clip-range', i: +clip.dataset.i, x0: e.clientX, x1: e.clientX, moved: false };
+    // O fantasma do take removido ocupa pixels mas dura ZERO no rascunho:
+    // os pixels dele ja pertencem, em tempo, ao take SEGUINTE. Levar a
+    // agulha para la jogaria a reproducao varios segundos a frente de quem
+    // so queria selecionar o fantasma para restaurar.
+    const iClip = +clip.dataset.i;
+    if (!(S.draft[iClip] && S.draft[iClip].removed)) {
+      seekDraft((e.clientX - timelineEl.getBoundingClientRect().left
+                 - LABEL_W) / S.pps);
+    }
+    drag = { type: 'clip-range', i: iClip, x0: e.clientX, x1: e.clientX, moved: false };
     try { panel.setPointerCapture(e.pointerId); } catch (err) { /* synthetic/touch */ }
     e.preventDefault();
     return;
@@ -4510,8 +4522,11 @@ panel.addEventListener('pointermove', (e) => {
     showTooltip(e, `${fmt(c.start)} → ${fmt(c.end)}`);
   } else if (drag.type === 'clip-range') {
     drag.x1 = e.clientX;
-    seekDraft((e.clientX - timelineEl.getBoundingClientRect().left
-               - LABEL_W) / S.pps);   // a agulha segue o dedo, como na regua
+    if (!(S.draft[drag.i] && S.draft[drag.i].removed)) {
+      // a agulha segue o dedo, como na regua (menos no fantasma removido)
+      seekDraft((e.clientX - timelineEl.getBoundingClientRect().left
+                 - LABEL_W) / S.pps);
+    }
     if (Math.abs(drag.x1 - drag.x0) > 4) drag.moved = true;
     if (drag.moved) {
       const range = clipRangeFromPixels(drag.i, drag.x0, drag.x1);

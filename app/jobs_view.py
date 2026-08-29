@@ -12,6 +12,7 @@ e não voltam para a fila — o store entrega cópias justamente para isso.
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -80,12 +81,21 @@ def _estado_de_publicacao(job: dict, edit: Path) -> None:
         job["publicacaoErro"] = str(d.get("error") or "")[:120]
 
 
+def _num(v) -> float:
+    """Numero do JSON, tolerante: texto, None ou lixo viram 0.0."""
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 # Etiqueta de clima do arquivo de trilha -> palavra que o usuario reconhece.
 _CLIMA_LABEL = {
     "viral": "viral", "humor": "humor", "venda": "venda",
     "anuncio": "anúncio", "resenha": "resenha",
     "informativo": "informativo", "educacional": "educacional",
     "institucional": "institucional", "padrao": "padrão",
+    "longform": "vídeo longo",
 }
 
 
@@ -164,7 +174,9 @@ def _qualidade_do_corte(job: dict, edit: Path) -> None:
         modo = ""
     preserva = modo in ("intact", "complete", "light")
     partes = []
-    total = float(d.get("silencioTotalS") or 0)
+    total = _num(d.get("silencioTotalS"))
+    if not math.isfinite(total):
+        total = 0.0
     quantas = len(d.get("silenciosSobrando") or [])
     if quantas and total >= 0.8 and not preserva:
         onde = (d.get("silenciosSobrando") or [{}])[0].get("inicio")
@@ -174,9 +186,16 @@ def _qualidade_do_corte(job: dict, edit: Path) -> None:
         partes.append(
             (f"{quantas} pausas somando {tempo}s" if quantas > 1
              else f"1 pausa de {tempo}s") + quando)
-    baixos = d.get("takesBaixos") or []
+    # Projeto gravado por uma versao anterior pode ter -Infinity aqui (JSON
+    # aceita, Python le, e o int() explode) — um unico projeto assim deixava
+    # a Fila INTEIRA em branco, porque o /api/jobs morre inteiro.
+    # Precisa ser numero FINITO e negativo: "quedaDb": null virava
+    # `0.0` e o card dizia "voz 0 dB mais baixa" — aviso sem sentido.
+    baixos = [x for x in (d.get("takesBaixos") or [])
+              if math.isfinite(_num(x.get("quedaDb")))
+              and _num(x.get("quedaDb")) < 0]
     if baixos:
-        pior = abs(min(float(x.get("quedaDb") or 0) for x in baixos))
+        pior = abs(min(_num(x.get("quedaDb")) for x in baixos))
         # meio-a-meio arredonda PARA CIMA: 8,5 dB virava "8 dB" com o
         # arredondamento bancário do Python, e quem lê espera 9.
         db = int(pior + 0.5)
