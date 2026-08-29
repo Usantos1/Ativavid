@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.43
+
+- **Atualizar virou um clique.** O aviso de versão nova agora aparece
+  sozinho ao abrir o app (uma vez por versão — quem diz "agora não" só é
+  perguntado quando sair outra), e a instalação roda em silêncio: acabaram
+  as telas de idioma, pasta, avançar e concluir. O único clique que sobra é
+  a autorização do Windows. O app fecha, atualiza e reabre sozinho.
+- Quem abrir o instalador na mão também não é mais perguntado sobre idioma,
+  e a pasta só é perguntada na primeira instalação.
+
 ## 3.42
 
 - **Quando a importação falha, o app diz por quê.** Antes, qualquer causa

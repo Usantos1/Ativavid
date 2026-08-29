@@ -1424,11 +1424,27 @@ function renderLicense(lic) {
   }
 }
 
+/* Aviso automatico de versao nova. Guarda a versao dispensada no
+ * localStorage: aparecer a cada abertura vira ruido, e ruido treina o
+ * usuario a fechar sem ler. */
+function avisarVersaoNova(up, atual) {
+  const nova = String(up.latestVersion || "").replace(/^v/i, "");
+  if (!nova) return;
+  let adiada = "";
+  try { adiada = localStorage.getItem("ativavid.updateAdiado") || ""; } catch { /* modo restrito */ }
+  if (adiada === nova) return;
+  openUpdateDialog({
+    appVersion: atual,
+    update: { ...up, updateAvailable: true, latestVersion: nova },
+  });
+}
+
 function openUpdateDialog(lic) {
   const dlg = $("#dlgUpdate");
   if (!dlg) return;
   const L = lic || state.license || {};
   const upd = L.update || {};
+  state.updateLatest = String(upd.latestVersion || "").replace(/^v/i, "");
   const title = $("#updDlgTitle");
   const hint = $("#updDlgHint");
   const meta = $("#updDlgMeta");
@@ -1436,7 +1452,12 @@ function openUpdateDialog(lic) {
     title.textContent = upd.force ? "Atualização obrigatória" : "Nova versão disponível";
   }
   if (hint) {
-    hint.textContent = upd.message || L.message || "Baixe o instalador e atualize o ATIVAVID.";
+    // O que o usuario precisa saber ANTES de clicar: e um clique so, o
+    // Windows vai pedir autorizacao uma vez, e o app volta sozinho.
+    hint.textContent = upd.force
+      ? (upd.message || L.message || "Atualize para continuar usando o ATIVAVID.")
+      : "É um clique: o ATIVAVID fecha, atualiza e reabre sozinho. "
+        + "O Windows pede sua autorização uma vez.";
   }
   if (meta) {
     const cur = L.appVersion || upd.appVersion || "";
@@ -1480,7 +1501,11 @@ async function instalarAtualizacao(btn) {
       body: JSON.stringify({ action: "instalar" }),
     });
     if (!res.ok) throw new Error(res.error || "não deu para baixar");
-    if (btn) btn.textContent = "Instalador aberto ✓";
+    if (btn) btn.textContent = res.silencioso ? "Atualizando…" : "Instalador aberto ✓";
+    const h = $("#updDlgHint");
+    if (h && res.silencioso) {
+      h.textContent = "Atualizando… o ATIVAVID vai fechar e reabrir sozinho.";
+    }
     toast(res.message
       || "Instalador aberto — o app fecha e reabre sozinho.", 6000);
     return true;
@@ -4210,6 +4235,12 @@ function wireForms() {
   const btnUpdLater = $("#btnUpdLater");
   if (btnUpdLater) {
     btnUpdLater.onclick = () => {
+      // Nao perguntar de novo por ESTA versao (a proxima volta a avisar).
+      try {
+        const nova = String(((state.license || {}).update || {}).latestVersion
+          || state.updateLatest || "").replace(/^v/i, "");
+        if (nova) localStorage.setItem("ativavid.updateAdiado", nova);
+      } catch { /* modo restrito */ }
       const dlg = $("#dlgUpdate");
       if (dlg?.open) dlg.close();
     };
@@ -5327,6 +5358,11 @@ async function wireTitlebar() {
     applyAppVersion(ver);
     try {
       const up = await api("/api/update/check");
+      // O aviso aparece SOZINHO, como o usuario pediu (29/08, comparando
+      // com o CapCut): antes so a pastilha de versao mudava de cor e ele
+      // precisava descobrir que aquilo era clicavel. Uma vez por versao —
+      // quem disse "agora nao" nao e perguntado de novo ate sair outra.
+      if (up.updateAvailable && !up.force) avisarVersaoNova(up, ver);
       if (btnVer) {
         btnVer.classList.toggle("update-available", !!up.updateAvailable);
         const tip = up.tooltip

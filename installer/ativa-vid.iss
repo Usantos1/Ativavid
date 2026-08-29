@@ -6,7 +6,7 @@
 ; Atalho → ATIVAVID.vbs (sem janela CMD).
 
 #define MyAppName "ATIVAVID"
-#define MyAppVersion "3.42"
+#define MyAppVersion "3.43"
 #define MyAppPublisher "ATIVAVID"
 #define MyAppURL "https://github.com/fillrochaa/edvid"
 #define MyAppExeName "ATIVAVID.vbs"
@@ -21,7 +21,13 @@ AppPublisherURL={#MyAppURL}
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
-DisableDirPage=no
+; `auto`: em ATUALIZACAO (ja instalado) a pagina de pasta some; na primeira
+; instalacao ela continua aparecendo, que e quando a escolha importa.
+DisableDirPage=auto
+; O app atualiza sozinho e o instalador roda em silencio — perguntar o
+; idioma no meio disso era etapa a toa. Quem abre o .exe na mao tambem
+; nao ve mais a pergunta: usa o primeiro idioma da lista (pt-BR).
+ShowLanguageDialog=no
 OutputDir=dist
 ; Pontos, não espaços: ao subir o asset o GitHub troca espaço por ponto, então
 ; o arquivo publicado vira "Instalar.ATIVAVID.x.y.exe" — que é exatamente o
@@ -71,13 +77,16 @@ Filename: "powershell.exe"; \
   WorkingDir: "{app}"; \
   StatusMsg: "Instalando dependencias (FFmpeg, Node, Python)…"; \
   Flags: runhidden waituntilterminated
+; A entrada abaixo NAO leva `skipifsilent`: a atualizacao roda em
+; /VERYSILENT e o app TEM de voltar sozinho — senao o usuario clica
+; "Atualizar" e o app some.
 ; Explorer abre o .lnk na sessão do usuário (igual ao atalho). wscript/cmd
 ; presos ao Setup morriam no Concluir; runasoriginaluser falhava se o exe
 ; foi iniciado com "Executar como administrador".
 Filename: "{win}\explorer.exe"; \
   Parameters: """{app}\{#MyAppName}.lnk"""; \
   Description: "Abrir ATIVAVID"; \
-  Flags: postinstall nowait skipifsilent
+  Flags: postinstall nowait
 
 [Code]
 function InitializeSetup(): Boolean;

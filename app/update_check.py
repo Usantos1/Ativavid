@@ -259,13 +259,28 @@ def baixar_e_instalar() -> dict[str, Any]:
         return {"ok": False, "error": f"download falhou: {e}"}
     if destino.stat().st_size < 1_000_000:
         return {"ok": False, "error": "o instalador baixado veio pequeno demais — tente pelo navegador"}
+    # SILENCIOSO: o usuario pediu "atualizar so dando o Ok, sem estas
+    # etapas" (29/08, comparando com o CapCut). Com /VERYSILENT o unico
+    # clique que sobra e o do Windows perguntando se autoriza — o resto
+    # (idioma, pasta, avancar, concluir) some. O instalador derruba o app
+    # e o reabre pelo [Run] (que perdeu o `skipifsilent` por isto).
+    import subprocess
+
+    flags = ["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART",
+             "/CLOSEAPPLICATIONS", "/NOCANCEL"]
     try:
-        os.startfile(str(destino))  # type: ignore[attr-defined]
-    except OSError as e:
-        return {"ok": False, "error": f"não consegui abrir o instalador: {e}",
-                "path": str(destino)}
-    return {"ok": True, "path": str(destino),
-            "message": "Instalador aberto — o ATIVAVID fecha e reabre sozinho."}
+        subprocess.Popen([str(destino), *flags], close_fds=True)
+    except OSError:
+        # Se nem abrir der, ainda vale tentar do jeito antigo (com
+        # assistente) antes de mandar o usuario para o navegador.
+        try:
+            os.startfile(str(destino))  # type: ignore[attr-defined]
+        except OSError as e:
+            return {"ok": False,
+                    "error": f"não consegui abrir o instalador: {e}",
+                    "path": str(destino)}
+    return {"ok": True, "path": str(destino), "silencioso": True,
+            "message": "Atualizando… o ATIVAVID fecha e reabre sozinho."}
 
 
 def open_setup() -> dict[str, Any]:
