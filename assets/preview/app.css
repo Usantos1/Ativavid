@@ -2250,6 +2250,26 @@ kbd {
   font: inherit;
 }
 .protect-menu button:hover { background: color-mix(in srgb, var(--text) 8%, transparent); }
+/* A MARCA do video, acima do preset: e ela que decide as cores e o texto
+   do card final, e ate 29/08 a tela nao dizia qual era. */
+.marca-do-video {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+  background: color-mix(in srgb, currentColor 4%, transparent);
+}
+.marca-lab {
+  font-size: 11px; font-weight: 700; letter-spacing: .08em;
+  text-transform: uppercase; opacity: .62;
+}
+.marca-do-video select { min-width: 190px; }
+.marca-dica { font-size: 12px; opacity: .75; }
+
 .preset-bar {
   display: flex;
   flex-wrap: wrap;

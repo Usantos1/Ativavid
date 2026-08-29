@@ -665,6 +665,22 @@ class Handler(BaseHTTPRequestHandler):
                     print(f"[estilo] modo de edição → {modo}", flush=True)
             except Exception as e:  # noqa: BLE001 - estilo salva mesmo assim
                 print(f"[estilo] modo não gravado: {e}", flush=True)
+        # MARCA do video. Mesma logica do modo de edicao acima: o
+        # `job_intent.json` e lido a cada render, e e dele que saem as cores
+        # e o texto do card final. Sem gravar aqui, trocar a marca na tela
+        # mudava o editor e o video saia com a marca velha assim mesmo.
+        marca = str(body.get("brandId") or "").strip()
+        if body.get("type") == "style-setup" and marca:
+            try:
+                from app.editing_intent import load as _lm, save as _sm
+
+                atual = _lm(self.root) or {}
+                if str(atual.get("brandId") or "") != marca:
+                    atual["brandId"] = marca
+                    _sm(self.root, atual)
+                    print(f"[estilo] marca do vídeo → {marca}", flush=True)
+            except Exception as e:  # noqa: BLE001 - estilo salva mesmo assim
+                print(f"[estilo] marca não gravada: {e}", flush=True)
         out = self.root / name
         tmp = out.with_suffix(".tmp")
         tmp.write_text(json.dumps(body, ensure_ascii=False, indent=2), encoding="utf-8")

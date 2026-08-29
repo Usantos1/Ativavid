@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.47
+
+- **A tela de estilo do vídeo agora mostra de qual marca ele é — e deixa
+  trocar.** Um vídeo sai com a marca que estava ativa na hora em que você
+  importou; se você trocar de marca depois, o vídeo antigo continua com a
+  anterior e não havia como perceber antes de renderizar. Agora aparece
+  "Marca deste vídeo" no topo, com a lista das suas marcas: escolher outra
+  troca as cores e o texto do card final ali mesmo, e "Salvar e refazer a
+  Fase 2" refaz o vídeo com ela — sem reimportar nada.
+
 ## 3.46
 
 - **Trocar a categoria de um arquivo na Biblioteca voltou a funcionar.** Dava

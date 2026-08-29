@@ -2357,6 +2357,7 @@ async function applyState(data) {
   refreshHeader();
   loadPostCaption(); // picks up a caption written between polls
   renderSaiuPanel();
+  carregarMarcaDoVideo().catch(() => {});
   loadBrandPresets({ applyActive: !!(HOUSE_STYLE || HUB_EMBED) });
 }
 
@@ -3373,6 +3374,10 @@ $('setupGo').addEventListener('click', async () => {
     // nao apaga o que ja havia.
     contentType: S.contentType || $('autoContentType')?.value || null,
     endCardCopy: S.endCardCopy || null,
+    // A MARCA escolhida na tela. O servidor grava no job_intent, que e
+    // lido a cada render — sem isto, trocar a marca mudava o editor e o
+    // video saia com a marca antiga assim mesmo.
+    brandId: (S.presetUsed && S.presetUsed.brandId) || null,
     // MODO DE EDICAO: e ele que decide se a IA planeja o corte. Sem este
     // campo um projeto criado em "Edicao leve" ficava preso no modo para
     // sempre — trocar o estilo e refazer nunca mudava a minutagem.
@@ -6638,6 +6643,73 @@ function currentStyleSnapshot() {
     oneClick: !!S.fastMode,
     contentType: S.contentType || $('autoContentType')?.value || null,
   };
+}
+
+/* MARCA DO VIDEO. Ela decide as cores e o texto do card final, e a tela
+ * nao dizia qual era: em 29/08 um video saiu com o verde e o "Segue
+ * @Ativacrm" porque a marca ativa no MOMENTO DA IMPORTACAO era outra — e
+ * so dava para descobrir depois de renderizar. Aqui ela aparece e pode ser
+ * trocada sem reimportar: o estilo da marca escolhida entra no editor e o
+ * `brandId` vai junto no "Salvar e refazer". */
+async function carregarMarcaDoVideo() {
+  const caixa = document.getElementById('marcaDoVideo');
+  const sel = document.getElementById('marcaSelect');
+  const dica = document.getElementById('marcaDica');
+  if (!caixa || !sel || HOUSE_STYLE || HUB_EMBED) return;
+  let marcas = [];
+  try {
+    const r = await fetch('/api/brands');
+    if (!r.ok) throw new Error('sem marcas');
+    marcas = (await r.json()).brands || [];
+  } catch {
+    caixa.hidden = true;        // preview solto (skill): nao ha marcas
+    return;
+  }
+  if (!marcas.length) { caixa.hidden = true; return; }
+  const atual = String(
+    (S.presetUsed && S.presetUsed.brandId)
+    || (S.state && S.state.style && S.state.style.brandId) || ''
+  ).trim();
+  S.marcas = marcas;
+  sel.innerHTML = marcas.map((m) =>
+    `<option value="${m.id}"${m.id === atual ? ' selected' : ''}>${m.name || m.id}</option>`
+  ).join('');
+  if (atual && !marcas.some((m) => m.id === atual)) {
+    sel.insertAdjacentHTML('afterbegin',
+      `<option value="${atual}" selected>${atual}</option>`);
+  }
+  caixa.hidden = false;
+  S.marcaOriginal = sel.value;
+  if (dica) dica.textContent = '';
+  sel.onchange = () => trocarMarcaDoVideo(sel.value);
+}
+
+function trocarMarcaDoVideo(id) {
+  const m = (S.marcas || []).find((x) => x.id === id);
+  const dica = document.getElementById('marcaDica');
+  if (!m) return;
+  // O estilo da marca entra no editor; o card final e o formato vem junto,
+  // senao o video trocaria de cor e continuaria com o CTA antigo.
+  if (m.style) applyPresetToUi({ style: m.style });
+  if (m.endCardCopy) {
+    S.endCardCopy = { ...m.endCardCopy };
+    const l1 = document.getElementById('ecLine1');
+    const l2 = document.getElementById('ecLine2');
+    if (l1) l1.value = S.endCardCopy.line1 || '';
+    if (l2) l2.value = S.endCardCopy.line2 || '';
+  }
+  if (S.presetUsed) {
+    S.presetUsed.brandId = m.id;
+    S.presetUsed.brandName = m.name || m.id;
+  } else {
+    S.presetUsed = { brandId: m.id, brandName: m.name || m.id };
+  }
+  if (dica) {
+    dica.textContent = (id === S.marcaOriginal)
+      ? ''
+      : 'aplique em "Salvar e refazer a Fase 2" para o vídeo sair assim';
+  }
+  loadBrandPresets({ applyActive: false }).catch(() => {});
 }
 
 async function loadBrandPresets(opts) {

@@ -121,6 +121,12 @@ def list_brands() -> list[dict[str, Any]]:
             "endCardCopy": data.get("endCardCopy"),
             "accent": data.get("accent"),
             "exportPreset": data.get("exportPreset") or "reels",
+            # O ESTILO inteiro vai junto: e o que permite trocar a marca de um
+            # video ja criado sem reimportar (a tela aplica isto no editor).
+            # Sem ele so dava para ver o nome — e o video seguia com as cores
+            # e o CTA da marca antiga, que foi o caso de 29/08.
+            "style": {k: v for k, v in data.items()
+                      if k not in ("brandId", "brandName")},
         })
     if not out:
         out.append({
