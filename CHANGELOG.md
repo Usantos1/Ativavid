@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.51
+
+- **Os nomes dos botões voltaram.** Na 3.50 o rótulo era a primeira coisa a
+  sair quando faltava espaço — e, com a tela em 125%, a barra virava uma
+  fileira de símbolos. Agora o nome é a **última** coisa a sair: primeiro
+  some a régua do zoom, depois o texto fica mais junto, depois os botões
+  − e +; só numa janela menor que qualquer tamanho de uso é que sobra só o
+  ícone. Com nomes a barra pede 1118px e agora cabe em 830.
+- **O "fit" virou ícone.** Era a única palavra em inglês da barra. A função é
+  a mesma (ajustar à janela) e o nome aparece ao passar o mouse.
+
 ## 3.50
 
 - **A barra do preview cabe numa linha só.** Ela quebrava em duas fileiras e o

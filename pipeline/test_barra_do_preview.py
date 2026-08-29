@@ -50,14 +50,29 @@ def test_a_barra_nao_quebra_em_duas_fileiras():
     assert "flex-wrap: nowrap" in bloco, bloco[:300]
 
 
-def test_quando_falta_espaco_o_rotulo_recolhe_em_vez_de_estourar():
-    """Sem isto, "uma linha só" viraria botão cortado na ponta direita."""
+def test_o_nome_do_botao_e_a_ultima_coisa_a_sair():
+    """A 3.50 recolheu o rótulo primeiro e, na tela do usuário (125% de
+    escala, coluna de ~906px), a barra virou uma fileira de símbolos. Ele
+    mandou print: "coloca os nomes ali, não apenas os ícones". Medido:
+    com nomes a barra pede 1118px; escondendo régua do zoom, apertando o
+    texto e tirando − + , ela cabe em 830 — ainda com os nomes."""
     assert "function ajustarBarraNumaLinha" in JS
     assert "ResizeObserver" in JS
-    # os dois níveis medidos: rótulo fora, depois duração total e régua
-    assert "compacta" in JS and "minima" in JS
-    assert ".transport.compacta .cover-btn > span:not([id])" in CSS
-    assert ".transport.minima #zoom" in CSS
+    i = JS.index("NIVEIS_DA_BARRA = [")
+    escada = JS[i:i + 120]
+    assert escada.index("sem-regua") < escada.index("apertada") <         escada.index("sem-zoom") < escada.index("so-icone"), escada
+    # o rótulo só some no último degrau
+    assert ".transport.so-icone .cover-btn > span:not([id])" in CSS
+    for cedo in ("sem-regua", "apertada", "sem-zoom"):
+        assert f".transport.{cedo} .cover-btn > span" not in CSS, cedo
+
+
+def test_o_botao_de_ajustar_nao_diz_mais_fit():
+    """Única palavra em inglês da barra, e ainda custava largura."""
+    assert ">fit<" not in HTML
+    i = HTML.index('id="btnFit"')
+    assert 'aria-label="Ajustar à janela"' in HTML[i:i + 160]
+    assert "$('btnFit').innerHTML = ICON.fit" in JS
 
 
 def test_quem_observa_e_a_coluna_nao_a_barra():

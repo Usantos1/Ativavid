@@ -3454,9 +3454,20 @@ body.styles-wide .setup-actions .btn.primary {
 
 /* --- barra apertada: fica o icone, sai o rotulo (ver ajustarBarraNumaLinha)
  * O `title` de cada botao continua dizendo o que ele faz. */
-.transport.compacta .cover-btn { padding: 7px 9px; }
-.transport.compacta .cover-btn > span:not([id]) { display: none; }
-.transport.compacta #btnZoom100 { padding: 5px 6px; }
-.transport.minima #timeTotal,
-.transport.minima .time.dim,
-.transport.minima #zoom { display: none; }
+/* 1 — a regua do zoom e a duracao total. Ctrl+scroll continua dando zoom. */
+.transport.sem-regua #timeTotal,
+.transport.sem-regua .time.dim,
+.transport.sem-regua #zoom { display: none; }
+/* 2 — o mesmo texto, so que mais junto. */
+.transport.apertada .cover-btn,
+.transport.apertada .btn.mark { padding: 6px 7px; gap: 4px; font-size: 11px; }
+.transport.apertada { gap: 6px; }
+/* 3 — os botoes de zoom, menos o "100%" (que tambem volta ao natural). */
+.transport.sem-zoom #btnZoomOut,
+.transport.sem-zoom #btnZoomIn,
+.transport.sem-zoom #btnFit { display: none; }
+/* 4 — ultimo recurso: o nome sai, o titulo no hover continua explicando. */
+.transport.so-icone .cover-btn > span:not([id]) { display: none; }
+.transport.so-icone #markText { display: none; }
+#btnFit { padding: 6px 8px; }
+#btnFit svg { width: 14px; height: 14px; display: block; }

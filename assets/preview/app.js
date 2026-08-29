@@ -50,6 +50,8 @@ const tooltip = $('tooltip');
 
 // minimal solid icons (design-system consistent — no emoji)
 const ICON = {
+  // "ajustar a janela": as duas bordas e a seta abrindo entre elas
+  fit: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3v10M14 3v10"/><path d="M4.8 8h6.4"/><path d="M6.6 6.2L4.8 8l1.8 1.8M9.4 6.2L11.2 8l-1.8 1.8"/></svg>',
   play: '<svg viewBox="0 0 16 16"><path d="M4 2.2v11.6c0 .9 1 1.5 1.8 1L15 9.2c.8-.5.8-1.7 0-2.2L5.8 1.2C5 .7 4 1.3 4 2.2z"/></svg>',
   pause: '<svg viewBox="0 0 16 16"><rect x="3" y="2" width="3.6" height="12" rx="1"/><rect x="9.4" y="2" width="3.6" height="12" rx="1"/></svg>',
   vol: '<svg viewBox="0 0 16 16"><path d="M2 6v4h2.8L9 13.4V2.6L4.8 6H2z"/><path d="M11 5.2a3.4 3.4 0 0 1 0 5.6V9.4a2 2 0 0 0 0-2.8V5.2z"/></svg>',
@@ -2756,17 +2758,16 @@ function renderNotes() {
  * em que a barra pisca entre os dois estados.
  * Quem e observado e a COLUNA, nao a barra: mexer na classe da barra
  * mudaria o tamanho dela e chamaria o observador de novo, em laco. */
+const NIVEIS_DA_BARRA = ['sem-regua', 'apertada', 'sem-zoom', 'so-icone'];
+
 function ajustarBarraNumaLinha() {
   const bar = $('transportBar');
   if (!bar) return;
-  bar.classList.remove('compacta', 'minima');
-  if (bar.scrollWidth <= bar.clientWidth + 1) return;
-  // 1o: sai o rotulo dos botoes secundarios, fica o icone
-  bar.classList.add('compacta');
-  if (bar.scrollWidth <= bar.clientWidth + 1) return;
-  // 2o (janela bem estreita): saem a duracao total e a regua do zoom.
-  // Os botoes − 100% + e fit ficam — e Ctrl+scroll continua dando zoom.
-  bar.classList.add('minima');
+  bar.classList.remove(...NIVEIS_DA_BARRA);
+  for (const nivel of NIVEIS_DA_BARRA) {
+    if (bar.scrollWidth <= bar.clientWidth + 1) return;
+    bar.classList.add(nivel);
+  }
 }
 
 if (typeof ResizeObserver !== 'undefined') {
@@ -5557,6 +5558,7 @@ $('noteText').addEventListener('keydown', (e) => {
   if (e.key === 'Escape') { e.stopPropagation(); closeNoteEditor(); }
   if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); $('noteOk').click(); }
 });
+$('btnFit').innerHTML = ICON.fit;
 $('btnFit').addEventListener('click', () => { fitZoom(); renderAll(); });
 if ($('btnZoomOut')) $('btnZoomOut').addEventListener('click', () => bumpZoom(1 / 1.4));
 $('btnZoom100').addEventListener('click', () => setZoom100());
