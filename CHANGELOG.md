@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.37
+
+- **Render não morre mais porque a máquina estava ocupada.** Havia um prazo
+  de 30 segundos por quadro: se um único quadro demorasse mais que isso —
+  o que acontece quando você está com o Chrome e outros programas abertos e
+  o vídeo é 4K — o render inteiro era perdido, depois de minutos de
+  trabalho. O prazo subiu para 2 minutos por quadro. Render saudável não
+  fica mais lento com isso; só muda quanto tempo o app espera antes de
+  desistir.
+
 ## 3.36
 
 - **Trecho que pede um pedaço que o arquivo não tem agora é barrado — e

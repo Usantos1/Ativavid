@@ -4379,6 +4379,16 @@ def run(
                         # Sai yuv420p/tv/bt709 direto (medido) — o encode_final
                         # detecta e copia o stream em vez de reencodar o vídeo.
                         "--color-space=bt709",
+                        # Prazo por quadro. O padrao do Remotion (30s) mata o
+                        # render inteiro quando UM quadro demora — e demorar e
+                        # normal aqui: a maquina do usuario edita video com o
+                        # Chrome e o Cursor abertos, e o quadro pede decode de
+                        # 4K HDR. Visto em 29/08: render de 3,5min morreu em
+                        # "delayRender ... nao liberado apos 28000ms" buscando
+                        # UM quadro do cut.mp4, com a maquina ocupada. Teto
+                        # alto nao atrasa render saudavel: ele so muda quanto
+                        # tempo se espera antes de desistir.
+                        "--timeout=120000",
                         *flags,
                     ),
                     cwd=remotion,
