@@ -1,5 +1,18 @@
 # Changelog
 
+## 3.25
+
+- **O aviso de pausa volta a aparecer em "Edição leve" e "Vídeo completo".**
+  A 3.17 calou os dois junto com "Sem cortes", mas esses dois modos cortam
+  silêncio — neles, pausa sobrando é defeito do corte, e era justamente o
+  único defeito que a Edição leve consegue produzir.
+- **A IA local de música espera a vez.** Com dois vídeos processando ao
+  mesmo tempo, o segundo desistia cedo e pegava trilha da biblioteca; agora
+  ele aguarda o motor liberar (uma composição leva ~90s).
+- **O card diz por que a trilha veio da biblioteca** — "outro vídeo ocupou o
+  motor", "a máquina não tinha folga de memória" ou "o motor não está
+  instalado" — em vez de acusar uma falha genérica da IA.
+
 ## 3.24
 
 Uma auditoria completa das versões 3.15 a 3.23 encontrou defeitos que os

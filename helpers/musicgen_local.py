@@ -135,9 +135,12 @@ def main() -> None:
               flush=True)
         sys.exit(6)
     if outro_motor_rodando():
-        print("[musicgen] outro vídeo já está compondo — um motor por vez",
+        # Codigo PROPRIO (7): "so falta a vez" e diferente de "a maquina nao
+        # tem folga" — quem espera a vez quase sempre consegue compor logo
+        # depois, e o chamador pode ser mais paciente sem arriscar nada.
+        print("[musicgen] outro vídeo já está compondo — esperando a vez",
               flush=True)
-        sys.exit(6)
+        sys.exit(7)
 
     gerador = Path(__file__).resolve().parent / "musicgen_gerar.py"
     try:

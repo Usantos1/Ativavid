@@ -217,6 +217,8 @@ def write_timing(edit_dir: Path) -> dict:
         payload["musicaFonte"] = _RENDER_META["musicaFonte"]
     if _RENDER_META.get("nivelAjustado"):
         payload["nivelAjustado"] = _RENDER_META["nivelAjustado"]
+    if _RENDER_META.get("musicaMotorRecusa"):
+        payload["musicaMotorRecusa"] = _RENDER_META["musicaMotorRecusa"]
     if _RENDER_META.get("endCardSkip"):
         payload["endCardSkip"] = _RENDER_META["endCardSkip"]
     try:
@@ -1805,6 +1807,13 @@ _MOTOR_RECUSADO = 6
 # transcricao solta a RAM — mesma cobertura (~2 min), musica pronta antes.
 _MOTOR_TENTATIVAS = 10
 _MOTOR_ESPERA_S = 12
+# Esperar a VEZ (outro video compondo) compensa mais que esperar folga de
+# memoria: uma composicao leva ~90s, entao com dois videos em paralelo o
+# segundo so precisa de paciencia. Medido em 28/08 nos 10 ultimos renders:
+# metade das trilhas caiu para a biblioteca, e a fila do motor e a
+# explicacao mais provavel.
+_MOTOR_NA_FILA = 7        # codigo do launcher para "outro esta compondo"
+_MOTOR_TENTATIVAS_FILA = 22
 
 
 def _tentar_musicgen(destino: Path, vibe: str, length_sec: int,
@@ -1813,7 +1822,7 @@ def _tentar_musicgen(destino: Path, vibe: str, length_sec: int,
     mesmo vibe que o ElevenLabs receberia. So roda onde o venv MotorMusica
     existe (launcher sai com 3 na hora em maquina sem ele); medido em
     26/08 na RTX 3050: 30s compostos em 67s, pico 1,9GB de VRAM."""
-    for volta in range(max(1, tentativas)):
+    for volta in range(max(1, tentativas, _MOTOR_TENTATIVAS_FILA)):
         try:
             proc = _helper("musicgen_local.py", vibe, "-o", str(destino),
                            "--length-sec", str(int(length_sec)),
@@ -1824,10 +1833,24 @@ def _tentar_musicgen(destino: Path, vibe: str, length_sec: int,
                   "sem ele", flush=True)
             return False
         if destino.exists() and destino.stat().st_size > 1000:
+            _RENDER_META.pop("musicaMotorRecusa", None)
             return True
-        if proc.returncode != _MOTOR_RECUSADO or volta == tentativas - 1:
+        codigo = proc.returncode
+        if codigo not in (_MOTOR_RECUSADO, _MOTOR_NA_FILA):
+            _RENDER_META["musicaMotorRecusa"] = (
+                "o motor local não está instalado" if codigo == 3 else
+                "o motor passou do tempo" if codigo == 5 else
+                f"o motor falhou (código {codigo})")
             return False
-        time.sleep(_MOTOR_ESPERA_S)  # maquina apertada: espera a fase pesada
+        teto = (max(tentativas, _MOTOR_TENTATIVAS_FILA)
+                if codigo == _MOTOR_NA_FILA else tentativas)
+        if volta >= teto - 1:
+            _RENDER_META["musicaMotorRecusa"] = (
+                "outro vídeo ocupou o motor até o fim da espera"
+                if codigo == _MOTOR_NA_FILA
+                else "a máquina não tinha folga de memória")
+            return False
+        time.sleep(_MOTOR_ESPERA_S)
     return False
 
 

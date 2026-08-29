@@ -107,3 +107,72 @@ def test_o_lock_sai_no_finally():
     i = s.find("finally:")
     assert i > 0, "sem finally, um erro deixaria o lock preso 10 min"
     assert "LOCK.unlink" in s[i:i + 400]
+
+
+# ---------- esperar a VEZ vale mais voltas que esperar folga (3.25) ----------
+
+def test_fila_do_motor_tem_codigo_proprio():
+    """"Outro video compondo" e "a maquina nao tem folga" pedem respostas
+    diferentes: a vez chega em ~90s; a folga pode nao chegar."""
+    s = LAUNCHER.read_text(encoding="utf-8")
+    i = s.index("if outro_motor_rodando():")
+    assert "sys.exit(7)" in s[i:i + 400], "a fila ainda sai com o codigo de recusa"
+
+
+def test_na_fila_o_pipeline_espera_mais(monkeypatch, tmp_path):
+    import pipeline.run_fast as rf
+    voltas = []
+
+    class R:  # noqa: N801
+        returncode = rf._MOTOR_NA_FILA
+
+    monkeypatch.setattr(rf, "_helper",
+                        lambda *a, **k: (voltas.append(1), R())[1])
+    monkeypatch.setattr(rf.time, "sleep", lambda s: None)
+    rf._RENDER_META.clear()
+    assert rf._tentar_musicgen(tmp_path / "t.mp3", "vibe", 30,
+                               tmp_path / "Projetos", tentativas=2) is False
+    assert len(voltas) == rf._MOTOR_TENTATIVAS_FILA, len(voltas)
+    assert "ocupou o motor" in rf._RENDER_META.get("musicaMotorRecusa", "")
+
+
+def test_sem_folga_de_memoria_nao_insiste_alem_do_pedido(monkeypatch, tmp_path):
+    import pipeline.run_fast as rf
+    voltas = []
+
+    class R:  # noqa: N801
+        returncode = rf._MOTOR_RECUSADO
+
+    monkeypatch.setattr(rf, "_helper",
+                        lambda *a, **k: (voltas.append(1), R())[1])
+    monkeypatch.setattr(rf.time, "sleep", lambda s: None)
+    rf._RENDER_META.clear()
+    rf._tentar_musicgen(tmp_path / "t.mp3", "vibe", 30, tmp_path / "Projetos",
+                        tentativas=3)
+    assert len(voltas) == 3, len(voltas)
+    assert "folga de memória" in rf._RENDER_META.get("musicaMotorRecusa", "")
+
+
+def test_o_motivo_da_recusa_chega_ao_card(tmp_path):
+    """"Veio da biblioteca" sozinho mandava procurar defeito onde so havia
+    fila — o card passa a dizer o motivo que o pipeline gravou."""
+    import json
+    from app.jobs_view import _aviso_de_trilha
+    (tmp_path / "timing.json").write_text(json.dumps({
+        "musicaFonte": "viral--mg-20260828.mp3",
+        "musicaMotorRecusa": "outro vídeo ocupou o motor até o fim da espera",
+    }), encoding="utf-8")
+    job = {}
+    _aviso_de_trilha(job, tmp_path)
+    assert "outro vídeo ocupou o motor" in job["trilhaNota"], job["trilhaNota"]
+
+
+def test_sem_motivo_gravado_a_nota_nao_acusa_falha(tmp_path):
+    import json
+    from app.jobs_view import _aviso_de_trilha
+    (tmp_path / "timing.json").write_text(
+        json.dumps({"musicaFonte": "viral--x.mp3"}), encoding="utf-8")
+    job = {}
+    _aviso_de_trilha(job, tmp_path)
+    assert "não compôs" in job["trilhaNota"]
+    assert "falhou" not in job["trilhaNota"]

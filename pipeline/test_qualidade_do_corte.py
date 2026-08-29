@@ -109,11 +109,17 @@ def test_modo_sem_cortes_nao_reclama_de_pausa(tmp_path):
     assert "corteQualidade" not in _projeto(tmp_path, "intact")
 
 
-def test_video_completo_e_edicao_leve_tambem_preservam(tmp_path):
+def test_video_completo_e_edicao_leve_AVISAM(tmp_path):
+    """A 3.17 calou estes dois junto com o "Sem cortes" — mas os dois
+    CORTAM silencio ("Edicao leve" corta so silencio/erro; "Video completo"
+    tira silencio e repeticao). Neles a pausa sobrando e defeito do corte,
+    que e o que este aviso existe para contar: calar ali escondia o unico
+    defeito que a Edicao leve consegue produzir."""
     for modo in ("complete", "light"):
         d = tmp_path / modo
         d.mkdir()
-        assert "corteQualidade" not in _projeto(d, modo), modo
+        job = _projeto(d, modo)
+        assert "pausas somando" in job.get("corteQualidade", ""), modo
 
 
 def test_modo_que_corta_continua_avisando(tmp_path):

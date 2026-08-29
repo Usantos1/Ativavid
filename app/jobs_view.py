@@ -121,9 +121,12 @@ def _aviso_de_trilha(job: dict, edit: Path) -> None:
             # quebra linha e estourava a largura do card. O que importa e o
             # clima da faixa, que e o prefixo antes do "--".
             clima = _CLIMA_LABEL.get(fonte.split("--", 1)[0].lower(), "")
+            # POR QUE veio da biblioteca importa: "a IA falhou" mandava
+            # procurar defeito onde so havia fila (outro video compondo).
+            motivo = str(t.get("musicaMotorRecusa") or "").strip()
             job["trilhaNota"] = (
-                f"Trilha da sua biblioteca{f' ({clima})' if clima else ''} "
-                "— a IA de música falhou nesta geração")
+                f"Trilha da sua biblioteca{f' ({clima})' if clima else ''} — "
+                + (motivo or "a IA de música não compôs nesta geração"))
     ec = str(t.get("endCardSkip") or "").strip()
     if ec:
         job["cardFinalNota"] = f"Card final desligado: {ec[:110]}"
@@ -172,7 +175,13 @@ def _qualidade_do_corte(job: dict, edit: Path) -> None:
         ).get("editingIntent") or "").lower()
     except (OSError, json.JSONDecodeError):
         modo = ""
-    preserva = modo in ("intact", "complete", "light")
+    # SO "Sem cortes" (intact) preserva as pausas: e o modo que nao passa
+    # tesoura nenhuma. "Edicao leve" corta exatamente silencio e erro, e
+    # "Video completo" tambem tira silencio e repeticao (ver os comentarios
+    # de app/editing_intent.py) — neles, pausa sobrando E defeito do corte,
+    # que e justamente o que este aviso existe para contar. A 3.17 calou os
+    # tres de uma vez porque o caso real que a motivou era intact.
+    preserva = modo == "intact"
     partes = []
     total = _num(d.get("silencioTotalS"))
     if not math.isfinite(total):
