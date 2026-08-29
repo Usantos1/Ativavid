@@ -1,5 +1,21 @@
 # Changelog
 
+## 3.35
+
+- **O take agora entra na hora da palavra que ele ilustra.** Antes o app
+  pegava as três palavras mais repetidas do vídeo inteiro e espalhava os
+  takes em fatias iguais — o take caía em qualquer lugar menos no momento
+  da piada. Agora ele procura, na fala, a palavra que está no nome do
+  arquivo e entra logo depois dela. Um take chamado
+  `humor--cavalo-patada.mp4` entra quando você diz "patada".
+- Quem manda é o **nome do arquivo**, não a categoria: a categoria diz o
+  papel do take (humor, meme, CTA) e serve para você achar na Biblioteca; o
+  nome diz o que o take mostra e é o que casa com a fala. Vale nomear
+  descrevendo: `cavalo-patada`, `celular-quebrado`, `cliente-feliz`.
+- Dois takes nunca entram colados (folga de 2,6s), e take que não casa com
+  nada continua entrando espaçado, como antes — o b-roll não some só porque
+  o nome não bateu.
+
 ## 3.34
 
 - **O b-roll estava procurando a sua biblioteca na pasta errada — e por isso

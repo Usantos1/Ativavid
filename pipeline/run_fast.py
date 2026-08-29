@@ -2193,6 +2193,78 @@ def build_edit_data(cut: Path, preset: dict, hook: list[str], duration: float, f
     return ed
 
 
+def _sem_acento(t: str) -> str:
+    import unicodedata
+    return "".join(c for c in unicodedata.normalize("NFD", (t or "").lower())
+                   if unicodedata.category(c) != "Mn")
+
+
+def _palavras_do_video(public: Path) -> list[tuple[str, float, float]]:
+    """Palavras com tempo NO VIDEO JA CORTADO (caption-cues.json).
+
+    E o unico relogio que serve para posicionar b-roll: a transcricao da
+    fonte fala do arquivo original, e o corte ja mudou tudo de lugar.
+    """
+    f = public / "caption-cues.json"
+    if not f.is_file():
+        return []
+    try:
+        dados = json.loads(f.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    cues = dados if isinstance(dados, list) else (dados.get("cues") or [])
+    fora: list[tuple[str, float, float]] = []
+    for c in cues:
+        for linha in (c.get("lines") or []):
+            for w in linha:
+                txt = _sem_acento(str(w.get("text") or "")).strip(" .,!?;:—-")
+                try:
+                    ini = float(w.get("fromMs") or 0) / 1000.0
+                    fim = float(w.get("toMs") or 0) / 1000.0
+                except (TypeError, ValueError):
+                    continue
+                if txt and fim > ini:
+                    fora.append((txt, ini, fim))
+    return fora
+
+
+def _palavras_do_take(nome: str) -> list[str]:
+    """O que o arquivo diz que o take MOSTRA.
+
+    "humor--cavalo-patada.mp4" -> ["cavalo", "patada"]. A categoria (antes
+    do `--`) fica de fora: ela diz o PAPEL do take, nao o conteudo, e
+    casar "humor" com a palavra "humor" da fala seria coincidencia.
+    """
+    import re
+    base = nome.rsplit(".", 1)[0]
+    if "--" in base:
+        base = base.split("--", 1)[1]
+    partes = re.split(r"[^0-9A-Za-zÀ-ÿ]+", base)
+    return [_sem_acento(x) for x in partes if len(x) >= 4]
+
+
+def _momento_do_take(nome: str, palavras: list[tuple[str, float, float]],
+                     depois_de: float) -> float | None:
+    """Quando a palavra que o take ilustra e dita (segundo do video).
+
+    Pedido do usuario: "quando der uma patada, usar um take de cavalo dando
+    patada". Antes o b-roll usava as 3 palavras mais frequentes do texto
+    INTEIRO e espalhava os inserts em fatias iguais — o take caia em
+    qualquer lugar menos no momento da piada.
+    """
+    chaves = _palavras_do_take(nome)
+    if not chaves:
+        return None
+    for txt, ini, fim in palavras:
+        if fim < depois_de:
+            continue
+        for k in chaves:
+            if txt == k or (len(k) >= 5 and (txt.startswith(k) or k.startswith(txt))
+                            and abs(len(txt) - len(k)) <= 3):
+                return fim
+    return None
+
+
 def _attach_auto_broll(edit_data: dict, public: Path, preset: dict, transcript: str, duration: float) -> dict:
     """Auto image cards / B-roll.
 
@@ -2230,7 +2302,12 @@ def _attach_auto_broll(edit_data: dict, public: Path, preset: dict, transcript: 
         # consertou na trilha; aqui tinha ficado).
         # public = <Projetos>/<projeto>/edit/remotion/public
         raiz_projetos = public.parents[3] if len(public.parents) > 3 else None
-        local = pick_for_query(query, projects_root=raiz_projetos, limit=2)
+        from auto_broll import _mode_count  # type: ignore
+        # Pede MAIS candidatos do que vai usar: quem entra e quem casa com
+        # um momento da fala, nao quem aparece primeiro na pasta.
+        quantos = max(1, _mode_count(mode))
+        local = pick_for_query(query, projects_root=raiz_projetos,
+                               limit=max(8, quantos * 3))
         if local:
             # pilula estica endSec para o vídeo inteiro — para o espaço de b-roll
             # vale a janela clássica de gancho, nunca a persistência da barra.
@@ -2240,8 +2317,36 @@ def _attach_auto_broll(edit_data: dict, public: Path, preset: dict, transcript: 
             pexels_dir = public / "pexels"
             pexels_dir.mkdir(parents=True, exist_ok=True)
             usable = max(0.0, duration - hook_end - end_card - 0.4)
-            slot = usable / max(1, len(local))
-            for i, it in enumerate(local):
+            palavras = _palavras_do_video(public)
+            # 1o passo: quem casa com uma palavra dita entra NAQUELE momento;
+            # o resto (ou tudo, se nao houver legenda) volta para as fatias
+            # iguais de antes.
+            escolhidos: list[tuple[dict, float | None]] = []
+            usados = hook_end + 0.3
+            for it in local:
+                if len(escolhidos) >= quantos:
+                    break
+                quando = _momento_do_take(it.get("name") or "", palavras,
+                                          usados) if palavras else None
+                if quando is None:
+                    continue
+                escolhidos.append((it, quando + 0.08))
+                usados = quando + 2.6      # dois takes colados viram ruido
+            if len(escolhidos) < quantos:
+                for it in local:
+                    if len(escolhidos) >= quantos:
+                        break
+                    if any(x is it for x, _ in escolhidos):
+                        continue
+                    escolhidos.append((it, None))
+            sem_momento = [1 for _, q in escolhidos if q is None]
+            slot = usable / max(1, len(sem_momento) or len(escolhidos))
+            if palavras and any(q is not None for _, q in escolhidos):
+                casados = sum(1 for _, q in escolhidos if q is not None)
+                print(f"[broll] {casados} take(s) no momento da fala",
+                      flush=True)
+            i_livre = 0
+            for it, quando in escolhidos:
                 src_path = Path(it["path"])
                 if not src_path.exists():
                     continue
@@ -2257,7 +2362,11 @@ def _attach_auto_broll(edit_data: dict, public: Path, preset: dict, transcript: 
                 video = ext in (".mp4", ".mov", ".webm")
                 name = f"lib-{src_path.stem[:30]}{ext}"
                 shutil.copy2(src_path, pexels_dir / name)
-                start = hook_end + 0.3 + i * slot
+                if quando is None:
+                    start = hook_end + 0.3 + i_livre * slot
+                    i_livre += 1
+                else:
+                    start = max(hook_end + 0.3, quando)
                 # take de video respira mais que uma foto: a acao precisa
                 # acontecer (uma patada em 1,0s nao le)
                 teto = 2.5 if video else 1.6
@@ -2267,7 +2376,8 @@ def _attach_auto_broll(edit_data: dict, public: Path, preset: dict, transcript: 
                     continue
                 inserts.append({"src": f"pexels/{name}", "start": round(start, 3),
                                 "end": round(end, 3), "local": True,
-                                "kind": "video" if video else "image"})
+                                "kind": "video" if video else "image",
+                                "noMomento": quando is not None})
             if inserts:
                 edit_data["inserts"] = inserts
                 print(f"[broll] biblioteca local · {len(inserts)} insert(s)", flush=True)
