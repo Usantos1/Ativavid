@@ -1466,6 +1466,13 @@ function openUpdateDialog(lic) {
       .filter(Boolean)
       .join(" · ") || "";
   }
+  // O que muda na versao nova, direto do changelog da release.
+  const notas = $("#updDlgNotas");
+  if (notas) {
+    const lista = Array.isArray(upd.notes) ? upd.notes : [];
+    notas.innerHTML = lista.map((x) => `<li>${escapeHtml(x)}</li>`).join("");
+    notas.hidden = !lista.length;
+  }
   const later = $("#btnUpdLater");
   if (later) later.hidden = !!upd.force;
   // Esconder o "Agora não" nao bastava: o Esc fecha showModal() do mesmo jeito,

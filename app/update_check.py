@@ -175,6 +175,10 @@ def check_update(*, channel: str = "stable") -> dict[str, Any]:
             data = json.loads(resp.read().decode("utf-8"))
         tag = str(data.get("tag_name") or "").lstrip("v")
         result["latestVersion"] = tag or None
+        # O QUE muda na versao nova. O corpo da release ja vinha na resposta
+        # e era jogado fora: "Nova versao disponivel" nao diz se vale o
+        # clique. Tres linhas bastam — quem quiser o resto abre o release.
+        result["notes"] = _resumo_das_notas(data.get("body"))
         result["releaseUrl"] = data.get("html_url")
         result["source"] = "github"
         # Asset .exe se existir (instalador)
@@ -208,6 +212,39 @@ def check_update(*, channel: str = "stable") -> dict[str, Any]:
             result["message"] = f"Não consegui checar online ({e}). Versão local: {cur}."
             result["tooltip"] = f"v{cur} · offline · clique para tentar"
     return result
+
+
+def _resumo_das_notas(corpo: object, limite: int = 3) -> list[str]:
+    """As primeiras linhas de lista do changelog, sem marcacao."""
+    import re as _re
+
+    texto = str(corpo or "")
+    fora: list[str] = []
+    atual = ""
+
+    def _fechar() -> None:
+        nonlocal atual
+        limpa = _re.sub(r"[*_`]+", "", atual).strip()
+        limpa = _re.sub(r"\s+", " ", limpa)
+        if limpa:
+            fora.append(limpa[:200])
+        atual = ""
+
+    for linha in texto.splitlines():
+        nua = linha.strip()
+        if nua.startswith(("- ", "* ")):
+            _fechar()
+            atual = nua[2:]
+        elif atual and nua and not nua.startswith("#"):
+            # o changelog quebra a linha no meio da frase: sem juntar, a
+            # nota chegava cortada ("O aviso de versao nova agora aparece")
+            atual += " " + nua
+        elif not nua:
+            _fechar()
+        if len(fora) >= limite:
+            return fora[:limite]
+    _fechar()
+    return fora[:limite]
 
 
 def open_url(url: str) -> dict[str, Any]:

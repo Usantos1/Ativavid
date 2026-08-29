@@ -3460,6 +3460,13 @@ body.home-working .hero-import .hero-inner { padding: 10px 0; }
   background: rgba(255, 255, 255, .08); color: var(--muted, #9aa0a6);
 }
 .lib-item-cat { padding: 0 10px 9px; }
+.dlg-notas {
+  margin: 10px 0 4px; padding: 10px 12px 10px 26px; border-radius: 10px;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  font-size: 12.5px; line-height: 1.5; max-width: 46ch;
+}
+.dlg-notas li { margin: 2px 0; }
+
 .lib-alerta {
   display: block; margin-top: 10px; padding: 9px 12px; border-radius: 10px;
   border: 1px solid color-mix(in srgb, var(--accent, #ff3b5c) 45%, transparent);

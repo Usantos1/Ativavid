@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.44
+
+- **O aviso de versão nova agora mostra o que muda.** Em vez de só "Nova
+  versão disponível", a janela lista as primeiras novidades da versão —
+  assim dá para decidir se vale atualizar agora sem abrir o site.
+- Esta é a versão para testar o atualizador de um clique da 3.43: estando na
+  3.43, atualizar para cá não passa por nenhuma tela do instalador.
+
 ## 3.43
 
 - **Atualizar virou um clique.** O aviso de versão nova agora aparece
