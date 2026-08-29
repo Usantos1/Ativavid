@@ -1,5 +1,24 @@
 # Changelog
 
+## 3.34
+
+- **O b-roll estava procurando a sua biblioteca na pasta errada — e por isso
+  nunca usava nada dela.** Seus projetos ficam no E: (a pasta do C: é só um
+  atalho), mas a busca de imagens olhava uma pasta Biblioteca vazia no C:.
+  Nenhuma foto sua jamais foi encontrada. Agora ele lê a biblioteca de
+  verdade. (Era o mesmo engano que a versão 3.03 corrigiu na trilha e que
+  tinha ficado aqui.)
+- **Os vídeos da Biblioteca agora entram no vídeo como take de apoio.** Antes
+  o app aceitava só foto: o clipe era descartado sem avisar. Agora o take
+  toca no cartão, sem som (para não passar por cima da sua fala), com até
+  2,5s de janela — foto continua com 1,6s, porque uma ação precisa de tempo
+  para ser lida.
+- Nesses vídeos o app usa o renderizador antigo, que é mais lento, e diz isso
+  no log em vez de entregar o vídeo sem o take.
+- **Para usar isso**: em Estilos, o b-roll precisa estar em "Sempre" ou
+  "Raro". No padrão ("Quando necessário") com o layout limpo, o app não
+  insere nada — é o talking-head limpo de sempre.
+
 ## 3.33
 
 - **Só um som toca por vez na Biblioteca.** Dar play numa trilha pausa a que

@@ -365,6 +365,14 @@ def motivo_nao_suportado(edit_data: dict[str, Any], public: Path) -> str | None:
         return "emoji nas legendas (Segoe UI Emoji ausente)"
     if int(edit_data.get("width") or 1080) != 1080 or int(edit_data.get("height") or 1920) != 1920:
         return f"resolucao {edit_data.get('width')}x{edit_data.get('height')}"
+    for it in edit_data.get("inserts") or []:
+        # Take de VIDEO no b-roll: o InsertCard do template toca ele com
+        # OffthreadVideo e este motor so sabe desenhar imagem parada.
+        # Recusar custa tempo de render; fingir que sabe custa o take.
+        alvo = str(it.get("src") or "").lower()
+        if (str(it.get("kind") or "").lower() == "video"
+                or alvo.endswith((".mp4", ".mov", ".webm"))):
+            return "insert de video (take da Biblioteca)"
     for tr in edit_data.get("transitions") or []:
         if tr.get("type") != "flash":
             return f"transicao '{tr.get('type')}'"

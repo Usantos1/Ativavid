@@ -541,6 +541,8 @@ const CARD_W = 780;
 const CARD_H = 500;
 const CARD_TOP = 90;
 
+const ehVideo = (s: string) => /\.(mp4|mov|webm)$/i.test(s);
+
 const InsertCard: React.FC<{src: string; totalFrames: number}> = ({src, totalFrames}) => {
   const frame = useCurrentFrame();
   const enter = interpolate(frame, [0, 9], [0, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic)});
@@ -554,7 +556,14 @@ const InsertCard: React.FC<{src: string; totalFrames: number}> = ({src, totalFra
     <AbsoluteFill style={{justifyContent: 'flex-start', alignItems: 'center'}}>
       <Sfx src="whoosh.mp3" />
       <div style={{width: CARD_W, height: CARD_H, marginTop: CARD_TOP, borderRadius: 28, overflow: 'hidden', opacity, scale: String(scale), translate: `0px ${y}px`, boxShadow: '0 18px 50px rgba(0,0,0,0.45)'}}>
-        <Img src={staticFile(src)} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
+        {/* Take de video da Biblioteca entra igual a uma foto. Mudo de
+            proposito: o som do take passaria por cima da fala. */}
+        {ehVideo(src) ? (
+          <OffthreadVideo src={staticFile(src)} muted
+            style={{width: '100%', height: '100%', objectFit: 'cover'}} />
+        ) : (
+          <Img src={staticFile(src)} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
+        )}
       </div>
     </AbsoluteFill>
   );

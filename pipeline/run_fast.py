@@ -2222,7 +2222,15 @@ def _attach_auto_broll(edit_data: dict, public: Path, preset: dict, transcript: 
 
         kws = keywords_from_text(transcript, limit=3)
         query = " ".join(kws) if kws else "produto"
-        local = pick_for_query(query, limit=2)
+        # A biblioteca REAL vem da raiz dos projetos, nunca do Path.home():
+        # os Projetos do usuario sao um junction C:\...\ATIVAVID\Projetos ->
+        # E:\ATIVAVID\Projetos, e no C: sobrou uma pasta Biblioteca VAZIA.
+        # O b-roll lia essa pasta morta — as fotos e os takes dele estavam
+        # todos no E: e nunca eram achados (mesmo defeito que a 3.03
+        # consertou na trilha; aqui tinha ficado).
+        # public = <Projetos>/<projeto>/edit/remotion/public
+        raiz_projetos = public.parents[3] if len(public.parents) > 3 else None
+        local = pick_for_query(query, projects_root=raiz_projetos, limit=2)
         if local:
             # pilula estica endSec para o vídeo inteiro — para o espaço de b-roll
             # vale a janela clássica de gancho, nunca a persistência da barra.
@@ -2235,19 +2243,31 @@ def _attach_auto_broll(edit_data: dict, public: Path, preset: dict, transcript: 
             slot = usable / max(1, len(local))
             for i, it in enumerate(local):
                 src_path = Path(it["path"])
-                if not src_path.exists() or it.get("kind") != "image":
+                if not src_path.exists():
                     continue
-                name = f"lib-{src_path.stem[:30]}.jpg"
-                dest = pexels_dir / name
-                if src_path.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp"):
-                    shutil.copy2(src_path, dest)
-                else:
+                ext = src_path.suffix.lower()
+                # O TAKE de video entra igual a foto. Antes o codigo exigia
+                # `kind == "image"` e o clipe da biblioteca era descartado
+                # calado — o usuario guardava take de reacao/humor e nada
+                # aparecia no video. Quem desenha e o InsertCard, que agora
+                # escolhe Img ou OffthreadVideo pela extensao.
+                if ext not in (".jpg", ".jpeg", ".png", ".webp",
+                               ".mp4", ".mov", ".webm"):
                     continue
+                video = ext in (".mp4", ".mov", ".webm")
+                name = f"lib-{src_path.stem[:30]}{ext}"
+                shutil.copy2(src_path, pexels_dir / name)
                 start = hook_end + 0.3 + i * slot
-                end = min(duration - end_card - 0.2, start + min(1.6, max(1.0, slot * 0.55)))
+                # take de video respira mais que uma foto: a acao precisa
+                # acontecer (uma patada em 1,0s nao le)
+                teto = 2.5 if video else 1.6
+                end = min(duration - end_card - 0.2,
+                          start + min(teto, max(1.0, slot * 0.55)))
                 if end <= start + 0.6:
                     continue
-                inserts.append({"src": f"pexels/{name}", "start": round(start, 3), "end": round(end, 3), "local": True})
+                inserts.append({"src": f"pexels/{name}", "start": round(start, 3),
+                                "end": round(end, 3), "local": True,
+                                "kind": "video" if video else "image"})
             if inserts:
                 edit_data["inserts"] = inserts
                 print(f"[broll] biblioteca local · {len(inserts)} insert(s)", flush=True)
