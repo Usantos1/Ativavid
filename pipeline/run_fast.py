@@ -790,6 +790,11 @@ def midia_do_editor(edit_dir: Path, public: Path, edit_data: dict) -> None:
         return
     inseridos, perdidos = 0, []
     inserts = list(edit_data.get("inserts") or [])
+    # Ja aplicado? Esta funcao roda no render completo E no "Aplicar
+    # alteracoes"; sem esta marca, aplicar duas vezes poria a mesma imagem
+    # duas vezes no video.
+    ja = {(str(x.get("src") or ""), round(float(x.get("start") or 0), 2))
+          for x in inserts if isinstance(x, dict)}
     for it in (ed.get("newInserts") or []):
         if not isinstance(it, dict):
             continue
@@ -806,6 +811,8 @@ def midia_do_editor(edit_dir: Path, public: Path, edit_data: dict) -> None:
             continue
         if fim - ini < 0.2:
             fim = ini + 2.5
+        if (src, round(ini, 2)) in ja:
+            continue
         inserts.append({"src": src, "start": round(ini, 3),
                         "end": round(fim, 3),
                         "credit": str(it.get("credit") or ""),
@@ -817,6 +824,8 @@ def midia_do_editor(edit_dir: Path, public: Path, edit_data: dict) -> None:
         edit_data["inserts"] = inserts
 
     emojis = list(edit_data.get("emojis") or [])
+    ja_emoji = {(str(x.get("char") or ""), round(float(x.get("atSec") or 0), 2))
+                for x in emojis if isinstance(x, dict)}
     n_emoji = 0
     for it in (ed.get("emojis") or []):
         if not isinstance(it, dict):
@@ -833,6 +842,8 @@ def midia_do_editor(edit_dir: Path, public: Path, edit_data: dict) -> None:
                 return float(it.get(k, padrao))
             except (TypeError, ValueError):
                 return padrao
+        if (ch[:8], round(em, 2)) in ja_emoji:
+            continue
         emojis.append({
             "char": ch[:8], "atSec": round(em, 3),
             "durSec": round(max(0.2, _f("durSec", 1.6)), 3),
@@ -845,6 +856,8 @@ def midia_do_editor(edit_dir: Path, public: Path, edit_data: dict) -> None:
         edit_data["emojis"] = emojis
 
     sons = list(edit_data.get("sfxManual") or [])
+    ja_som = {(str(x.get("src") or ""), round(float(x.get("atSec") or 0), 2))
+              for x in sons if isinstance(x, dict)}
     n_som = 0
     for it in (ed.get("sfxManual") or []):
         if not isinstance(it, dict):
@@ -863,6 +876,8 @@ def midia_do_editor(edit_dir: Path, public: Path, edit_data: dict) -> None:
             vol = float(vol) if vol is not None else 0.5
         except (TypeError, ValueError):
             vol = 0.5
+        if (nome, round(max(0.0, em), 2)) in ja_som:
+            continue
         sons.append({"src": nome, "atSec": round(max(0.0, em), 3),
                      "volume": max(0.0, min(1.5, vol))})
         n_som += 1

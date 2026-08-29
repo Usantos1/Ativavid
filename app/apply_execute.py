@@ -588,6 +588,19 @@ def _render_visual_real(
     fps = float(edit_data.get("fps") or 30)
     _touch_edit_data_duration(edit, duration, fps)
     edit_data = _read_json(edit_data_path(edit), edit_data)
+    # Midia posta na mao no editor (imagem, efeito, emoji). Sem isto ela so
+    # entrava no render COMPLETO, e "Aplicar alteracoes" — que e o botao que
+    # o usuario usa depois de mexer na linha do tempo — devolvia o video sem
+    # ela, calado. A funcao e idempotente: aplicar de novo nao duplica.
+    try:
+        from pipeline.run_fast import midia_do_editor
+
+        antes = json.dumps(edit_data, sort_keys=True)
+        midia_do_editor(edit, public, edit_data)
+        if json.dumps(edit_data, sort_keys=True) != antes:
+            _write_json(edit_data_path(edit), edit_data)
+    except Exception as e:  # noqa: BLE001 - midia nao pode derrubar o apply
+        print(f"[warn] mídia do editor: {e}", flush=True)
 
     swaps: list[tuple[Path, Path]] = []
     caps_tmp: Path | None = None

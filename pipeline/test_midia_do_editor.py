@@ -111,3 +111,31 @@ def test_o_template_toca_o_mesmo():
     assert "const SfxManual" in tsx and "<SfxManual />" in tsx
     i = tsx.index("const SfxManual")
     assert "sfxManual" in tsx[i:i + 400]
+
+
+def test_aplicar_duas_vezes_nao_duplica(tmp_path):
+    """Esta função roda no render completo E no "Aplicar alterações". Sem
+    marca de "já apliquei", o segundo clique poria a mesma imagem duas
+    vezes no vídeo — e o usuário veria a foto piscar repetida."""
+    edit, public = _projeto(tmp_path, {
+        "newInserts": [{"src": "biblioteca/foto.jpg", "start": 3.0, "end": 5.5}],
+        "sfxManual": [{"src": "risada.mp3", "atSec": 4.2}],
+        "emojis": [{"char": "🔥", "atSec": 2.0}]})
+    ed: dict = {}
+    for _ in range(3):
+        midia_do_editor(edit, public, ed)
+    assert len(ed["inserts"]) == 1
+    assert len(ed["sfxManual"]) == 1
+    assert len(ed["emojis"]) == 1
+
+
+def test_o_aplicar_alteracoes_tambem_le_a_midia():
+    """"Aplicar alterações" é o botão que o usuário usa depois de mexer na
+    linha do tempo. Se só o render completo lesse a mídia, ele aplicaria e
+    receberia o vídeo sem ela, calado."""
+    fonte = (Path(__file__).resolve().parent.parent / "app"
+             / "apply_execute.py").read_text(encoding="utf-8")
+    assert "from pipeline.run_fast import midia_do_editor" in fonte
+    i = fonte.index("midia_do_editor(edit, public, edit_data)")
+    # e grava, senão o render (que lê o arquivo) não veria a mudança
+    assert "_write_json(edit_data_path(edit), edit_data)" in fonte[i:i + 400]

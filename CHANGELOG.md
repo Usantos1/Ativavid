@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.62
+
+- **"Aplicar alterações" passou a levar a mídia que você põe à mão.** Imagem,
+  efeito sonoro e emoji só entravam no vídeo pelo "Refazer a Fase 2"; quem
+  aplicasse — que é o botão natural depois de mexer na linha do tempo —
+  recebia o vídeo sem eles, sem aviso.
+- Aplicar duas vezes **não duplica**: a mesma imagem não entra de novo.
+
 ## 3.61
 
 - **Emoji na mão.** Leve a agulha ao ponto, abra o seletor de mídia e vá na
