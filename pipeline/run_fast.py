@@ -228,6 +228,8 @@ def write_timing(edit_dir: Path) -> dict:
         payload["trechosForaDaFonte"] = _RENDER_META["trechosForaDaFonte"]
     if _RENDER_META.get("fonteSemAcento"):
         payload["fonteSemAcento"] = _RENDER_META["fonteSemAcento"]
+    if _RENDER_META.get("midiaDoEditorPerdida"):
+        payload["midiaDoEditorPerdida"] = _RENDER_META["midiaDoEditorPerdida"]
     try:
         (edit_dir / "timing.json").write_text(
             json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8"
@@ -763,6 +765,89 @@ def parse_speech_regions(stdout: str) -> list[tuple[float, float]]:
         if b > a:
             regions.append((a, b))
     return regions
+
+
+def _preview_edits(edit_dir: Path) -> dict:
+    """O arquivo que a tela grava ao salvar. {} quando nao existe/ilegivel."""
+    try:
+        d = json.loads((edit_dir / "preview_edits.json")
+                       .read_text(encoding="utf-8-sig"))
+        return d if isinstance(d, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def midia_do_editor(edit_dir: Path, public: Path, edit_data: dict) -> None:
+    """Imagem, clipe e efeito sonoro que o USUARIO poe na mao no editor.
+
+    Roda depois do b-roll de proposito: em "limpa" o automatico e
+    descartado, mas o que foi pedido na mao fica. Arquivo que nao esta em
+    public/ nao entra e sai avisado — sumir calado foi o defeito que este
+    caminho tinha.
+    """
+    ed = (_preview_edits(edit_dir).get("editData") or {})
+    if not isinstance(ed, dict):
+        return
+    inseridos, perdidos = 0, []
+    inserts = list(edit_data.get("inserts") or [])
+    for it in (ed.get("newInserts") or []):
+        if not isinstance(it, dict):
+            continue
+        src = str(it.get("src") or "").replace("\\", "/").lstrip("/")
+        if not src or ".." in src.split("/"):
+            continue
+        if not (public / src).exists():
+            perdidos.append(src)
+            continue
+        try:
+            ini = float(it.get("start"))
+            fim = float(it.get("end"))
+        except (TypeError, ValueError):
+            continue
+        if fim - ini < 0.2:
+            fim = ini + 2.5
+        inserts.append({"src": src, "start": round(ini, 3),
+                        "end": round(fim, 3),
+                        "credit": str(it.get("credit") or ""),
+                        # `manual`: o corte nao pode descartar isto como
+                        # descarta o b-roll automatico do estilo limpa
+                        "manual": True})
+        inseridos += 1
+    if inseridos:
+        edit_data["inserts"] = inserts
+
+    sons = list(edit_data.get("sfxManual") or [])
+    n_som = 0
+    for it in (ed.get("sfxManual") or []):
+        if not isinstance(it, dict):
+            continue
+        nome = str(it.get("src") or "").replace("\\", "/").split("/")[-1]
+        if not nome or not (public / "sfx" / nome).exists():
+            if nome:
+                perdidos.append(f"sfx/{nome}")
+            continue
+        try:
+            em = float(it.get("atSec"))
+        except (TypeError, ValueError):
+            continue
+        vol = it.get("volume")
+        try:
+            vol = float(vol) if vol is not None else 0.5
+        except (TypeError, ValueError):
+            vol = 0.5
+        sons.append({"src": nome, "atSec": round(max(0.0, em), 3),
+                     "volume": max(0.0, min(1.5, vol))})
+        n_som += 1
+    if n_som:
+        edit_data["sfxManual"] = sons
+    if inseridos or n_som:
+        print(f"[editor] mídia posta na mão: {inseridos} insert(s), "
+              f"{n_som} efeito(s)", flush=True)
+    if perdidos:
+        # Ficha, nao so log: o usuario pediu e nao veio.
+        _RENDER_META["midiaDoEditorPerdida"] = perdidos[:6]
+        print(f"[editor] ATENCAO: não achei em public/ — {', '.join(perdidos[:6])}",
+              flush=True)
 
 
 def load_preview_edit_ranges(edit_dir: Path, source_key: str) -> list[dict] | None:
@@ -4332,6 +4417,7 @@ def run(
         flush=True,
     )
     _attach_brand_font_file(edit_data, public)
+    midia_do_editor(edit_dir, public, edit_data)
     (public / "edit-data.json").write_text(
         json.dumps(edit_data, indent=2, ensure_ascii=False), encoding="utf-8"
     )

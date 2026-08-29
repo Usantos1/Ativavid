@@ -1,0 +1,113 @@
+# -*- coding: utf-8 -*-
+"""A mídia posta à mão no editor tem de chegar ao vídeo.
+
+A tela sabia inserir imagem na agulha desde sempre e guardava o pedido em
+`preview_edits.json` (`editData.newInserts`). O pipeline **nunca leu esse
+campo**: `load_preview_edit_ranges` só pega `edl.ranges`, e o "refazer" só
+recoloca o job na fila. O pedido era salvo e sumia no render — calado, do
+mesmo jeito que o `videoLayout` sumia no motor rápido.
+
+Ninguém tinha percebido porque, até a 3.58, o botão de mídia só funcionava
+na aba Visual: 0 de 186 projetos entregues tinham uma imagem posta à mão.
+
+Três regras que o teste segura:
+
+* sobrevive ao estilo "limpa" — quadro cheio dispensa b-roll AUTOMÁTICO, e
+  o que o usuário pediu na mão não é automático;
+* arquivo que não está na pasta do projeto NÃO entra, e é apontado na
+  ficha (sumir calado é o defeito que este caminho tinha);
+* `..` no caminho é recusado — o campo vem da tela e aponta um arquivo.
+"""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from pipeline.run_fast import _RENDER_META, midia_do_editor
+
+
+def _projeto(tmp_path: Path, editor: dict) -> tuple[Path, Path]:
+    edit = tmp_path / "edit"
+    public = edit / "remotion" / "public"
+    (public / "sfx").mkdir(parents=True)
+    (public / "biblioteca").mkdir()
+    (public / "biblioteca" / "foto.jpg").write_bytes(b"x")
+    (public / "sfx" / "risada.mp3").write_bytes(b"x")
+    (edit / "preview_edits.json").write_text(
+        json.dumps({"editData": editor}), encoding="utf-8")
+    return edit, public
+
+
+def test_a_imagem_posta_na_mao_entra_no_render(tmp_path):
+    edit, public = _projeto(tmp_path, {"newInserts": [
+        {"src": "biblioteca/foto.jpg", "start": 3.0, "end": 5.5, "credit": "eu"}]})
+    ed: dict = {"inserts": []}
+    midia_do_editor(edit, public, ed)
+    assert len(ed["inserts"]) == 1
+    it = ed["inserts"][0]
+    assert it["src"] == "biblioteca/foto.jpg" and it["start"] == 3.0
+    # marcada como do usuário: o corte não pode descartá-la como descarta o
+    # b-roll automático do estilo limpa
+    assert it["manual"] is True
+
+
+def test_o_efeito_sonoro_posto_na_mao_entra(tmp_path):
+    edit, public = _projeto(tmp_path, {"sfxManual": [
+        {"src": "risada.mp3", "atSec": 4.2, "volume": 0.6}]})
+    ed: dict = {}
+    midia_do_editor(edit, public, ed)
+    assert ed["sfxManual"] == [{"src": "risada.mp3", "atSec": 4.2, "volume": 0.6}]
+
+
+def test_arquivo_que_nao_esta_na_pasta_e_apontado(tmp_path):
+    _RENDER_META.pop("midiaDoEditorPerdida", None)
+    edit, public = _projeto(tmp_path, {
+        "newInserts": [{"src": "biblioteca/sumiu.jpg", "start": 8, "end": 9}],
+        "sfxManual": [{"src": "nao-existe.mp3", "atSec": 5}]})
+    ed: dict = {"inserts": []}
+    midia_do_editor(edit, public, ed)
+    assert not ed["inserts"] and "sfxManual" not in ed
+    perdida = _RENDER_META.get("midiaDoEditorPerdida") or []
+    assert len(perdida) == 2
+
+
+def test_caminho_para_fora_da_pasta_e_recusado(tmp_path):
+    edit, public = _projeto(tmp_path, {"newInserts": [
+        {"src": "../fora.jpg", "start": 1, "end": 2}]})
+    ed: dict = {"inserts": []}
+    midia_do_editor(edit, public, ed)
+    assert not ed["inserts"]
+
+
+def test_duracao_absurda_vira_a_janela_padrao(tmp_path):
+    edit, public = _projeto(tmp_path, {"newInserts": [
+        {"src": "biblioteca/foto.jpg", "start": 3.0, "end": 3.01}]})
+    ed: dict = {"inserts": []}
+    midia_do_editor(edit, public, ed)
+    assert ed["inserts"][0]["end"] == 5.5
+
+
+def test_o_motor_rapido_toca_o_efeito_da_mao(tmp_path):
+    """Contrato dos dois motores: mesmo arquivo, mesmo segundo."""
+    from app.render_proprio import Renderizador
+
+    public = tmp_path / "public"
+    (public / "sfx").mkdir(parents=True)
+    ed = {"width": 1080, "height": 1920, "fps": 30, "durationSec": 3,
+          "hook": {"enabled": False}, "captions": {"enabled": False},
+          "endCard": {"enabled": False}, "soundtrack": {"enabled": False},
+          "transitions": [], "inserts": [], "behind": [],
+          "camera": {"enabled": False, "zooms": [1]},
+          "sfxManual": [{"src": "pop.mp3", "atSec": 1.5, "volume": 0.4},
+                        {"src": "", "atSec": 2.0},
+                        {"src": "x.mp3", "atSec": -1}]}
+    r = Renderizador(public, ed, frames=90, fps=30)
+    assert r.eventos_sfx == [("pop.mp3", 1.5, 0.4)]
+
+
+def test_o_template_toca_o_mesmo():
+    repo = Path(__file__).resolve().parent.parent
+    tsx = (repo / "assets" / "shortform" / "src" / "Main.tsx").read_text(encoding="utf-8")
+    assert "const SfxManual" in tsx and "<SfxManual />" in tsx
+    i = tsx.index("const SfxManual")
+    assert "sfxManual" in tsx[i:i + 400]

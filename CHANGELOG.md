@@ -1,5 +1,18 @@
 # Changelog
 
+## 3.59
+
+- **A mídia que você põe à mão agora aparece no vídeo.** A tela sabia inserir
+  imagem na agulha desde sempre e guardava o pedido — mas o app nunca lia esse
+  pedido na hora de renderizar: a imagem era salva e sumia, calada. Agora ela
+  entra no vídeo, e sobrevive ao estilo "Limpo" (quadro cheio dispensa b-roll
+  *automático*; o que você pediu não é automático).
+- **Se um arquivo não estiver na pasta do projeto, o card avisa** em vez de
+  deixar o vídeo sair sem ele.
+- **Efeito sonoro na mão: o motor já toca.** Os dois motores passaram a
+  entender um efeito posto num instante (`sfxManual`). Falta o seletor na
+  tela — vem na próxima.
+
 ## 3.58
 
 - **A manchete se edita pela linha do tempo.** Clique no bloco **GANCHO** e o

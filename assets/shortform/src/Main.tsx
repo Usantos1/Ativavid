@@ -1432,11 +1432,34 @@ const HookIntro: React.FC = () => {
   );
 };
 
+// ============ EFEITOS POSTOS NA MAO ==========================================
+// `sfxManual` vem do editor: o usuario escolheu um som da Biblioteca e um
+// instante. Gemeo do laco em `render_proprio.Renderizador.__init__` — os dois
+// tocam o mesmo arquivo de public/sfx no mesmo segundo.
+const SfxManual: React.FC = () => {
+  const {fps} = useVideoConfig();
+  const itens = ((D as any).sfxManual ?? []) as {src: string; atSec: number; volume?: number}[];
+  if (!itens.length) return null;
+  return (
+    <>
+      {itens.map((s, i) => {
+        const from = Math.max(0, Math.round((Number(s.atSec) || 0) * fps));
+        return (
+          <Sequence key={i} from={from} layout="none">
+            <Sfx src={String(s.src)} volume={Number(s.volume ?? 0.5)} />
+          </Sequence>
+        );
+      })}
+    </>
+  );
+};
+
 // ============ MAIN ============
 export const Main: React.FC = () => {
   return (
     <AbsoluteFill style={{backgroundColor: 'black'}}>
       {D.soundtrack.enabled ? <Soundtrack /> : null}
+      <SfxManual />
       <VideoStage />
       <BehindSubject />
       <LayoutScrim />

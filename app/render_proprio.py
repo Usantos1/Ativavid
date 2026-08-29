@@ -566,6 +566,22 @@ class Renderizador:
         self.cues = d if isinstance(d, list) else (d.get("cues") or [])
         self.camadas: list[Camada] = []
         self.eventos_sfx: list[tuple[str, float, float]] = []   # (arquivo, seg, volume)
+        # Efeitos postos na mao pelo usuario. Entram junto dos automaticos:
+        # o mixer nao distingue quem pediu o som, so quando ele toca.
+        for ev in (edit_data.get("sfxManual") or []):
+            try:
+                nome = str((ev or {}).get("src") or "").strip()
+                em = float((ev or {}).get("atSec"))
+            except (TypeError, ValueError):
+                continue
+            if not nome or em < 0:
+                continue
+            vol = (ev or {}).get("volume")
+            try:
+                vol = float(vol) if vol is not None else 0.5
+            except (TypeError, ValueError):
+                vol = 0.5
+            self.eventos_sfx.append((nome, em, max(0.0, min(1.5, vol))))
         # Tinta do layout (degrade/vinheta/cinema/borda): estatica, entao ela
         # e o FUNDO do buffer — ver `_gravar_video`.
         self.fundo = camada_do_layout(

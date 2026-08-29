@@ -130,6 +130,13 @@ def _aviso_de_trilha(job: dict, edit: Path) -> None:
     ec = str(t.get("endCardSkip") or "").strip()
     if ec:
         job["cardFinalNota"] = f"Card final desligado: {ec[:110]}"
+    perdida = t.get("midiaDoEditorPerdida") or []
+    if isinstance(perdida, list) and perdida:
+        # O usuario POS na mao e nao veio: sem esta linha ele procura o
+        # proprio erro num arquivo que o render nao achou.
+        job["midiaNota"] = (
+            f"{len(perdida)} mídia(s) que você inseriu não estavam na pasta do "
+            f"projeto e ficaram de fora: {', '.join(str(x)[:28] for x in perdida[:3])}")
     ft = t.get("fonteSemAcento") or {}
     if isinstance(ft, dict) and ft.get("faltam"):
         # Sai no VIDEO, na frente do cliente dele: a fonte desenha o simbolo

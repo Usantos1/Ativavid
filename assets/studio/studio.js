@@ -530,6 +530,7 @@ function fichaHtml(j) {
   // defeito e mudo: o video sai pronto com pedaco sem som e travado.
   if (j.corteNota) linhas.push(["Corte", j.corteNota]);
   if (j.fonteNota) linhas.push(["Fonte", j.fonteNota]);
+  if (j.midiaNota) linhas.push(["Mídia", j.midiaNota]);
   if (j.trilhaNota) linhas.push(["Trilha", j.trilhaNota]);
   if (j.cardFinalNota) linhas.push(["Marca", j.cardFinalNota]);
   // A nota do corte (gancho, clareza, ritmo, CTA) e a dica mais util dela.
@@ -589,6 +590,7 @@ function cardSig(j, opts) {
     j.corteQualidade || "",
     j.corteNota || "",
     j.fonteNota || "",
+    j.midiaNota || "",
     j.cardFinalNota || "",
     versoesDaFonte(j).length,
     j.stage, j.message, j.reason || "", j.localPoster || j.thumbUrl, links.editor, links.estilo, links.final,
