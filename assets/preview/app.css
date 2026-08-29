@@ -1361,18 +1361,22 @@ kbd {
 .rhythm-preset.on { border-color: var(--interact); }
 #autoControls.is-collapsed { display: none; }
 
-/* Ênfase belongs directly under destaque (both are "the one accented thing"
-   for a style), círculo under legenda (both are stacked-only) — a plain
-   swatch card is short enough that pairing two per column reads as one
-   related unit instead of the row just trailing off into empty space. A
-   plain grid item like any other .setup-group — auto-fit already collapses
-   it to the full row on its own once the pane is too narrow for 2 columns,
-   no breakpoint needed, and its two cards just stay stacked either way. */
-.setup-col {
-  display: flex;
-  flex-direction: column;
+/* As quatro cores lado a lado. 206px e a largura real de um cartao (dois
+   seletores de 32px + o campo do hexadecimal + o respiro do cartao); com
+   auto-fit a fileira vira 2x2 sozinha quando a janela nao da os 876px, sem
+   media query nenhuma. */
+.cores-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(206px, 1fr));
   gap: 12px;
-  min-width: 0;
+}
+/* Num cartao estreito a nota ("aplicada", "ver enfase") disputava a linha
+   com o titulo e quebrava "COR DA / HEADLINE" no meio. Uma embaixo da
+   outra, o titulo tem o cartao inteiro e cabe numa linha so. */
+.cores-grid .group-head {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
 }
 
 .setup-head { padding: 0 2px; }
@@ -2876,15 +2880,6 @@ body.hub-embed .setup-footer,
 body.hub-embed .style-block {
   grid-column: 1 / -1;
 }
-/* Cores: 4 cards na mesma linha, largura total */
-html.hub-embed .setup-col,
-body.hub-embed .setup-col {
-  display: contents;
-}
-html.hub-embed .setup-col > .setup-group,
-body.hub-embed .setup-col > .setup-group {
-  min-width: 0;
-}
 
 /* Tipo de edição — só 3 opções: fila compacta de mocks 9:16 (não cards gigantes) */
 html.hub-embed #optEdit.opt-grid,
@@ -3189,12 +3184,6 @@ body.styles-wide .setup-group {
 body.styles-wide .setup-group--wide,
 body.styles-wide .setup-footer {
   grid-column: 1 / -1;
-}
-body.styles-wide .setup-col {
-  display: contents;
-}
-body.styles-wide .setup-col > .setup-group {
-  min-width: 0;
 }
 body.styles-wide #optEdit.opt-grid {
   display: flex;

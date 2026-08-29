@@ -228,14 +228,14 @@
         <div id="optEdit" class="opt-grid"></div>
       </div>
 
-      <!-- Stacked in one column on purpose: ênfase is the headline accent's
-           sibling (both paint the "one marked thing" per style), so it sits
-           directly under Cor de destaque instead of floating in its own row
-           wherever the grid's auto-flow happened to land it. -->
-      <div class="setup-col">
-        <!-- Ahead of the headline styles: the accent is what they paint with,
-             so it is set first and the headline preview group below reacts
-             to it. -->
+      <!-- As quatro cores numa fileira. Cada cartao e pequeno de verdade
+           (dois seletores de 32px e o hexadecimal): quatro cabem em 876px,
+           e abaixo disso a propria grade quebra em duas fileiras de dois,
+           sem breakpoint. Antes cada um ocupava a largura inteira do bloco
+           — quatro faixas com uma bolinha no canto. -->
+      <div class="cores-grid">
+        <!-- Antes dos estilos de headline: o destaque e a tinta com que
+             eles pintam. -->
         <div class="setup-group">
           <div class="group-head">
             <span class="group-title">Cor da headline</span>
@@ -244,11 +244,10 @@
           <div id="optAccent" class="swatches"></div>
         </div>
 
-        <!-- The ONE accented element per style, distinct from the base legenda
-             colour in the column beside this one: stacked's serif line,
-             scatter's highlighted word. Karaoke and the static styles have no
-             separate emphasis concept, so this note says so instead of doing
-             nothing silently. -->
+        <!-- O UNICO elemento realcado de cada estilo, diferente da cor base
+             da legenda ao lado: a linha serifada do stacked, a palavra
+             realcada do scatter. Karaoke e os estaticos nao tem esse
+             conceito — a nota diz isso em vez de nao fazer nada calado. -->
         <div class="setup-group">
           <div class="group-head">
             <span class="group-title">Cor de ênfase</span>
@@ -256,17 +255,9 @@
           </div>
           <div id="optEmphasisAccent" class="swatches"></div>
         </div>
-      </div>
 
-      <!-- Same pairing logic: círculo is stacked-only, same as the legenda
-           colour beside it is the base text of the SAME styles. -->
-      <div class="setup-col">
-        <!-- Independent from the headline's accent above — a project can want
-             a red headline marker and white karaoke text, or the same colour
-             on both. This is the BASE text colour: karaoke's whole line, and
-             the three static styles. Stacked/scatter's body text is
-             deliberately not tied to this — see ênfase in the column beside
-             this one. -->
+        <!-- Independente do destaque da headline: da para querer marcador
+             vermelho e karaoke branco. Esta e a cor BASE do texto. -->
         <div class="setup-group">
           <div class="group-head">
             <span class="group-title">Cor da legenda</span>
@@ -275,23 +266,15 @@
           <div id="optCaptionAccent" class="swatches"></div>
         </div>
 
-        <!-- Stacked-only: the hand-drawn pencil circle around a solo emphasis
-             word. A third, independent pick — a project can circle in green
-             while the serif line beside this reads red. No live demo here
-             (the mockup does not animate the SVG scratch); the pick still
-             saves and reaches Fase 2 like the other two. -->
+        <!-- So no stacked: o circulo a mao em volta da palavra realcada.
+             Terceira escolha independente — da para circular de verde com a
+             linha serifada ao lado em vermelho. -->
         <div class="setup-group">
           <div class="group-head">
-            <span class="group-title">Cor do círculo riscado</span>
+            <span class="group-title">Cor do círculo</span>
             <span class="group-note" id="circleAccentNote"></span>
           </div>
           <div id="optCircleAccent" class="swatches"></div>
-          <label class="auto-field" style="margin-top:8px;max-width:280px">Traço da ênfase
-            <select id="optEmphStyle">
-              <option value="circle">Círculo riscado</option>
-              <option value="marker">Marca-texto (pinta o fundo)</option>
-            </select>
-          </label>
         </div>
       </div>
 
@@ -324,6 +307,15 @@
       <div class="setup-group setup-group--wide">
         <div class="group-head"><span class="group-title">Estilo de legenda</span></div>
         <div id="optCaptions" class="opt-grid"></div>
+        <!-- Aqui, e nao junto das cores: quem recebe o risco e a palavra
+             realcada da LEGENDA. Dentro do cartao da cor, ele ainda deixava
+             aquele cartao mais alto que os outros tres da fileira. -->
+        <label class="auto-field" style="max-width:320px;margin-top:10px">Traço da ênfase
+          <select id="optEmphStyle">
+            <option value="circle">Círculo riscado</option>
+            <option value="marker">Marca-texto (pinta o fundo)</option>
+          </select>
+        </label>
       </div>
       </div>
       </details>

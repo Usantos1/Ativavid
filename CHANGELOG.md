@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.52
+
+- **As quatro cores do estilo ficam lado a lado.** Cor da headline, de ênfase,
+  da legenda e do círculo ocupavam uma faixa da tela inteira cada uma, com
+  duas bolinhas no canto e o resto vazio. Agora são quatro cartões numa
+  fileira só; em janela estreita a fileira vira 2x2 sozinha.
+- **"Traço da ênfase" foi para junto do Estilo de legenda.** É a palavra
+  realçada da legenda que recebe o risco — e, dentro do cartão de cor, ele
+  deixava aquele cartão mais alto que os outros três.
+
 ## 3.51
 
 - **Os nomes dos botões voltaram.** Na 3.50 o rótulo era a primeira coisa a
