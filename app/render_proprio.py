@@ -1389,7 +1389,9 @@ class Renderizador:
             if base_sombra is None:
                 base_sombra = ct
 
-        if vazar:
+        # `fundo`: sem caixa nao ha o que furar, e tirar a letra de um alpha
+        # vazio apagaria a headline inteira. Vazar so faz sentido com caixa.
+        if vazar and fundo is not None:
             # A letra nao e pintada: ela e TIRADA da caixa, e por esse buraco
             # aparece o video. A sombra sai da peca JA FURADA — com ela vindo
             # da caixa cheia, o borrao escuro ficava dentro do buraco e as
