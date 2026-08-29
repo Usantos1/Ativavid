@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.61
+
+- **Emoji na mão.** Leve a agulha ao ponto, abra o seletor de mídia e vá na
+  aba **Emoji**: o escolhido entra grande na tela e fica 1,6s. O bloco é
+  arrastável na linha do tempo, junto da manchete.
+- Ele **não** entra como foto de propósito: uma foto vira cartão no meio da
+  tela, e o emoji tem que ficar solto sobre o vídeo.
+
 ## 3.60
 
 - **Efeito sonoro na mão.** Leve a agulha até o ponto, abra o seletor de mídia,

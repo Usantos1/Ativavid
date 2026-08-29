@@ -3890,7 +3890,7 @@ function renderChips() {
 
   // TEXT and IMAGE get their own tracks — a headline and a photo are different
   // kinds of edit, and mixing them on one lane hid the images entirely.
-  const isText = (c) => c.kind === 'hook' || c.kind === 'word';
+  const isText = (c) => c.kind === 'hook' || c.kind === 'word' || c.kind === 'emoji';
   const isSfx = (c) => c.kind === 'sfx';
   const groups = [
     { icon: 'text', cls: 'teal', items: visiveis.filter(({ c }) => isText(c)) },
@@ -5119,17 +5119,22 @@ function toggleImgPicker(open) {
 }
 
 function setImgTab(tab) {
-  IMG_TAB = tab === 'library' ? 'library' : 'pexels';
+  IMG_TAB = (tab === 'library' || tab === 'emoji') ? tab : 'pexels';
   const pex = $('imgTabPexels');
   const lib = $('imgTabLibrary');
+  const emo = $('imgTabEmoji');
   if (pex) pex.classList.toggle('active', IMG_TAB === 'pexels');
   if (lib) lib.classList.toggle('active', IMG_TAB === 'library');
+  if (emo) emo.classList.toggle('active', IMG_TAB === 'emoji');
   $('imgPexelsPane')?.classList.toggle('hidden', IMG_TAB !== 'pexels');
-  $('imgLibraryPane')?.classList.toggle('hidden', IMG_TAB !== 'library');
+  $('imgLibraryPane')?.classList.toggle('hidden', IMG_TAB === 'pexels');
   $('imgHint').textContent = IMG_TAB === 'library'
     ? 'Arquivos da pasta Biblioteca — clique para inserir na agulha.'
-    : 'A imagem escolhida entra na trilha de inserts, na posição da agulha.';
+    : IMG_TAB === 'emoji'
+      ? 'O emoji entra grande na agulha e fica 1,6s — arraste o bloco para mover.'
+      : 'A imagem escolhida entra na trilha de inserts, na posição da agulha.';
   if (IMG_TAB === 'library') loadLibraryResults();
+  else if (IMG_TAB === 'emoji') mostrarEmojis();
   else $('imgResults').innerHTML = '';
 }
 
@@ -5151,6 +5156,7 @@ $('imgQuery').addEventListener('keydown', (e) => {
 });
 $('imgTabPexels')?.addEventListener('click', () => setImgTab('pexels'));
 $('imgTabLibrary')?.addEventListener('click', () => setImgTab('library'));
+$('imgTabEmoji')?.addEventListener('click', () => setImgTab('emoji'));
 $('imgLibRefresh')?.addEventListener('click', () => loadLibraryResults());
 $('imgLibFolder')?.addEventListener('click', async () => {
   try {
@@ -5189,6 +5195,45 @@ $('imgLibUpload')?.addEventListener('change', async (e) => {
     toast(err.message || 'Upload falhou', 3500);
   }
 });
+
+/* Emoji nao vem de arquivo: e um caractere. Por isso ele NAO entra como
+ * imagem — um insert vira cartao (780x500 no meio da tela) e o emoji
+ * ficaria enquadrado. Ele tem contrato proprio (`edit-data.emojis`), que os
+ * dois motores desenham solto no quadro.
+ * A lista e curta de proposito: um teclado inteiro de emoji vira vitrine,
+ * e o que serve num video de loja sao meia duzia deles. */
+const EMOJIS = ['🔥', '😱', '😂', '👀', '💰', '✅', '❌', '⚠️', '👉', '🎯',
+                '💡', '🚀', '❤️', '👏', '🤔', '📱', '🔧', '⭐', '🎁', '😮'];
+
+function mostrarEmojis() {
+  const box = $('imgResults');
+  box.innerHTML = '';
+  for (const e of EMOJIS) {
+    const card = el('button', 'img-card emoji-card', box);
+    card.textContent = e;
+    card.title = `Inserir ${e} na agulha`;
+    card.addEventListener('click', () => {
+      pushEmoji(e);
+      toggleImgPicker(false);
+      toast(`✓ ${e} na agulha — arraste na linha do tempo e Salvar`, 4000);
+    });
+  }
+}
+
+/* Bloco de emoji: o comeco e a duracao valem (ele fica na tela enquanto o
+ * bloco durar), diferente do efeito sonoro, onde so o instante importa. */
+function pushEmoji(ch) {
+  pushHistory();
+  const start = Math.max(0, renderedToDraft(video.currentTime));
+  const end = start + 1.6;
+  S.insertsDraft.push({
+    kind: 'emoji', label: ch, char: ch,
+    start, end, orig: { start, end },
+    isNew: true, x: 0.5, y: 0.34, size: 0.22,
+  });
+  renderAll(); refreshHeader();
+  scheduleAutosave();
+}
 
 async function loadLibraryResults() {
   const box = $('imgResults');
@@ -5573,6 +5618,12 @@ async function saveEditsAndReturnToQueue() {
       })),
       newInserts: S.insertsDraft.filter(keepNew).map((c) => ({
         src: c.src, credit: c.credit || '', start: +c.start.toFixed(3), end: +c.end.toFixed(3),
+      })),
+      // Emoji: comeco E duracao (ele fica na tela enquanto o bloco durar).
+      emojis: S.insertsDraft.filter((c) => c.kind === 'emoji' && c.char).map((c) => ({
+        char: c.char, atSec: +c.start.toFixed(3),
+        durSec: +(c.end - c.start).toFixed(3),
+        x: +(c.x ?? 0.5), y: +(c.y ?? 0.34), size: +(c.size ?? 0.22),
       })),
       // Efeito posto na mao: so o instante importa (o som toca inteiro).
       sfxManual: S.insertsDraft.filter((c) => c.kind === 'sfx' && c.src).map((c) => ({

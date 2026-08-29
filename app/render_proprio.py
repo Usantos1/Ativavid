@@ -834,8 +834,57 @@ class Renderizador:
         return out
 
     # ----------------------------------------------------------- montagem ----
+    def _montar_emojis(self) -> None:
+        """Emoji solto no quadro, posto na mao pelo usuario.
+
+        Gemeo do `EmojisManuais` do Main.tsx. Sem a Segoe UI Emoji o item e
+        pulado com aviso — desenhar um retangulo vazio seria pior.
+        """
+        itens = self.ed.get("emojis") or []
+        if not itens:
+            return
+        for it in itens:
+            if not isinstance(it, dict):
+                continue
+            ch = str(it.get("char") or "").strip()
+            if not ch:
+                continue
+            try:
+                em = max(0.0, float(it.get("atSec") or 0))
+                dur = float(it.get("durSec") or 1.6)
+                x = float(it.get("x", 0.5))
+                y = float(it.get("y", 0.34))
+                tam_frac = float(it.get("size", 0.22))
+            except (TypeError, ValueError):
+                continue
+            tam = max(24, int(round(tam_frac * self.w)))
+            fe = self._fonte_emoji(tam)
+            if fe is None:
+                print("[emoji] Segoe UI Emoji ausente — item pulado", flush=True)
+                continue
+            cx = fe.getbbox(ch)
+            larg = max(1, cx[2] - cx[0])
+            alt = max(1, cx[3] - cx[1])
+            img = Image.new("RGBA", (larg + 8, alt + 8), (0, 0, 0, 0))
+            ImageDraw.Draw(img).text((-cx[0] + 4, -cx[1] + 4), ch, font=fe,
+                                     embedded_color=True)
+            arr = np.asarray(img, dtype=np.float32) / 255.0
+            alpha = arr[..., 3].copy()
+            rgb = arr[..., :3] * 255.0
+            x0 = int(round(x * self.w - img.width / 2))
+            y0 = int(round(y * self.h - img.height / 2))
+            ini = int(round(em * self.fps))
+            fim = ini + max(1, int(round(max(0.2, dur) * self.fps)))
+            cam = Camada(inicio_f=ini, fim_f=fim, dur_f=float(fim - ini))
+            cam.palavras.append(Palavra(
+                x0, y0, rgb, alpha,
+                self._sombra_de(alpha, [(0, 8, 22, 0.45)], k=BLUR_K),
+                inicio_f=0, enter=6, sobe=0.0))
+            self.camadas.append(cam)
+
     def _montar_tudo(self) -> None:
         hook = self.ed.get("hook") or {}
+        self._montar_emojis()
         if hook.get("enabled"):
             self.camadas.append(self._montar_headline(hook))
             if self.sfx_on:

@@ -1454,12 +1454,52 @@ const SfxManual: React.FC = () => {
   );
 };
 
+// ============ EMOJI POSTO NA MAO =============================================
+// Gemeo de `Renderizador._montar_emojis`. x/y sao o CENTRO em fracao do quadro
+// e `size` a altura em fracao da LARGURA — as mesmas contas dos dois lados.
+const EmojisManuais: React.FC = () => {
+  const {fps, width} = useVideoConfig();
+  const itens = ((D as any).emojis ?? []) as {
+    char: string; atSec: number; durSec?: number;
+    x?: number; y?: number; size?: number;
+  }[];
+  if (!itens.length) return null;
+  return (
+    <>
+      {itens.map((e, i) => {
+        const from = Math.max(0, Math.round((Number(e.atSec) || 0) * fps));
+        const dur = Math.max(1, Math.round((Number(e.durSec ?? 1.6)) * fps));
+        return (
+          <Sequence key={i} from={from} durationInFrames={dur} layout="none">
+            <AbsoluteFill style={{pointerEvents: 'none'}}>
+              <div
+                style={{
+                  position: 'absolute',
+                  left: `${(e.x ?? 0.5) * 100}%`,
+                  top: `${(e.y ?? 0.34) * 100}%`,
+                  transform: 'translate(-50%, -50%)',
+                  fontSize: (e.size ?? 0.22) * width,
+                  lineHeight: 1,
+                  filter: 'drop-shadow(0 8px 22px rgba(0,0,0,0.45))',
+                }}
+              >
+                {String(e.char ?? '')}
+              </div>
+            </AbsoluteFill>
+          </Sequence>
+        );
+      })}
+    </>
+  );
+};
+
 // ============ MAIN ============
 export const Main: React.FC = () => {
   return (
     <AbsoluteFill style={{backgroundColor: 'black'}}>
       {D.soundtrack.enabled ? <Soundtrack /> : null}
       <SfxManual />
+      <EmojisManuais />
       <VideoStage />
       <BehindSubject />
       <LayoutScrim />

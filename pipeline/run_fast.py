@@ -816,6 +816,34 @@ def midia_do_editor(edit_dir: Path, public: Path, edit_data: dict) -> None:
     if inseridos:
         edit_data["inserts"] = inserts
 
+    emojis = list(edit_data.get("emojis") or [])
+    n_emoji = 0
+    for it in (ed.get("emojis") or []):
+        if not isinstance(it, dict):
+            continue
+        ch = str(it.get("char") or "").strip()
+        if not ch:
+            continue
+        try:
+            em = max(0.0, float(it.get("atSec")))
+        except (TypeError, ValueError):
+            continue
+        def _f(k, padrao):
+            try:
+                return float(it.get(k, padrao))
+            except (TypeError, ValueError):
+                return padrao
+        emojis.append({
+            "char": ch[:8], "atSec": round(em, 3),
+            "durSec": round(max(0.2, _f("durSec", 1.6)), 3),
+            "x": min(1.0, max(0.0, _f("x", 0.5))),
+            "y": min(1.0, max(0.0, _f("y", 0.34))),
+            "size": min(0.8, max(0.05, _f("size", 0.22))),
+        })
+        n_emoji += 1
+    if n_emoji:
+        edit_data["emojis"] = emojis
+
     sons = list(edit_data.get("sfxManual") or [])
     n_som = 0
     for it in (ed.get("sfxManual") or []):
@@ -840,9 +868,9 @@ def midia_do_editor(edit_dir: Path, public: Path, edit_data: dict) -> None:
         n_som += 1
     if n_som:
         edit_data["sfxManual"] = sons
-    if inseridos or n_som:
+    if inseridos or n_som or n_emoji:
         print(f"[editor] mídia posta na mão: {inseridos} insert(s), "
-              f"{n_som} efeito(s)", flush=True)
+              f"{n_som} efeito(s), {n_emoji} emoji(s)", flush=True)
     if perdidos:
         # Ficha, nao so log: o usuario pediu e nao veio.
         _RENDER_META["midiaDoEditorPerdida"] = perdidos[:6]

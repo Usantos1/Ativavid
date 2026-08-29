@@ -3543,3 +3543,13 @@ body.styles-wide .setup-actions .btn.primary {
   color: var(--hl-accent, #ff7713);
   background: color-mix(in srgb, var(--hl-accent, #ff7713) 12%, transparent);
 }
+
+/* Cartao de emoji: o proprio caractere, grande, sem miniatura nenhuma. */
+.img-card.emoji-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 34px;
+  line-height: 1;
+  min-height: 76px;
+}
