@@ -58,3 +58,29 @@ def test_os_dois_desenhos_usam_o_mesmo_caminho():
     assert s.count("_mascara_linha(sub") == 2
     assert "dr.line(desl" not in s.split("def _mascara_linha")[1].split(
         "def ", 1)[1], "sobrou desenho sem suavização fora do ajudante"
+
+
+def test_a_caixa_do_risco_segue_a_referencia_do_template():
+    """O SVG do traço é "120% x 150% da palavra" nos dois motores — mas o
+    que o navegador usa como altura da palavra é `tam * 0,80`, não a
+    entrelinha (`tam * 1,12`). Com a entrelinha o risco saía 36px mais
+    baixo e 33% mais alto que o desenho original (medido quadro a quadro
+    contra o Remotion em 29/08). Depois do conserto: topo igual, base
+    dentro de 4px."""
+    from pathlib import Path
+    import app.render_proprio as rp
+    assert abs(rp.TRACO_ALT_REF - 0.80) < 1e-6
+    s = (Path(__file__).resolve().parent.parent / "app" / "render_proprio.py"
+         ).read_text(encoding="utf-8")
+    i = s.index("alt_ref = tam * TRACO_ALT_REF")
+    trecho = s[i:i + 400]
+    assert "bw, bh = larg_f * larg_c, alt_f * alt_ref" in trecho, \
+        "a altura da caixa voltou a sair da entrelinha"
+    assert "bx, by = x_c + esq * larg_c, y_c + topo * alt_ref" in trecho
+
+
+def test_supersampling_suficiente_para_a_diagonal():
+    """3x deixava a diagonal do laço com 0,225 de meio-tom por núcleo
+    contra 0,241 do navegador; 6x dá 0,239."""
+    import app.render_proprio as rp
+    assert rp.TRACO_SS >= 6

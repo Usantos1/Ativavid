@@ -140,7 +140,11 @@ TRACO_PX = 9
 # aparece na tela. Medido em 29/08 contra o Remotion no MESMO quadro: o
 # navegador tinha 649 pixels de meio-tom na borda e o motor proprio ZERO.
 # Desenhar 3x maior e reduzir por media de area da a suavizacao que falta.
-TRACO_SS = 3
+# 6x (nao 3x): medido na DIAGONAL do laco, que e onde o degrau aparece —
+# com 3x a borda tinha 0,225 de meio-tom por nucleo contra 0,241 do
+# navegador; com 6x, 0,239. Custa 0,07s por video na montagem das camadas
+# e nada no desenho dos quadros.
+TRACO_SS = 6
 
 
 def _mascara_linha(pontos, lt: int, at: int, tx0: float, ty0: float,
@@ -168,6 +172,14 @@ MARCADOR_ALPHA = 0.85
 MARCADOR_CAIXA = (-0.07, -0.16, 1.14, 1.38)  # left/top/width/height do svg
 TRACO_SOMBRA = (0, 3, 8, 0.45)
 TRACO_CAIXA = (-0.10, -0.22, 1.20, 1.50)   # esq, topo, larg, alt (fração)
+# A caixa do SVG e "120% x 150% da palavra" nos dois motores — mas o que o
+# navegador chama de altura da palavra NAO e `tam * 1.12` (a entrelinha do
+# texto): medido em 29/08 comparando o traco verde quadro a quadro contra o
+# Remotion, a caixa dele e `tam * 0.80`. Usando a entrelinha, o risco saia
+# 36 px mais baixo e 33% mais alto que o desenho original — e como o motor
+# proprio desenha 18 de cada 20 videos, o circulo dos videos ficou maior que
+# o projetado desde que ele entrou (2.21, 20/08). A largura sempre bateu.
+TRACO_ALT_REF = 0.80
 
 HL_MIN = 40
 
@@ -1147,8 +1159,9 @@ class Renderizador:
             return leg
 
         esq, topo, larg_f, alt_f = TRACO_CAIXA
-        bx, by = x_c + esq * larg_c, y_c + topo * alt_c
-        bw, bh = larg_f * larg_c, alt_f * alt_c
+        alt_ref = tam * TRACO_ALT_REF        # ver TRACO_ALT_REF
+        bx, by = x_c + esq * larg_c, y_c + topo * alt_ref
+        bw, bh = larg_f * larg_c, alt_f * alt_ref
         pts = [(bx + x / TRACO_VB[0] * bw, by + y / TRACO_VB[1] * bh)
                for x, y in self._pontos_traco()]
         acum = [0.0]

@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.29
+
+- **O risco de ênfase voltou ao tamanho do desenho original.** Desde que o
+  renderizador próprio entrou (20/08), o círculo saía 33% mais alto e 36
+  pixels mais baixo que o projetado — e como ele desenha quase todos os
+  vídeos, era o que aparecia em quase todos. Medido quadro a quadro contra
+  o preview: agora o topo bate exatamente e a base fica dentro de 4 pixels.
+- **E ficou mais liso**: a suavização subiu para o nível do preview também
+  nas partes inclinadas do laço (0,239 contra 0,241 do navegador; antes do
+  conserto de ontem era zero).
+
 ## 3.28
 
 - **O traço de ênfase (o círculo e o marca-texto) saiu do serrilhado.** Ele
