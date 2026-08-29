@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.40
+
+- **As chaves passam a ser lidas de onde a tela de Integrações grava.**
+  Cinco partes do app (trilha da ElevenLabs, busca de imagens do Pexels e do
+  Google, b-roll e transcrição) procuravam a chave só numa pasta que, numa
+  instalação normal, nem existe — funcionavam apenas porque o app repassava
+  a chave ao abrir. Quando esse repasse falha, o sintoma é mudo: o vídeo sai
+  sem música e a ficha diz "geração falhou", mandando você conferir uma
+  chave que está certa.
+
 ## 3.39
 
 - **A Biblioteca avisa quando os takes guardados não vão entrar no vídeo.**

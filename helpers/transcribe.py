@@ -132,7 +132,15 @@ def load_api_key() -> str:
     only if it clearly holds a Groq key (starts with 'gsk_').
     """
     wanted = ("GROQ_API_KEY", "ELEVENLABS_API_KEY")
-    for candidate in [Path(__file__).resolve().parent.parent / ".env", Path(".env")]:
+    # ORDEM DO APP: `%USERPROFILE%/ATIVAVID/.env` primeiro. Numa
+    # instalacao normal o codigo fica em Program Files (so leitura) e a
+    # tela de Integracoes grava no do usuario; o .env ao lado do codigo
+    # so existe na maquina de quem desenvolve. Sem esta linha o helper
+    # depende de o app injetar a chave no ambiente, e quando isso falha
+    # o sintoma e MUDO (a 3.26 consertou o mesmo no Groq).
+    for candidate in [Path.home() / "ATIVAVID" / ".env",
+                      Path(__file__).resolve().parent.parent / ".env",
+                      Path(".env")]:
         if candidate.exists():
             found: dict[str, str] = {}
             for line in candidate.read_text(encoding="utf-8").splitlines():
@@ -159,7 +167,15 @@ def load_elevenlabs_key() -> str:
     if none is configured. Optional — only long sources use it, and they fall
     back to Groq when it's absent.
     """
-    for candidate in [Path(__file__).resolve().parent.parent / ".env", Path(".env")]:
+    # ORDEM DO APP: `%USERPROFILE%/ATIVAVID/.env` primeiro. Numa
+    # instalacao normal o codigo fica em Program Files (so leitura) e a
+    # tela de Integracoes grava no do usuario; o .env ao lado do codigo
+    # so existe na maquina de quem desenvolve. Sem esta linha o helper
+    # depende de o app injetar a chave no ambiente, e quando isso falha
+    # o sintoma e MUDO (a 3.26 consertou o mesmo no Groq).
+    for candidate in [Path.home() / "ATIVAVID" / ".env",
+                      Path(__file__).resolve().parent.parent / ".env",
+                      Path(".env")]:
         if candidate.exists():
             for line in candidate.read_text(encoding="utf-8").splitlines():
                 line = line.strip()
@@ -179,7 +195,15 @@ class ModelLoadError(RuntimeError):
 
 def _env_value(name: str) -> str:
     """Read one setting from .env (repo root or cwd) or the environment."""
-    for candidate in [Path(__file__).resolve().parent.parent / ".env", Path(".env")]:
+    # ORDEM DO APP: `%USERPROFILE%/ATIVAVID/.env` primeiro. Numa
+    # instalacao normal o codigo fica em Program Files (so leitura) e a
+    # tela de Integracoes grava no do usuario; o .env ao lado do codigo
+    # so existe na maquina de quem desenvolve. Sem esta linha o helper
+    # depende de o app injetar a chave no ambiente, e quando isso falha
+    # o sintoma e MUDO (a 3.26 consertou o mesmo no Groq).
+    for candidate in [Path.home() / "ATIVAVID" / ".env",
+                      Path(__file__).resolve().parent.parent / ".env",
+                      Path(".env")]:
         if candidate.exists():
             for line in candidate.read_text(encoding="utf-8").splitlines():
                 line = line.strip()

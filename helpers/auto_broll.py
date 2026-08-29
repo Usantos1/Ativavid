@@ -22,7 +22,15 @@ _STOP = {
 
 
 def _pexels_key() -> str | None:
-    for candidate in [Path(__file__).resolve().parent.parent / ".env", Path(".env")]:
+    # ORDEM DO APP: `%USERPROFILE%/ATIVAVID/.env` primeiro. Numa
+    # instalacao normal o codigo fica em Program Files (so leitura) e a
+    # tela de Integracoes grava no do usuario; o .env ao lado do codigo
+    # so existe na maquina de quem desenvolve. Sem esta linha o helper
+    # depende de o app injetar a chave no ambiente, e quando isso falha
+    # o sintoma e MUDO (a 3.26 consertou o mesmo no Groq).
+    for candidate in [Path.home() / "ATIVAVID" / ".env",
+                      Path(__file__).resolve().parent.parent / ".env",
+                      Path(".env")]:
         if candidate.exists():
             try:
                 for line in candidate.read_text(encoding="utf-8").splitlines():
