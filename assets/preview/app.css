@@ -3553,3 +3553,41 @@ body.styles-wide .setup-actions .btn.primary {
   line-height: 1;
   min-height: 76px;
 }
+
+/* --- previa da midia posta na mao ----------------------------------------
+ * Mesma geometria do render: o cartao do insert e 780x500 a 90px do topo
+ * num quadro de 1080x1920; o emoji se posiciona pelo centro. */
+.midia-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+  overflow: hidden;
+  border-radius: inherit;
+}
+.midia-previa-emoji {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  line-height: 1;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.45));
+}
+.midia-previa-card {
+  position: absolute;
+  left: 13.9%;
+  top: 4.7%;
+  width: 72.2%;
+  height: 26.0%;
+  border-radius: 3%;
+  overflow: hidden;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+  background: #0b0e13;
+}
+.midia-previa-card img { width: 100%; height: 100%; object-fit: cover; }
+.midia-previa-card .midia-previa-nome {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 4px 8px;
+  font-size: 11px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+}

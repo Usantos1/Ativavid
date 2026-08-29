@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.63
+
+- **Você vê o emoji e a imagem antes de renderizar.** O que você põe à mão
+  agora aparece sobre o vídeo na hora, na posição e no tamanho exatos do
+  render — antes era preciso aplicar e esperar o vídeo para descobrir que o
+  emoji estava tapando o rosto.
+- O efeito sonoro fica de fora da prévia de propósito: som não se vê, e um
+  ícone dele só taparia a imagem.
+
 ## 3.62
 
 - **"Aplicar alterações" passou a levar a mídia que você põe à mão.** Imagem,

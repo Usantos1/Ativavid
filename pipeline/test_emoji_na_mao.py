@@ -109,3 +109,38 @@ def test_a_tela_manda_comeco_e_duracao():
     bloco = js[i:i + 320]
     assert "atSec: +c.start.toFixed(3)" in bloco
     assert "durSec" in bloco and "char: c.char" in bloco
+
+
+def test_a_previa_usa_a_geometria_do_render():
+    """Prévia que mente é pior que prévia nenhuma: o emoji apareceria num
+    lugar na tela e noutro no vídeo. `size` é fração da LARGURA, e x/y são
+    o centro — as três contas do render."""
+    js = (REPO / "assets" / "preview" / "app.js").read_text(encoding="utf-8")
+    i = js.index("function desenharMidiaNoPreview")
+    bloco = js[i:i + 1500]
+    assert "(c.size ?? 0.22) * box.clientWidth" in bloco
+    assert "(c.x ?? 0.5) * 100" in bloco and "(c.y ?? 0.34) * 100" in bloco
+    css = (REPO / "assets" / "preview" / "app.css").read_text(encoding="utf-8")
+    j = css.index(".midia-previa-emoji")
+    assert "translate(-50%, -50%)" in css[j:j + 240]
+
+
+def test_o_cartao_da_previa_tem_o_tamanho_do_cartao_do_render():
+    """O InsertCard é 780x500 a 90px do topo num quadro de 1080x1920."""
+    css = (REPO / "assets" / "preview" / "app.css").read_text(encoding="utf-8")
+    i = css.index(".midia-previa-card")
+    bloco = css[i:i + 400]
+    for esperado in (f"{780 / 1080 * 100:.1f}%", f"{500 / 1920 * 100:.1f}%",
+                     f"{90 / 1920 * 100:.1f}%"):
+        assert esperado in bloco, (esperado, bloco[:200])
+
+
+def test_a_previa_so_mostra_o_que_foi_posto_na_mao():
+    """O insert da IA está no relógio do vídeo FINAL — aqui ele apareceria
+    fora de hora."""
+    js = (REPO / "assets" / "preview" / "app.js").read_text(encoding="utf-8")
+    i = js.index("function desenharMidiaNoPreview")
+    bloco = js[i:i + 900]
+    assert "c.isNew" in bloco
+    # som não tem o que mostrar
+    assert "'sfx'" not in bloco

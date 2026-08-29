@@ -3222,6 +3222,42 @@ function updateCircleAccentNote() {
  * corte, e mentira aqui e pior que ausencia. */
 const LAYOUTS_COM_PREVIA = ['degrade', 'vinheta', 'cinema', 'borda'];
 
+/* Previa do que o usuario acabou de por na mao. Sem ela, descobrir ONDE o
+ * emoji caiu custava um render inteiro — e ele pode estar tapando o rosto.
+ * So o que foi posto na mao (`isNew`): o insert que a IA colocou esta no
+ * relogio do video FINAL e apareceria fora de hora aqui.
+ * Som nao entra: nao se ve, e um icone dele so taparia a imagem. */
+function desenharMidiaNoPreview() {
+  const box = $('midiaOverlay');
+  if (!box) return;
+  const t = renderedToDraft(video.currentTime || 0);
+  const agora = S.insertsDraft.filter(
+    (c) => c.isNew && t >= c.start && t < c.end
+    && (c.kind === 'emoji' || c.kind === 'insert'));
+  const chave = agora.map((c) => `${c.kind}:${c.label}:${c.start}`).join('|');
+  if (box.dataset.chave === chave) return;   // sem repintar a cada quadro
+  box.dataset.chave = chave;
+  box.innerHTML = '';
+  for (const c of agora) {
+    if (c.kind === 'emoji') {
+      const d = el('div', 'midia-previa-emoji', box);
+      d.style.left = `${(c.x ?? 0.5) * 100}%`;
+      d.style.top = `${(c.y ?? 0.34) * 100}%`;
+      // `size` e fracao da LARGURA, como nos dois motores
+      d.style.fontSize = `${(c.size ?? 0.22) * box.clientWidth}px`;
+      d.textContent = c.char || '';
+      continue;
+    }
+    const card = el('div', 'midia-previa-card', box);
+    if (c.src) {
+      const img = el('img', '', card);
+      img.src = `${BASE}/media/remotion/public/${c.src}`;
+      img.alt = '';
+    }
+    el('div', 'midia-previa-nome', card).textContent = c.label || '';
+  }
+}
+
 function aplicarLayoutNoPreview() {
   const box = $('layoutOverlay');
   if (!box) return;
@@ -5087,7 +5123,7 @@ $('btnCapPreview').addEventListener('click', () => {
 // tab is not visible, so a caption that was on screen would stay frozen on the
 // wrong line after a background seek. These events fire regardless.
 ['seeked', 'timeupdate', 'loadedmetadata'].forEach((ev) =>
-  video.addEventListener(ev, updateCapOverlay)
+  video.addEventListener(ev, () => { updateCapOverlay(); desenharMidiaNoPreview(); })
 );
 
 $('postCopy').addEventListener('click', async () => {
@@ -5310,6 +5346,7 @@ function pushSfxFromRef(src, label) {
     isNew: true, src, volume: 0.5,
   });
   renderAll(); refreshHeader();
+  desenharMidiaNoPreview();
   scheduleAutosave();
 }
 
@@ -5323,6 +5360,7 @@ function pushInsertFromRef(src, label, credit) {
     isNew: true, src, credit: credit || '',
   });
   renderAll(); refreshHeader();
+  desenharMidiaNoPreview();
   scheduleAutosave();
 }
 
