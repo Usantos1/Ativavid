@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.57
+
+- **Escrever legenda na mão.** Leve a agulha até um trecho sem legenda e
+  clique em **+ escrever legenda** (a pastilha ao lado da headline): você
+  escreve o texto e ele entra na linha do tempo como qualquer outra legenda —
+  mesmo desenho, mesmas quebras, mesmo realce. Serve para b-roll, fala baixa
+  ou uma frase que ninguém falou. Se o trecho já tiver legenda, ele avisa em
+  vez de escrever por cima.
+- **A nota do corte aparece no card.** A nota (gancho, clareza, ritmo, CTA) e
+  a dica mais útil dela existiam só no painel do preview; agora vêm na ficha
+  do vídeo, onde você já olha a fila.
+
 ## 3.56
 
 - **As dicas da nota agora dizem onde e quanto.** Passei os 185 vídeos já

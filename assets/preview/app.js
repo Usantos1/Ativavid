@@ -1888,6 +1888,35 @@ async function persistHeadline(lines) {
   return persistCorrection({ op: 'set_headline', lines: list });
 }
 
+/* Escreve uma legenda ONDE NAO HA nenhuma — b-roll, fala baixa, ou uma
+ * frase que ninguem falou e que o usuario quer na tela. O resto do editor
+ * so corrige o que a transcricao ouviu.
+ * O tempo e o da agulha, no relogio do cut.mp4 — o mesmo de captions.json. */
+async function escreverLegendaAqui() {
+  const t = video.currentTime || 0;
+  const texto = await pedirTexto('Escrever legenda neste momento', '', 'Adicionar');
+  if (!texto) return;
+  const data = await persistCorrection({ op: 'add_caption', text: texto, start: t });
+  if (!data) return;
+  if (data.ok === false) {
+    toast(data.erro || data.error || 'Não consegui escrever a legenda aqui', 3600);
+    return;
+  }
+  if (Array.isArray(data.captionWords)) {
+    S.captions = groupCaptions(data.captionWords);
+    S.captionFixes = {};
+    S.capApagadas = [];
+    S.capSel = [];
+    S.capSelAncora = -1;
+  }
+  if (data.corrections) S.corrections = data.corrections;
+  renderAll();
+  highlightCurrentCaption(currentCaptionIndex());
+  const seg = ((data.janela ? (data.janela.fimMs - data.janela.inicioMs) : 0) / 1000);
+  toast(seg ? `Legenda escrita (${seg.toFixed(1).replace('.', ',')}s)`
+            : 'Legenda escrita', 2200);
+}
+
 async function persistCaptionFix(from, to, extra) {
   const data = await persistCorrection({ op: 'fix_caption', from, to, ...(extra || {}) });
   if (data && data.ok === false) {
@@ -2176,7 +2205,9 @@ function highlightCurrentCaption(i) {
   if (panel) {
     const c = i >= 0 ? S.captions[i] : null;
     const fix = c && S.captionFixes[i];
-    const text = c ? (fix ? fix.to : c.text) : '—';
+    // Sem legenda aqui, a pastilha CONVIDA em vez de so mostrar um traco:
+    // era o unico lugar da tela que falava de legenda e mandava embora.
+    const text = c ? (fix ? fix.to : c.text) : '+ escrever legenda';
     if (panel.textContent !== text) panel.textContent = text;
     panel.classList.toggle('current', i >= 0);
   }
@@ -5802,7 +5833,7 @@ if ($('capNow')) {
     e.stopPropagation();
     const i = currentCaptionIndex();
     if (i >= 0) openCaptionEditor(i, e.currentTarget);
-    else toast('Avance o vídeo até aparecer a legenda', 1800);
+    else escreverLegendaAqui();
   });
 }
 

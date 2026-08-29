@@ -379,6 +379,82 @@ def fix_caption(
     }
 
 
+# Espaco minimo para uma legenda caber sem virar piscada.
+_MIN_LEGENDA_S = 0.30
+# Quanto tempo cada palavra ocupa quando ninguem a falou.
+_SEG_POR_PALAVRA = 0.38
+
+
+def add_caption(
+    edit_dir: Path, *, texto: str, inicio_s: Any, dur_s: Any = None,
+) -> dict[str, Any]:
+    """Cria uma legenda ONDE NAO HAVIA — o resto do editor so corrige.
+
+    Grava PALAVRAS em captions.json, nao uma cue pronta: o apply reconstroi
+    as cues a partir das palavras, entao a legenda escrita na mao sai com o
+    mesmo desenho e as mesmas quebras das outras. Uma cue inventada aqui
+    apareceria com estilo diferente das vizinhas.
+
+    Nao encosta em legenda existente: o fim e aparado ate a proxima palavra.
+    Sem espaco livre (>= 0,30s) o pedido volta com o motivo — sobrescrever a
+    fala transcrita para caber um texto novo seria pior que recusar.
+    """
+    palavras = [w for w in str(texto or "").split() if w]
+    if not palavras:
+        return {"ok": False, "erro": "Escreva o texto da legenda."}
+    try:
+        ini = max(0.0, float(inicio_s))
+    except (TypeError, ValueError):
+        return {"ok": False, "erro": "Momento inválido."}
+
+    atual = _read_json(captions_path(edit_dir), []) or []
+    if not isinstance(atual, list):
+        atual = []
+    ini_ms = int(round(ini * 1000))
+    try:
+        dur = float(dur_s) if dur_s is not None else 0.0
+    except (TypeError, ValueError):
+        dur = 0.0
+    if dur <= 0:
+        dur = min(4.0, max(1.2, _SEG_POR_PALAVRA * len(palavras)))
+    fim_ms = ini_ms + int(round(dur * 1000))
+
+    # nao passar por cima do que ja existe
+    for w in atual:
+        try:
+            w0, w1 = int(w.get("startMs") or 0), int(w.get("endMs") or 0)
+        except (TypeError, ValueError):
+            continue
+        if w1 <= ini_ms:
+            continue
+        if w0 < fim_ms:
+            fim_ms = min(fim_ms, w0)
+    if fim_ms - ini_ms < _MIN_LEGENDA_S * 1000:
+        return {"ok": False,
+                "erro": "Já existe legenda neste trecho — leve a agulha "
+                        "para um espaço livre."}
+
+    passo = (fim_ms - ini_ms) / len(palavras)
+    novas = []
+    for k, w in enumerate(palavras):
+        a0 = int(round(ini_ms + k * passo))
+        a1 = int(round(ini_ms + (k + 1) * passo))
+        novas.append({"text": w, "startMs": a0, "endMs": a1,
+                      "timestampMs": (a0 + a1) // 2, "confidence": None,
+                      # marca de origem: quem le o arquivo depois sabe que
+                      # esta palavra nao veio da transcricao
+                      "manual": True})
+    prepare_correction(edit_dir)
+    juntas = list(atual) + novas
+    juntas.sort(key=lambda w: (int(w.get("startMs") or 0),
+                               int(w.get("endMs") or 0)))
+    _write_json(captions_path(edit_dir), juntas)
+    corr = mark_dirty(edit_dir, "captions")
+    return {"ok": True, "changed": len(novas), "captionWords": juntas,
+            "corrections": corr,
+            "janela": {"inicioMs": ini_ms, "fimMs": fim_ms}}
+
+
 def read_edl_ranges(edit_dir: Path) -> list[dict]:
     data = _read_json(edl_path(edit_dir), {})
     if not isinstance(data, dict):
@@ -605,6 +681,15 @@ def handle(
             body.get("paddingTop") if body.get("paddingTop") is not None
             else body.get("paddingBottom"),
             base="bottom" if body.get("paddingBottom") is not None else "top",
+        )
+    if op in ("add_caption", "nova_legenda"):
+        return add_caption(
+            edit,
+            texto=str(body.get("text") or body.get("texto") or ""),
+            inicio_s=body.get("start") if body.get("start") is not None
+            else body.get("inicio"),
+            dur_s=body.get("dur") if body.get("dur") is not None
+            else body.get("duracao"),
         )
     if op in ("fix_caption", "caption", "captions"):
         return fix_caption(

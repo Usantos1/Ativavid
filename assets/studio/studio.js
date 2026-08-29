@@ -532,6 +532,15 @@ function fichaHtml(j) {
   if (j.fonteNota) linhas.push(["Fonte", j.fonteNota]);
   if (j.trilhaNota) linhas.push(["Trilha", j.trilhaNota]);
   if (j.cardFinalNota) linhas.push(["Marca", j.cardFinalNota]);
+  // A nota do corte (gancho, clareza, ritmo, CTA) e a dica mais util dela.
+  // Ate aqui as duas so existiam no painel do preview — o card, que e onde
+  // o usuario olha a fila, nao mostrava nenhuma. Uma dica so: duas ou tres
+  // viram parede de texto e ninguem le.
+  if (j.score && Number.isFinite(Number(j.score.overall))) {
+    const dica = (j.score.tips || []).filter(Boolean)[0] || "";
+    linhas.push(["Nota do corte",
+      `${Math.round(Number(j.score.overall))}/100${dica ? ` · ${dica}` : ""}`]);
+  }
   if (j.publicadoLink) linhas.push(["Instagram", "publicado ✓"]);
   else if (j.publicando) linhas.push(["Instagram", "publicando…"]);
   else if (j.publicacaoErro) linhas.push(["Instagram", `falhou: ${j.publicacaoErro}`]);
@@ -576,6 +585,7 @@ function cardSig(j, opts) {
     j.publicando ? "pub" : "",
     j.publicacaoErro || "",
     j.trilhaNota || "",
+    (j.score && (j.score.tips || [])[0]) || "",
     j.corteQualidade || "",
     j.corteNota || "",
     j.fonteNota || "",
