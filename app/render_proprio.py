@@ -172,14 +172,12 @@ MARCADOR_ALPHA = 0.85
 MARCADOR_CAIXA = (-0.07, -0.16, 1.14, 1.38)  # left/top/width/height do svg
 TRACO_SOMBRA = (0, 3, 8, 0.45)
 TRACO_CAIXA = (-0.10, -0.22, 1.20, 1.50)   # esq, topo, larg, alt (fração)
-# A caixa do SVG e "120% x 150% da palavra" nos dois motores — mas o que o
-# navegador chama de altura da palavra NAO e `tam * 1.12` (a entrelinha do
-# texto): medido em 29/08 comparando o traco verde quadro a quadro contra o
-# Remotion, a caixa dele e `tam * 0.80`. Usando a entrelinha, o risco saia
-# 36 px mais baixo e 33% mais alto que o desenho original — e como o motor
-# proprio desenha 18 de cada 20 videos, o circulo dos videos ficou maior que
-# o projetado desde que ele entrou (2.21, 20/08). A largura sempre bateu.
-TRACO_ALT_REF = 0.80
+# A caixa do traco e "120% x 150% da palavra", com a palavra medida pela
+# ENTRELINHA (tam * 1.12) — igual ao navegador. Isto foi conferido em 29/08
+# pelas PONTAS do laco, que o texto nao esconde: esquerda 1281 e direita
+# 1258 no motor proprio contra 1281 e 1256 no Remotion. Medir pela BASE do
+# laco engana: no navegador o arco de baixo passa atras das letras e some,
+# e a base visivel fica ~36px mais alta do que a geometria real.
 
 HL_MIN = 40
 
@@ -1156,12 +1154,17 @@ class Renderizador:
                                     / max(1e-6, o_fim - o_ini))),
                        (q, q + 1))
                 q += 1
+            # A faixa TEM de ficar ate o fim da legenda. Sem esta etapa ela
+            # era pintada durante a entrada (uma peca por quadro) e sumia no
+            # quadro seguinte — o traco do circulo sempre teve a etapa final,
+            # o marca-texto nasceu sem (2.7x) e ninguem viu porque o estilo
+            # padrao e o circulo.
+            _faixa(1.0, (o_fim, float(leg.fim_f - leg.inicio_f + 10)))
             return leg
 
         esq, topo, larg_f, alt_f = TRACO_CAIXA
-        alt_ref = tam * TRACO_ALT_REF        # ver TRACO_ALT_REF
-        bx, by = x_c + esq * larg_c, y_c + topo * alt_ref
-        bw, bh = larg_f * larg_c, alt_f * alt_ref
+        bx, by = x_c + esq * larg_c, y_c + topo * alt_c
+        bw, bh = larg_f * larg_c, alt_f * alt_c
         pts = [(bx + x / TRACO_VB[0] * bw, by + y / TRACO_VB[1] * bh)
                for x, y in self._pontos_traco()]
         acum = [0.0]

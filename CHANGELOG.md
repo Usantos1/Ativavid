@@ -1,8 +1,23 @@
 # Changelog
 
+## 3.30
+
+- **O marca-texto sumia depois de entrar.** No estilo marca-texto, a faixa
+  amarela era desenhada só durante a animação de entrada e depois
+  desaparecia — a palavra ficava sem realce pelo resto da legenda. Agora ela
+  entra e fica, e bate exatamente com o preview (a faixa começa e termina
+  nos mesmos pixels em todos os quadros conferidos).
+- **O círculo de ênfase volta ao tamanho que tinha até a 3.28.** A mudança
+  de tamanho da 3.29 estava errada e foi desfeita. O que enganou a medição:
+  no preview o arco de baixo do laço passa ATRÁS das letras e não aparece,
+  então comparar a base visível dava 36 pixels de diferença que não existem.
+  Medindo as PONTAS do laço, que o texto não cobre, os dois motores batem
+  (1281 e 1258 contra 1281 e 1256 do preview). O tamanho de sempre estava
+  certo. A suavização melhor da 3.29 continua.
+
 ## 3.29
 
-- **O risco de ênfase voltou ao tamanho do desenho original.** Desde que o
+- **O risco de ênfase voltou ao tamanho do desenho original.** (Este item estava errado e foi desfeito na 3.30.) Desde que o
   renderizador próprio entrou (20/08), o círculo saía 33% mais alto e 36
   pixels mais baixo que o projetado — e como ele desenha quase todos os
   vídeos, era o que aparecia em quase todos. Medido quadro a quadro contra

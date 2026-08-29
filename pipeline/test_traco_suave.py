@@ -60,23 +60,25 @@ def test_os_dois_desenhos_usam_o_mesmo_caminho():
         "def ", 1)[1], "sobrou desenho sem suavização fora do ajudante"
 
 
-def test_a_caixa_do_risco_segue_a_referencia_do_template():
-    """O SVG do traço é "120% x 150% da palavra" nos dois motores — mas o
-    que o navegador usa como altura da palavra é `tam * 0,80`, não a
-    entrelinha (`tam * 1,12`). Com a entrelinha o risco saía 36px mais
-    baixo e 33% mais alto que o desenho original (medido quadro a quadro
-    contra o Remotion em 29/08). Depois do conserto: topo igual, base
-    dentro de 4px."""
+def test_a_caixa_do_risco_usa_a_entrelinha_como_o_navegador():
+    """A caixa do traço é "120% x 150% da palavra", e a palavra é medida
+    pela ENTRELINHA (tam * 1,12) — como no navegador.
+
+    Isto tem um teste porque eu mesmo "consertei" errado em 29/08: medindo
+    a BASE do laço, o motor próprio parecia 36px mais baixo. Mas no
+    navegador o arco de baixo passa ATRÁS das letras e some — a base
+    visível não é a geometria. As PONTAS do laço, que o texto não esconde,
+    batem com a entrelinha (esquerda 1281 e direita 1258, contra 1281 e
+    1256 do Remotion) e erram 25px com qualquer outra referência."""
     from pathlib import Path
-    import app.render_proprio as rp
-    assert abs(rp.TRACO_ALT_REF - 0.80) < 1e-6
     s = (Path(__file__).resolve().parent.parent / "app" / "render_proprio.py"
          ).read_text(encoding="utf-8")
-    i = s.index("alt_ref = tam * TRACO_ALT_REF")
-    trecho = s[i:i + 400]
-    assert "bw, bh = larg_f * larg_c, alt_f * alt_ref" in trecho, \
-        "a altura da caixa voltou a sair da entrelinha"
-    assert "bx, by = x_c + esq * larg_c, y_c + topo * alt_ref" in trecho
+    i = s.index("esq, topo, larg_f, alt_f = TRACO_CAIXA")
+    trecho = s[i:i + 260]
+    assert "topo * alt_c" in trecho and "alt_f * alt_c" in trecho, trecho
+    j = s.index("esq, topo, larg_f, alt_f = MARCADOR_CAIXA")
+    trecho_m = s[j:j + 260]
+    assert "topo * alt_c" in trecho_m and "alt_f * alt_c" in trecho_m
 
 
 def test_supersampling_suficiente_para_a_diagonal():
