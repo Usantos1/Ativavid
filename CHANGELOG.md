@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.96
+
+- **O editor não fala mais em nome de arquivo.** Enquanto o vídeo está
+  sendo cortado, a tela dizia "assim que o `cut.mp4` existir…". Agora diz
+  "Ainda cortando o seu vídeo — pode fechar esta tela, o trabalho
+  continua."
+- Uma verificação nova impede que nome de arquivo ou de motor de render
+  volte a aparecer em qualquer tela.
+
 ## 3.95
 
 - **A conferência dos vídeos agora conserta, não só acusa.** Cada item da

@@ -180,8 +180,12 @@
   <section id="emptyState" class="empty glass hidden">
     <div class="empty-inner">
       <div class="empty-icon">🎬</div>
-      <h2>Aguardando o primeiro render</h2>
-      <p>Assim que o <code>cut.mp4</code> existir, a timeline aparece aqui sozinha.</p>
+      <!-- "render" e "cut.mp4" sao nomes de dentro: quem le esta esperando
+           um VIDEO, nao um arquivo. O proprio codigo tem a regra de nunca
+           vazar isso, e este era o unico lugar da tela que vazava. -->
+      <h2>Ainda cortando o seu vídeo</h2>
+      <p>A linha do tempo aparece aqui sozinha quando o corte ficar pronto.
+        Pode fechar esta tela — o trabalho continua.</p>
     </div>
   </section>
 
