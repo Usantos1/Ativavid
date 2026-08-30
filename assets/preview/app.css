@@ -3734,3 +3734,43 @@ body.styles-wide .setup-actions .btn.primary {
 .alca-e { right: -7px !important; top: 50%; margin-top: -8px; cursor: ew-resize; }
 .alca-n, .alca-s { width: 22px; height: 12px; }
 .alca-w, .alca-e { width: 12px; height: 22px; }
+
+/* --- capa no comeco da faixa de video (como no CapCut) -------------------
+ * Ela e o quadro zero do que vai ser publicado: o lugar dela e o inicio da
+ * linha do tempo, nao um botao na barra. */
+.capa-chip {
+  flex: 0 0 auto;
+  width: 46px;
+  align-self: stretch;
+  margin-right: 6px;
+  border: 1px dashed var(--stroke);
+  border-radius: 8px;
+  background: transparent center/cover no-repeat;
+  color: var(--fg-soft, #b9bec7);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 3px;
+  position: relative;
+  overflow: hidden;
+}
+.capa-chip:hover {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--interact) 55%, transparent);
+  color: var(--text, #f4f4f5);
+}
+.capa-chip.tem-capa .capa-chip-txt {
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 4px;
+  padding: 0 4px;
+  color: #fff;
+}
+
+/* Bloco selecionado: e nele que o Delete age e onde o ✕ aparece. */
+.chip.insert.sel {
+  outline: 2px solid var(--interact, #ff5470);
+  outline-offset: 1px;
+}

@@ -587,7 +587,7 @@
     <span class="time dim">/</span>
     <span id="timeTotal" class="time dim">0:00.00</span>
     <button id="btnMark" class="btn mark" title="Marcar o trecho a corrigir: uma vez no começo, outra no fim (tecla M)">
-      <span id="markIcon"></span><span id="markText">Marcar</span>
+      <span id="markIcon"></span><span id="markText" class="hidden">Marcar</span>
     </button>
     <button id="btnUndo" class="btn icon" title="Desfazer (Ctrl+Z)" disabled></button>
     <button id="btnRedo" class="btn icon" title="Refazer (Ctrl+Shift+Z)" disabled></button>
@@ -597,7 +597,7 @@
     <button id="btnDeleteTake" class="btn cover-btn" title="Excluir o take selecionado (Delete)" disabled>
       <span id="deleteIcon"></span><span>Excluir</span>
     </button>
-    <button id="btnCover" class="btn cover-btn" title="Salvar o frame da agulha como capa.jpg na pasta para postar">
+    <button id="btnCover" class="btn cover-btn hidden" title="Salvar o frame da agulha como capa.jpg na pasta para postar">
       <span id="coverIcon"></span><span>Capa</span>
     </button>
     <button id="btnImage" class="btn icon" title="Buscar e inserir uma imagem na agulha"></button>
@@ -640,6 +640,13 @@
       </div>
       <div class="track">
         <div class="track-label"><span class="tl-chip" data-icon="video" title="Vídeo"></span></div>
+        <!-- A capa mora ANTES do primeiro clipe, como no CapCut: ela e o
+             quadro zero do que vai ser publicado. Antes era um botao na
+             barra, longe da linha do tempo. -->
+        <button type="button" id="capaChip" class="capa-chip"
+                title="Capa do vídeo — clique para usar o quadro da agulha">
+          <span class="capa-chip-txt">Capa</span>
+        </button>
         <div class="lane tall" id="laneVideo"></div>
       </div>
       <div class="track">

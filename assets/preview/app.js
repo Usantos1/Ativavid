@@ -1044,6 +1044,7 @@ let S = {
   staleNotice: false,
   savedPending: false,
   notes: [], // correction markers [{id,start,end,text}] — draft-timeline seconds
+  blocoSel: -1,    // bloco posto na mao que esta selecionado (Delete apaga)
   pendingIn: null, // an IN is open, waiting for its OUT
   editingNote: null, // id of the note the editor is bound to
   style: null, // current picks {edit, captions, elements:{…}, note}
@@ -2867,7 +2868,12 @@ function renderNotes() {
   }
   const btn = $('btnMark');
   btn.classList.toggle('armed', S.pendingIn != null);
-  $('markText').textContent = S.pendingIn != null ? 'Até aqui' : 'Marcar';
+  const rotuloMarca = S.pendingIn != null ? 'Até aqui' : 'Marcar';
+  $('markText').textContent = rotuloMarca;
+  // o botao ficou so com o icone: o estado vai para o `title`
+  btn.title = S.pendingIn != null
+    ? 'Marcar o FIM do trecho (tecla M)'
+    : 'Marcar o começo do trecho a corrigir (tecla M)';
   ajustarBarraNumaLinha();
 }
 
@@ -3277,6 +3283,7 @@ function removerBlocoDaMao(i) {
   const c = S.insertsDraft[i];
   if (!c || !c.isNew) return;
   pushHistory();
+  S.blocoSel = -1;
   S.insertsDraft.splice(i, 1);
   renderAll();
   desenharMidiaNoPreview();
@@ -4300,11 +4307,11 @@ function desenharFaixasDeInsert(phase2) {
       if (c.start !== c.orig.start || c.end !== c.orig.end) chip.classList.add('dirty');
       el('div', 'handle l', chip).dataset.i = i;
       el('div', 'handle r', chip).dataset.i = i;
-      // Tirar o que FOI POSTO NA MAO. Sem isto, so o Ctrl+Z imediato — e
-      // passado esse instante o emoji errado ficava no video para sempre.
-      if (c.isNew) {
-        // sempre visivel: no bloco de som (0,6s, ~24px) o ✕ escondido no
-        // hover era alvo pequeno demais, e o usuario nao conseguia apagar
+      if (c.isNew && S.blocoSel === i) chip.classList.add('sel');
+      // O ✕ so no bloco SELECIONADO: colado em cima de um bloco de 24px ele
+      // comia o bloco e ainda errava o alvo ("x ali atrapalha", 30/08). Em
+      // editor de video se seleciona e se aperta Delete.
+      if (c.isNew && S.blocoSel === i) {
         const x = el('button', 'chip-x sempre', chip);
         x.type = 'button';
         x.textContent = '✕';
@@ -4970,6 +4977,10 @@ panel.addEventListener('pointerdown', (e) => {
   const handle = e.target.closest('.handle');
   const clip = e.target.closest('.clip');
   const chip = e.target.closest('.chip.insert');
+  if (!chip && S.blocoSel >= 0) {
+    S.blocoSel = -1;      // clicou fora: solta a selecao
+    renderChips();
+  }
 
   // caption chips are click-to-edit, not draggable — their timing belongs to
   // the transcript, only the WORDS are the user's to correct here
@@ -5028,6 +5039,11 @@ panel.addEventListener('pointerdown', (e) => {
   }
   if (chip && (S.tab === 2 || daMao)) {
     const i = +chip.dataset.i;
+    if (daMao && S.blocoSel !== i) {
+      // selecionar e o primeiro gesto: dai o Delete e o ✕ tem alvo
+      S.blocoSel = i;
+      renderChips();
+    }
     drag = { type: 'chip-move', i, x0: e.clientX, c: { ...S.insertsDraft[i] }, preSnapshot: snapshotState() };
     try { panel.setPointerCapture(e.pointerId); } catch (err) { /* synthetic/touch */ }
     e.preventDefault();
@@ -5226,7 +5242,14 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     S.capSel = [];
     S.capSelAncora = -1;
+    S.blocoSel = -1;
     renderAll();
+  } else if ((e.key === 'Delete' || e.key === 'Backspace') && S.blocoSel >= 0) {
+    // o bloco posto na mao vem ANTES do take: e o que esta selecionado
+    e.preventDefault();
+    const i = S.blocoSel;
+    S.blocoSel = -1;
+    removerBlocoDaMao(i);
   } else if ((e.key === 'Delete' || e.key === 'Backspace') && S.capSel.length) {
     e.preventDefault();
     apagarLegendas(S.capSel);
@@ -5271,12 +5294,36 @@ $('btnUndo').innerHTML = ICON.undo;
 $('btnRedo').innerHTML = ICON.redo;
 $('btnUndo').addEventListener('click', undo);
 $('btnRedo').addEventListener('click', redo);
-$('btnSplit').innerHTML = `${ICON.razor}<span>Cortar</span>`;
+// So o icone: o nome fica no `title`. Devolve barra, que na tela do usuario
+// (125% de escala) era o que fazia os rotulos recolherem cedo.
+$('btnSplit').innerHTML = ICON.razor;
+$('btnSplit').classList.add('icon');
 $('btnSplit').addEventListener('click', splitAtPlayhead);
-$('btnDeleteTake').innerHTML = `${ICON.trash}<span>Excluir</span>`;
+$('btnDeleteTake').innerHTML = ICON.trash;
+$('btnDeleteTake').classList.add('icon');
 $('btnDeleteTake').addEventListener('click', toggleSelectedTake);
 $('coverIcon').innerHTML = ICON.cover;
 $('btnCover').addEventListener('click', saveCoverFromPlayhead);
+if ($('capaChip')) {
+  $('capaChip').addEventListener('click', (e) => {
+    e.stopPropagation();
+    saveCoverFromPlayhead();
+  });
+}
+
+/* A capa ja escolhida aparece no proprio bloco: sem isso o usuario nao
+ * sabe se ja definiu uma, nem qual quadro ficou. */
+function mostrarCapaNoBloco() {
+  const chip = $('capaChip');
+  if (!chip || !BASE) return;
+  const img = new Image();
+  img.onload = () => {
+    chip.style.backgroundImage = `url(${img.src})`;
+    chip.classList.add('tem-capa');
+  };
+  img.src = `${BASE}/media/cover.jpg?v=${Date.now()}`;
+}
+window.addEventListener('load', mostrarCapaNoBloco);
 if ($('appendCtaIcon')) $('appendCtaIcon').innerHTML = ICON.appendCta;
 if ($('btnAppendCta')) {
   $('btnAppendCta').addEventListener('click', () => {
@@ -5430,6 +5477,7 @@ function refreshTransportActions() {
 }
 
 async function saveCoverFromPlayhead() {
+  // (o bloco da capa se atualiza no fim desta funcao)
   const btn = $('btnCover');
   if (!btn || btn.disabled) return;
   const t = Number(video.currentTime) || 0;
@@ -5447,6 +5495,7 @@ async function saveCoverFromPlayhead() {
     }
     const where = data.pack ? ` ao lado da legenda em ${data.pack}` : '';
     toast(`Imagem da capa salva${where} · ${fmtClock(data.t != null ? data.t : t)}`, 3200);
+    mostrarCapaNoBloco();      // o bloco passa a mostrar o quadro escolhido
   } catch (e) {
     toast('Não consegui salvar a capa — servidor fora do ar?', 3500);
   } finally {

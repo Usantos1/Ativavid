@@ -138,8 +138,8 @@ def test_da_para_tirar_o_que_foi_posto_na_mao():
     # histórico ANTES: remover por engano não pode custar o trabalho
     assert bloco.index("pushHistory()") < bloco.index("splice(i, 1)")
     assert "if (!c || !c.isNew) return;" in bloco
-    # e o ✕ só nasce no bloco do usuário
-    j = JS.index("if (c.isNew) {")
+    # e o ✕ só nasce no bloco do usuário — e só quando ele está selecionado
+    j = JS.index("if (c.isNew && S.blocoSel === i) {")
     assert "chip-x" in JS[j:j + 400]
 
 
@@ -173,3 +173,41 @@ def test_o_x_do_bloco_curto_nao_depende_do_hover():
     j = css.index(".chip .chip-x::after")
     assert "inset: -6px" in css[j:j + 160]
     assert "chip-x sempre" in JS
+
+
+def test_a_capa_fica_no_comeco_da_faixa():
+    """No CapCut a capa é um bloco ANTES do primeiro clipe, e o usuário
+    disse que aquele lugar é melhor que o nosso (era um botão na barra).
+    Ela é o quadro zero do que vai ser publicado."""
+    html = (REPO / "assets" / "preview" / "index.html").read_text(encoding="utf-8")
+    i = html.index('id="capaChip"')
+    j = html.index('id="laneVideo"')
+    assert i < j, "a capa tem de vir ANTES da faixa de vídeo"
+    assert "$('capaChip')" in JS and "saveCoverFromPlayhead()" in JS
+
+
+def test_a_barra_ficou_so_de_icones_nos_tres():
+    """Marcar, Cortar e Excluir viraram ícone: o nome fica no passar do
+    mouse e a barra devolve espaço — era ele que fazia os rótulos
+    recolherem cedo na tela do usuário (125% de escala)."""
+    assert "$('btnSplit').innerHTML = ICON.razor;" in JS
+    assert "$('btnDeleteTake').innerHTML = ICON.trash;" in JS
+    i = JS.index("const rotuloMarca =")
+    assert "btn.title =" in JS[i:i + 400]
+
+
+def test_o_x_so_aparece_no_bloco_selecionado():
+    """"x ali atrapalha": colado num bloco de 24px ele comia o bloco e
+    ainda errava o alvo. Em editor de vídeo se seleciona e se aperta
+    Delete."""
+    i = JS.index("if (c.isNew && S.blocoSel === i) {")
+    assert "chip-x" in JS[i:i + 300]
+    # e o Delete age no bloco selecionado ANTES do take
+    k = JS.index("S.blocoSel >= 0) {")
+    take = JS.index("S.selected >= 0 && S.tab === 1")
+    assert k < take, "o bloco selecionado tem de vir antes do take no Delete"
+
+
+def test_clicar_fora_solta_a_selecao():
+    i = JS.index("if (!chip && S.blocoSel >= 0) {")
+    assert "S.blocoSel = -1;" in JS[i:i + 200]

@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.73
+
+- **A Capa foi para o começo da faixa de vídeo**, como no CapCut: ela é o
+  quadro zero do que vai ser publicado, e o lugar dela é ali — não num botão
+  perdido na barra. O bloco mostra a capa já escolhida.
+- **O ✕ saiu da frente.** Agora você **clica no bloco para selecionar** e
+  aperta **Delete**. O ✕ aparece só no bloco selecionado, onde tem espaço.
+- **Marcar, Cortar e Excluir viraram ícone** (o nome fica no passar do
+  mouse). Isso devolveu espaço na barra, que era o que fazia os nomes
+  recolherem cedo na sua tela.
+
 ## 3.72
 
 - **A imagem se ajusta pelos quatro lados e pelos cantos** — oito alças. Puxe
