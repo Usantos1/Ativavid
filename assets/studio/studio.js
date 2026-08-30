@@ -565,6 +565,9 @@ function fichaHtml(j) {
   // Por que ESTE video demorou o triplo. O motivo ficava so no
   // `timing.json`; aparece em menos de um quinto dos videos.
   if (j.motorNota) linhas.push(["Render", j.motorNota]);
+  // Trabalho que ele fez no editor e que nunca virou video: 12 projetos
+  // estavam assim, o mais antigo de 13/08, sem nada na tela dizendo.
+  if (j.pedidoNota) linhas.push(["Pendente", j.pedidoNota]);
   // Trecho que pedia tempo inexistente no arquivo. Sem esta linha o
   // defeito e mudo: o video sai pronto com pedaco sem som e travado.
   if (j.corteNota) linhas.push(["Corte", j.corteNota]);
@@ -628,6 +631,7 @@ function cardSig(j, opts) {
     (j.score && (j.score.tips || [])[0]) || "",
     j.corteQualidade || "",
     j.motorNota || "",
+    j.pedidoNota || "",
     j.corteNota || "",
     j.fonteNota || "",
     j.midiaNota || "",

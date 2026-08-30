@@ -49,6 +49,17 @@ def test_o_arnes_aplica_o_flash():
 def test_o_achado_fica_no_codigo_do_flash():
     """Quem for mexer no flash precisa começar pelos números, não do zero."""
     i = RP.index("def _flash_quadro(")
-    antes = RP[max(0, i - 1400):i]
-    assert "MEDIDO E NAO CONSERTADO" in antes
-    assert "0.258" in antes and "0.000" in antes
+    antes = RP[max(0, i - 1600):i]
+    assert "FEIXE ESTAVA FORA DE LUGAR" in antes
+    assert "0,629" in antes and "0,892" in antes
+    # as hipóteses já descartadas ficam registradas para não voltarem
+    assert "0,895" in antes and "0,630" in antes
+
+
+def test_o_feixe_e_colado_pelo_centro():
+    """`expand=True` devolve uma imagem maior que o retângulo: colar pelo
+    canto empurrava o feixe +462px para a direita, em todo vídeo."""
+    i = RP.index("def _flash_quadro(")
+    corpo = RP[i:i + 2200]
+    assert "barra.width / 2.0" in corpo and "barra.height / 2.0" in corpo
+    assert "img.paste(barra, (int(x)" not in corpo

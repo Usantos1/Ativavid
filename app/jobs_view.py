@@ -246,6 +246,39 @@ def _qualidade_do_corte(job: dict, edit: Path) -> None:
         job["corteQualidade"] = " · ".join(partes)
 
 
+def _pedido_nao_aplicado(job: dict, edit: Path) -> None:
+    """Correção salva no editor que nunca virou vídeo.
+
+    O painel de projetos já conta isso; a Fila e os Concluídos, não —
+    e é neles que ele olha. Medido nos projetos do usuário: **12 têm um
+    pedido salvo e nunca aplicado**, o mais antigo de 13/08. Trabalho que
+    ele fez e que não chegou ao vídeo, sem nada na tela dizendo.
+
+    Só conta o que é MAIS NOVO que o vídeo entregue: arquivo de pedido
+    mais velho que a entrega já foi aplicado, e o arquivo é sobra.
+    """
+    alvos = [(edit / "preview_edits.json", "marcações no editor"),
+             (edit / "preview_style.json", "troca de estilo")]
+    try:
+        from app.local_server import resolve_delivery_mp4
+
+        final = resolve_delivery_mp4(edit)
+        t_final = final.stat().st_mtime if final else 0.0
+    except Exception:  # noqa: BLE001
+        t_final = 0.0
+    for caminho, oque in alvos:
+        try:
+            if not caminho.is_file():
+                continue
+            if t_final and caminho.stat().st_mtime <= t_final:
+                continue
+        except OSError:
+            continue
+        job["pedidoNota"] = (f"há {oque} salvas neste projeto que ainda não "
+                             f"foram aplicadas ao vídeo")
+        return
+
+
 def _aviso_do_motor(job: dict, edit: Path) -> None:
     """Diz quando o vídeo saiu pelo caminho LENTO — e por quê.
 
@@ -383,6 +416,7 @@ def build(store: Any, projects_root: Path, *, com_links: bool = False) -> list[d
         _estado_de_publicacao(j, edit)
         _aviso_de_ia(j, edit)
         _aviso_do_motor(j, edit)
+        _pedido_nao_aplicado(j, edit)
         enrich_job_display(j, edit)
         if j.get("sourceDurationSec") in (None, "") and (j.get("sources") or j.get("source")):
             # Projeto de antes deste campo existir. A medicao vai para o fundo

@@ -257,6 +257,34 @@ def _bring_window_to_front(want_title_start: str, timeout_s: float = 2.0) -> boo
 _dur_cache: dict[tuple[str, float, int], float | None] = {}
 
 
+def esquentar_painel(roots) -> None:
+    """Mede as duracoes do painel em segundo plano, no arranque.
+
+    `/api/projects` faz um `ffprobe` por projeto: com os 187 do usuario a
+    primeira chamada custa **31,5s** e a segunda 0,2s. O cache ja existia;
+    quem pagava os 31 segundos era sempre quem abriu a tela.
+
+    So leitura. Falhar aqui nao muda nada — a rota mede na hora.
+    """
+    def _trabalho() -> None:
+        try:
+            for proot in roots or ():
+                proot = Path(proot)
+                if not proot.is_dir():
+                    continue
+                for edit in sorted(proot.glob("*/edit")):
+                    for mp4 in edit.glob("*.mp4"):
+                        if mp4.name in ("cut.mp4", "base.mp4",
+                                        "cut_proxy.mp4"):
+                            continue
+                        probe_duration_cached(mp4)
+        except Exception:  # noqa: BLE001 — conforto, nunca derruba o app
+            pass
+
+    threading.Thread(target=_trabalho, daemon=True,
+                     name="painel-esquentar").start()
+
+
 def probe_duration_cached(p: Path) -> float | None:
     try:
         st = p.stat()
@@ -367,6 +395,27 @@ def template_state(edit: Path) -> str:
                 return "stale"
         return "ok"
     return "none"
+
+
+def _pedido_e_novo(pedido: Path, delivery: dict | None, edit: Path) -> bool:
+    """O pedido salvo e mais novo que o video entregue?
+
+    Sem essa comparacao, "existe o arquivo" marcava como pendente coisa ja
+    aplicada: dos 12 projetos do usuario que o painel acusava, 10 tinham o
+    pedido mais VELHO que a entrega — sobra, nao trabalho perdido.
+    """
+    try:
+        if not pedido.is_file():
+            return False
+        nome = (delivery or {}).get("name")
+        if not nome:
+            return True          # sem entrega, o pedido esta mesmo pendente
+        alvo = edit / str(nome)
+        if not alvo.is_file():
+            return True
+        return pedido.stat().st_mtime > alvo.stat().st_mtime
+    except OSError:
+        return False
 
 
 def describe_pending(edit: Path) -> dict | None:
@@ -1387,8 +1436,17 @@ class Handler(BaseHTTPRequestHandler):
                     "hasCut": cut.exists(),
                     "cutDurationSec": probe_duration_cached(cut) if cut.exists() else None,
                     "delivery": delivery,
-                    "pendingEdits": (edit / "preview_edits.json").exists(),
-                    "pendingStyle": (edit / "preview_style.json").exists(),
+                    # PENDENTE e o pedido MAIS NOVO que o video entregue.
+                    # So "existe o arquivo" contava sobra: dos 12 projetos
+                    # que o painel marcava, 10 tinham o pedido mais velho
+                    # que a entrega — ja aplicados, arquivo esquecido. A
+                    # Fila usa a mesma regra (`_pedido_nao_aplicado`), e
+                    # duas telas dizendo coisas diferentes sobre o mesmo
+                    # projeto e pior que uma so.
+                    "pendingEdits": _pedido_e_novo(
+                        edit / "preview_edits.json", delivery, edit),
+                    "pendingStyle": _pedido_e_novo(
+                        edit / "preview_style.json", delivery, edit),
                     "mtime": sp.stat().st_mtime if sp.exists() else 0,
                 })
         rows.sort(key=lambda r: r["mtime"], reverse=True)
@@ -1878,6 +1936,8 @@ def main() -> None:
     # so the sensible default is simply "the folder my siblings live in".
     Handler.projects_roots = ([p.resolve() for p in args.projects_root]
                               if args.projects_root else [root.parent.parent])
+    esquentar_painel(Handler.projects_roots)
+
     srv = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     print(f"ATIVAVID preview → http://127.0.0.1:{args.port}  (root: {root})", flush=True)
     srv.serve_forever()

@@ -619,6 +619,13 @@ def build_server(projects_root: Path, port: int) -> tuple[ThreadingHTTPServer, s
 
     gw.ensure_local_base_url(port)
 
+    # O painel de projetos custa 31s na primeira chamada (um ffprobe por
+    # projeto, 187 deles). Esquentar aqui tira essa espera de quem abre.
+    try:
+        ps.esquentar_painel(DesktopHandler.projects_roots)
+    except Exception:  # noqa: BLE001
+        pass
+
     srv = QuietThreadingHTTPServer(("127.0.0.1", port), DesktopHandler)
     url = f"http://127.0.0.1:{port}/"
     return srv, url

@@ -3872,28 +3872,24 @@ class Renderizador:
 
     _flash_cache: dict[int, np.ndarray]
 
-    # MEDIDO E NAO CONSERTADO (varredura `transicoes`, 30/08). O flash
-    # aparece em quase todo video do usuario — mediana de 8 por video — e
-    # nunca tinha sido comparado com o template: os outros grupos da
-    # varredura zeram `transitions` para isolar o desenho, e ninguem media
-    # o que sobrava. Comparado agora, quadro a quadro de uma janela:
+    # O FEIXE ESTAVA FORA DE LUGAR (varredura `transicoes`, 30/08). O
+    # flash aparece em quase todo video do usuario — mediana de 8 por
+    # video — e nunca tinha sido comparado com o template: os outros
+    # grupos da varredura zeram `transitions` para isolar o desenho.
     #
-    #     quadro  remotion   nosso    razao
-    #        151  2073600  2073600    1.000   <- bloom, tela cheia: igual
-    #        152  2073600  2073600    1.000
-    #        153   873678   225596    0.258   <- o nosso ja quase apagou
-    #        154   245066        0    0.000   <- o nosso acabou
+    # Comparado, deu 0,629 de tinta. A causa: `expand=True` devolve uma
+    # imagem MAIOR que o retangulo, e ela era colada em `(x, -0.3h)` como
+    # se o canto dela fosse o canto do retangulo — o feixe inteiro andava
+    # meia expansao para a direita (+462px num quadro de 1080). Medido
+    # contra a posicao do CSS (`x + 0,23w`): est=1 dava CSS -724 e nosso
+    # +120. Colando pelo CENTRO: **0,629 -> 0,892**.
     #
-    # Ou seja: o comeco bate e a CAUDA nao — o feixe daqui apaga antes.
-    # Duas hipoteses foram testadas e DESCARTADAS: inverter o giro do feixe
-    # (0,629 -> 0,630) e somar o `blur(16px)` do template (0,629 -> 0,630).
-    #
-    # RESSALVA antes de agir: a varredura desenha o overlay SEM o video por
-    # baixo, e o flash e a unica peca do catalogo que compoe contra o que
-    # ja esta no quadro (`_aplicar_flash` le o alfa existente). Antes de
-    # mexer, confirmar a diferenca num FINAL de verdade — pode ser do
-    # arnes, e mexer no desenho por causa do arnes seria trocar um defeito
-    # medido por um inventado.
+    # SOBRA 4% e nao se sabe de onde. Duas hipoteses ja foram medidas e
+    # descartadas: inverter o giro do feixe (0,629 -> 0,630, com o feixe
+    # ainda fora de lugar) e somar o `blur(16px)` do template (0,892 ->
+    # 0,895 — nao paga o custo). E vale a ressalva: a varredura desenha o
+    # overlay SEM o video por baixo, e o flash e a unica peca que compoe
+    # contra o quadro existente.
     def _flash_quadro(self, at_s: float, f: int) -> np.ndarray | None:
         c = round(at_s * self.fps) + VIDEO_LAG
         if not (c - FLASH_LEAD <= f < c - FLASH_LEAD + FLASH_LEN):
@@ -3913,7 +3909,18 @@ class Renderizador:
             barra_np = np.repeat(linha[None, :], int(self.h * 1.6), axis=0)
             barra = Image.fromarray(barra_np, mode="L").rotate(
                 -18, expand=True, resample=Image.BILINEAR)
-            img.paste(barra, (int(x), int(-0.3 * self.h)), barra)
+            # A colagem parte do CENTRO. `expand=True` devolve uma imagem
+            # maior que o retangulo, e colar essa imagem em `(x, -0.3h)`
+            # tratava o canto dela como o canto do retangulo — o feixe
+            # inteiro andava meia expansao para a direita (+462px num
+            # quadro de 1080, medido). O CSS gira em torno do proprio
+            # centro (`transform-origin` padrao), entao e o centro que tem
+            # de cair no mesmo lugar nos dois motores.
+            cx = x + 0.46 * self.w / 2.0
+            cy = -0.3 * self.h + 1.6 * self.h / 2.0
+            img.paste(barra,
+                      (int(round(cx - barra.width / 2.0)),
+                       int(round(cy - barra.height / 2.0))), barra)
             cache[est] = np.clip(
                 np.asarray(img, dtype=np.float32) / 255.0 * beam, 0.0, 1.0)
         return np.maximum(cache[est], np.float32(bloom))

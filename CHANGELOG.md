@@ -1,5 +1,22 @@
 # Changelog
 
+## 4.17
+
+- **O feixe de luz do corte varre a parte certa do quadro.** O flash tem
+  duas peças: o clarão e um feixe que atravessa a tela. O feixe estava
+  deslocado 462 pixels para a direita, sempre — e ele aparece umas oito
+  vezes em cada vídeo seu. A comparação com o desenho original foi de
+  0,63 para 0,89.
+- **O card avisa quando há correção salva e não aplicada.** Você marca no
+  editor, salva, e aquilo só vira vídeo quando você manda aplicar — se
+  parasse no meio, nada na Fila dizia. Só avisa quando o pedido é mais
+  novo que o vídeo entregue: dos 12 projetos que a outra tela acusava, 10
+  eram sobra de coisa já aplicada.
+- **O painel de projetos abre na hora.** Ele media a duração de cada
+  vídeo entregue ao abrir — 31 segundos parado com os seus 187 projetos.
+  Agora essa medição acontece no arranque, em segundo plano.
+
+
 ## 4.16
 
 - **A conferência de desenho passou a pegar defeito de forma.** Ela
