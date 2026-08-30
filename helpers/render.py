@@ -1178,6 +1178,16 @@ def snap_ranges_to_frames(edl: dict, fps: int) -> int:
     return changed
 
 
+# O corte e 30,8% do tempo de render e nao tinha medicao nenhuma por
+# dentro. Cada etapa imprime uma linha; o run_fast recolhe.
+def _marco_corte(nome: str, t0: float) -> float:
+    import time as _t
+
+    dt = _t.perf_counter() - t0
+    print(f"TIMING_CORTE {nome}={dt:.3f}", flush=True)
+    return dt
+
+
 def extract_all_segments(
     edl: dict,
     edit_dir: Path,
@@ -1273,10 +1283,18 @@ def extract_all_segments(
         )
         return out_path
 
-    if jobs == 1 or len(ranges) == 1:
-        return [work(i, r) for i, r in enumerate(ranges)]
-    with ThreadPoolExecutor(max_workers=jobs) as ex:
-        return list(ex.map(work, range(len(ranges)), ranges))
+    import time as _t
+
+    _t0 = _t.perf_counter()
+    try:
+        if jobs == 1 or len(ranges) == 1:
+            return [work(i, r) for i, r in enumerate(ranges)]
+        with ThreadPoolExecutor(max_workers=jobs) as ex:
+            return list(ex.map(work, range(len(ranges)), ranges))
+    finally:
+        # o `finally` mede ate quando a extracao falha: um corte que
+        # demora e QUEBRA e o caso que mais interessa entender
+        _marco_corte(f"extrair_{len(ranges)}_trechos", _t0)
 
 
 # -------- Lossless concat ----------------------------------------------------
@@ -1312,7 +1330,10 @@ def concat_segments(segment_paths: list[Path], out_path: Path, edit_dir: Path) -
         str(out_path),
     ]
     print(f"concat → {out_path.name}")
+    import time as _t
+    _t0 = _t.perf_counter()
     _run_ffmpeg(cmd, label=f"ffmpeg concat ({out_path.name})")
+    _marco_corte("juntar", _t0)
     concat_list.unlink(missing_ok=True)
 
 

@@ -130,6 +130,28 @@ _TIMING: dict[str, float] = {}
 _RENDER_META: dict = {}
 
 
+def _recolher_marcos_do_corte(proc) -> None:
+    """As etapas do corte, que so o helper conhece.
+
+    O corte e 30,8% do tempo de render (12,6h somadas em 172 jobs) e era
+    uma caixa preta: `CUT` dizia o total e mais nada. O helper agora
+    imprime `TIMING_CORTE <etapa>=<segundos>` e aqui as linhas viram
+    fases do `timing.json`, com o prefixo `CUT_`.
+
+    Se o helper nao imprimir nada — versao antiga, saida perdida — o
+    total continua sendo gravado como antes; nada depende disto.
+    """
+    import re
+
+    saida = ((getattr(proc, "stdout", "") or "")
+             + (getattr(proc, "stderr", "") or ""))
+    for m in re.finditer(r"TIMING_CORTE (\w+)=([0-9.]+)", saida):
+        try:
+            _TIMING[f"CUT_{m.group(1)}"] = round(float(m.group(2)), 3)
+        except ValueError:
+            pass
+
+
 def _timing_mark(name: str, t0: float) -> float:
     dt = time.perf_counter() - t0
     _TIMING[name] = round(dt, 3)
@@ -139,7 +161,10 @@ def _timing_mark(name: str, t0: float) -> float:
 
 def write_timing(edit_dir: Path) -> dict:
     """Grava timing.json — medição, não otimização."""
-    total = sum(_TIMING.values())
+    # As sub-fases do corte (`CUT_*`) estão DENTRO do `CUT`: somá-las no
+    # total contaria o mesmo tempo duas vezes e faria as porcentagens
+    # mentirem.
+    total = sum(v for k, v in _TIMING.items() if not k.startswith("CUT_"))
     stages = {
         k: {"sec": v, "pct": round(100.0 * v / total, 1) if total else 0.0}
         for k, v in _TIMING.items()
@@ -4078,7 +4103,7 @@ def run(
         render_args.append("--keep-resolution")
     _t_cut = time.perf_counter()
     try:
-        _helper("render.py", *render_args)
+        _recolher_marcos_do_corte(_helper("render.py", *render_args))
     except RuntimeError:
         if not zoom_baked:
             raise

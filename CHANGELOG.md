@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.98
+
+- **O corte passou a dizer onde gasta o tempo.** Ele é 30% do tempo de
+  cada vídeo — 12,6 horas somadas nos seus 172 projetos — e era uma caixa
+  preta: o relatório dava só o total. Agora separa extrair os trechos,
+  juntar e a passada de filtro.
+  Não muda nada no vídeo; muda o que dá para melhorar depois.
+
 ## 3.97
 
 - **Busca sem resultado não diz mais que você não tem vídeos.** Era um
