@@ -54,3 +54,31 @@ def test_a_auditoria_nao_roda_sozinha():
     bloco = JS[i:i + 500]
     assert "runDoutor()" in bloco
     assert "rodarAuditoria()" not in bloco
+
+
+def test_a_auditoria_pode_consertar_e_nao_so_acusar():
+    """Em 3.90 ela passou a acusar; o usuário ficava olhando a lista sem
+    nada para fazer. As duas famílias mais comuns (15 rótulos errados, 4
+    pausas) foram consertadas no pipeline em 29/08 — refazer o projeto com
+    o pipeline de hoje resolve."""
+    assert 'data-refazer=' in JS
+    assert "async function refazerProjeto(" in JS
+    i = JS.index("async function refazerProjeto(")
+    bloco = JS[i:i + 1200]
+    # reusa o endpoint que o editor já usa
+    assert '"/api/jobs/requeue-folder"' in bloco
+    # e pede confirmação: SUBSTITUI o vídeo entregue e ocupa a fila
+    assert "pedirConfirmacao(" in bloco
+    assert "é substituído" in bloco
+
+
+def test_o_refazer_usa_funcoes_que_existem():
+    """`loadJobs` não existe neste arquivo — eu inventei o nome na primeira
+    versão e só o navegador teria contado, depois do clique."""
+    i = JS.index("async function refazerProjeto(")
+    bloco = JS[i:i + 1200]
+    for chamada in ("pedirConfirmacao", "refreshJobs", "toast"):
+        assert chamada in bloco, chamada
+        assert (f"function {chamada}(" in JS
+                or f"async function {chamada}(" in JS
+                or f"const {chamada} =" in JS), f"{chamada} não existe"

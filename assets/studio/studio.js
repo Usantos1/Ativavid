@@ -3651,6 +3651,7 @@ function wireForms() {
   };
 
   const btnAud = $("#btnAuditoria");
+  ligarRefazerDaAuditoria();
   if (btnAud) btnAud.onclick = () => rodarAuditoria().catch((e) => toast(e.message));
   const btnDoutorRun = $("#btnDoutorRun");
   if (btnDoutorRun) btnDoutorRun.onclick = () => runDoutor().catch((err) => toast(err.message));
@@ -4503,6 +4504,9 @@ async function rodarAuditoria() {
       <header class="doutor-item-top">
         <span class="doutor-dot" aria-hidden="true"></span>
         <h5 class="t">${escapeHtml(String(it.projeto || "").slice(0, 46))}</h5>
+        <button type="button" class="ghost-btn ghost-btn--sm doutor-refazer"
+                data-refazer="${escapeHtml(String(it.projeto || ""))}"
+                title="Recria este vídeo com o pipeline de hoje">Refazer</button>
       </header>
       <p class="d">${escapeHtml((it.problemas || []).join(" · "))}</p>
     </article>`).join("") || "";
@@ -4513,6 +4517,47 @@ async function rodarAuditoria() {
       : `${d.total} projetos conferidos, nenhuma marca.`;
     resumo.classList.toggle("doutor-atencao", itens.length > 0);
   }
+}
+
+/* "Refazer": poe o projeto de volta na fila com o pipeline de hoje.
+ *
+ * As duas familias mais comuns da auditoria — rotulo errado no EDL e pausa
+ * morta sobrando — foram consertadas em 29/08. Os videos antigos ficaram
+ * como estavam, e refazer resolve. Sem isto a auditoria so acusa.
+ *
+ * Pede confirmacao: SUBSTITUI o video entregue e ocupa a fila por alguns
+ * minutos. */
+async function refazerProjeto(pasta) {
+  const ok = await pedirConfirmacao(
+    "Refazer este vídeo?",
+    "Ele volta para a fila e é recriado com o pipeline de hoje — o que "
+    + "estiver torto é corrigido. O vídeo atual é substituído no fim, e "
+    + "isso leva alguns minutos.",
+    "Refazer");
+  if (!ok) return;
+  const r = await fetch("/api/jobs/requeue-folder", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({folder: pasta}),
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || d.error) {
+    toast(d.error || "Não deu para refazer este vídeo");
+    return;
+  }
+  toast("Na fila — o vídeo vai ser recriado");
+  refreshJobs().catch(() => {});
+}
+
+function ligarRefazerDaAuditoria() {
+  const out = $("#auditoriaOut");
+  if (!out || out.dataset.wired) return;
+  out.dataset.wired = "1";
+  out.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-refazer]");
+    if (!b) return;
+    refazerProjeto(b.dataset.refazer).catch((err) => toast(err.message));
+  });
 }
 
 const DOUTOR_ROTULO = {ok: "ok", aviso: "atenção", bloqueio: "impede"};

@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.95
+
+- **A conferência dos vídeos agora conserta, não só acusa.** Cada item da
+  lista ganhou um **"Refazer"**: o vídeo volta para a fila e é recriado com
+  o pipeline de hoje, que já corrige o que a conferência apontou.
+  Pede confirmação — substitui o vídeo entregue e ocupa a fila por alguns
+  minutos.
+
 ## 3.94
 
 - **A busca acha pelo título do vídeo.** Ela olhava só o nome da pasta (um
