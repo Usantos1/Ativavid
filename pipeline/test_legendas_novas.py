@@ -154,3 +154,28 @@ def test_o_eco_pinta_na_mesma_ordem_nos_dois():
     j = PY.index("for desloc, cor_hex in ((")
     linha = PY[j:PY.index("\n", j)]
     assert linha.index("#ff2e88") < linha.index("#28e0d8")
+
+
+def test_o_cartao_da_tela_usa_os_mesmos_numeros_do_render():
+    """Um cartão que mente sobre o resultado é pior que não ter cartão — já
+    aconteceu aqui (lápide branca com texto branco, invisível).
+
+    Medido no navegador: o cartão do Metálico aplica o degradê com
+    `background-clip: text` e opacidade 0,88; o do Vidro, preenchimento a
+    0,32 com fio de 2px a 0,92. São os mesmos números do motor.
+    """
+    for fonte in (TSX, JS):
+        assert "VIDRO_OPACO = 0.32;" in fonte
+        assert "VIDRO_FIO = 0.92;" in fonte
+        assert "METAL_OPACO = 0.88;" in fonte
+    # e o metal do cartão é DUAS cópias, como no template: uma cópia só faria
+    # o contorno tapar o degradê
+    i = JS.index("if (V.modo === 'metal')")
+    bloco = JS[i:i + 1400]
+    assert "cima.style.webkitBackgroundClip = 'text';" in bloco
+    assert "for (const alvo of [baixo, cima])" in bloco
+    # e o vidro do cartão é fill + fio, como no template
+    i = JS.index("if (V.modo === 'vidro')")
+    bloco = JS[i:i + 1200]
+    assert "fundo.style.opacity = String(VIDRO_OPACO);" in bloco
+    assert "fio.style.webkitTextStrokeWidth" in bloco
