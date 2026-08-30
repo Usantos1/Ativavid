@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.90
+
+- **"Conferir os vídeos entregues"**, em Configurações. Passa uma checagem
+  em todos os seus projetos e mostra o que saiu torto: trecho pedindo tempo
+  que a fonte não tem, pausa sobrando dentro do corte, vídeo sem trilha.
+  Leva ~11 segundos para 187 projetos.
+  Era uma ferramenta que só rodava por linha de comando — e foi por ela que
+  os defeitos mais caros apareceram, nenhum deles dando erro na hora.
+
 ## 3.89
 
 - **O som da manchete estava igual em todos os estilos, e não é.** A

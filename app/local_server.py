@@ -991,6 +991,39 @@ def _musica_instalar_em_fundo(projects_root) -> None:
                      name="musica-instalar").start()
 
 
+def rodar_auditoria() -> dict:
+    """Passa os invariantes em TODOS os projetos entregues.
+
+    Roda `tools/auditar_projetos.py --json` num processo a parte: o script
+    e de leitura (json dos projetos + ffprobe), e mante-lo como script
+    preserva o uso no terminal, que e onde ele nasceu.
+    """
+    import subprocess
+    import sys
+
+    raiz = REPO / "tools" / "auditar_projetos.py"
+    if not raiz.exists():
+        return {"ok": False, "erro": "ferramenta de auditoria nao encontrada"}
+    try:
+        r = subprocess.run(
+            [sys.executable, str(raiz), "--json"],
+            capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=180,
+            **({"creationflags": subprocess.CREATE_NO_WINDOW}
+               if hasattr(subprocess, "CREATE_NO_WINDOW") else {}))
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "erro": "a auditoria passou de 3 minutos"}
+    saida = (r.stdout or "").strip()
+    if r.returncode != 0 or not saida:
+        detalhe = ((r.stderr or "") or saida)[-200:]
+        return {"ok": False, "erro": detalhe or "a auditoria nao respondeu"}
+    try:
+        dados = json.loads(saida)
+    except json.JSONDecodeError:
+        return {"ok": False, "erro": "resposta da auditoria ilegivel"}
+    return {"ok": True, **dados}
+
+
 def run_doutor() -> dict:
     from app.win_process import hide_console_kwargs
 
@@ -1751,6 +1784,9 @@ class StudioHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/doutor":
             self._json(run_doutor())
+            return
+        if path == "/api/auditoria":
+            self._json(rodar_auditoria())
             return
         if path == "/api/preset":
             self._json(load_preset())

@@ -2032,6 +2032,17 @@ _MOTOR_NA_FILA = 7        # codigo do launcher para "outro esta compondo"
 # caminho sincrono (uma tentativa so) e a trilha vinha da biblioteca
 # mesmo com o motor prestes a liberar.
 _MOTOR_TENTATIVAS_FILA = 18
+# MEDIDO em 30/08, antes de "otimizar" esta espera: dos 138 jobs com
+# `MUSIC_WAIT`, 106 esperam ~0s e 16 esperam mais de 30s. Desses 16, DEZ
+# terminam com "motor: MusicGen local" — ou seja, a espera esta compondo
+# musica de verdade, nao desperdicando. Encurtar o teto trocaria trilha de
+# IA por trilha da biblioteca nesses casos.
+#
+# O custo total e 27 minutos somados em 138 jobs (12s de media). O ganho
+# real estaria em SOBREPOR a fila do motor com o render do overlay (a
+# composicao do Overlay nao usa a trilha; ela entra so no compose), nao em
+# cortar o tempo de espera. Fica registrado para nao se mexer aqui pelo
+# motivo errado.
 
 
 def _tentar_musicgen(destino: Path, vibe: str, length_sec: int,

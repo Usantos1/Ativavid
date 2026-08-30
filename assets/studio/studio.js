@@ -3626,6 +3626,8 @@ function wireForms() {
     }
   };
 
+  const btnAud = $("#btnAuditoria");
+  if (btnAud) btnAud.onclick = () => rodarAuditoria().catch((e) => toast(e.message));
   const btnDoutorRun = $("#btnDoutorRun");
   if (btnDoutorRun) btnDoutorRun.onclick = () => runDoutor().catch((err) => toast(err.message));
   const btnCopy = $("#btnDoutorCopy");
@@ -4443,6 +4445,49 @@ function wireForms() {
       }
       goHome();
     };
+  }
+}
+
+/* A auditoria dos videos ENTREGUES. Diferente do Diagnostico, que olha a
+ * instalacao: aqui se conferem os projetos que ja sairam.
+ *
+ * Nao roda sozinha ao abrir a tela (leva ~11s e le 187 projetos) — o
+ * Diagnostico roda porque e barato e e a primeira pergunta de quem chega
+ * aqui; esta e uma pergunta que se faz de propósito. */
+async function rodarAuditoria() {
+  const out = $("#auditoriaOut");
+  const resumo = $("#auditoriaResumo");
+  const btn = $("#btnAuditoria");
+  if (!out) return;
+  if (btn) { btn.disabled = true; btn.textContent = "Conferindo…"; }
+  if (resumo) resumo.textContent = "Lendo os projetos…";
+  out.classList.add("carregando");
+  let d;
+  try {
+    d = await api("/api/auditoria");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Conferir de novo"; }
+    out.classList.remove("carregando");
+  }
+  if (!d || d.ok === false) {
+    if (resumo) resumo.textContent = `Não deu para conferir: ${(d && d.erro) || "sem detalhe"}`;
+    out.innerHTML = "";
+    return;
+  }
+  const itens = d.itens || [];
+  out.innerHTML = itens.map((it) => `<article class="doutor-item aviso">
+      <header class="doutor-item-top">
+        <span class="doutor-dot" aria-hidden="true"></span>
+        <h5 class="t">${escapeHtml(String(it.projeto || "").slice(0, 46))}</h5>
+      </header>
+      <p class="d">${escapeHtml((it.problemas || []).join(" · "))}</p>
+    </article>`).join("") || "";
+  if (resumo) {
+    resumo.textContent = itens.length
+      ? `${itens.length} de ${d.total} projeto(s) com alguma marca — `
+        + (d.resumo || []).map((r) => `${r.projetos} ${r.tipo}`).join(" · ")
+      : `${d.total} projetos conferidos, nenhuma marca.`;
+    resumo.classList.toggle("doutor-atencao", itens.length > 0);
   }
 }
 

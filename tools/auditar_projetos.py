@@ -31,7 +31,13 @@ import argparse
 _ap = argparse.ArgumentParser(description=__doc__)
 _ap.add_argument("--raiz", type=Path,
                  default=Path.home() / "ATIVAVID" / "Projetos")
-RAIZ = _ap.parse_args().raiz
+# `--json` para o APP chamar. A saida de texto continua igual: ela e o
+# que se le no terminal, e parsear texto impresso e frouxo demais para
+# virar tela.
+_ap.add_argument("--json", action="store_true",
+                 help="imprime o resultado como JSON (o app usa isto)")
+_args = _ap.parse_args()
+RAIZ = _args.raiz
 VIDEO_EXT = {".mp4", ".mov", ".m4v", ".webm", ".mkv"}
 
 
@@ -57,7 +63,8 @@ def duracao(p: Path) -> float:
 achados = Counter()
 linhas = []
 projs = sorted([p for p in RAIZ.glob("2026*") if p.is_dir()])
-print(f"projetos: {len(projs)}\n")
+if not _args.json:      # no modo JSON a saida tem de ser SO o JSON
+    print(f"projetos: {len(projs)}\n")
 
 for proj in projs:
     edit = proj / "edit"
@@ -141,9 +148,19 @@ for proj in projs:
     if problemas:
         linhas.append((proj.name[:38], problemas))
 
-for nome, ps in linhas:
-    print(f"{nome:<38} {' · '.join(ps)[:120]}")
-print("\n--- resumo ---")
-for k, n in achados.most_common():
-    print(f"  {k:<28} {n} projeto(s)")
-print(f"  projetos com algo               {len(linhas)} de {len(projs)}")
+if _args.json:
+    print(json.dumps({
+        "total": len(projs),
+        "comAlgo": len(linhas),
+        "resumo": [{"tipo": k, "projetos": n}
+                   for k, n in achados.most_common()],
+        "itens": [{"projeto": nome, "problemas": ps}
+                  for nome, ps in linhas],
+    }, ensure_ascii=False))
+else:
+    for nome, ps in linhas:
+        print(f"{nome:<38} {' · '.join(ps)[:120]}")
+    print("\n--- resumo ---")
+    for k, n in achados.most_common():
+        print(f"  {k:<28} {n} projeto(s)")
+    print(f"  projetos com algo               {len(linhas)} de {len(projs)}")
