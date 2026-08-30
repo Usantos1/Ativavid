@@ -10,7 +10,7 @@ puro. A assinatura carrega a marca do processo que produziu o arquivo, e a
 marca é comparada com o que está pedido agora.
 
 **Cache envenenado.** Se a revisão falhou, o Whisper puro que saiu no lugar
-NÃO pode ser gravado como `+rev1`. Se fosse, uma queda de rede de dez
+NÃO pode ser gravado com o sufixo de revisão. Se fosse, uma queda de rede de dez
 segundos marcaria o vídeo como já processado e a próxima chance de revisá-lo
 só voltaria quando a versão virasse `rev2`.
 
@@ -32,6 +32,12 @@ for extra in (REPO, REPO / "helpers"):
         sys.path.insert(0, str(extra))
 
 from app.transcricao import Palavra, Segmento, ResultadoDeTranscricao, revisao
+
+# O sufixo sai do modulo: estes testes sao sobre QUANDO ele e gravado,
+# nao sobre qual e a versao do prompt (rev1, rev2...). Presos na letra,
+# tres deles quebravam a cada melhoria da revisao sem ter mudado de
+# intencao.
+SUF = revisao.SUFIXO
 
 PALAVRAS = [Palavra("eu", 0.0, 0.2), Palavra("vendi", 0.2, 0.7),
             Palavra("na", 0.7, 0.85), Palavra("praimcamp", 0.85, 1.6),
@@ -115,7 +121,7 @@ def test_revisao_off_grava_a_marca_pura(mundo):
     mundo.ligar("off")
     d = mundo.rodar()
     assert d["text"] == TEXTO
-    assert "marca=local-medium" in mundo.sig() and "+rev1" not in mundo.sig()
+    assert "marca=local-medium" in mundo.sig() and SUF not in mundo.sig()
     assert mundo.marcas() == ["local-medium-medium"]
 
 
@@ -124,8 +130,8 @@ def test_revisao_on_grava_as_duas_variantes(mundo):
     mundo.gemini()
     d = mundo.rodar()
     assert d["text"] == CORRIGIDO
-    assert "marca=local-medium+rev1" in mundo.sig()
-    assert mundo.marcas() == ["local-medium+rev1-medium", "local-medium-medium"]
+    assert f"marca=local-medium{SUF}" in mundo.sig()
+    assert mundo.marcas() == [f"local-medium{SUF}-medium", "local-medium-medium"]
     assert d["_revisao"] == revisao.VERSAO
 
 
@@ -168,9 +174,10 @@ def test_revisao_que_falha_nao_grava_marca_revisada(mundo):
     d = mundo.rodar()
 
     assert d["text"] == TEXTO, "não era para ter revisado nada"
-    assert "+rev1" not in mundo.sig(), "assinou como revisado um Whisper puro"
+    assert SUF not in mundo.sig(), "assinou como revisado um Whisper puro"
     assert mundo.marcas() == ["local-medium-medium"], (
-        "gravou `+rev1` no cache entre projetos com conteúdo não revisado")
+        "gravou o sufixo de revisão no cache entre projetos com "
+        "conteúdo não revisado")
     assert "_revisao" not in d
 
 
@@ -189,7 +196,7 @@ def test_falha_temporaria_e_tentada_de_novo_depois(mundo):
     assert _MotorFalso.chamadas == 1
 
 
-def test_revisao_descartada_pelo_freio_tambem_nao_vira_rev1(mundo, monkeypatch):
+def test_revisao_descartada_pelo_freio_tambem_nao_vira_revisada(mundo, monkeypatch):
     """Retranscrever não é revisar, e o resultado não pode se dizer revisado.
 
     O freio só vale com amostra suficiente — num trecho de 3 palavras, uma
@@ -204,7 +211,7 @@ def test_revisao_descartada_pelo_freio_tambem_nao_vira_rev1(mundo, monkeypatch):
     mundo.gemini(correcoes=[{"indice": i, "para": f"x{i}"} for i in range(5)])
     d = mundo.rodar()
     assert d["text"] == TEXTO
-    assert "+rev1" not in mundo.sig()
+    assert SUF not in mundo.sig()
     assert mundo.marcas() == ["local-medium-medium"]
 
 
@@ -230,7 +237,7 @@ def test_rollback_devolve_o_texto_puro_sem_retranscrever(mundo):
     mundo.ligar("off")
     d = mundo.rodar()
     assert d["text"] == TEXTO, "o rollback não voltou o texto"
-    assert "+rev1" not in mundo.sig()
+    assert SUF not in mundo.sig()
     assert _MotorFalso.chamadas == 1, "o rollback custou uma transcrição nova"
 
 
@@ -241,7 +248,7 @@ def test_o_rollback_nao_purga_nada(mundo):
     mundo.rodar()
     mundo.ligar("off")
     mundo.rodar()
-    assert mundo.marcas() == ["local-medium+rev1-medium", "local-medium-medium"]
+    assert mundo.marcas() == [f"local-medium{SUF}-medium", "local-medium-medium"]
 
     mundo.ligar("gemini")
     d = mundo.rodar()

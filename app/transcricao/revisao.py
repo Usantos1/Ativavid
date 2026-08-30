@@ -67,7 +67,10 @@ from . import alinhar
 # transcript. Mudou o prompt, o modelo ou uma política do alinhador? Vire
 # para `rev2`: os transcripts antigos ficam onde estão em vez de serem
 # servidos como se tivessem passado pelo processo novo.
-VERSAO = "rev1"
+# rev2: o prompt passou a levar o vocabulario das marcas do usuario.
+# A versao E a chave do cache — mantendo `rev1` o video ja revisado
+# nunca veria o nome certo da loja, que e justamente o que mudou.
+VERSAO = "rev2"
 
 # Sufixo que marca um transcript revisado, no cache entre projetos e no
 # `.srcsig` do projeto. É por ele que o rollback funciona sem apagar arquivo.
@@ -186,6 +189,50 @@ Se nada precisar mudar, devolva {"correcoes": []}.
 """
 
 
+def vocabulario() -> list[str]:
+    """Nomes próprios que o app CONHECE e o Whisper não tem como saber.
+
+    Hoje são os nomes dos kits de marca. Medido nas transcrições do
+    usuário: `Prime Camp` saiu errado 30 vezes (`Prêmio Camp`, `Prime Cup`,
+    `PremiCamp`, `Prêmio Campo`...) e foi assim para a legenda, queimada no
+    vídeo.
+
+    Nunca levanta: sem kit legível a revisão segue como sempre foi.
+    """
+    nomes: list[str] = []
+    try:
+        from app import brand_kits
+
+        for b in brand_kits.list_brands():
+            nome = str(b.get("name") or "").strip()
+            if nome and nome.lower() != "padrao" and nome not in nomes:
+                nomes.append(nome)
+    except Exception:  # noqa: BLE001
+        return []
+    return nomes[:12]
+
+
+def _bloco_de_vocabulario(nomes: list[str]) -> str:
+    """O trecho do prompt que lista as marcas. Vazio quando não há nenhuma.
+
+    A instrução diz o que fazer E o que não fazer: sem o segundo parágrafo
+    o modelo começa a "corrigir" `primeira` e `prêmio` para a marca, que é
+    o erro oposto e pior — ele reescreve fala que estava certa.
+    """
+    if not nomes:
+        return ""
+    lista = ", ".join(f"\u201c{n}\u201d" for n in nomes)
+    return (
+        "\n\nMARCAS DESTE USUÁRIO (grafia correta): " + lista + ".\n"
+        "Quando o contexto mostrar que a fala é uma dessas marcas, use a "
+        "grafia acima — inclusive quando o Whisper partiu a marca em duas "
+        "palavras ou juntou duas numa só.\n"
+        "Na dúvida NÃO troque: palavra comum parecida (\u201cprimeira\u201d, "
+        "\u201cprêmio\u201d, \u201cprimeiro\u201d, \u201ccampo\u201d) fica "
+        "como está. Só corrija quando o contexto for de marca."
+    )
+
+
 class RevisaoIndisponivel(RuntimeError):
     """O Gemini não respondeu, ou respondeu o que não dá para usar.
 
@@ -211,7 +258,8 @@ def pedir_correcoes(palavras: list[Palavra], texto: str) -> list[dict]:
     codigo, resp = chat_completions({
         "model": MODELO,
         "messages": [{"role": "user", "content":
-                      f"{PROMPT}\n\nTEXTO COMPLETO DO WHISPER:\n"
+                      f"{PROMPT}{_bloco_de_vocabulario(vocabulario())}"
+                      f"\n\nTEXTO COMPLETO DO WHISPER:\n"
                       f"{texto}\n\nPALAVRAS DO WHISPER (índice, palavra, "
                       f"tempo):\n{indexado}\n"}],
     })

@@ -1,5 +1,16 @@
 # Changelog
 
+## 4.01
+
+- **A revisão da legenda passou a saber o nome da sua loja.** *Prime Camp*
+  saía errado 30 vezes nas transcrições — *Prêmio Camp*, *Prime Cup*,
+  *PremiCamp*, *Prêmio Campo* — e ia assim para a legenda, queimada no
+  vídeo. O revisor já corrigia marcas, mas tinha de adivinhar quais eram;
+  agora ele recebe os nomes dos seus kits de marca.
+  A troca é feita pelo contexto, não por parecença: *primeira*, *prêmio* e
+  *primeiro* continuam como você falou.
+
+
 ## 4.00
 
 - **O corte não cai mais no meio de uma palavra.** Um terço das bordas de

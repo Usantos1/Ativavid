@@ -7,6 +7,7 @@ projeto, e que ela não virou um modo de transcrição por acidente.
 """
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -108,7 +109,10 @@ def test_o_sufixo_desejado_acompanha_o_interruptor(monkeypatch):
     monkeypatch.setenv("ATIVAVID_REVISAO", "off")
     assert revisao.sufixo_desejado() == ""
     monkeypatch.setenv("ATIVAVID_REVISAO", "gemini")
-    assert revisao.sufixo_desejado() == revisao.SUFIXO == "+rev1"
+    assert revisao.sufixo_desejado() == revisao.SUFIXO
+    # A FORMA e o contrato do cache; o numero sobe a cada mudanca de
+    # prompt e nao pode ser pinado aqui.
+    assert re.fullmatch(r"\+rev\d+", revisao.SUFIXO), revisao.SUFIXO
 
 
 # ------------------------------------------------- os marcadores no pipeline
