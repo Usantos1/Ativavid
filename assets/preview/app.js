@@ -51,9 +51,13 @@ const tooltip = $('tooltip');
 // minimal solid icons (design-system consistent — no emoji)
 const ICON = {
   // "ajustar a janela": as duas bordas e a seta abrindo entre elas
-  // apagar para um lado: a lamina e a metade que vai embora
-  cortarEsq: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="1.6" y="3.4" width="5.4" height="9.2" rx="1.2" fill="currentColor" opacity=".35" stroke="none"/><path d="M8.4 2.2v11.6"/><path d="M11 8h3.4M12.6 6.2 14.4 8l-1.8 1.8"/></svg>',
-  cortarDir: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="9" y="3.4" width="5.4" height="9.2" rx="1.2" fill="currentColor" opacity=".35" stroke="none"/><path d="M7.6 2.2v11.6"/><path d="M5 8H1.6M3.4 6.2 1.6 8l1.8 1.8"/></svg>',
+  // Apagar para um lado, no desenho do CapCut: a barra e o corte e o
+  // colchete e o lado que FICA; o bloco apagado some.
+  // So formas PREENCHIDAS: o `.btn.icon svg` do app forca `fill:
+  // currentColor`, e o CSS ganha do atributo `fill="none"` — icone de traco
+  // virava mancha (foi o que saiu na 3.75, e o usuario viu botao vazio).
+  cortarEsq: '<svg viewBox="0 0 16 16"><rect x="1.4" y="3.6" width="4.6" height="8.8" rx="1.1" opacity=".38"/><rect x="7.1" y="1.6" width="1.8" height="12.8" rx=".9"/><path d="M10.6 3.6h3.4v1.7h-1.7v5.4h1.7v1.7h-3.4z"/></svg>',
+  cortarDir: '<svg viewBox="0 0 16 16"><rect x="10" y="3.6" width="4.6" height="8.8" rx="1.1" opacity=".38"/><rect x="7.1" y="1.6" width="1.8" height="12.8" rx=".9"/><path d="M5.4 3.6H2v1.7h1.7v5.4H2v1.7h3.4z"/></svg>',
   fit: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3v10M14 3v10"/><path d="M4.8 8h6.4"/><path d="M6.6 6.2L4.8 8l1.8 1.8M9.4 6.2L11.2 8l-1.8 1.8"/></svg>',
   play: '<svg viewBox="0 0 16 16"><path d="M4 2.2v11.6c0 .9 1 1.5 1.8 1L15 9.2c.8-.5.8-1.7 0-2.2L5.8 1.2C5 .7 4 1.3 4 2.2z"/></svg>',
   pause: '<svg viewBox="0 0 16 16"><rect x="3" y="2" width="3.6" height="12" rx="1"/><rect x="9.4" y="2" width="3.6" height="12" rx="1"/></svg>',
@@ -1465,8 +1469,54 @@ async function loadPostCaption() {
  *
  * Sem take selecionado, vale o que estiver SOB a agulha: exigir selecao
  * antes seria um passo a mais para o gesto mais comum da edicao. */
+/* O bloco posto na mao tem duracao? Entao ele se corta como um take. */
+function blocoTemDuracao(c) {
+  return c && (c.kind === 'insert' || c.kind === 'emoji');
+}
+
+/* Cortar/encurtar o BLOCO selecionado. Devolve true quando cuidou do
+ * pedido — o chamador so segue para os takes se aqui nao era o caso. */
+function acaoNoBlocoSelecionado(acao) {
+  if (S.blocoSel < 0) return false;
+  const c = S.insertsDraft[S.blocoSel];
+  if (!c) return false;
+  if (c.kind === 'sfx') {
+    toast('Efeito é um ponto no tempo: arraste para mover, ou Excluir para tirar', 3200);
+    return true;
+  }
+  if (!blocoTemDuracao(c)) return false;
+  const t = renderedToDraft(video.currentTime);
+  const margem = 0.12;
+  if (t <= c.start + margem || t >= c.end - margem) {
+    toast('Leve a agulha para dentro do bloco', 2200);
+    return true;
+  }
+  pushHistory();
+  if (acao === 'cortar') {
+    const b = { ...c, start: t, orig: { start: t, end: c.end } };
+    c.end = t;
+    c.orig = { start: c.start, end: t };
+    S.insertsDraft.splice(S.blocoSel + 1, 0, b);
+    toast('Bloco cortado — agora são 2', 2000);
+  } else if (acao === 'esq') {
+    c.start = t;
+    toast('Começo do bloco encurtado até a agulha', 2000);
+  } else {
+    c.end = t;
+    toast('Fim do bloco encurtado até a agulha', 2000);
+  }
+  renderAll();
+  desenharMidiaNoPreview();
+  refreshHeader();
+  scheduleAutosave();
+  return true;
+}
+
 function apagarAteAAgulha(lado) {
   if (S.applying) return;
+  // o que esta SELECIONADO vem primeiro: com a imagem marcada, responder
+  // "selecione um take" e responder sobre outra coisa
+  if (acaoNoBlocoSelecionado(lado)) return;
   if (S.tab !== 1) { toast('Corte só na aba Edição', 1600); return; }
   const draftT = renderedToDraft(video.currentTime);
   const layout = draftLayout();
@@ -1498,8 +1548,15 @@ function apagarAteAAgulha(lado) {
 
 function splitAtPlayhead() {
   if (S.applying) return;
+  if (acaoNoBlocoSelecionado('cortar')) return;
   if (S.tab !== 1) { toast('Corte só na aba Edição', 1600); return; }
-  if (S.selected < 0) { toast('Selecione um take pra cortar', 1600); return; }
+  if (S.selected < 0) {
+    // legenda tem editor proprio; o resto pede um take
+    toast(S.capSel.length
+      ? 'A legenda se ajusta pelo texto: clique nela para editar'
+      : 'Selecione um take, uma imagem ou um emoji para cortar', 2600);
+    return;
+  }
   const r = S.draft[S.selected];
   if (!r || r.removed) { toast('Esse take está removido', 1600); return; }
   const item = draftLayout()[S.selected];
@@ -5341,6 +5398,12 @@ $('btnRedo').addEventListener('click', redo);
 $('btnSplit').innerHTML = ICON.razor;
 $('btnSplit').classList.add('icon');
 $('btnSplit').addEventListener('click', splitAtPlayhead);
+// Apagar da agulha para um lado — o Q e o W do CapCut, tambem no botao:
+// atalho sem botao e recurso que so existe para quem leu o changelog.
+$('btnCutLeft').innerHTML = ICON.cortarEsq;
+$('btnCutRight').innerHTML = ICON.cortarDir;
+$('btnCutLeft').addEventListener('click', () => apagarAteAAgulha('esq'));
+$('btnCutRight').addEventListener('click', () => apagarAteAAgulha('dir'));
 $('btnDeleteTake').innerHTML = ICON.trash;
 $('btnDeleteTake').classList.add('icon');
 $('btnDeleteTake').addEventListener('click', toggleSelectedTake);
@@ -5358,6 +5421,8 @@ if ($('capaChip')) {
 function mostrarCapaNoBloco() {
   const chip = $('capaChip');
   if (!chip || !BASE) return;
+  // (o rotulo so aparece quando NAO ha capa: com a miniatura, texto por
+  //  cima e ruido — o `title` continua explicando)
   const img = new Image();
   img.onload = () => {
     chip.style.backgroundImage = `url(${img.src})`;
@@ -5528,10 +5593,20 @@ function refreshTransportActions() {
     : (!can
       ? 'Selecione um take ou um bloco para excluir'
       : (r.removed ? 'Restaurar o take selecionado (Delete)' : 'Excluir o take selecionado (Delete)'));
-  // os cortes para os lados so valem na Edicao
-  for (const id of ['btnCutLeft', 'btnCutRight']) {
+  // Os cortes valem na Edicao (a aba Visual mostra o video pronto, onde nao
+  // ha o que cortar). Botao apagado sem explicacao vira "quebrado": o
+  // motivo vai no titulo.
+  for (const [id, lado] of [['btnCutLeft', 'ESQUERDA (Q)'],
+                            ['btnCutRight', 'DIREITA (W)']]) {
     const b = $(id);
-    if (b) b.disabled = S.tab !== 1;
+    if (!b) continue;
+    const temBloco = blocoTemDuracao(S.insertsDraft[S.blocoSel]);
+    b.disabled = S.tab !== 1 && !temBloco;
+    b.title = b.disabled
+      ? `Apagar da agulha para a ${lado} — abra a aba Edição`
+      : (temBloco
+        ? `Encurtar o bloco selecionado pela ${lado}`
+        : `Apagar da agulha para a ${lado}`);
   }
 }
 

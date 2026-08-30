@@ -3740,15 +3740,18 @@ body.styles-wide .setup-actions .btn.primary {
  * linha do tempo, nao um botao na barra. */
 /* A coluna da faixa de video guarda o icone E a capa, empilhados. Ela e a
    unica que precisa de duas linhas, entao so ela muda de largura. */
+/* A coluna nao cresce por causa da capa: 48px, igual as outras faixas. A
+   capa e um quadradinho — com a miniatura dentro, ela se explica sozinha, e
+   o nome fica no passar do mouse. */
 .track-label.track-label-video {
-  flex: 0 0 62px;
+  flex: 0 0 48px;
   flex-direction: column;
-  gap: 4px;
-  padding: 4px 0;
+  gap: 3px;
+  padding: 3px 0;
 }
 .capa-chip {
-  width: 52px;
-  height: 34px;
+  width: 40px;
+  height: 30px;
   border: 1px dashed var(--stroke);
   border-radius: 6px;
   background: transparent center/cover no-repeat;
@@ -3768,12 +3771,8 @@ body.styles-wide .setup-actions .btn.primary {
   border-color: color-mix(in srgb, var(--interact) 55%, transparent);
   color: var(--text, #f4f4f5);
 }
-.capa-chip.tem-capa .capa-chip-txt {
-  background: rgba(0, 0, 0, 0.6);
-  border-radius: 4px;
-  padding: 0 4px;
-  color: #fff;
-}
+/* Com a miniatura no fundo, o texto vira ruido: some. */
+.capa-chip.tem-capa .capa-chip-txt { display: none; }
 
 /* Bloco selecionado: e nele que o Delete age e onde o ✕ aparece. */
 .chip.insert.sel {

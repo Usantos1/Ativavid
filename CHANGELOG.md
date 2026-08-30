@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.76
+
+- **Os botões de corte agora existem de verdade.** Na 3.75 eles saíram sem
+  ícone e sem clique — só as teclas Q e W funcionavam. Foi erro meu na hora
+  de aplicar a mudança.
+- **Cortar vale para a imagem e o emoji selecionados**: Cortar divide o bloco
+  em dois, Q encurta o começo até a agulha e W encurta o fim. Antes o app
+  respondia "selecione um take" mesmo com a imagem marcada.
+- **O efeito sonoro explica em vez de fingir que cortou**: ele toca inteiro a
+  partir de um instante, então o que se faz é mover ou excluir.
+- **A capa ficou compacta** e não estica mais a coluna da linha do tempo.
+
 ## 3.75
 
 - **Cortar e apagar para os lados**, como no CapCut: dois botões novos na

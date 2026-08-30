@@ -47,6 +47,9 @@ def test_a_conta_do_tempo_e_a_mesma_da_regua():
 
 def test_o_cortar_continua_exigindo_agulha_dentro_do_take():
     i = JS.index("function splitAtPlayhead()")
-    corpo = JS[i:i + 900]
-    assert "Selecione um take pra cortar" in corpo
+    corpo = JS[i:i + 1200]
+    # A mensagem mudou na 3.76: cortar passou a valer para a imagem e o
+    # emoji selecionados, então pedir "um take" seria responder sobre outra
+    # coisa (o usuário tinha a imagem marcada e ouvia "selecione um take").
+    assert "Selecione um take, uma imagem ou um emoji para cortar" in corpo
     assert "Posicione a agulha dentro do take" in corpo

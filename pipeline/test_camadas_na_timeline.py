@@ -258,3 +258,40 @@ def test_o_excluir_de_cima_apaga_o_bloco_selecionado():
     assert "const can = !!bloco ||" in bloco
     j = JS.index("function toggleSelectedTake")
     assert "removerBlocoDaMao(i);" in JS[j:j + 400]
+
+
+def test_cortar_vale_para_a_imagem_e_o_emoji():
+    """"não deixa cortar uma imagem, um áudio ou uma legenda" (30/08):
+    Cortar/Q/W só olhavam os takes de vídeo e respondiam "selecione um
+    take" com a imagem selecionada — resposta sobre outra coisa."""
+    assert "function acaoNoBlocoSelecionado" in JS
+    i = JS.index("function acaoNoBlocoSelecionado")
+    bloco = JS[i:i + 1600]
+    assert "S.insertsDraft.splice(S.blocoSel + 1, 0, b);" in bloco   # cortar
+    assert "c.start = t;" in bloco and "c.end = t;" in bloco         # Q e W
+    # e o bloco vem ANTES do take nos três caminhos
+    for fn in ("function apagarAteAAgulha", "function splitAtPlayhead"):
+        k = JS.index(fn)
+        assert "acaoNoBlocoSelecionado" in JS[k:k + 400], fn
+
+
+def test_o_efeito_sonoro_explica_em_vez_de_cortar():
+    """Ele toca inteiro a partir de um instante: cortar não existe ali.
+    Dizer isso é melhor que cortar de um jeito que o render ignora."""
+    i = JS.index("function acaoNoBlocoSelecionado")
+    bloco = JS[i:i + 1600]
+    assert "Efeito é um ponto no tempo" in bloco
+    assert "if (!blocoTemDuracao(c)) return false;" in bloco
+
+
+def test_os_botoes_de_corte_existem_de_verdade():
+    """Na 3.75 eles ficaram sem ícone e sem clique — um ramo do meu patch
+    não rodou, e só as teclas Q/W funcionavam."""
+    assert "$('btnCutLeft').innerHTML = ICON.cortarEsq;" in JS
+    assert "$('btnCutRight').innerHTML = ICON.cortarDir;" in JS
+    assert "$('btnCutLeft').addEventListener('click'" in JS
+    assert "$('btnCutRight').addEventListener('click'" in JS
+    # e o ícone é de forma PREENCHIDA: o CSS do app força fill=currentColor,
+    # então ícone de traço vira mancha
+    i = JS.index("cortarEsq:")
+    assert 'fill="none"' not in JS[i:i + 400]
