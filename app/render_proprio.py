@@ -52,6 +52,31 @@ BLUR_K = 1.05
 # InsertCard.tsx: cartao fixo, 780x500 a 90px do topo, canto 28, sombra
 # 0 18px 50px rgba(0,0,0,.45).
 INSERT_W, INSERT_H, INSERT_TOP, INSERT_RAIO = 780, 500, 90, 28
+# O cartao de sempre, em fracao do quadro 1080x1920: e o padrao de quem nao
+# escolheu nada, para projeto antigo nao mudar de aparencia.
+INSERT_X_PAD = 0.5
+INSERT_Y_PAD = (INSERT_TOP + INSERT_H / 2) / 1920
+INSERT_SIZE_PAD = INSERT_W / 1080
+
+
+def geometria_do_insert(it: dict, larg: int, alt: int) -> tuple[int, int, float, float]:
+    """(largura, altura, centro x, centro y) em pixels do cartao.
+
+    `size` e a largura em fracao da LARGURA do quadro; a altura segue a
+    proporcao do cartao (500/780) para ele nunca deformar.
+    """
+    def _f(chave, padrao):
+        try:
+            return float(it.get(chave, padrao))
+        except (TypeError, ValueError):
+            return padrao
+
+    frac = min(1.0, max(0.08, _f("size", INSERT_SIZE_PAD)))
+    cw = max(16, int(round(frac * larg)))
+    ch = max(16, int(round(cw * INSERT_H / INSERT_W)))
+    cx = min(1.0, max(0.0, _f("x", INSERT_X_PAD))) * larg
+    cy = min(1.0, max(0.0, _f("y", INSERT_Y_PAD))) * alt
+    return cw, ch, cx, cy
 
 # Emoji: o Chrome no Windows desenha com a Segoe UI Emoji do SISTEMA. Lendo o
 # MESMO arquivo, o glifo sai identico ao das versoes anteriores — e nada e
@@ -437,6 +462,9 @@ class Camada:
     insert: tuple | None = None      # (imagem do cartao, quadros) — Ken-Burns
     # take de VIDEO: (pasta dos quadros ja no tamanho do cartao, mascara)
     insert_quadros: tuple | None = None
+    # (largura, altura, centro x, centro y) do cartao — o usuario pode mover
+    # e redimensionar a imagem que ele mesmo pos
+    insert_caixa: tuple | None = None
     cache_chave: tuple | None = None
     cache_tela: np.ndarray | None = None
     cache_pronto: np.ndarray | None = None
@@ -3102,22 +3130,21 @@ class Renderizador:
             except (OSError, IndexError):
                 print(f"  [warn] insert ilegivel: {src}", flush=True)
                 continue
+            cw, ch, ccx, ccy = geometria_do_insert(it, self.w, self.h)
+            raio = max(4, int(round(INSERT_RAIO * cw / INSERT_W)))
             # objectFit: cover — recorta o excedente, nao deforma
-            esc = max(INSERT_W / im.width, INSERT_H / im.height)
+            esc = max(cw / im.width, ch / im.height)
             nw, nh = max(1, round(im.width * esc)), max(1, round(im.height * esc))
             im = im.resize((nw, nh), Image.LANCZOS).crop((
-                (nw - INSERT_W) // 2, (nh - INSERT_H) // 2,
-                (nw - INSERT_W) // 2 + INSERT_W,
-                (nh - INSERT_H) // 2 + INSERT_H))
-            masc = Image.new("L", (INSERT_W, INSERT_H), 0)
+                (nw - cw) // 2, (nh - ch) // 2,
+                (nw - cw) // 2 + cw, (nh - ch) // 2 + ch))
+            masc = Image.new("L", (cw, ch), 0)
             ImageDraw.Draw(masc).rounded_rectangle(
-                [0, 0, INSERT_W - 1, INSERT_H - 1], radius=INSERT_RAIO,
-                fill=255)
+                [0, 0, cw - 1, ch - 1], radius=raio, fill=255)
             im.putalpha(masc)
             folga = 70
-            base = np.zeros((INSERT_H + 2 * folga, INSERT_W + 2 * folga),
-                            dtype=np.float32)
-            base[folga:folga + INSERT_H, folga:folga + INSERT_W] = \
+            base = np.zeros((ch + 2 * folga, cw + 2 * folga), dtype=np.float32)
+            base[folga:folga + ch, folga:folga + cw] = \
                 np.asarray(masc, dtype=np.float32) / 255.0
             sombra = self._sombra_de(base, [(0, 18, 50, 0.45)], k=0.5)
             leg = Camada(ini, min(self.frames, fim) - 1)
@@ -3127,6 +3154,8 @@ class Renderizador:
             s_rgba[..., 3] = (sombra * 255).astype(np.uint8)   # preta
             leg.insert = (im, total, Image.fromarray(s_rgba, "RGBA"))
             leg.insert_quadros = (pasta, masc) if video else None
+            # onde e de que tamanho: sem isto o desenho voltaria ao cartao fixo
+            leg.insert_caixa = (cw, ch, ccx, ccy)
             camadas.append(leg)
             self.eventos_sfx.append(("whoosh.mp3", ini / self.fps, 0.09))
         return camadas
@@ -3168,11 +3197,15 @@ class Renderizador:
         cresce = 1.0 + 0.08 * min(1.0, f / max(1.0, total))
         escala = (0.92 + 0.08 * ent) * cresce
         dy = 26.0 * (1.0 - ent)
-        lw = max(1, int(round(INSERT_W * escala)))
-        lh = max(1, int(round(INSERT_H * escala)))
+        cw, ch, ccx, ccy = getattr(
+            leg, "insert_caixa",
+            (INSERT_W, INSERT_H, self.w / 2.0,
+             INSERT_TOP + INSERT_H / 2.0))
+        lw = max(1, int(round(cw * escala)))
+        lh = max(1, int(round(ch * escala)))
         # `scale` do CSS cresce a partir do CENTRO da caixa
-        cx = self.w / 2.0
-        cy = INSERT_TOP + INSERT_H / 2.0 + dy
+        cx = ccx
+        cy = ccy + dy
         x0, y0 = int(round(cx - lw / 2)), int(round(cy - lh / 2))
         folga = 70
         L, A = lw + 2 * folga, lh + 2 * folga

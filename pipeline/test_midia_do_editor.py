@@ -176,3 +176,52 @@ def test_a_biblioteca_guarda_a_copia_duravel(tmp_path):
     assert r["src"] == "library/foto.jpg"
     # a cópia que sobrevive ao scaffold
     assert (tmp_path / "proj" / "edit" / "midia" / "library" / "foto.jpg").exists()
+
+
+def test_a_imagem_leva_posicao_e_tamanho(tmp_path):
+    """Pedido de 30/08: a foto entrava sempre no mesmo cartão fixo e tapava
+    a cena. x/y são o CENTRO em fração do quadro e `size` a largura."""
+    edit, public = _projeto(tmp_path, {"newInserts": [
+        {"src": "biblioteca/foto.jpg", "start": 3.0, "end": 5.0,
+         "x": 0.75, "y": 0.7, "size": 0.36}]})
+    ed: dict = {"inserts": []}
+    midia_do_editor(edit, public, ed)
+    it = ed["inserts"][0]
+    assert (it["x"], it["y"], it["size"]) == (0.75, 0.7, 0.36)
+
+
+def test_geometria_absurda_e_aparada(tmp_path):
+    edit, public = _projeto(tmp_path, {"newInserts": [
+        {"src": "biblioteca/foto.jpg", "start": 1.0, "end": 3.0,
+         "x": -5, "y": 9, "size": 40}]})
+    ed: dict = {"inserts": []}
+    midia_do_editor(edit, public, ed)
+    it = ed["inserts"][0]
+    assert 0.0 <= it["x"] <= 1.0 and 0.0 <= it["y"] <= 1.0
+    assert 0.08 <= it["size"] <= 1.0
+
+
+def test_sem_os_campos_o_cartao_e_o_de_sempre():
+    """Projeto antigo não pode mudar de aparência: 780x500 a 90px do topo."""
+    from app.render_proprio import geometria_do_insert
+
+    assert geometria_do_insert({}, 1080, 1920) == (780, 500, 540.0, 340.0)
+
+
+def test_o_cartao_nunca_deforma():
+    """Um botão de tamanho só: a altura segue a proporção do cartão."""
+    from app.render_proprio import geometria_do_insert
+
+    for frac in (0.2, 0.5, 0.9):
+        cw, ch, _, _ = geometria_do_insert({"size": frac}, 1080, 1920)
+        assert abs(ch / cw - 500 / 780) < 0.01, (frac, cw, ch)
+
+
+def test_os_dois_motores_calculam_igual():
+    repo = Path(__file__).resolve().parent.parent
+    tsx = (repo / "assets" / "shortform" / "src" / "Main.tsx").read_text(encoding="utf-8")
+    i = tsx.index("const InsertCard")
+    bloco = tsx[i:i + 2200]
+    assert "(larg * CARD_H) / CARD_W" in bloco      # altura pela proporção
+    assert "cx - larg / 2" in bloco                 # x/y são o centro
+    assert "(CARD_TOP + CARD_H / 2) / 1920" in bloco  # mesmo padrão

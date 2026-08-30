@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.70
+
+- **A imagem que você insere agora se move e muda de tamanho.** Arraste ela
+  sobre o vídeo e use a roda do mouse para aumentar ou diminuir. Antes toda
+  imagem entrava no mesmo cartão fixo no alto — no seu vídeo de ontem a foto
+  tapava a cena e não havia como tirar do caminho.
+- O cartão **nunca deforma**: a altura acompanha a largura na proporção de
+  sempre. E quem não mexer continua com o cartão de antes, igualzinho.
+
 ## 3.69
 
 - **Agora dá para pegar e apagar o som que você põe.** Clicar no bloco levava

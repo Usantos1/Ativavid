@@ -3584,11 +3584,16 @@ body.styles-wide .setup-actions .btn.primary {
   border-radius: 8px;
 }
 .midia-previa-card {
+  /* posicao e tamanho vem do JS (o usuario move e redimensiona); os valores
+     aqui sao so o ponto de partida do cartao de sempre */
   position: absolute;
   left: 13.9%;
   top: 4.7%;
   width: 72.2%;
   height: 26.0%;
+  pointer-events: auto;
+  cursor: grab;
+  touch-action: none;
   border-radius: 3%;
   overflow: hidden;
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
@@ -3690,3 +3695,8 @@ body.styles-wide .setup-actions .btn.primary {
   inset: -6px;
 }
 .chip .chip-x:hover { background: var(--rose-fg, #ff5470); }
+.midia-previa-card.dragging { cursor: grabbing; }
+.midia-previa-card.movivel:hover {
+  outline: 2px dashed color-mix(in srgb, var(--hl-accent, #ff7713) 60%, transparent);
+  outline-offset: 4px;
+}

@@ -550,7 +550,14 @@ const CARD_TOP = 90;
 
 const ehVideo = (s: string) => /\.(mp4|mov|webm)$/i.test(s);
 
-const InsertCard: React.FC<{src: string; totalFrames: number}> = ({src, totalFrames}) => {
+// x/y sao o CENTRO em fracao do quadro e `size` a LARGURA em fracao da
+// largura — as mesmas contas de `geometria_do_insert` no render_proprio.py.
+// Sem os campos sai o cartao de sempre (780x500 a 90px do topo), para
+// projeto antigo nao mudar de aparencia.
+const InsertCard: React.FC<{
+  src: string; totalFrames: number;
+  x?: number; y?: number; size?: number;
+}> = ({src, totalFrames, x, y, size}) => {
   const frame = useCurrentFrame();
   const enter = interpolate(frame, [0, 9], [0, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic)});
   const exit = interpolate(frame, [totalFrames - 7, totalFrames], [1, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
@@ -558,11 +565,17 @@ const InsertCard: React.FC<{src: string; totalFrames: number}> = ({src, totalFra
   // dynamic zoom: the image itself grows slowly while on screen (Ken-Burns)
   const grow = interpolate(frame, [0, totalFrames], [1, 1.08], {extrapolateRight: 'clamp'});
   const scale = interpolate(enter, [0, 1], [0.92, 1]) * grow;
-  const y = interpolate(enter, [0, 1], [26, 0]);
+  // `y` virou a POSICAO (prop); esta e a subida de entrada
+  const yEnt = interpolate(enter, [0, 1], [26, 0]);
+  const {width: qLarg, height: qAlt} = useVideoConfig();
+  const larg = Math.max(16, Math.round(Math.min(1, Math.max(0.08, size ?? CARD_W / 1080)) * qLarg));
+  const alt = Math.max(16, Math.round((larg * CARD_H) / CARD_W));
+  const cx = Math.min(1, Math.max(0, x ?? 0.5)) * qLarg;
+  const cy = Math.min(1, Math.max(0, y ?? (CARD_TOP + CARD_H / 2) / 1920)) * qAlt;
   return (
-    <AbsoluteFill style={{justifyContent: 'flex-start', alignItems: 'center'}}>
+    <AbsoluteFill>
       <Sfx src="whoosh.mp3" />
-      <div style={{width: CARD_W, height: CARD_H, marginTop: CARD_TOP, borderRadius: 28, overflow: 'hidden', opacity, scale: String(scale), translate: `0px ${y}px`, boxShadow: '0 18px 50px rgba(0,0,0,0.45)'}}>
+      <div style={{position: 'absolute', width: larg, height: alt, left: cx - larg / 2, top: cy - alt / 2, borderRadius: Math.max(4, Math.round((28 * larg) / CARD_W)), overflow: 'hidden', opacity, scale: String(scale), translate: `0px ${yEnt}px`, boxShadow: '0 18px 50px rgba(0,0,0,0.45)'}}>
         {/* Take de video da Biblioteca entra igual a uma foto. Mudo de
             proposito: o som do take passaria por cima da fala. */}
         {ehVideo(src) ? (
@@ -585,7 +598,8 @@ const Inserts: React.FC = () => {
         const duration = Math.round((it.end - it.start) * fps);
         return (
           <Sequence key={i} from={from} durationInFrames={duration} layout="none">
-            <InsertCard src={it.src} totalFrames={duration} />
+            <InsertCard src={it.src} totalFrames={duration}
+              x={(it as any).x} y={(it as any).y} size={(it as any).size} />
           </Sequence>
         );
       })}

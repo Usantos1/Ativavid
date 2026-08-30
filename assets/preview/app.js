@@ -3250,12 +3250,22 @@ function desenharMidiaNoPreview() {
       continue;
     }
     const card = el('div', 'midia-previa-card', box);
+    // mesma conta dos dois motores: x/y sao o CENTRO e `size` a largura,
+    // ambos em fracao do quadro; a altura segue a proporcao do cartao
+    const larg = Math.min(1, Math.max(0.08, c.size ?? CARTAO_SIZE_PAD));
+    const lp = larg * box.clientWidth;
+    const ap = lp * (500 / 780);
+    card.style.width = `${lp}px`;
+    card.style.height = `${ap}px`;
+    card.style.left = `${(c.x ?? 0.5) * box.clientWidth - lp / 2}px`;
+    card.style.top = `${(c.y ?? CARTAO_Y_PAD) * box.clientHeight - ap / 2}px`;
     if (c.src) {
       const img = el('img', '', card);
       img.src = `${BASE}/media/remotion/public/${c.src}`;
       img.alt = '';
     }
     el('div', 'midia-previa-nome', card).textContent = c.label || '';
+    cartaoArrastavel(card, c, box);
   }
 }
 
@@ -3295,6 +3305,79 @@ function somComVolume(chip, c) {
     const pct = Math.round(c.volume * 100);
     chip.textContent = `${c.label} · ${pct}%`;
     chip.title = `${c.label} — ${pct}% de volume (roda do mouse muda)`;
+    refreshHeader();
+    scheduleAutosave();
+  }, { passive: false });
+}
+
+/* O cartao de sempre, em fracao do quadro (780x500 a 90px do topo em
+ * 1080x1920). E o padrao de quem nao mexeu — igual ao dos dois motores. */
+const CARTAO_SIZE_PAD = 780 / 1080;
+const CARTAO_Y_PAD = (90 + 250) / 1920;
+
+/* Arrastar e redimensionar a imagem, como o emoji. Ela era um cartao fixo
+ * no alto: no video do usuario (30/08) a foto tapava a cena e nao havia
+ * como tirar do caminho. */
+function cartaoArrastavel(card, c, box) {
+  if (card.dataset.arrasta) return;
+  card.dataset.arrasta = '1';
+  card.classList.add('movivel');
+  let arr = null;
+
+  card.addEventListener('pointerdown', (e) => {
+    if (S.applying || e.button !== 0) return;
+    const r = box.getBoundingClientRect();
+    arr = { x0: e.clientX, y0: e.clientY, cx: c.x ?? 0.5, cy: c.y ?? CARTAO_Y_PAD,
+            larg: r.width, alt: r.height, moveu: false };
+    card.setPointerCapture(e.pointerId);
+    e.preventDefault();
+    e.stopPropagation();
+  });
+
+  card.addEventListener('pointermove', (e) => {
+    if (!arr) return;
+    const dx = e.clientX - arr.x0;
+    const dy = e.clientY - arr.y0;
+    if (!arr.moveu && Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
+    arr.moveu = true;
+    card.classList.add('dragging');
+    const nx = Math.max(0.02, Math.min(0.98, arr.cx + dx / arr.larg));
+    const ny = Math.max(0.02, Math.min(0.98, arr.cy + dy / arr.alt));
+    card.style.left = `${nx * arr.larg - card.offsetWidth / 2}px`;
+    card.style.top = `${ny * arr.alt - card.offsetHeight / 2}px`;
+    card.dataset.nx = String(nx);
+    card.dataset.ny = String(ny);
+  });
+
+  const soltar = (e) => {
+    if (!arr) return;
+    const moveu = arr.moveu;
+    arr = null;
+    card.classList.remove('dragging');
+    try { card.releasePointerCapture(e.pointerId); } catch { /* ja solto */ }
+    if (!moveu) return;
+    pushHistory();
+    c.x = +Number(card.dataset.nx || c.x || 0.5).toFixed(4);
+    c.y = +Number(card.dataset.ny || c.y || CARTAO_Y_PAD).toFixed(4);
+    refreshHeader();
+    scheduleAutosave();
+    toast('Imagem movida — Salvar para valer no vídeo', 2200);
+  };
+  card.addEventListener('pointerup', soltar);
+  card.addEventListener('pointercancel', soltar);
+
+  card.addEventListener('wheel', (e) => {
+    if (S.applying) return;
+    e.preventDefault();
+    const fator = e.deltaY < 0 ? 1.08 : 1 / 1.08;
+    const novo = Math.max(0.12, Math.min(1.0, (c.size ?? CARTAO_SIZE_PAD) * fator));
+    c.size = +novo.toFixed(4);
+    const lp = c.size * box.clientWidth;
+    const ap = lp * (500 / 780);
+    card.style.width = `${lp}px`;
+    card.style.height = `${ap}px`;
+    card.style.left = `${(c.x ?? 0.5) * box.clientWidth - lp / 2}px`;
+    card.style.top = `${(c.y ?? CARTAO_Y_PAD) * box.clientHeight - ap / 2}px`;
     refreshHeader();
     scheduleAutosave();
   }, { passive: false });
@@ -5857,7 +5940,12 @@ async function saveEditsAndReturnToQueue() {
         ref: c.ref, start: +c.start.toFixed(3), end: +c.end.toFixed(3),
       })),
       newInserts: S.insertsDraft.filter(keepNew).map((c) => ({
-        src: c.src, credit: c.credit || '', start: +c.start.toFixed(3), end: +c.end.toFixed(3),
+        src: c.src, credit: c.credit || '',
+        start: +c.start.toFixed(3), end: +c.end.toFixed(3),
+        // onde e de que tamanho, quando o usuario mexeu
+        ...(c.x != null ? { x: +c.x } : {}),
+        ...(c.y != null ? { y: +c.y } : {}),
+        ...(c.size != null ? { size: +c.size } : {}),
       })),
       // Emoji: comeco E duracao (ele fica na tela enquanto o bloco durar).
       emojis: S.insertsDraft.filter((c) => c.kind === 'emoji' && c.char).map((c) => ({
