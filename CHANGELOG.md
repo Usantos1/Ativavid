@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.88
+
+- **Conserto de um estrago meu na 3.87.** A guarda que impedia a legenda
+  desligada de ser desenhada saía do montador cedo demais e levava junto
+  tudo o que vem depois: **b-roll, contador de lista, card final e o som
+  dos cortes**. Valia só para quem escolhe "Nenhuma" na legenda, mas ali
+  era pior que o defeito original.
+- **O contador de lista foi medido pela primeira vez** e bate com o desenho
+  de referência (1,077).
+
 ## 3.87
 
 - **Escolher "Nenhuma" na legenda não tirava a legenda do vídeo.** O motor

@@ -959,10 +959,18 @@ class Renderizador:
         #
         # `is not False` e nao `if enabled`: edit-data de projeto antigo pode
         # nao ter o campo, e ali o certo e continuar desenhando.
+        #
+        # NAO e um `return`: depois daqui o montador ainda faz o contador de
+        # lista, os inserts, o card final e o som dos cortes. A primeira
+        # versao desta guarda (3.87) saia da funcao e levava tudo isso junto
+        # — um projeto com legenda "Nenhuma" perdia o b-roll. Achado na
+        # medicao do contador, que veio com ZERO camadas.
         if caps_cfg.get("enabled") is False:
             self.cues = []
-            return
         estilo = caps_cfg.get("style") or "stacked"
+        legenda_ligada = caps_cfg.get("enabled") is not False
+        if not legenda_ligada:
+            estilo = None
         if estilo == "impacto":
             self.camadas.extend(self._montar_impacto())
             self.cues = []

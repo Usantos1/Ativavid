@@ -59,8 +59,14 @@ def test_nenhuma_nao_desenha_legenda(tmp_path):
                              ["a", "b"], 12.0, 30.0)
     assert _camadas(pub, ligada) > com, (
         "desligar a legenda tem de tirar camadas do desenho")
-    # sobra a manchete, que é outro `enabled`
-    assert com == 1, com
+    # Sobram DUAS, e vale nomeá-las: a manchete (que tem o `enabled` dela) e
+    # o CARD FINAL, que o `build_edit_data` liga por padrão. As duas eram
+    # levadas junto pelo `return` da 3.87 — o card final some do vídeo é o
+    # que mais dói ali.
+    assert com == 2, com
+    camadas = Renderizador(pub, ed, frames=200, fps=30.0,
+                           width=1080, height=1920).camadas
+    assert any(c.dim for c in camadas), "o card final tem de sobreviver"
 
 
 def test_o_estilo_ligado_continua_desenhando(tmp_path):
@@ -80,3 +86,32 @@ def test_edit_data_antigo_sem_o_campo_continua_desenhando(tmp_path):
                          ["a", "b"], 12.0, 30.0)
     ed["captions"].pop("enabled", None)
     assert _camadas(pub, ed) > 1
+
+
+def test_desligar_a_legenda_nao_leva_o_resto_junto(tmp_path):
+    """A primeira versão desta guarda (3.87) era um `return` — e depois dela
+    o montador ainda faz o contador de lista, os inserts, o card final e o
+    som dos cortes. Um projeto com legenda "Nenhuma" perdia o b-roll.
+
+    Achado na medição do contador, que veio com ZERO camadas.
+    """
+    pub = _projeto(tmp_path)
+    base = {"hook": {"enabled": False}, "endCard": {"enabled": False},
+            "transitions": [], "elements": {},
+            "listMarkers": [{"n": 1, "atSec": 1.0}, {"n": 2, "atSec": 3.0}]}
+    desligada = dict(base, captions={"enabled": False, "style": "karaoke",
+                                     "fontSize": 76, "maxWords": 3,
+                                     "safeWidth": 720, "paddingBottom": 420})
+    assert _camadas(pub, desligada) == 2, (
+        "o contador de lista tem de sobreviver à legenda desligada")
+
+
+def test_a_guarda_nao_e_um_return():
+    """O código depois dela é que desenha contador, inserts e card final."""
+    py = (REPO / "app" / "render_proprio.py").read_text(encoding="utf-8")
+    i = py.index('if caps_cfg.get("enabled") is False:')
+    bloco = py[i:i + 200]
+    assert "return" not in bloco, "voltou o return que matava o resto"
+    assert "self.cues = []" in bloco
+    # e o despachante de estilo fica atrás da guarda
+    assert "legenda_ligada = caps_cfg.get(\"enabled\") is not False" in py
