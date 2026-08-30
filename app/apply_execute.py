@@ -830,6 +830,19 @@ def _stamp_captions_clock(edit_dir: Path, data: dict[str, Any]) -> dict[str, Any
     return data
 
 
+# NAO PROMETER TEMPO AQUI. Tentei em 30/08 e o dado reprovou: ajustando
+# uma reta nas 45 aplicacoes do motor proprio, `render ~ 10,6s fixos +
+# 52,0 ms por quadro`, com erro de 32% na mediana e 75% no p90. Mesmo
+# arredondando em faixas grossas ("menos de 1 minuto" / "cerca de N
+# minutos"), a faixa acertava **21 de 45 vezes (47%)** — cara ou coroa.
+# Dizer "cerca de 2 minutos" e levar 40s e pior que nao dizer nada.
+#
+# O que falta para uma barra HONESTA e progresso de verdade: o
+# `_gravar_video` sabe em que quadro esta, e levar isso ate a tela pede
+# passar uma funcao por `_render_visual_real` -> run_fast -> overlay_path
+# -> `render_overlay_proprio`. E o caminho certo, e nao um palpite.
+
+
 def record_apply_metric(edit_dir: Path, rec: dict[str, Any]) -> None:
     """Histórico local curto. Sem dashboard."""
     path = Path(edit_dir) / APPLY_HISTORY
@@ -1178,7 +1191,10 @@ def execute_apply_plan(
             log("CAPTIONS_REMAP_APPLIED")
             log(f"QUICK_APPLY_REMAP_SEC {_fase(edit, 'remap', t0):.3f}")
 
-        hooks.progress("visual", "Aplicando edição...")
+        # "Aplicando edição..." nao dizia o que estava acontecendo no
+        # minuto mais longo da espera (80,7% do tempo, mediana 52,4s).
+        hooks.progress("visual",
+                       "Redesenhando o vídeo com as suas correções…")
         log("QUICK_APPLY_RENDER_VISUAL")
         t0 = time.time()
         if not _tentar_emenda(edit, plan, cut=work_cut, dest=final_tmp, log=log):

@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.92
+
+- **A espera de "Aplicar alterações" diz o que está acontecendo.** O minuto
+  mais longo da espera (80% do tempo) é o redesenho do vídeo, e o que se
+  lia era "Aplicando edição..." — uma frase parada que não conta nada.
+  Agora: "Redesenhando o vídeo com as suas correções…".
+- Tentei também mostrar **quanto falta** e o dado reprovou: mesmo em faixas
+  grossas, a previsão acertava 47% das vezes. Prometer "cerca de 2 minutos"
+  e levar 40 segundos é pior que não prometer nada.
+
 ## 3.91
 
 - **Quando "Aplicar alterações" falha, agora diz o que houve e o que

@@ -232,7 +232,9 @@ def test_progress_messages_reuse(tmp_path: Path):
     execute_apply_plan(edit, plan_apply_changes(load(edit)), hooks=_hooks(logs))
     msgs = [x for x in logs if x.startswith("progress:")]
     assert "progress:Preparando alterações..." in msgs
-    assert "progress:Aplicando edição..." in msgs
+    # "Aplicando edição..." nao dizia o que acontecia no minuto mais
+    # longo da espera (80,7%% do tempo de aplicar).
+    assert "progress:Redesenhando o vídeo com as suas correções…" in msgs
     assert "progress:Finalizando vídeo..." in msgs
 
 
@@ -246,7 +248,9 @@ def test_progress_messages_rebuild(tmp_path: Path):
     execute_apply_plan(edit, plan_apply_changes(load(edit)), hooks=_hooks(logs))
     msgs = [x for x in logs if x.startswith("progress:")]
     assert "progress:Atualizando cortes..." in msgs
-    assert "progress:Aplicando edição..." in msgs
+    # "Aplicando edição..." nao dizia o que acontecia no minuto mais
+    # longo da espera (80,7%% do tempo de aplicar).
+    assert "progress:Redesenhando o vídeo com as suas correções…" in msgs
     assert "progress:Finalizando vídeo..." in msgs
 
 

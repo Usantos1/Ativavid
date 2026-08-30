@@ -68,3 +68,23 @@ def test_o_motivo_vence_a_frase_generica_na_origem():
 def test_a_frase_generica_continua_dizendo_que_nada_se_perdeu():
     """É a única coisa que a genérica precisa garantir."""
     assert "vídeo anterior foi mantido" in PREPARE_FAIL_MSG
+
+
+def test_a_espera_diz_o_que_esta_acontecendo():
+    """80,7% do tempo de aplicar é o redesenho (mediana 52,4s), e o que se
+    lia nesse minuto era "Aplicando edição..." — uma frase que não muda e
+    não diz nada."""
+    i = FONTE.index('hooks.progress("visual"')
+    bloco = FONTE[i:i + 220]
+    assert "Redesenhando o vídeo com as suas correções" in bloco
+
+
+def test_nao_se_promete_tempo_de_espera():
+    """Tentei em 30/08 e o dado reprovou: a faixa acertava 21 de 45 (47%).
+    Dizer "cerca de 2 minutos" e levar 40s é pior que não dizer nada.
+
+    Este teste existe para a tentação não voltar sem dado novo.
+    """
+    assert "espera_do_redesenho" not in FONTE
+    assert "NAO PROMETER TEMPO AQUI" in FONTE
+    assert "47%" in FONTE      # o número que reprovou
