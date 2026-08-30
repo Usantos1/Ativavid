@@ -1,5 +1,23 @@
 # Changelog
 
+## 4.12
+
+- **As manchetes "Carimbo" e "Fita" giravam para o lado errado.** O
+  carimbo saía inclinado ao contrário do desenho original — espelhado. A
+  medida de área não via nada (mesma tinta, forma trocada); quem
+  denunciou foi a diferença ponto a ponto, a maior de todo o catálogo.
+  A Fita ficou praticamente idêntica ao original depois da correção.
+- **O corte volta a escolher o codificador de vídeo certo quando é
+  chamado sozinho.** Ele perguntava ao perfil da sua máquina qual placa
+  funciona — e essa pergunta só chegava quando o programa era iniciado de
+  um jeito específico. Sem ela, caía num codificador que passa no teste
+  sintético e falha no vídeo de verdade.
+- **"Abrir o log deste vídeo" funciona mesmo com a licença bloqueada.**
+  Ele é só leitura, como "Abrir pasta" e "Ver vídeo final" — e é
+  justamente o que se precisa mandar para o suporte quando algo deu
+  errado.
+
+
 ## 4.11
 
 - **A legenda "Impacto" voltou a ter a sombra do desenho original.** Ela

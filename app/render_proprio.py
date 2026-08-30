@@ -1573,16 +1573,23 @@ class Renderizador:
             else np.zeros_like(alpha)
 
         if rot:
+            # CSS e Pillow giram para lados OPOSTOS: `rotate(-6deg)` do
+            # template inclina num sentido e `Image.rotate(-6)` no outro.
+            # Passando o valor direto, o carimbo saia espelhado — a razao
+            # de tinta nao via (1,057, area igual) e a diferenca de alfa
+            # gritava (107 de 255, a maior do catalogo).
+            _giro = -float(rot)
+
             def _gira(a, modo="L"):
                 im = Image.fromarray((a * 255).astype(np.uint8), modo)
-                return np.asarray(im.rotate(rot, expand=False,
+                return np.asarray(im.rotate(_giro, expand=False,
                                             resample=Image.BICUBIC),
                                   dtype=np.float32) / 255.0
             alpha = _gira(alpha)
             sombra = _gira(sombra)
             rgb = np.asarray(
                 Image.fromarray(rgb.astype(np.uint8), "RGB")
-                .rotate(rot, expand=False, resample=Image.BICUBIC),
+                .rotate(_giro, expand=False, resample=Image.BICUBIC),
                 dtype=np.float32)
 
         leg.palavras.append(Palavra(
@@ -1658,14 +1665,20 @@ class Renderizador:
                   else np.zeros_like(alpha))
 
         if rot:
+            # Mesma troca de convencao do bloco de uma linha: CSS gira para
+            # um lado, Pillow para o outro. E a `fita` (-2,4 e 1,8 graus)
+            # passa por aqui.
+            _giro = -float(rot)
+
             def _g(a):
                 im = Image.fromarray((a * 255).astype(np.uint8), "L")
-                return np.asarray(im.rotate(rot, expand=False,
+                return np.asarray(im.rotate(_giro, expand=False,
                                             resample=Image.BICUBIC),
                                   dtype=np.float32) / 255.0
             alpha, sombra = _g(alpha), _g(sombra)
             rgb = np.asarray(Image.fromarray(rgb.astype(np.uint8), "RGB")
-                             .rotate(rot, expand=False, resample=Image.BICUBIC),
+                             .rotate(_giro, expand=False,
+                                     resample=Image.BICUBIC),
                              dtype=np.float32)
         leg.palavras.append(Palavra(
             int(x0) - folga, int(y_topo) - folga, rgb, alpha, sombra,

@@ -535,6 +535,10 @@ _GATE_FREE_EXACT = frozenset({
     "/v1/chat/completions",
     "/api/jobs/open-folder",
     "/api/jobs/open-final",
+    # Mesma familia: so ABRE um arquivo que ja existe. E quando alguem esta
+    # bloqueado e algo deu errado, o log e justamente o que ele precisa
+    # mandar para o suporte.
+    "/api/jobs/open-log",
     "/api/jobs/rename",
     "/api/jobs/cancel",
     "/api/jobs/delete",

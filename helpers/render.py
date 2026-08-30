@@ -41,6 +41,17 @@ from pathlib import Path
 
 from ffprobe_util import first_record, parse_rate  # mesma pasta
 
+# O REPO no `sys.path` desde o comeco. `pick_video_encoder` pergunta ao
+# perfil de hardware (`app.render_engine`) qual encoder de fato ABRE
+# nesta maquina; sem o import ele cai numa sondagem propria que testa
+# com clipe sintetico — e o `h264_amf` PASSA nessa sondagem e falha no
+# arquivo de verdade (perfil desta maquina: `h264_amf: false`).
+# Funcionava so porque quem chama exporta PYTHONPATH; rodado a mao, o
+# corte saia por um encoder quebrado, tentando e caindo em cada peca.
+_REPO_RENDER = Path(__file__).resolve().parent.parent
+if str(_REPO_RENDER) not in sys.path:
+    sys.path.insert(0, str(_REPO_RENDER))
+
 try:
     from grade import get_preset, auto_grade_for_clip  # same directory
 except Exception:
