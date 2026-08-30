@@ -1,5 +1,21 @@
 # Changelog
 
+## 4.18
+
+- **A legenda "Impacto" ficou igual ao desenho original — agora de
+  verdade.** Ela tem duas sombras: a da caixa da palavra destacada e a do
+  texto das palavras brancas. A 4.11 corrigiu só a primeira, e por isso a
+  diferença mudava conforme o vídeo — o excesso da segunda cresce com o
+  número de palavras. Com as duas certas, dois vídeos diferentes medem o
+  mesmo: 1,020 e 1,020.
+- **A conferência de desenho passou a valer para qualquer projeto.** Cada
+  projeto guarda a cópia do desenho do dia em que foi feito, e comparar
+  contra uma cópia velha inventa defeito: um projeto de ontem acusou cinco
+  manchetes erradas que não tinham nada de errado. Agora a referência é
+  sempre o desenho de hoje. Antes disso, só 1 dos seus 187 projetos servia
+  para conferir.
+
+
 ## 4.17
 
 - **O feixe de luz do corte varre a parte certa do quadro.** O flash tem

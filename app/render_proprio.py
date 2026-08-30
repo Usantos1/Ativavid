@@ -1138,13 +1138,17 @@ class Renderizador:
     def _palavra_texto(self, leg: Camada, f, texto: str, ls: float, x0: int,
                        topo_caixa: float, alt_caixa: float, y_base: int,
                        cor_fixa: str | None, inicio_f: float, enter: int,
-                       especs=SHADOW, ease: str = "cubic") -> None:
+                       especs=SHADOW, ease: str = "cubic",
+                       k_sombra: float = BLUR_K) -> None:
         m, cor_e = self._mascara_cor(f, texto, ls)
         h_m, w_m = m.shape
         folga = 24
         pad_m = np.zeros((h_m + 2 * folga, w_m + 2 * folga), dtype=np.float32)
         pad_m[folga:folga + h_m, folga:folga + w_m] = m
-        sombra = self._sombra_de(pad_m, especs)
+        # `k_sombra` e o fator sigma/raio. O padrao (drop-shadow) vale para
+        # os estilos que nasceram com ele; quem vem de um `text-shadow` do
+        # CSS precisa de 0,5, senao o halo sai ~80% maior.
+        sombra = self._sombra_de(pad_m, especs, k=k_sombra)
         if cor_fixa:
             rgb = np.broadcast_to(self._cor(cor_fixa), (*pad_m.shape, 3)).copy()
         else:
@@ -2257,10 +2261,16 @@ class Renderizador:
                 for i, w in enumerate(cue):
                     texto = limpar(w["text"])
                     if i != hi:
+                        # `textShadow: 0 4px 18px` (ImpactCaptions.tsx:142) —
+                        # text-shadow pede sigma = raio/2. Com o padrao de
+                        # drop-shadow o halo de CADA palavra branca saia
+                        # maior, e como o numero de palavras muda de video
+                        # para video, a divergencia do `impacto` mudava
+                        # junto: 1,032 num projeto e 1,174 noutro.
                         self._palavra_texto(
                             leg, f, texto, 0.0, int(round(x)), y_base,
                             alt_linha, y_texto, "#ffffff", -1, 1,
-                            especs=[(0, 4, 18, 0.6)])
+                            especs=[(0, 4, 18, 0.6)], k_sombra=0.5)
                         leg.palavras[-1].sobe = 0.0
                     else:
                         lw = larg_pal(w)
@@ -2300,15 +2310,24 @@ class Renderizador:
                             # com sigma=raio o halo saia 49% maior que o do
                             # Remotion.
                             #
-                            # E ESTE COMENTARIO desmentia a propria linha: o
-                            # codigo usava `26 * 0.25`, que e raio/4 — a
-                            # correcao de "sigma=raio" passou do ponto e
-                            # dividiu por quatro. Sombra pela metade e menos
-                            # tinta: a razao contra o Remotion ficou em 0,846
-                            # (faixa saudavel 0,93-1,10) por semanas, e o
-                            # quadro parado parecia certo porque a diferenca
-                            # esta no halo, nao no corpo. Com raio/2: 1,032.
-                            # Quinto estilo mordido pelos dois sigmas do CSS.
+                            #
+                            # E ESTE COMENTARIO desmentia a propria linha:
+                            # o codigo usava `26 * 0.25`, que e raio/4.
+                            #
+                            # SAO DUAS SOMBRAS, e as duas pedem raio/2: esta,
+                            # da caixa da palavra quente (`box-shadow`), e a
+                            # do TEXTO das palavras brancas (`text-shadow 0
+                            # 4px 18px`, la em cima). So a primeira tinha sido
+                            # olhada, e por isso a divergencia mudava de
+                            # projeto para projeto — o halo a mais das
+                            # palavras brancas cresce com o NUMERO delas:
+                            #
+                            #     so a caixa em raio/4:  0,846 e 1,062
+                            #     so a caixa em raio/2:  1,032 e 1,174
+                            #     as duas  em raio/2:    1,020 e 1,020
+                            #
+                            # Dois projetos, o mesmo numero. Foi o que fechou
+                            # o caso.
                             b = np.asarray(
                                 Image.fromarray((a_caixa * 255).astype(np.uint8))
                                 .filter(ImageFilter.GaussianBlur(26 * 0.5)),

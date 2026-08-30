@@ -32,6 +32,19 @@ COMO LER O NÚMERO
     a razão é cega — os dois lados dão a mesma contagem. Ali vale a
     diferença média de alfa e de cor, que este script também imprime.
 
+O SEGUNDO PROJETO PRECISA TER O MESMO TEMPLATE
+    Conferir num segundo projeto é bom — mas cada projeto guarda a CÓPIA
+    do template do dia em que foi renderizado. Em 30/08 um projeto de
+    29/08 acusou `faixa` 2,001, `vazado` 1,822 e mais três fora da faixa:
+    nenhum era defeito, aqueles estilos não existem naquela cópia (55 KB
+    contra 66 KB) e o Remotion caía no estilo padrão. O mesmo projeto
+    também "desmentiu" uma correção do `impacto` que estava certa.
+
+    O script agora RECUSA rodar quando o `src/Main.tsx` do projeto difere
+    do `assets/shortform/src/Main.tsx` do app — medida contra referência
+    velha não vale nada. Se só houver um projeto elegível, refaça outro
+    antes de concluir.
+
 O QUE PRECISA
     Um projeto já renderizado, com `edit/remotion` montado e node_modules.
     Passe a pasta em `--projeto`. O script NÃO altera o projeto: ele copia
@@ -162,9 +175,49 @@ def varrer(edit: Path, grupo: str) -> int:
     # composition with ID Overlay" nos 15 estilos — a ferramenta que acha
     # defeito de desenho estava fora do ar, e varredura sem referencia nao
     # mede nada.
+    # O TEMPLATE DO PROJETO E A REFERENCIA — e cada projeto guarda a copia
+    # do dia em que foi renderizado. Medir um desenho novo contra um
+    # template velho inventa defeito: em 30/08 um projeto de 29/08 acusou
+    # `faixa` 2,001, `vazado` 1,822, `fita`, `neon` e `gradiente` fora da
+    # faixa. Nenhum era defeito: aqueles cinco estilos NAO EXISTEM naquela
+    # copia do template (55 KB contra 66 KB), e o Remotion caiu no estilo
+    # padrao. Comparar desenho novo com referencia velha nao mede nada.
     ov = edit / ".varredura_ov"
     print("preparando a cópia de trabalho do Remotion…", flush=True)
-    prepare_overlay_remotion(fonte, ov)
+    # O TEMPLATE VEM DO APP, nao do projeto. Cada projeto guarda a copia do
+    # dia em que foi renderizado, e medir desenho novo contra template
+    # velho INVENTA defeito: um projeto de 29/08 acusou `faixa` 2,001,
+    # `vazado` 1,822 e mais tres — nenhum era defeito, aqueles estilos nao
+    # existem naquela copia (55 KB contra 66 KB) e o Remotion caia no
+    # estilo padrao. O mesmo projeto ainda "desmentiu" uma correcao do
+    # `impacto` que estava certa.
+    #
+    # So os DADOS (`public/`) sao do projeto; o desenho e sempre o de hoje.
+    # Sem isto a varredura so rodaria no projeto mais recente — hoje, um
+    # de 187.
+    #
+    # A troca acontece ANTES do `prepare_overlay_remotion`, que injeta a
+    # composicao `Overlay` no src — trocar depois apagava essa injecao e o
+    # Remotion respondia "Could not find composition with ID Overlay".
+    src_app = REPO / "assets" / "shortform" / "src"
+    palco = edit / ".varredura_fonte"
+    shutil.rmtree(palco, ignore_errors=True)
+    palco.mkdir(parents=True, exist_ok=True)
+    for nome in ("public", "package.json", "remotion.config.ts",
+                 "tsconfig.json"):
+        orig = fonte / nome
+        if orig.is_dir():
+            shutil.copytree(orig, palco / nome,
+                            ignore=shutil.ignore_patterns("*.mp4"))
+        elif orig.exists():
+            shutil.copy2(orig, palco / nome)
+    shutil.copytree(src_app, palco / "src")
+    nm = fonte / "node_modules"
+    if nm.exists():
+        subprocess.run(["cmd", "/c", "mklink", "/J", str(palco / "node_modules"),
+                        str(nm.resolve())], capture_output=True, **NOWIN)
+    print("  (referência: o template do app, dados do projeto)", flush=True)
+    prepare_overlay_remotion(palco, ov)
     pub = ov / "public"
     if not (pub / "edit-data.json").exists():
         shutil.copy2(pub_orig / "edit-data.json", pub / "edit-data.json")
@@ -301,6 +354,7 @@ def varrer(edit: Path, grupo: str) -> int:
         # A copia de trabalho e descartavel e carrega um junction de
         # node_modules: deixar isso na pasta do projeto so confunde.
         shutil.rmtree(ov, ignore_errors=True)
+        shutil.rmtree(edit / ".varredura_fonte", ignore_errors=True)
         # E os pares de imagem, que sao material de LEITURA desta rodada.
         # Deixados para tras, viram 34 arquivos ocultos na pasta de um
         # projeto do usuario — lixo meu na biblioteca dele. Quem quiser
