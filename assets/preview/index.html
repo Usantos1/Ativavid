@@ -594,6 +594,8 @@
     <button id="btnSplit" class="btn cover-btn" title="Cortar o take selecionado na agulha (S)">
       <span id="splitIcon"></span><span>Cortar</span>
     </button>
+    <button id="btnCutLeft" class="btn icon" title="Apagar da agulha para a ESQUERDA (Q)"></button>
+    <button id="btnCutRight" class="btn icon" title="Apagar da agulha para a DIREITA (W)"></button>
     <button id="btnDeleteTake" class="btn cover-btn" title="Excluir o take selecionado (Delete)" disabled>
       <span id="deleteIcon"></span><span>Excluir</span>
     </button>
@@ -643,7 +645,8 @@
              video — fora da linha do tempo, como no CapCut. Dentro da faixa
              ela empurrava os clipes e virava mais um bloco. -->
         <div class="track-label track-label-video">
-          <span class="tl-chip" data-icon="video" title="Vídeo"></span>
+          <!-- So a capa: o icone de video ali nao dizia nada que a propria
+               faixa ja nao diga (pedido de 30/08). -->
           <button type="button" id="capaChip" class="capa-chip"
                   title="Clique para editar a capa (usa o quadro da agulha)">
             <span class="capa-chip-txt">Capa</span>

@@ -51,6 +51,9 @@ const tooltip = $('tooltip');
 // minimal solid icons (design-system consistent — no emoji)
 const ICON = {
   // "ajustar a janela": as duas bordas e a seta abrindo entre elas
+  // apagar para um lado: a lamina e a metade que vai embora
+  cortarEsq: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="1.6" y="3.4" width="5.4" height="9.2" rx="1.2" fill="currentColor" opacity=".35" stroke="none"/><path d="M8.4 2.2v11.6"/><path d="M11 8h3.4M12.6 6.2 14.4 8l-1.8 1.8"/></svg>',
+  cortarDir: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="9" y="3.4" width="5.4" height="9.2" rx="1.2" fill="currentColor" opacity=".35" stroke="none"/><path d="M7.6 2.2v11.6"/><path d="M5 8H1.6M3.4 6.2 1.6 8l1.8 1.8"/></svg>',
   fit: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3v10M14 3v10"/><path d="M4.8 8h6.4"/><path d="M6.6 6.2L4.8 8l1.8 1.8M9.4 6.2L11.2 8l-1.8 1.8"/></svg>',
   play: '<svg viewBox="0 0 16 16"><path d="M4 2.2v11.6c0 .9 1 1.5 1.8 1L15 9.2c.8-.5.8-1.7 0-2.2L5.8 1.2C5 .7 4 1.3 4 2.2z"/></svg>',
   pause: '<svg viewBox="0 0 16 16"><rect x="3" y="2" width="3.6" height="12" rx="1"/><rect x="9.4" y="2" width="3.6" height="12" rx="1"/></svg>',
@@ -1452,6 +1455,47 @@ async function loadPostCaption() {
 // to back" — that's already inside what the save payload can express (see
 // btnSave below: it sends the WHOLE current ranges list, not a diff), so
 // this needs no new save-schema and no server change.
+/* Apagar da agulha para um lado — o Q e o W do CapCut.
+ *
+ * No nosso modelo o corte e uma lista de trechos: apagar a esquerda e
+ * encurtar o COMECO do trecho ate a agulha; a direita, o FIM. Nao quebra o
+ * take em dois nem apaga o resto do video — e o mesmo resultado, feito com
+ * a peca que ja existe (o trim), o que mantem o EDL valido e o refazer
+ * funcionando.
+ *
+ * Sem take selecionado, vale o que estiver SOB a agulha: exigir selecao
+ * antes seria um passo a mais para o gesto mais comum da edicao. */
+function apagarAteAAgulha(lado) {
+  if (S.applying) return;
+  if (S.tab !== 1) { toast('Corte só na aba Edição', 1600); return; }
+  const draftT = renderedToDraft(video.currentTime);
+  const layout = draftLayout();
+  let i = S.selected;
+  if (i < 0 || !S.draft[i] || S.draft[i].removed
+      || draftT < layout[i].out || draftT > layout[i].out + layout[i].dur) {
+    i = layout.findIndex((it, k) => !S.draft[k].removed
+      && draftT >= it.out && draftT <= it.out + it.dur);
+  }
+  if (i < 0) { toast('Leve a agulha até um take', 1800); return; }
+  const r = S.draft[i];
+  const item = layout[i];
+  const corte = draftTimeToSource(i, draftT);
+  const dentro = corte > r.start + MIN_SEG && corte < r.end - MIN_SEG;
+  if (!dentro) {
+    toast('A agulha está na borda do take — nada para apagar deste lado', 2400);
+    return;
+  }
+  pushHistory();
+  if (lado === 'esq') r.start = corte;
+  else r.end = corte;
+  S.selected = i;
+  renderAll(); refreshHeader();
+  persistEdl();
+  const seg = (lado === 'esq' ? corte - item.srcIn : 0);
+  toast(lado === 'esq' ? 'Apagado até a agulha (esquerda)'
+                       : 'Apagado da agulha em diante (direita)', 2000);
+}
+
 function splitAtPlayhead() {
   if (S.applying) return;
   if (S.tab !== 1) { toast('Corte só na aba Edição', 1600); return; }
@@ -4307,21 +4351,11 @@ function desenharFaixasDeInsert(phase2) {
       if (c.start !== c.orig.start || c.end !== c.orig.end) chip.classList.add('dirty');
       el('div', 'handle l', chip).dataset.i = i;
       el('div', 'handle r', chip).dataset.i = i;
+      // Selecionado = contorno e o Excluir DE CIMA aceso. Sem ✕ colado no
+      // bloco: num bloco de 24px ele comia o proprio bloco, e o usuario ja
+      // tem um botao de excluir na barra ("quando clico na imagem deve
+      // ativar o delete que temos la em cima", 30/08).
       if (c.isNew && S.blocoSel === i) chip.classList.add('sel');
-      // O ✕ so no bloco SELECIONADO: colado em cima de um bloco de 24px ele
-      // comia o bloco e ainda errava o alvo ("x ali atrapalha", 30/08). Em
-      // editor de video se seleciona e se aperta Delete.
-      if (c.isNew && S.blocoSel === i) {
-        const x = el('button', 'chip-x sempre', chip);
-        x.type = 'button';
-        x.textContent = '✕';
-        x.title = 'Tirar da linha do tempo';
-        x.dataset.i = i;
-        x.addEventListener('click', (ev) => {
-          ev.stopPropagation();
-          removerBlocoDaMao(+ev.currentTarget.dataset.i);
-        });
-      }
     }
   }
 
@@ -4980,6 +5014,7 @@ panel.addEventListener('pointerdown', (e) => {
   if (!chip && S.blocoSel >= 0) {
     S.blocoSel = -1;      // clicou fora: solta a selecao
     renderChips();
+    refreshHeader();
   }
 
   // caption chips are click-to-edit, not draggable — their timing belongs to
@@ -5040,9 +5075,10 @@ panel.addEventListener('pointerdown', (e) => {
   if (chip && (S.tab === 2 || daMao)) {
     const i = +chip.dataset.i;
     if (daMao && S.blocoSel !== i) {
-      // selecionar e o primeiro gesto: dai o Delete e o ✕ tem alvo
+      // selecionar e o primeiro gesto: dai o Excluir de cima tem alvo
       S.blocoSel = i;
       renderChips();
+      refreshHeader();
     }
     drag = { type: 'chip-move', i, x0: e.clientX, c: { ...S.insertsDraft[i] }, preSnapshot: snapshotState() };
     try { panel.setPointerCapture(e.pointerId); } catch (err) { /* synthetic/touch */ }
@@ -5255,6 +5291,12 @@ document.addEventListener('keydown', (e) => {
     apagarLegendas(S.capSel);
   } else if ((e.key === 'Delete' || e.key === 'Backspace') && S.selected >= 0 && S.tab === 1) {
     toggleSelectedTake();
+  } else if ((e.key === 'q' || e.key === 'Q') && !e.ctrlKey && !e.metaKey) {
+    e.preventDefault();
+    apagarAteAAgulha('esq');
+  } else if ((e.key === 'w' || e.key === 'W') && !e.ctrlKey && !e.metaKey) {
+    e.preventDefault();
+    apagarAteAAgulha('dir');
   } else if ((e.key === 's' || e.key === 'S') && !e.ctrlKey && !e.metaKey) {
     e.preventDefault();
     splitAtPlayhead();
@@ -5440,6 +5482,13 @@ async function appendCtaFromFile(file) {
 
 function toggleSelectedTake() {
   if (S.applying) return;
+  // Bloco posto na mao vem primeiro: e o que esta selecionado na tela.
+  if (S.blocoSel >= 0) {
+    const i = S.blocoSel;
+    S.blocoSel = -1;
+    removerBlocoDaMao(i);
+    return;
+  }
   if (S.tab !== 1 || S.selected < 0) {
     toast('Selecione um take pra apagar', 1600);
     return;
@@ -5467,13 +5516,23 @@ function toggleSelectedTake() {
 function refreshTransportActions() {
   const btn = $('btnDeleteTake');
   if (!btn) return;
+  // Bloco posto na mao (imagem, som, emoji) acende o MESMO botao: o usuario
+  // clica na imagem e usa o excluir de cima, sem ✕ colado no bloco.
+  const bloco = S.blocoSel >= 0 ? S.insertsDraft[S.blocoSel] : null;
   const r = S.selected >= 0 ? S.draft[S.selected] : null;
-  const can = S.tab === 1 && !!r;
+  const can = !!bloco || (S.tab === 1 && !!r);
   btn.disabled = !can;
-  btn.classList.toggle('danger-on', !!(r && r.removed));
-  btn.title = !can
-    ? 'Selecione um take para excluir'
-    : (r.removed ? 'Restaurar o take selecionado (Delete)' : 'Excluir o take selecionado (Delete)');
+  btn.classList.toggle('danger-on', !!(r && r.removed) || !!bloco);
+  btn.title = bloco
+    ? `Tirar da linha do tempo: ${bloco.label || 'este bloco'} (Delete)`
+    : (!can
+      ? 'Selecione um take ou um bloco para excluir'
+      : (r.removed ? 'Restaurar o take selecionado (Delete)' : 'Excluir o take selecionado (Delete)'));
+  // os cortes para os lados so valem na Edicao
+  for (const id of ['btnCutLeft', 'btnCutRight']) {
+    const b = $(id);
+    if (b) b.disabled = S.tab !== 1;
+  }
 }
 
 async function saveCoverFromPlayhead() {

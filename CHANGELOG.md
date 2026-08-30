@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.75
+
+- **Cortar e apagar para os lados**, como no CapCut: dois botões novos na
+  barra e as teclas **Q** (apaga da agulha para a esquerda) e **W** (para a
+  direita). Vale no take que estiver sob a agulha, sem precisar selecionar
+  antes.
+- **Clicar na imagem acende o Excluir da barra** — o ✕ colado no bloco saiu
+  de vez. Delete também funciona.
+- **A coluna da capa ficou só com a capa**, sem o ícone de vídeo ao lado.
+
 ## 3.74
 
 - **A Capa foi para o lugar certo**: na coluna da esquerda, logo abaixo do

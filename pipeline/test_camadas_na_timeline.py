@@ -131,16 +131,15 @@ def test_da_para_somar_pela_propria_linha_do_tempo():
 
 def test_da_para_tirar_o_que_foi_posto_na_mao():
     """Somar sem tirar é armadilha: o emoji errado ficava no vídeo, e só o
-    Ctrl+Z imediato salvava. O ✕ aparece só no que o usuário criou."""
+    Ctrl+Z imediato salvava. Tirar é selecionar o bloco e usar o Excluir de
+    cima (ou Delete) — o ✕ colado no bloco saiu na 3.75 porque num bloco de
+    24px ele comia o próprio bloco."""
     assert "function removerBlocoDaMao" in JS
     i = JS.index("function removerBlocoDaMao")
     bloco = JS[i:i + 700]
     # histórico ANTES: remover por engano não pode custar o trabalho
     assert bloco.index("pushHistory()") < bloco.index("splice(i, 1)")
     assert "if (!c || !c.isNew) return;" in bloco
-    # e o ✕ só nasce no bloco do usuário — e só quando ele está selecionado
-    j = JS.index("if (c.isNew && S.blocoSel === i) {")
-    assert "chip-x" in JS[j:j + 400]
 
 
 def test_o_gancho_nao_se_apaga_pela_linha_do_tempo():
@@ -163,32 +162,25 @@ def test_o_bloco_da_mao_se_pega_tambem_na_edicao():
     assert bloco.count("S.tab === 2 || daMao") == 2
 
 
-def test_o_x_do_bloco_curto_nao_depende_do_hover():
-    """O bloco de som tem 0,6s (~24px): um ✕ escondido no hover, encostado
-    na borda, é alvo pequeno demais."""
-    css = (REPO / "assets" / "preview" / "app.css").read_text(encoding="utf-8")
-    i = css.index(".chip .chip-x.sempre")
-    assert "opacity: 0.75" in css[i:i + 120]
-    # e a área de toque é maior que o desenho
-    j = css.index(".chip .chip-x::after")
-    assert "inset: -6px" in css[j:j + 160]
-    assert "chip-x sempre" in JS
+def test_o_bloco_curto_nao_precisa_de_alvo_dentro_dele():
+    """O bloco de som tem 0,6s (~24px). Qualquer botão desenhado dentro
+    dele — o antigo ✕ — comia o bloco e ainda errava o alvo. Por isso a
+    ação mora na barra de cima, que tem espaço."""
+    assert "chip-x" not in JS
+    i = JS.index("function refreshTransportActions")
+    assert "S.blocoSel" in JS[i:i + 400]
 
 
-def test_a_capa_fica_na_coluna_e_nao_na_faixa():
-    """Como no CapCut: a capa é um botão na COLUNA da esquerda, junto do
-    ícone da faixa de vídeo — fora da linha do tempo. Dentro da faixa (a
-    primeira tentativa, 3.73) ela empurrava os clipes e virava mais um
-    bloco: "capa deve ser ali fora da timeline... onde mostra o icone de
-    video na esquerda" (30/08).
-
-    E JUNTO do ícone, não no lugar dele: os dois ficam na mesma coluna."""
+def test_a_capa_fica_sozinha_na_coluna():
+    """Como no CapCut: a capa é um botão na COLUNA da esquerda, fora da
+    linha do tempo. Dentro da faixa (3.73) ela empurrava os clipes; com o
+    ícone de vídeo ao lado (3.74) sobrava um enfeite que não dizia nada —
+    "a capa deve ser apenas ela ali" (30/08)."""
     html = (REPO / "assets" / "preview" / "index.html").read_text(encoding="utf-8")
     i = html.index('class="track-label track-label-video"')
-    fim = html.index('id="laneVideo"')
-    coluna = html[i:fim]
-    assert 'data-icon="video"' in coluna, "o ícone da faixa não pode sumir"
-    assert 'id="capaChip"' in coluna, "a capa tem de morar na coluna"
+    coluna = html[i:html.index('id="laneVideo"')]
+    assert 'id="capaChip"' in coluna
+    assert 'data-icon="video"' not in coluna
     assert "$('capaChip')" in JS and "saveCoverFromPlayhead()" in JS
 
 
@@ -202,18 +194,67 @@ def test_a_barra_ficou_so_de_icones_nos_tres():
     assert "btn.title =" in JS[i:i + 400]
 
 
-def test_o_x_so_aparece_no_bloco_selecionado():
-    """"x ali atrapalha": colado num bloco de 24px ele comia o bloco e
-    ainda errava o alvo. Em editor de vídeo se seleciona e se aperta
-    Delete."""
-    i = JS.index("if (c.isNew && S.blocoSel === i) {")
-    assert "chip-x" in JS[i:i + 300]
-    # e o Delete age no bloco selecionado ANTES do take
-    k = JS.index("S.blocoSel >= 0) {")
-    take = JS.index("S.selected >= 0 && S.tab === 1")
-    assert k < take, "o bloco selecionado tem de vir antes do take no Delete"
+def test_clicar_no_bloco_acende_o_excluir_de_cima():
+    """"quando clico na imagem deve ativar o delete que temos lá em cima,
+    não aparecer um X" (30/08)."""
+    i = JS.index("if (c.isNew && S.blocoSel === i) chip.classList.add('sel');")
+    assert i > 0
+    k = JS.index("function toggleSelectedTake")
+    bloco = JS[k:k + 400]
+    assert "S.blocoSel >= 0" in bloco and "removerBlocoDaMao(i);" in bloco
+    # e o bloco selecionado vem ANTES do take, senão apagaria o take errado
+    assert bloco.index("S.blocoSel >= 0") < bloco.index("S.selected < 0")
 
 
 def test_clicar_fora_solta_a_selecao():
     i = JS.index("if (!chip && S.blocoSel >= 0) {")
     assert "S.blocoSel = -1;" in JS[i:i + 200]
+
+
+def test_cortar_e_apagar_para_os_lados():
+    """O Q e o W do CapCut. No nosso modelo o corte é uma lista de trechos:
+    apagar à esquerda encurta o COMEÇO do trecho até a agulha, à direita o
+    FIM. Não quebra o take em dois nem apaga o resto — mesmo resultado,
+    feito com a peça que já existe (o trim), o que mantém o EDL válido."""
+    assert "function apagarAteAAgulha" in JS
+    i = JS.index("function apagarAteAAgulha")
+    bloco = JS[i:i + 1800]
+    assert "if (lado === 'esq') r.start = corte;" in bloco
+    assert "else r.end = corte;" in bloco
+    assert "persistEdl();" in bloco
+    # sem take selecionado vale o que está SOB a agulha
+    assert "layout.findIndex" in bloco
+    # e as teclas
+    assert "e.key === 'q'" in JS and "e.key === 'w'" in JS
+    html = (REPO / "assets" / "preview" / "index.html").read_text(encoding="utf-8")
+    assert 'id="btnCutLeft"' in html and 'id="btnCutRight"' in html
+
+
+def test_a_agulha_na_borda_nao_apaga_o_take_inteiro():
+    """Com a agulha na borda não há o que apagar daquele lado — e apagar o
+    take todo seria destruir o que o usuário não pediu."""
+    i = JS.index("function apagarAteAAgulha")
+    bloco = JS[i:i + 1800]
+    assert "const dentro = corte > r.start + MIN_SEG && corte < r.end - MIN_SEG;" in bloco
+    assert "nada para apagar deste lado" in bloco
+
+
+def test_a_coluna_da_capa_nao_tem_mais_o_icone():
+    """"a capa deve ser apenas ela ali sem o icone de video" (30/08)."""
+    html = (REPO / "assets" / "preview" / "index.html").read_text(encoding="utf-8")
+    i = html.index('class="track-label track-label-video"')
+    coluna = html[i:html.index('id="laneVideo"')]
+    assert 'data-icon="video"' not in coluna
+    assert 'id="capaChip"' in coluna
+
+
+def test_o_excluir_de_cima_apaga_o_bloco_selecionado():
+    """"quando clico na imagem deve ativar o delete que temos la em cima
+    nao aparecer um X"."""
+    assert "chip-x" not in JS, "o ✕ colado no bloco tinha de sair"
+    i = JS.index("function refreshTransportActions")
+    bloco = JS[i:i + 1200]
+    assert "S.blocoSel >= 0 ? S.insertsDraft[S.blocoSel] : null" in bloco
+    assert "const can = !!bloco ||" in bloco
+    j = JS.index("function toggleSelectedTake")
+    assert "removerBlocoDaMao(i);" in JS[j:j + 400]
