@@ -61,6 +61,13 @@ type Variant = {
 // motores (este, o render_proprio e a previa) tem de concordar.
 const MAIUSCULA = new Set(['metal', 'moldura', 'eco']);
 
+// Opacidades do Vidro e do Metálico — os MESMOS números do render_proprio
+// (VIDRO_OPACO / VIDRO_FIO / METAL_OPACO). Um 0,32 que vira 0,30 aqui sai
+// como outra legenda e ninguém percebe.
+const VIDRO_OPACO = 0.32;
+const VIDRO_FIO = 0.92;
+const METAL_OPACO = 0.88;
+
 const C = (editData as any).captions ?? {};
 export const SIMPLE_VARIANTS: Record<string, Variant> = {
   simples: {
@@ -135,8 +142,8 @@ export const SIMPLE_VARIANTS: Record<string, Variant> = {
     modo: 'metal',
   },
   vidro: {
-    family: INTER, weight: 500, size: 50, maxWords: 12, lines: 2,
-    squeeze: 1, squeezeY: 1, tracking: 0, bottom: 430, maxW: 700,
+    family: POPPINS, weight: 600, size: 72, maxWords: 3, lines: 1,
+    squeeze: 1, squeezeY: 1, tracking: -1, bottom: 430, maxW: 840,
     modo: 'vidro',
   },
   traco: {
@@ -164,9 +171,9 @@ function degradeMetal(hex: string): string {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
   const n = m ? parseInt(m[1], 16) : 0xe8edf3;
   const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-  const paradas: [number, number][] = [
-    [0, 1.45], [34, 0.55], [50, 0.38], [56, 1.6], [100, 0.72],
-  ];
+  // PRATA LISO — sem a faixa escura no meio, que o usuário leu (com razão)
+  // como um risco atravessando a letra.
+  const paradas: [number, number][] = [[0, 1.38], [42, 1.06], [100, 0.74]];
   return paradas
     .map(([pos, f]) => {
       const rgb = c.map((v) =>
@@ -340,7 +347,7 @@ export const SimpleCaptions: React.FC<{variant: string}> = ({variant}) => {
     const txt = (ln: Word[]) =>
       ln.map((w) => (CAIXA ? clean(w.text).toUpperCase() : clean(w.text))).join(' ');
     const LH: Record<string, number> = {
-      metal: 1.1, vidro: 1.34, traco: 1.16, moldura: 1.2, eco: 1.14,
+      metal: 1.1, vidro: 1.16, traco: 1.16, moldura: 1.2, eco: 1.14,
     };
     const tipo = {
       fontFamily: V.family,
@@ -384,6 +391,9 @@ export const SimpleCaptions: React.FC<{variant: string}> = ({variant}) => {
                 backgroundClip: 'text',
                 color: 'transparent',
                 WebkitTextFillColor: 'transparent',
+                // a prata deixa o take pulsar por baixo; a borda (na cópia
+                // de baixo) fica opaca e é ela que segura a leitura
+                opacity: METAL_OPACO,
               }}
             >
               {corpo}
@@ -423,9 +433,49 @@ export const SimpleCaptions: React.FC<{variant: string}> = ({variant}) => {
       );
     }
 
-    // vidro e moldura: UM painel em volta do cue inteiro (o bloco da uma
-    // lapide por linha — aqui a caixa e uma so, com as duas dentro)
-    const vidro = V.modo === 'vidro';
+    if (V.modo === 'vidro') {
+      // A LETRA é de vidro: 32% de branco, então o take aparece ATRAVÉS
+      // dela. O fio de luz de 2px é o que garante a leitura sobre qualquer
+      // imagem — sem ele isto vira texto apagado.
+      //
+      // `-webkit-text-stroke` é um traço CENTRADO (metade para dentro,
+      // metade para fora); o motor próprio reproduz isso com dilata−corrói.
+      const R = Math.max(1, Math.round(V.size * 0.028));
+      const cor = C.accent ?? '#ffffff';
+      return (
+        <AbsoluteFill style={fora}>
+          <div
+            style={{
+              ...tipo,
+              color: cor,
+              opacity: VIDRO_OPACO,
+              filter: 'drop-shadow(0 8px 22px rgba(0,0,0,0.55))',
+            }}
+          >
+            {lines.map((ln, i) => <div key={i}>{txt(ln)}</div>)}
+          </div>
+          <div
+            style={{
+              ...tipo,
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              bottom: V.bottom,
+              color: 'transparent',
+              WebkitTextStrokeWidth: `${R * 2}px`,
+              WebkitTextStrokeColor: cor,
+              opacity: VIDRO_FIO,
+            }}
+          >
+            {lines.map((ln, i) => <div key={i}>{txt(ln)}</div>)}
+          </div>
+        </AbsoluteFill>
+      );
+    }
+
+    // moldura: UM painel em volta do cue inteiro (o bloco da uma lápide por
+    // linha — aqui a caixa é uma só, com as duas dentro)
+    const vidro = false;
     const padX = Math.round(V.size * (vidro ? 0.62 : 0.72));
     const padY = Math.round(V.size * (vidro ? 0.44 : 0.4));
     return (

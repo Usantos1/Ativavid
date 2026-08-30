@@ -304,6 +304,12 @@ function setView(name) {
   if (name === "licenca") loadLicenca().catch((e) => toast(e.message));
   if (name === "sistema") {
     loadSistema().catch((e) => toast(e.message));
+    // Roda a checagem ao ABRIR: o card mostrava duas acoes e nenhum
+    // resultado, e quem chega aqui quer saber se esta tudo bem.
+    runDoutor().catch(() => {
+      const r = $("#doutorResumo");
+      if (r) r.textContent = "Não deu para rodar a checagem agora.";
+    });
   }
   if (name === "marca") loadBrandsUi().catch(() => {});
   if (name === "biblioteca") loadLibraryUi().catch(() => {});
@@ -4440,23 +4446,55 @@ function wireForms() {
   }
 }
 
+const DOUTOR_ROTULO = {ok: "ok", aviso: "atenção", bloqueio: "impede"};
+
+/* A checagem roda sozinha ao abrir Configuracoes e o resultado nasce
+ * ABERTO. O resumo no topo diz o veredito em uma linha — e o unico numero
+ * que a maioria vai ler. */
 async function runDoutor() {
   const out = $("#doutorOut");
   if (!out) return;
-  out.innerHTML = "<p class='hint'>Verificando…</p>";
-  const data = await api("/api/doutor");
+  const resumo = $("#doutorResumo");
+  const btn = $("#btnDoutorRun");
+  if (btn) { btn.disabled = true; btn.textContent = "Checando…"; }
+  if (resumo) resumo.textContent = "Verificando a instalação…";
+  out.classList.add("carregando");
+  let data;
+  try {
+    data = await api("/api/doutor");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Checar novamente"; }
+    out.classList.remove("carregando");
+  }
   const itens = data.itens || [];
+  const conta = {ok: 0, aviso: 0, bloqueio: 0};
   out.innerHTML = itens
     .map((it) => {
       const nivel = it.nivel || "ok";
       const mark = nivel === "ok" ? "ok" : nivel === "aviso" ? "aviso" : "bloqueio";
-      return `<div class="item ${mark}">
-        <div class="t">${escapeHtml(it.titulo || nivel)}</div>
-        <div class="d">${escapeHtml(it.detalhe || "")}</div>
-        ${it.solucao ? `<div class="s">${escapeHtml(it.solucao)}</div>` : ""}
-      </div>`;
+      conta[mark]++;
+      return `<article class="doutor-item ${mark}">
+        <header class="doutor-item-top">
+          <span class="doutor-dot" aria-hidden="true"></span>
+          <h5 class="t">${escapeHtml(it.titulo || nivel)}</h5>
+          <span class="doutor-tag">${DOUTOR_ROTULO[mark]}</span>
+        </header>
+        <p class="d">${escapeHtml(it.detalhe || "")}</p>
+        ${it.solucao ? `<p class="s">${escapeHtml(it.solucao)}</p>` : ""}
+      </article>`;
     })
     .join("") || "<p class='hint'>Sem itens.</p>";
+  if (resumo) {
+    // O que importa primeiro e o que IMPEDE; depois o que merece atencao.
+    resumo.textContent = conta.bloqueio
+      ? `${conta.bloqueio} item(ns) impedem o funcionamento — veja abaixo.`
+      : conta.aviso
+        ? `Tudo funciona; ${conta.aviso} ponto(s) merecem atenção.`
+        : `${conta.ok} verificação(ões), tudo certo.`;
+    resumo.classList.toggle("doutor-ruim", conta.bloqueio > 0);
+    resumo.classList.toggle("doutor-atencao", !conta.bloqueio && conta.aviso > 0);
+  }
+  $("#btnDoutorCopy")?.classList.toggle("hidden", !itens.length);
 }
 
 async function loadLicenca() {
@@ -5374,16 +5412,35 @@ async function loadPresetsUi() {
   if (hint) {
     const marca = pack.brandName || (state.brandActive && state.brandActive.name) || "Padrão";
     hint.textContent = presets.length
-      ? `${presets.length} preset(s) da marca ${marca}. O marcado como padrão é o que a importação usa.`
-      : `Nenhum preset salvo para a marca ${marca}. Crie um a partir de um estilo aberto.`;
+      ? `${presets.length} preset(s) da marca ${marca}. O marcado como padrão é o que a importação usa — `
+        + `"Duplicar" cria outro a partir dele.`
+      : `Nenhum preset salvo para a marca ${marca}. Ajuste o estilo em Estilos e salve a combinação aqui.`;
   }
   lista.innerHTML = presets.map((p) => {
     const on = p.id === activeId;
     const tipo = p.contentType ? escapeHtml(p.contentType) : "—";
+    // O que este preset DECIDE. Antes a linha mostrava só um rótulo solto
+    // ("viral") e o usuário perguntou para que servia a tela.
+    const st = p.style || {};
+    const chip = (rot, val) => (val
+      ? `<span class="preset-chip"><i>${rot}</i>${escapeHtml(String(val))}</span>`
+      : "");
+    const cor = (rot, hex) => (/^#[0-9a-f]{3,8}$/i.test(String(hex || ""))
+      ? `<span class="preset-chip"><i>${rot}</i><b class="preset-cor" style="background:${escapeHtml(hex)}"></b>${escapeHtml(hex)}</span>`
+      : "");
+    const chips = [
+      chip("layout", st.edit),
+      chip("legenda", st.captions),
+      chip("manchete", st.headline),
+      chip("ritmo", st.rhythm),
+      cor("cor", st.accent),
+      cor("legenda", st.captionAccent),
+    ].filter(Boolean).join("");
     return `<article class="preset-row${on ? " on" : ""}" data-preset="${escapeHtml(p.id)}">
       <div class="preset-main">
         <strong class="preset-name">${escapeHtml(p.name || p.id)}</strong>
         <span class="preset-meta">${tipo}${on ? " · padrão da marca" : ""}</span>
+        ${chips ? `<div class="preset-chips">${chips}</div>` : ""}
       </div>
       <div class="preset-acts">
         ${on ? "" : `<button type="button" class="ghost-btn ghost-btn--sm" data-preset-act="default">Usar como padrão</button>`}

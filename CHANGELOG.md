@@ -1,5 +1,24 @@
 # Changelog
 
+## 3.80
+
+- **Vidro e Metálico refeitos.** O Vidro agora é a **letra** que é de vidro
+  — 32% de transparência, o take aparece através dela, com um fio de luz na
+  borda. Não há mais painel escuro atrás. O Metálico virou **prata lisa**,
+  sem a faixa escura que cortava a letra no meio.
+- **Ponteiro de seleção na linha do tempo (tecla V).** Arraste um retângulo
+  e marque takes, legendas e blocos de uma vez; **Delete** apaga tudo junto
+  e **um** Ctrl+Z desfaz o gesto inteiro. Blocos marcados se arrastam no
+  tempo em conjunto.
+- **A bandeira de marcar virou o marcador do CapCut.**
+- **Diagnóstico aberto de cara**: a checagem roda ao abrir Configurações e o
+  resultado nasce expandido em cards, com um botão só — "Checar novamente".
+- **A tela de Configurações usa a largura do monitor**: em 1920px eram
+  1160px de coluna e ~490px de tela vazia; agora são 1590px e 4 cards por
+  linha em vez de 3.
+- **Presets explicam o que são**: cada um mostra o que decide (layout,
+  legenda, manchete, ritmo e cores) e o topo diz a diferença para a Marca.
+
 ## 3.79
 
 - **Cinco estilos de legenda novos**: **Metálico** (letras cromadas, com a

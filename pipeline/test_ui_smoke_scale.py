@@ -194,6 +194,14 @@ def test_menu_vira_gaveta_em_tela_de_celular():
         assert "function wireGaveta" in txt, js
         assert "sb-open" in txt, js
 
+def _ocorrencias(texto, alvo):
+    """Todos os inicios de `alvo` em `texto` — para ler regra por regra."""
+    i = texto.find(alvo)
+    while i >= 0:
+        yield i
+        i = texto.find(alvo, i + 1)
+
+
 def test_ia_e_integracoes_usam_a_largura_do_monitor():
     """Num monitor de 1920 sobravam ~680px de vazio: ao separar IA de
     Integracoes eu travei a grade em 900px e a tela ficou colada na
@@ -219,8 +227,13 @@ def test_ia_e_integracoes_usam_a_largura_do_monitor():
     # `1 / -1` é legítimo em grid de colunas explícitas (a tela de IA usa);
     # o que não pode voltar é ele junto de auto-fit AQUI, onde ressuscita a
     # coluna fantasma.
-    i_apis = bloco.index(".keys-block--apis")
-    trecho_apis = bloco[i_apis:]
+    # SO as regras de `.keys-block--apis`. Ler daqui ate o fim do arquivo
+    # fazia o teste acusar CSS de outras telas: o card largo do Diagnostico
+    # usa `1 / -1` legitimamente, num grid de colunas explicitas.
+    trecho_apis = "".join(
+        bloco[m:bloco.index("}", m) + 1]
+        for m in _ocorrencias(bloco, ".keys-block--apis")
+    )
     assert "grid-column: 1 / -1" not in trecho_apis, (
         "a coluna fantasma voltou: os cartoes param no meio da tela"
     )

@@ -197,7 +197,8 @@ def test_a_barra_ficou_so_de_icones_nos_tres():
 def test_clicar_no_bloco_acende_o_excluir_de_cima():
     """"quando clico na imagem deve ativar o delete que temos lá em cima,
     não aparecer um X" (30/08)."""
-    i = JS.index("if (c.isNew && S.blocoSel === i) chip.classList.add('sel');")
+    # (a condição ganhou o laço junto: `S.blocoSel === i` OU marcado por ele)
+    i = JS.index("if (c.isNew && (S.blocoSel === i || S.blocosSel.includes(i)))")
     assert i > 0
     k = JS.index("function toggleSelectedTake")
     bloco = JS[k:k + 400]

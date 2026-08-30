@@ -3800,3 +3800,27 @@ body.styles-wide .setup-actions .btn.primary {
   outline-offset: 1px;
 }
 
+/* ---------- ferramenta de selecao (laco) ----------
+   Duas ferramentas, como em qualquer editor: a agulha (clicar posiciona) e
+   o laco (arrastar marca varios). O cursor diz qual esta ligada — sem isso
+   o mesmo arrasto faria duas coisas diferentes sem aviso. */
+.btn.icon.ativo {
+  color: var(--interact, #ff5470);
+  border-color: color-mix(in srgb, var(--interact, #ff5470) 55%, transparent);
+  background: color-mix(in srgb, var(--interact, #ff5470) 14%, transparent);
+}
+.timeline-panel.modo-laco { cursor: crosshair; }
+.timeline-panel.modo-laco .clip,
+.timeline-panel.modo-laco .chip { cursor: crosshair; }
+.laco-box {
+  position: absolute;
+  z-index: 130;
+  pointer-events: none;
+  border: 1px solid var(--interact, #ff5470);
+  background: color-mix(in srgb, var(--interact, #ff5470) 14%, transparent);
+  border-radius: 3px;
+}
+.clip.laco-sel {
+  outline: 2px solid var(--interact, #ff5470);
+  outline-offset: -2px;
+}

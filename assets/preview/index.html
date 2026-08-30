@@ -590,6 +590,7 @@
     <button id="btnMark" class="btn mark" title="Marcar o trecho a corrigir: uma vez no começo, outra no fim (tecla M)">
       <span id="markIcon"></span><span id="markText" class="hidden">Marcar</span>
     </button>
+    <button id="btnLaco" class="btn icon" title="Selecionar vários — arraste um retângulo na linha do tempo (V)" aria-pressed="false"></button>
     <button id="btnUndo" class="btn icon" title="Desfazer (Ctrl+Z)" disabled></button>
     <button id="btnRedo" class="btn icon" title="Refazer (Ctrl+Shift+Z)" disabled></button>
     <button id="btnSplit" class="btn cover-btn" title="Cortar o take selecionado na agulha (S)">
@@ -629,6 +630,9 @@
   </div>
     <section id="timelinePanel" class="timeline-panel glass">
     <div id="timeline" class="timeline">
+      <!-- O retangulo do laco. Fica no <div class="timeline"> e nao no
+           painel: assim ele acompanha o rolamento junto com as faixas. -->
+      <div id="lacoBox" class="laco-box hidden"></div>
       <div class="track ruler-track">
         <div class="track-label"></div>
         <div class="lane ruler-lane"><canvas id="ruler"></canvas></div>

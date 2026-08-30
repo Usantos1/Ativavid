@@ -373,12 +373,17 @@
         <section class="view hidden" id="view-presets" data-view-panel="presets">
           <div class="lib-bar">
             <div class="lib-bar-copy">
+              <!-- "nao e a mesma coisa que marca?" (30/08). A tela nao
+                   respondia isso em lugar nenhum — dizia so quantos eram. -->
+              <p class="hint"><strong>Preset é um jeito de cortar</strong> — layout,
+                legenda, manchete, ritmo e cores. A <strong>Marca</strong> é quem
+                você é (logo, fontes, assinatura); uma marca tem vários presets.</p>
               <p class="hint" id="presetsHint">Carregando…</p>
             </div>
             <div class="lib-bar-actions">
               <!-- Criar preset exige o retrato do estilo que está aberto, e
                    só o editor de Estilos tem isso — daqui sairia vazio. -->
-              <button type="button" class="export-btn export-btn--sm" data-view="estilo">Criar em Estilos</button>
+              <button type="button" class="export-btn export-btn--sm" data-view="estilo">Criar preset novo</button>
             </div>
           </div>
           <div class="preset-list" id="presetList"></div>
@@ -712,12 +717,20 @@
               <!-- Diagnóstico saiu de dentro do "Avançado": é a primeira coisa
                    que o suporte pede, e escondida ela deixava metade da tela
                    vazia enquanto o usuário não achava onde clicar. -->
-              <div class="sys-card">
-                <h4>Diagnóstico</h4>
-                <p class="hint">Checagem rápida da instalação — use quando algo não funcionar.</p>
-                <div class="panel-actions">
-                  <button type="button" class="ghost-btn" id="btnDoutorRun">Rodar checagem</button>
-                  <button type="button" class="ghost-btn" id="btnDoutorCopy">Copiar relatório</button>
+              <!-- Ocupa a linha inteira e roda sozinho ao abrir a tela: quem
+                   chega aqui quer SABER se esta tudo bem, nao apertar um
+                   botao para descobrir. Uma acao so; o "copiar" e um link ao
+                   lado do resumo, porque so o suporte pede. -->
+              <div class="sys-card sys-card--wide" id="doutorCard">
+                <div class="doutor-head">
+                  <div class="doutor-head-copy">
+                    <h4>Diagnóstico</h4>
+                    <p class="hint" id="doutorResumo">Verificando a instalação…</p>
+                  </div>
+                  <div class="doutor-head-acts">
+                    <button type="button" class="ghost-btn ghost-btn--sm doutor-copy hidden" id="btnDoutorCopy">Copiar relatório</button>
+                    <button type="button" class="export-btn export-btn--sm" id="btnDoutorRun">Checar novamente</button>
+                  </div>
                 </div>
                 <div id="doutorOut" class="doutor"></div>
               </div>

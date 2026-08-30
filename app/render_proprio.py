@@ -2397,7 +2397,7 @@ class Renderizador:
         "recorte_simple": ("Poppins-ExtraBold.ttf", None, 78, 3, 1, 1.0, 1.0, -1, 430, 800, "sticker"),
         # --- os cinco de 30/08 -------------------------------------------
         "metal":    ("Poppins-ExtraBold.ttf", None, 76, 3, 1, 1.0, 1.0, -1, 430, 800, "metal"),
-        "vidro":    ("Inter[opsz,wght].ttf", "Medium", 50, 12, 2, 1.0, 1.0, 0, 430, 700, "vidro"),
+        "vidro":    ("Poppins-SemiBold.ttf", None, 72, 3, 1, 1.0, 1.0, -1, 430, 840, "vidro"),
         "traco":    ("Poppins-ExtraBold.ttf", None, 74, 3, 1, 1.0, 1.0, -1, 430, 820, "traco"),
         "moldura":  ("Inter[opsz,wght].ttf", "SemiBold", 44, 6, 1, 1.0, 1.0, 6, 430, 700, "moldura"),
         "eco":      ("Poppins-ExtraBold.ttf", None, 78, 3, 1, 1.0, 1.0, -2, 430, 800, "eco"),
@@ -2406,16 +2406,24 @@ class Renderizador:
     # os tres motores tem de concordar sobre quem esta nesta lista.
     SIMPLE_MAIUSCULA = ("sticker", "metal", "moldura", "eco")
     # Modos com um painel em volta do cue INTEIRO (e nao por linha, como o
-    # bloco): a caixa e uma so para as duas linhas.
-    SIMPLE_PAINEL = ("vidro", "moldura")
+    # bloco): a caixa e uma so para as duas linhas. O `vidro` saiu daqui —
+    # ele virou uma LETRA de vidro, nao uma caixa atras da letra.
+    SIMPLE_PAINEL = ("moldura",)
     # Peso que cada variante estatica tem no template (`capWeight(base.weight)`
     # em SimpleCaptions.tsx:218). Aqui ele fica implicito no ARQUIVO —
     # `Poppins-SemiBold.ttf` E o 600 — entao, quando a fonte da marca
     # substitui o arquivo, o peso se perdia junto. Escrito, ele sobrevive.
     SIMPLE_PESO = {"simples": 600, "serifada": 700, "classica": 500,
                    "bloco": 800, "recorte_simple": 800,
-                   "metal": 800, "vidro": 500, "traco": 800,
+                   "metal": 800, "vidro": 600, "traco": 800,
                    "moldura": 600, "eco": 800}
+
+    # Opacidades do Vidro e do Metalico. Ficam aqui, com nome, porque os
+    # tres motores tem de usar o MESMO numero — um 0,32 que vira 0,30 no
+    # template sai como outra legenda e ninguem percebe.
+    VIDRO_OPACO = 0.32     # o preenchimento da letra
+    VIDRO_FIO = 0.92       # o fio de luz da borda
+    METAL_OPACO = 0.88     # a prata deixa o take pulsar por baixo
 
     _ORFAO = ("o", "a", "os", "as", "e", "\u00e9", "de", "do", "da", "em", "no",
               "na", "um", "uma", "que", "se", "ao", "\u00e0", "por", "com")
@@ -2847,7 +2855,7 @@ class Renderizador:
             return [ws[:melhor], ws[melhor:]]
 
         camadas = []
-        lh = {"bloco": 1.06, "sticker": 1.16, "metal": 1.10, "vidro": 1.34,
+        lh = {"bloco": 1.06, "sticker": 1.16, "metal": 1.10, "vidro": 1.16,
               "traco": 1.16, "moldura": 1.20, "eco": 1.14}.get(modo, 1.18)
         for ci, cue in enumerate(cues):
             ini_f = int(round(cue[0]["startMs"] / 1000 * self.fps))
@@ -2938,7 +2946,7 @@ class Renderizador:
                 pad_m = np.zeros((h_m + 2 * folga, w_m + 2 * folga),
                                  dtype=np.float32)
                 pad_m[folga:folga + h_m, folga:folga + w_m] = m
-                if modo in ("metal", "traco", "eco"):
+                if modo in ("metal", "traco", "eco", "vidro"):
                     rgb, alpha, sombra = self._tinta_dos_novos(
                         modo, pad_m, folga, h_m, tam, accent, cor_emj)
                     leg.palavras.append(Palavra(
@@ -3016,8 +3024,11 @@ class Renderizador:
         degrade suave de claro para escuro parece papel, nao cromo.
         """
         import numpy as np
-        paradas = ((0.00, 1.45), (0.34, 0.55), (0.50, 0.38),
-                   (0.56, 1.60), (1.00, 0.72))
+        # PRATA LISO. A versao anterior tinha uma parada escura no meio com
+        # um estalo de luz abaixo — o cromado de catalogo. O usuario leu
+        # aquilo como um risco atravessando a letra, e ele tem razao: numa
+        # legenda de 3 palavras a faixa escura corta o glifo no meio.
+        paradas = ((0.00, 1.38), (0.42, 1.06), (1.00, 0.74))
         t = np.linspace(0.0, 1.0, max(1, n), dtype=np.float32)
         fs = np.interp(t, [q for q, _ in paradas], [v for _, v in paradas])
         fs = fs.astype(np.float32)[:, None]
@@ -3041,10 +3052,35 @@ class Renderizador:
             r = max(2, round(tam * 0.035))
             borda = self._contorno(pad_m, r)
             cor_b = self._cor("#0e1013")
-            alpha = np.maximum(borda, pad_m)
+            # 88% na letra: a prata deixa o take pulsar por baixo, que e a
+            # "certa transparencia" pedida. A BORDA fica opaca — e ela que
+            # segura a leitura sobre imagem clara.
+            alpha = np.maximum(borda, pad_m * self.METAL_OPACO)
             rgb = rgb * pad_m[..., None] + cor_b * (1.0 - pad_m[..., None])
             self._pintar_emoji(rgb, cor_emj, folga)
             return rgb, alpha, self._sombra_de(pad_m, [(0, 10, 24, 0.5)], k=0.5)
+
+        if modo == "vidro":
+            # A LETRA e de vidro: 32% de branco, entao o take aparece
+            # ATRAVES dela. O fio de luz de 2px e o que garante a leitura
+            # sobre qualquer imagem — sem ele isto vira texto apagado.
+            #
+            # O fio e CENTRADO (metade para dentro, metade para fora), que e
+            # como o `-webkit-text-stroke` desenha: por isso dilata E corroe.
+            r = max(1, round(tam * 0.028))
+            fora = self._contorno(pad_m, r)
+            dentro = 1.0 - self._contorno(1.0 - pad_m, r)
+            fio = np.clip(fora - dentro, 0.0, 1.0)
+            cor_t = self._cor(accent or "#ffffff")
+            alpha = np.maximum(pad_m * self.VIDRO_OPACO, fio * self.VIDRO_FIO)
+            rgb = np.broadcast_to(cor_t, (*pad_m.shape, 3)).copy()
+            self._pintar_emoji(rgb, cor_emj, folga)
+            # O `drop-shadow` do CSS parte do elemento JA com a opacidade
+            # dele: a sombra de uma letra a 32% e 32% mais fraca. Lancar do
+            # glifo cheio deixava a legenda 28% mais "tinta" que a do
+            # template (medido: 1,280 contra 1,007 dos outros estilos).
+            return rgb, alpha, self._sombra_de(
+                pad_m, [(0, 8, 22, 0.55 * self.VIDRO_OPACO)], k=0.5)
 
         if modo == "traco":
             # o Recorte com contorno FINO: 3px em vez dos 7px dele

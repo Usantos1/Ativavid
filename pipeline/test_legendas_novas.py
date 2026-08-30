@@ -8,7 +8,13 @@ surpreenda."
 Validados quadro a quadro contra o Remotion (140 quadros de fala contínua,
 razão de tinta mediana):
 
-    metal 1,007 · vidro 1,014 · traço 1,018 · moldura 1,003 · eco 1,023
+    metal 1,007 · vidro 0,935 · traço 1,018 · moldura 1,003 · eco 1,023
+
+O vidro fica 6,5% abaixo porque o `-webkit-text-stroke` do Chrome é um
+traço REDONDO e o nosso é a união de 8 direções (um octógono, que perde os
+vãos das diagonais). A diferença é menor que a de estilos já publicados
+(o `simples` está em 1,059 e o `impacto` em 1,094) e o par lado a lado é o
+mesmo desenho.
 
 O que estes testes guardam é o que a razão de tinta NÃO pega: um estilo que
 existe num motor e não no outro sai calado — foi assim que o `videoLayout`
@@ -54,7 +60,7 @@ def test_o_tamanho_e_a_medida_batem():
     esperado = {
         # estilo:    (tamanho, maxPalavras, linhas, larguraMax)
         "metal":     (76, 3, 1, 800),
-        "vidro":     (50, 12, 2, 700),
+        "vidro":     (72, 3, 1, 840),
         "traco":     (74, 3, 1, 820),
         "moldura":   (44, 6, 1, 700),
         "eco":       (78, 3, 1, 800),
@@ -85,6 +91,42 @@ def test_a_cor_da_legenda_chega_nos_cinco():
     for e in NOVOS:
         assert f"'{e}'" in JS[JS.index("const CAP_BASE_STYLES = ["):
                               JS.index("const CAP_EMPH_STYLES")]
+
+
+def test_o_metal_e_prata_lisa_sem_risco_no_meio():
+    """"a metalica é apenas uma cor metalica com uma certa transparencia
+    puxando pro prata, e nao aquele risco no meio da fonte" (30/08).
+
+    A primeira versão tinha uma parada escura em 50% com um estalo de luz
+    logo abaixo — o cromado de catálogo. Numa legenda de 3 palavras aquilo
+    corta o glifo no meio, e foi o que ele viu.
+    """
+    i = PY.index("paradas = ((0.00,")
+    linha = PY[i:PY.index(chr(41) + chr(10), i)]
+    assert "0.38" not in linha and "1.60" not in linha    # a faixa escura
+    assert "(0.00, 1.38), (0.42, 1.06), (1.00, 0.74)" in linha
+    assert "[[0, 1.38], [42, 1.06], [100, 0.74]]" in TSX
+    assert "[[0, 1.38], [42, 1.06], [100, 0.74]]" in JS
+    # e a prata deixa o take pulsar por baixo
+    assert "METAL_OPACO = 0.88" in PY and "METAL_OPACO = 0.88;" in TSX
+    assert "METAL_OPACO = 0.88;" in JS
+
+
+def test_o_vidro_e_a_letra_e_nao_uma_caixa_atras_dela():
+    """"apenas o estilo da fonte é tipo de vidro, com uma certa
+    transparência, nao aquele fundo escroto" (30/08). A primeira versão era
+    um PAINEL de vidro fumado — uma caixa, não uma letra de vidro."""
+    assert 'SIMPLE_PAINEL = ("moldura",)' in PY      # o vidro saiu daqui
+    assert "VIDRO_OPACO = 0.32" in PY and "VIDRO_FIO = 0.92" in PY
+    for fonte in (TSX, JS):
+        assert "VIDRO_OPACO = 0.32;" in fonte
+        assert "VIDRO_FIO = 0.92;" in fonte
+    # o fio é CENTRADO, como o `-webkit-text-stroke`: dilata E corrói
+    i = PY.index('if modo == "vidro":')
+    bloco = PY[i:i + 1200]
+    assert "dentro = 1.0 - self._contorno(1.0 - pad_m, r)" in bloco
+    assert "fio = np.clip(fora - dentro, 0.0, 1.0)" in bloco
+    assert "WebkitTextStrokeWidth" in TSX
 
 
 def test_o_metal_nao_deixa_o_contorno_tapar_o_degrade():

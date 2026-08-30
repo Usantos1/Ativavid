@@ -71,7 +71,11 @@ const ICON = {
   music: '<svg viewBox="0 0 16 16"><path d="M13.1 1.9 6.6 3.5a.8.8 0 0 0-.6.78v6.06a2.25 2.25 0 1 0 1.5 2.12V6.6l5-1.22v3.5a2.25 2.25 0 1 0 1.5 2.12V2.68a.8.8 0 0 0-.9-.78z"/></svg>',
   text: '<svg viewBox="0 0 16 16"><path d="M2 2.6h12v2.5h-1.5V4.1H8.75v8.1h1.6v1.3H5.65v-1.3h1.6V4.1H3.5v1H2V2.6z"/></svg>',
   notes: '<svg viewBox="0 0 16 16"><rect x="1.9" y="1.4" width="1.6" height="13.2" rx=".8"/><path d="M5 2.7h7.6a.6.6 0 0 1 .47.97L11.36 6l1.71 2.33a.6.6 0 0 1-.47.97H5V2.7z"/></svg>',
-  flag: '<svg viewBox="0 0 16 16"><rect x="1.9" y="1.4" width="1.6" height="13.2" rx=".8"/><path d="M5 2.7h7.6a.6.6 0 0 1 .47.97L11.36 6l1.71 2.33a.6.6 0 0 1-.47.97H5V2.7z"/></svg>',
+  // O marcador do CapCut: a fita com o entalhe embaixo. A bandeirinha de
+  // mastro que estava aqui nao e o desenho que o usuario reconhece.
+  flag: '<svg viewBox="0 0 16 16"><path d="M4.4 1.8h7.2a1.2 1.2 0 0 1 1.2 1.2v11.2L8 11.3l-4.8 2.9V3a1.2 1.2 0 0 1 1.2-1.2z"/></svg>',
+  // Ponteiro de selecao — a seta de sempre, com o rastro do laco atras
+  laco: '<svg viewBox="0 0 16 16"><path d="M3.4 1.6 12.2 7.4a.5.5 0 0 1-.16.9l-3.3.78-1.5 3.1a.5.5 0 0 1-.92-.08L3.4 1.6z"/><path d="M12.6 11.2c1.2.5 1.9 1.2 1.9 2 0 1.4-2.4 2.2-5.2 2.2s-5.2-.8-5.2-2.2c0-.6.4-1.1 1.1-1.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-dasharray="2.2 2"/></svg>',
   folder: '<svg viewBox="0 0 16 16"><path d="M1.6 3.6c0-.66.54-1.2 1.2-1.2h3.1c.4 0 .78.2 1 .53l.6.87h5.9c.66 0 1.2.54 1.2 1.2v7.4c0 .66-.54 1.2-1.2 1.2H2.8c-.66 0-1.2-.54-1.2-1.2V3.6z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>',
   sun: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="3.1" fill="none" stroke="currentColor" stroke-width="1.4"/><g stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M8 1.4v1.7M8 12.9v1.7M14.6 8h-1.7M3.1 8H1.4M12.6 3.4l-1.2 1.2M4.6 11.4l-1.2 1.2M12.6 12.6l-1.2-1.2M4.6 4.6L3.4 3.4"/></g></svg>',
   moon: '<svg viewBox="0 0 16 16"><path d="M13.8 9.9A6 6 0 1 1 6.1 2.2a5 5 0 0 0 7.7 7.7z"/></svg>',
@@ -817,7 +821,7 @@ const STATIC_VARIANTS = {
   recorte: {family: "'Poppins',sans-serif", weight: 800, size: 78, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: -1, maxW: 800, sticker: true},
   bolha: {family: "'Inter',sans-serif", weight: 500, size: 46, maxWords: 12, lines: 2, sx: 1, sy: 1, tracking: 0, maxW: 760, bubble: true},
   metal: {family: "'Poppins',sans-serif", weight: 800, size: 76, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: -1, maxW: 800, modo: 'metal'},
-  vidro: {family: "'Inter',sans-serif", weight: 500, size: 50, maxWords: 12, lines: 2, sx: 1, sy: 1, tracking: 0, maxW: 700, modo: 'vidro'},
+  vidro: {family: "'Poppins',sans-serif", weight: 600, size: 72, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: -1, maxW: 840, modo: 'vidro'},
   traco: {family: "'Poppins',sans-serif", weight: 800, size: 74, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: -1, maxW: 820, modo: 'traco'},
   moldura: {family: "'Inter',sans-serif", weight: 600, size: 44, maxWords: 6, lines: 1, sx: 1, sy: 1, tracking: 6, maxW: 700, modo: 'moldura'},
   eco: {family: "'Poppins',sans-serif", weight: 800, size: 78, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: -2, maxW: 800, modo: 'eco'},
@@ -826,7 +830,11 @@ const STATIC_VARIANTS = {
 // Quem desenha em CAIXA ALTA — muda a MEDIDA das linhas, entao esta lista
 // tem de ser a mesma nos tres motores (SimpleCaptions.tsx e render_proprio).
 const CAP_MAIUSCULA = new Set(['metal', 'moldura', 'eco']);
-const CAP_LH = {metal: 1.1, vidro: 1.34, traco: 1.16, moldura: 1.2, eco: 1.14};
+const CAP_LH = {metal: 1.1, vidro: 1.16, traco: 1.16, moldura: 1.2, eco: 1.14};
+// Os MESMOS numeros do render_proprio (VIDRO_OPACO/VIDRO_FIO/METAL_OPACO).
+const VIDRO_OPACO = 0.32;
+const VIDRO_FIO = 0.92;
+const METAL_OPACO = 0.88;
 
 /* As cinco paradas do cromado, tiradas DA COR escolhida — mesma conta do
  * `degradeMetal` no template. A parada escura no meio com o estalo de luz
@@ -835,7 +843,9 @@ function degradeMetal(hex) {
   const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim());
   const n = m ? parseInt(m[1], 16) : 0xe8edf3;
   const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-  return [[0, 1.45], [34, 0.55], [50, 0.38], [56, 1.6], [100, 0.72]]
+  // PRATA LISO — sem a faixa escura, que o usuario leu (com razao) como um
+  // risco atravessando a letra.
+  return [[0, 1.38], [42, 1.06], [100, 0.74]]
     .map(([pos, f]) => {
       const rgb = c.map((v) => Math.round(f > 1 ? v + (255 - v) * Math.min(1, f - 1) : v * f));
       return `rgb(${rgb.join(',')}) ${pos}%`;
@@ -966,6 +976,7 @@ function buildStaticDemo(host, id) {
         cima.style.backgroundClip = 'text';
         cima.style.color = 'transparent';
         cima.style.webkitTextFillColor = 'transparent';
+        cima.style.opacity = String(METAL_OPACO);
         for (const alvo of [baixo, cima]) {
           for (const ln of lines) el('div', '', alvo).textContent = t(ln);
         }
@@ -987,7 +998,30 @@ function buildStaticDemo(host, id) {
         for (const ln of lines) el('div', '', box).textContent = t(ln);
         return box;
       }
-      const vidro = V.modo === 'vidro';
+      if (V.modo === 'vidro') {
+        // A LETRA e de vidro: 32% de branco, o take aparece atraves dela.
+        // O fio de luz e o que garante a leitura sobre qualquer imagem.
+        const R = Math.max(1, V.size * 0.028 * s);
+        const cor2 = cor || '#ffffff';
+        box.style.position = 'relative';
+        const fundo = el('div', '', box);
+        fundo.style.color = cor2;
+        fundo.style.opacity = String(VIDRO_OPACO);
+        const fio = el('div', '', box);
+        fio.style.position = 'absolute';
+        fio.style.left = '0';
+        fio.style.top = '0';
+        fio.style.width = '100%';
+        fio.style.color = 'transparent';
+        fio.style.webkitTextStrokeWidth = `${R * 2}px`;
+        fio.style.webkitTextStrokeColor = cor2;
+        fio.style.opacity = String(VIDRO_FIO);
+        for (const alvo of [fundo, fio]) {
+          for (const ln of lines) el('div', '', alvo).textContent = t(ln);
+        }
+        return box;
+      }
+      const vidro = false;
       box.style.display = 'flex';
       box.style.flexDirection = 'column';
       box.style.alignItems = 'center';
@@ -1158,6 +1192,9 @@ let S = {
   savedPending: false,
   notes: [], // correction markers [{id,start,end,text}] — draft-timeline seconds
   blocoSel: -1,    // bloco posto na mao que esta selecionado (Delete apaga)
+  ferramenta: 'agulha',  // 'agulha' (padrao) ou 'laco' (selecionar varios)
+  takeSel: [],     // takes marcados pelo laco
+  blocosSel: [],   // blocos postos na mao marcados pelo laco
   pendingIn: null, // an IN is open, waiting for its OUT
   editingNote: null, // id of the note the editor is bound to
   style: null, // current picks {edit, captions, elements:{…}, note}
@@ -2355,12 +2392,14 @@ function refreshHeadlineOptions(hlLines) {
 }
 
 /** Apaga uma ou VARIAS legendas. Indices em S.captions. */
-function apagarLegendas(indices) {
+function apagarLegendas(indices, semHistorico = false) {
   const alvos = [...new Set(indices.map(Number))]
     .filter((i) => i >= 0 && S.captions[i])
     .sort((a, b) => b - a);            // de tras para frente: nao desloca o resto
   if (!alvos.length) return;
-  pushHistory();
+  // Quando o laco apaga as tres especies de uma vez, o historico e UM so:
+  // o Ctrl+Z tem de desfazer o gesto inteiro, nao um terco dele.
+  if (!semHistorico) pushHistory();
   const pedidos = [];
   for (const i of alvos) {
     const c = S.captions[i];
@@ -2385,9 +2424,11 @@ function apagarLegendas(indices) {
   S.capSelAncora = -1;
   renderAll();
   refreshHeader();
-  toast(alvos.length === 1
-    ? 'Legenda apagada — Ctrl+Z desfaz'
-    : `${alvos.length} legendas apagadas — Ctrl+Z desfaz`, 3000);
+  if (!semHistorico) {
+    toast(alvos.length === 1
+      ? 'Legenda apagada — Ctrl+Z desfaz'
+      : `${alvos.length} legendas apagadas — Ctrl+Z desfaz`, 3000);
+  }
   // NAO grava no servidor agora, de proposito. Uma correcao de TEXTO gravada
   // na hora ainda da para reescrever; uma palavra APAGADA no arquivo nao volta
   // pelo Ctrl+Z, que so restaura a tela — o usuario desfaria, veria a legenda
@@ -4304,7 +4345,8 @@ function renderClips() {
       g.title = 'clique e pressione delete para restaurar';
       return;
     }
-    const c = el('div', 'clip', laneVideo);
+    const c = el('div', 'clip' + (S.takeSel.includes(i) ? ' laco-sel' : ''),
+                 laneVideo);
     const px = r.dur * S.pps;
     c.style.left = `${r.out * S.pps}px`;
     c.style.width = `${Math.max(px, 0)}px`;
@@ -4525,7 +4567,9 @@ function desenharFaixasDeInsert(phase2) {
       // bloco: num bloco de 24px ele comia o proprio bloco, e o usuario ja
       // tem um botao de excluir na barra ("quando clico na imagem deve
       // ativar o delete que temos la em cima", 30/08).
-      if (c.isNew && S.blocoSel === i) chip.classList.add('sel');
+      if (c.isNew && (S.blocoSel === i || S.blocosSel.includes(i))) {
+        chip.classList.add('sel');
+      }
     }
   }
 
@@ -5178,6 +5222,30 @@ panel.addEventListener('pointerdown', (e) => {
   // programmatic .click() did.
   if (e.target.closest('.track-label') || e.target.closest('button')) return;
 
+  if (S.ferramenta === 'laco') {
+    // Pegar DENTRO da selecao move o conjunto; pegar fora comeca uma nova.
+    const dentro = e.target.closest('.chip.insert, .chip.caption, .clip');
+    const iDentro = dentro
+      ? (dentro.classList.contains('chip')
+        ? (dentro.classList.contains('caption')
+          ? S.capSel.includes(+dentro.dataset.ci)
+          : S.blocosSel.includes(+dentro.dataset.i))
+        : S.takeSel.includes(+dentro.dataset.i))
+      : false;
+    if (iDentro && S.blocosSel.length) {
+      drag = {type: 'laco-mover', x0: e.clientX, dt: 0,
+              preSnapshot: snapshotState()};
+      try { panel.setPointerCapture(e.pointerId); } catch (err) { /* touch */ }
+      e.preventDefault();
+      return;
+    }
+    const r0 = timelineEl.getBoundingClientRect();
+    drag = {type: 'laco', x0: e.clientX, y0: e.clientY, ox: r0.left, oy: r0.top};
+    try { panel.setPointerCapture(e.pointerId); } catch (err) { /* touch */ }
+    e.preventDefault();
+    return;
+  }
+
   const handle = e.target.closest('.handle');
   const clip = e.target.closest('.clip');
   const chip = e.target.closest('.chip.insert');
@@ -5299,6 +5367,30 @@ panel.addEventListener('pointerdown', (e) => {
 
 panel.addEventListener('pointermove', (e) => {
   if (!drag) return;
+  if (drag.type === 'laco') {
+    const cx = Math.min(drag.x0, e.clientX);
+    const cy = Math.min(drag.y0, e.clientY);
+    const cw = Math.abs(e.clientX - drag.x0);
+    const ch = Math.abs(e.clientY - drag.y0);
+    const box = $('lacoBox');
+    box.classList.remove('hidden');
+    box.style.left = `${cx - drag.ox}px`;
+    box.style.top = `${cy - drag.oy}px`;
+    box.style.width = `${cw}px`;
+    box.style.height = `${ch}px`;
+    marcarPeloRetangulo({left: cx, top: cy, right: cx + cw, bottom: cy + ch});
+    renderClips();
+    renderChips();      // desenha os blocos E as legendas
+    return;
+  }
+  if (drag.type === 'laco-mover') {
+    const dt = (e.clientX - drag.x0) / S.pps;
+    moverSelecaoNoTempo(dt - drag.dt);
+    drag.dt = dt;
+    renderAll();
+    desenharMidiaNoPreview();
+    return;
+  }
   if (drag.type === 'scrub') {
     const rect = timelineEl.getBoundingClientRect();
     seekDraft((e.clientX - rect.left - LABEL_W) / S.pps);
@@ -5362,6 +5454,23 @@ panel.addEventListener('pointermove', (e) => {
     // commit ONE history entry per drag gesture (not per pointermove tick),
     // and only if the drag actually moved something — a click-and-release on
     // a handle with no movement shouldn't cost the user an undo step later
+    if (drag && drag.type === 'laco') {
+      $('lacoBox')?.classList.add('hidden');
+      if (temSelecaoMultipla()) {
+        toast(`${contarSelecao()} · Delete apaga`
+          + (S.blocosSel.length ? ' · arraste para mover' : ''), 3200);
+      }
+      drag = null;
+      return;
+    }
+    if (drag && drag.type === 'laco-mover') {
+      if (drag.dt) {
+        pushHistory(drag.preSnapshot);
+        scheduleAutosave();
+      }
+      drag = null;
+      return;
+    }
     if (drag && drag.preSnapshot) {
       const moved = drag.type === 'trim'
         ? (S.draft[drag.i].start !== drag.r.start || S.draft[drag.i].end !== drag.r.end)
@@ -5444,12 +5553,23 @@ document.addEventListener('keydown', (e) => {
   } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
     const step = e.shiftKey ? 1 : 1 / S.fps;
     seekDraft(renderedToDraft(video.currentTime) + (e.key === 'ArrowRight' ? step : -step));
+  } else if (e.key === 'Escape' && temSelecaoMultipla()) {
+    e.preventDefault();
+    limparSelecaoMultipla();
   } else if (e.key === 'Escape' && S.capSel.length) {
     e.preventDefault();
     S.capSel = [];
     S.capSelAncora = -1;
     S.blocoSel = -1;
     renderAll();
+  } else if ((e.key === 'Delete' || e.key === 'Backspace')
+             && (S.takeSel.length || S.blocosSel.length)) {
+    // o laco marcou mais de uma especie: apaga tudo junto
+    e.preventDefault();
+    apagarSelecaoMultipla();
+  } else if ((e.key === 'v' || e.key === 'V') && !e.ctrlKey && !e.metaKey) {
+    e.preventDefault();
+    trocarFerramenta(S.ferramenta === 'laco' ? 'agulha' : 'laco');
   } else if ((e.key === 'Delete' || e.key === 'Backspace') && S.blocoSel >= 0) {
     // o bloco posto na mao vem ANTES do take: e o que esta selecionado
     e.preventDefault();
@@ -6239,6 +6359,122 @@ $('saiuToggle')?.addEventListener('click', () => {
   setSaiuCollapsed(!panel.classList.contains('collapsed'));
 });
 
+/* ---------------------------------------------------------------------
+ * O LACO — selecionar varios de uma vez.
+ *
+ * Com a ferramenta ligada, arrastar no fundo da linha do tempo desenha um
+ * retangulo e marca tudo que ele encostar. A selecao e das TRES especies
+ * ao mesmo tempo (take, legenda e bloco posto na mao), porque e assim que
+ * o usuario ve a linha: uma coisa so.
+ * ------------------------------------------------------------------ */
+function trocarFerramenta(qual) {
+  S.ferramenta = qual === 'laco' ? 'laco' : 'agulha';
+  const b = $('btnLaco');
+  if (b) {
+    b.classList.toggle('ativo', S.ferramenta === 'laco');
+    b.setAttribute('aria-pressed', S.ferramenta === 'laco' ? 'true' : 'false');
+  }
+  panel.classList.toggle('modo-laco', S.ferramenta === 'laco');
+  if (S.ferramenta === 'agulha') limparSelecaoMultipla(false);
+  toast(S.ferramenta === 'laco'
+    ? 'Seleção: arraste um retângulo na linha do tempo · Delete apaga'
+    : 'Agulha: clique para posicionar', 2400);
+  renderAll();
+}
+
+function temSelecaoMultipla() {
+  return S.takeSel.length + S.capSel.length + S.blocosSel.length > 0;
+}
+
+function limparSelecaoMultipla(repintar = true) {
+  S.takeSel = [];
+  S.blocosSel = [];
+  S.capSel = [];
+  S.capSelAncora = -1;
+  if (repintar) renderAll();
+}
+
+/* Marca tudo que o retangulo encostar. O teste e por INTERSECAO e nao por
+ * conter inteiro: num zoom fechado um take ocupa mais que a tela, e exigir
+ * envolve-lo inteiro tornaria o laco inutil justamente onde ele mais serve. */
+function marcarPeloRetangulo(r) {
+  const bate = (el) => {
+    const b = el.getBoundingClientRect();
+    return !(b.right < r.left || b.left > r.right
+             || b.bottom < r.top || b.top > r.bottom);
+  };
+  S.takeSel = [];
+  S.capSel = [];
+  S.blocosSel = [];
+  for (const el of laneVideo.querySelectorAll('.clip')) {
+    const i = +el.dataset.i;
+    if (Number.isInteger(i) && !S.draft[i]?.removed && bate(el)) S.takeSel.push(i);
+  }
+  for (const el of panel.querySelectorAll('.chip.caption')) {
+    const i = +el.dataset.ci;
+    if (Number.isInteger(i) && bate(el)) S.capSel.push(i);
+  }
+  for (const el of panel.querySelectorAll('.chip.insert')) {
+    const i = +el.dataset.i;
+    if (Number.isInteger(i) && S.insertsDraft[i]?.isNew && bate(el)) S.blocosSel.push(i);
+  }
+  S.selected = -1;
+  S.blocoSel = -1;
+}
+
+function contarSelecao() {
+  const p = [];
+  if (S.takeSel.length) p.push(`${S.takeSel.length} take${S.takeSel.length > 1 ? 's' : ''}`);
+  if (S.capSel.length) p.push(`${S.capSel.length} legenda${S.capSel.length > 1 ? 's' : ''}`);
+  if (S.blocosSel.length) p.push(`${S.blocosSel.length} bloco${S.blocosSel.length > 1 ? 's' : ''}`);
+  return p.join(' · ');
+}
+
+/* Apaga TUDO que esta marcado, das tres especies, num historico so — o
+ * Ctrl+Z tem de desfazer o gesto inteiro, nao um terco dele. */
+function apagarSelecaoMultipla() {
+  if (!temSelecaoMultipla()) return;
+  const quanto = contarSelecao();
+  pushHistory();
+  for (const i of S.takeSel) if (S.draft[i]) S.draft[i].removed = true;
+  // de tras para a frente: apagar por indice muda os indices seguintes
+  for (const i of [...S.blocosSel].sort((a, b) => b - a)) {
+    const c = S.insertsDraft[i];
+    if (c && c.isNew) S.insertsDraft.splice(i, 1);
+  }
+  if (S.capSel.length) apagarLegendas(S.capSel, true);
+  limparSelecaoMultipla(false);
+  renderAll();
+  refreshHeader();
+  desenharMidiaNoPreview();
+  persistEdl();
+  scheduleAutosave();
+  toast(`Apagado: ${quanto}`, 2600);
+}
+
+/* Move no TEMPO o que tem tempo PROPRIO: imagem, video, som e emoji postos
+ * na mao. As outras duas especies nao se movem, e por motivos diferentes:
+ *
+ *   take     o corte e uma SEQUENCIA — um take nao flutua sem empurrar os
+ *            outros, e arrastar assim daria um resultado que o render nao
+ *            respeita;
+ *   legenda  o tempo dela e o da FALA. Deslocar a legenda no tempo e
+ *            dessincroniza-la da boca de quem fala — o que se corrige numa
+ *            legenda e o texto, e isso ja tem editor proprio.
+ */
+function moverSelecaoNoTempo(dt) {
+  const layout = draftLayout();
+  const ult = layout[layout.length - 1];
+  const fim = ult ? ult.out + ult.dur : 0;
+  for (const i of S.blocosSel) {
+    const c = S.insertsDraft[i];
+    if (!c) continue;
+    const dur = c.end - c.start;
+    c.start = Math.max(0, Math.min(Math.max(0, fim - dur), c.start + dt));
+    c.end = c.start + dur;
+  }
+}
+
 function closeHeadMore() {
   $('headMoreMenu')?.classList.add('hidden');
   $('btnHeadMore')?.setAttribute('aria-expanded', 'false');
@@ -6576,6 +6812,9 @@ async function saveEditsAndReturnToQueue() {
 
 // ---------- correction markers: button, chips, editor ----------
 $('markIcon').innerHTML = ICON.flag;
+$('btnLaco').innerHTML = ICON.laco;
+$('btnLaco').addEventListener('click', () => trocarFerramenta(
+  S.ferramenta === 'laco' ? 'agulha' : 'laco'));
 $('btnMark').addEventListener('click', toggleMark);
 $('laneNotes').addEventListener('click', (e) => {
   const chip = e.target.closest('.note-chip');

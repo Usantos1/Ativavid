@@ -43,9 +43,16 @@ def test_a_acao_desce_para_o_rodape_do_card():
 
 
 def test_a_coluna_inteira_tem_a_mesma_largura():
-    """Grade e barra "Avançado" precisam terminar na mesma linha."""
+    """Grade e barra "Avançado" terminam na mesma linha — mas SEM teto.
+
+    O teto de 1160px que estava aqui é o que o usuário viu como desperdício:
+    "a gente tem muito espaco ali em uma tela full hd que pode ser usado"
+    (30/08). O alinhamento continua garantido porque a barra "Avançado" está
+    DENTRO desta coluna; quem cresce agora é o número de colunas da grade
+    (medido: 3 → 4 cards por linha em 1920px).
+    """
     b = _bloco(".sys-shell,")
-    assert "max-width: 1160px" in b, b
+    assert "max-width" not in b, "o teto voltou: sobra tela vazia à direita"
     assert "max-width" not in _bloco(".sys-grid,"), "dois tetos discordando"
 
 
