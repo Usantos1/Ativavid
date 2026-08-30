@@ -598,6 +598,22 @@
               </div>
             </div>
 
+            <!-- So para quem tem licenca ativa: `mode === "licensed"` em
+                 renderLicense. Quem esta em teste ou bloqueado nunca ve o
+                 numero (pedido de 30/08). -->
+            <div class="lic-suporte" id="licSuporte" hidden>
+              <div class="lic-suporte-copy">
+                <strong>Suporte Prime Camp</strong>
+                <span class="hint">ATIVAVID é uma solução Prime Camp. Suporte a
+                  clientes com licença ativa, de segunda a sábado.</span>
+              </div>
+              <div class="lic-suporte-acoes">
+                <a class="export-btn export-btn--sm" id="btnSuporteZap"
+                   href="#" rel="noopener">WhatsApp do suporte</a>
+                <span class="mono lic-suporte-num" id="licSuporteNum"></span>
+              </div>
+            </div>
+
             <div class="lic-client-key" id="licClientKeyCard" hidden>
               <label class="ia-form">Chave de ativação
                 <div class="lic-key-row">

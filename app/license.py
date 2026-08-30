@@ -73,6 +73,13 @@ def _sign_cache(blob: dict[str, Any]) -> str | None:
         # Amarra ao device: copiar o license.json de outra máquina não vale.
         "deviceId": blob.get("deviceId"),
     }
+    # Campos novos entram na assinatura SO quando existem: assim o
+    # license.json de quem ja esta instalado continua valendo depois de
+    # atualizar (senao a atualizacao exigiria internet para abrir). Tirar
+    # um deles a mao muda o payload e quebra a assinatura, que e o ponto.
+    for extra in ("maxSeenAt", "blockedAt"):
+        if blob.get(extra):
+            payload[extra] = blob[extra]
     msg = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hmac.new(_cache_key(), msg.encode("utf-8"), hashlib.sha256).hexdigest()
 
@@ -221,9 +228,13 @@ def _apply_update_gate(status: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def _http_rpc(payload: dict[str, Any]) -> tuple[int, Any]:
+def _http_rpc(payload: dict[str, Any], fn: str = "ativavid_license") -> tuple[int, Any]:
+    """`fn` existe para o registro de abertura (`ativavid_open`) usar o
+    mesmo transporte sem virar mais uma assinatura de `ativavid_license` —
+    duas funcoes com parametros opcionais deixam o PostgREST ambiguo, e foi
+    por isso que a versao de 3 argumentos precisou ser derrubada."""
     c = _cfg()
-    endpoint = f"{c['url']}/rest/v1/rpc/ativavid_license"
+    endpoint = f"{c['url']}/rest/v1/rpc/{fn}"
     raw = json.dumps(payload).encode("utf-8")
     # JWT do usuário logado → RPC resolve account_access; senão anon (chave/trial)
     bearer = c["anon"]
@@ -357,6 +368,26 @@ def _offline_fallback(err: str) -> dict[str, Any]:
     blob = _load_blob()
     cached = blob.get("cached")
     cached_at = blob.get("cachedAt")
+    if _cache_intact(blob) and blob.get("blockedAt"):
+        # Bloqueado pelo servidor: cache antigo nao ressuscita a licenca.
+        return {
+            "entitled": False,
+            "mode": "blocked",
+            "error": "device_blocked",
+            "message": ("Este computador foi bloqueado. Fale com o suporte "
+                        "do ATIVAVID."),
+            "detail": err,
+        }
+    if _cache_intact(blob) and _relogio_voltou(blob):
+        return {
+            "entitled": False,
+            "mode": "blocked",
+            "error": "clock_rollback",
+            "message": ("A data do computador está atrás da última vez que "
+                        "o ATIVAVID rodou. Acerte o relógio e conecte-se à "
+                        "internet para validar a licença."),
+            "detail": err,
+        }
     if isinstance(cached, dict) and cached_at and not _cache_intact(blob):
         return {
             "entitled": False,
@@ -401,6 +432,32 @@ def _offline_fallback(err: str) -> dict[str, Any]:
     }
 
 
+def _marcar_hora(blob: dict[str, Any]) -> dict[str, Any]:
+    """Guarda a MAIOR hora que este app ja viu.
+
+    A janela offline mede `agora - cachedAt`. Sem isto, atrasar o relogio
+    do Windows deixa a conta abaixo de 72h para sempre — e o cache, que e
+    assinado contra edicao, nao protegia a hora da propria maquina.
+    """
+    agora = _utc()
+    if str(blob.get("maxSeenAt") or "") < agora:
+        blob["maxSeenAt"] = agora
+    return blob
+
+
+def _relogio_voltou(blob: dict[str, Any]) -> bool:
+    """A maquina esta antes da ultima hora que o app viu? (5 min de folga
+    para fuso e acerto de NTP.)"""
+    marca = str(blob.get("maxSeenAt") or "")
+    if not marca:
+        return False
+    try:
+        ts = datetime.fromisoformat(marca.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return (datetime.now(timezone.utc) - ts).total_seconds() < -300
+
+
 def _cache(status: dict[str, Any]) -> dict[str, Any]:
     status = _apply_update_gate(status)
     # Resposta que saiu do próprio cache offline não pode regravar cachedAt:
@@ -411,8 +468,15 @@ def _cache(status: dict[str, Any]) -> dict[str, Any]:
     # apagava a licença guardada e o fallback offline achava entitled=false.
     if status.get("mode") == "error" and not status.get("entitled"):
         return status
-    blob = _load_blob()
+    blob = _marcar_hora(_load_blob())
     blob["deviceId"] = device_id()
+    # Veredito de bloqueio do SERVIDOR gruda. Sem isto bastava puxar o
+    # cabo depois de ser bloqueado: o fallback offline voltava ao ultimo
+    # cache bom e liberava por mais 72h.
+    if status.get("mode") == "blocked" and not status.get("offline"):
+        blob["blockedAt"] = _utc()
+    elif status.get("entitled"):
+        blob.pop("blockedAt", None)
     blob["cached"] = {
         "entitled": bool(status.get("entitled")),
         "mode": status.get("mode"),
@@ -440,6 +504,10 @@ def entitlement(*, refresh: bool = False) -> dict[str, Any]:
         return out
 
     blob = _load_blob()
+    if _cache_intact(blob) and (blob.get("blockedAt") or _relogio_voltou(blob)):
+        # Nem o cache de 30 minutos vale: os dois casos exigem uma resposta
+        # ONLINE para voltar a liberar.
+        return _cache(_call("status"))
     if (
         not refresh
         and isinstance(blob.get("cached"), dict)

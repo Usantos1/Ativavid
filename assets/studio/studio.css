@@ -3795,3 +3795,21 @@ video.lib-thumb { aspect-ratio: 9 / 16; max-height: 260px; object-fit: contain;
   background: color-mix(in srgb, var(--bad) 12%, transparent);
 }
 .lib-item-cat { display: flex; align-items: center; gap: 6px; }
+
+/* Suporte Prime Camp — so aparece com licenca ativa (4.27). Discreto: e
+   informacao de dono, nao chamada para acao. */
+.lic-suporte {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+.lic-suporte-copy { display: grid; gap: 3px; min-width: 220px; flex: 1 1 260px; }
+.lic-suporte-copy .hint { margin: 0; max-width: 46ch; }
+.lic-suporte-acoes { display: inline-flex; align-items: center; gap: 10px; }
+.lic-suporte-num { font-size: 12.5px; color: var(--dim); white-space: nowrap; }

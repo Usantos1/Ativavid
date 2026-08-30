@@ -645,6 +645,16 @@ def main() -> None:
     ap.add_argument("--port", type=int, default=4850)
     args = ap.parse_args()
 
+    # Uma linha por abertura, em ~/ATIVAVID/aberturas.jsonl, e um aviso ao
+    # servidor quando ele souber receber. Em segundo plano: registro de uso
+    # nao vale um app que demora a abrir.
+    try:
+        from app.registro_de_uso import registrar_abertura
+
+        registrar_abertura()
+    except Exception:  # noqa: BLE001
+        pass
+
     srv, url = build_server(args.projects_root, args.port)
     print(f"ATIVAVID Desktop -> {url}", flush=True)
     print(f"Projetos: {args.projects_root.resolve()}", flush=True)

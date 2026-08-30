@@ -1,5 +1,21 @@
 # Changelog
 
+## 4.27
+
+- **Bloquear um computador agora funciona mesmo sem internet.** Testando o
+  sistema de licença achei dois caminhos por onde uma máquina bloqueada
+  continuava trabalhando: **atrasar o relógio do Windows** (a janela de 72h
+  offline nunca fechava) e **ficar offline logo depois de ser bloqueada** (o
+  app voltava para a última licença guardada e liberava por mais 72h). Os
+  dois estão fechados, e desbloquear continua funcionando na hora.
+- **Toda abertura do app vira registro.** Uma linha por vez que o ATIVAVID
+  abre, em `%USERPROFILE%\ATIVAVIDberturas.jsonl`: máquina, usuário do
+  Windows, versão e situação da licença. Funciona sem internet e sem
+  servidor — é o arquivo que o suporte pede quando precisa entender um caso.
+- **Suporte Prime Camp na tela de Licença.** Aparece só para quem tem
+  licença ou assinatura ativa; quem está em teste ou bloqueado não vê. O
+  botão já abre o WhatsApp com o identificador da máquina na mensagem.
+
 ## 4.26
 
 - **A IA agora recebe o pedido que a nota cobrava.** A ficha reclamava da

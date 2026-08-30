@@ -1484,7 +1484,47 @@ function syncLicenseChrome() {
   }
 }
 
+/* Contato do dono da solucao. Fica no codigo (nao numa tela de ajuste)
+ * porque e identidade do produto, nao preferencia de usuario. */
+const SUPORTE = {
+  dono: "Prime Camp",
+  zap: "5519987680453",
+  numero: "(19) 98768-0453",
+};
+
+/* O cartao de suporte aparece SO com licenca ativa.
+ *
+ * "pode deixar bem escondido esse numero, apenas pra quem for pagar ou
+ * contratar a licenca" (30/08). Teste, bloqueado e sem configuracao nao
+ * veem — e `licensed` e o unico estado que significa cliente pagante.
+ *
+ * A mensagem ja leva o identificador da maquina: e a primeira coisa que
+ * o suporte pergunta e o cliente nao sabe onde achar. */
+function renderSuporte(lic) {
+  const box = $("#licSuporte");
+  if (!box) return;
+  // `licensed` (chave) e `account` (assinatura) sao os dois estados de
+  // cliente pagante. `trial` e `open` NAO: um esta testando, o outro e
+  // maquina sem licenca exigida.
+  const modo = String((lic && lic.mode) || "");
+  const pago = !!(lic && lic.entitled) && (modo === "licensed" || modo === "account");
+  box.hidden = !pago;
+  if (!pago) return;
+  const num = $("#licSuporteNum");
+  if (num) num.textContent = SUPORTE.numero;
+  const btn = $("#btnSuporteZap");
+  if (btn) {
+    const quem = (lic && (lic.accountEmail || lic.licenseKeyHint)) || "";
+    const msg = `Ola! Suporte ATIVAVID.\nMaquina: ${(lic && lic.deviceId) || "?"}`
+      + (quem ? `\nConta: ${quem}` : "")
+      + `\nVersao: ${(lic && lic.appVersion) || ""}`;
+    btn.href = `https://wa.me/${SUPORTE.zap}?text=${encodeURIComponent(msg)}`;
+    btn.target = "_blank";
+  }
+}
+
 function renderLicense(lic) {
+  renderSuporte(lic);
   const hint = $("#licenseHint");
   const device = $("#licenseDevice");
   const badge = $("#licenseBadge");
