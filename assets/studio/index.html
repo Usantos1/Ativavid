@@ -212,6 +212,16 @@
 
         <!-- DONE -->
         <section class="view hidden" id="view-done" data-view-panel="done">
+          <!-- Sao 183 videos prontos e nao havia busca aqui: so em
+               Projetos, e la ela nem olhava o titulo. -->
+          <div class="proj-bar">
+            <label class="proj-search">
+              <span class="sr-only">Buscar vídeo pronto</span>
+              <input type="search" id="doneSearch"
+                     placeholder="Buscar pelo título, pelo arquivo…"
+                     autocomplete="off">
+            </label>
+          </div>
           <div id="jobListDone" class="project-grid"></div>
           <div id="emptyDone" class="hub-empty hidden">Nenhum vídeo pronto ainda.</div>
         </section>
@@ -227,7 +237,9 @@
             </div>
             <label class="proj-search">
               <span class="sr-only">Buscar projeto</span>
-              <input type="search" id="projSearch" placeholder="Buscar por nome…" autocomplete="off">
+              <input type="search" id="projSearch"
+                     placeholder="Buscar pelo título, pelo arquivo…"
+                     autocomplete="off">
             </label>
           </div>
           <div id="jobListProjetos" class="project-grid"></div>

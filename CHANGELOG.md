@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.94
+
+- **A busca acha pelo título do vídeo.** Ela olhava só o nome da pasta (um
+  carimbo de data com o nome do arquivo da câmera) — digitar "lanterna" não
+  achava "Celular na lanterna?", que é o que está escrito no cartão.
+- **Concluídos ganhou busca.** São 183 vídeos prontos e a única forma de
+  achar um era rolar a lista.
+- O campo agora diz o que dá para procurar: título, arquivo ou data.
+
 ## 3.93
 
 - **A espera de "Aplicar alterações" agora mostra quanto já andou.**

@@ -18,6 +18,7 @@ const state = {
   brandActive: null,
   projFilter: "todos",
   projBusca: "",
+  doneBusca: "",
   libraryRoot: "",
   libraryData: null,
   libAba: "image",
@@ -402,13 +403,16 @@ function filterJobs(kind) {
     return state.jobs.filter(jobInFila);
   }
   if (kind === "done") {
-    return state.jobs.filter((j) => j.status === "done").sort(byRecency);
+    // Busca tambem aqui: sao 183 videos prontos, e sem ela a unica
+    // forma de achar um era rolar a lista.
+    return state.jobs.filter((j) => j.status === "done")
+      .filter((j) => casaBusca(j, state.doneBusca))
+      .sort(byRecency);
   }
   if (kind === "projetos") {
     // Projetos é o acervo: TODO trabalho que ainda existe em disco, em
     // qualquer estado. A Fila e os Concluídos são recortes disto.
     const f = state.projFilter || "todos";
-    const busca = (state.projBusca || "").trim().toLowerCase();
     return state.jobs
       .filter((j) => {
         if (f === "ativos") return jobInFila(j) && j.status !== "error";
@@ -416,12 +420,24 @@ function filterJobs(kind) {
         if (f === "parados") return j.status === "error" || j.status === "needs_review";
         return true;
       })
-      .filter((j) => !busca
-        || String(j.name || "").toLowerCase().includes(busca)
-        || jobFolderName(j).toLowerCase().includes(busca))
+      .filter((j) => casaBusca(j, state.projBusca))
       .sort(byRecency);
   }
   return [...state.jobs].sort(byRecency).slice(0, 8);
+}
+
+/* O que o usuario procura e o que ele LE no cartao: o titulo. A busca
+ * olhava so o nome da pasta ("20260829-185156_Elizangela001_08291440_C039")
+ * e o arquivo de camera — digitar "lanterna" nao achava
+ * "Celular na lanterna?".
+ *
+ * Uma funcao so para Projetos e Concluidos: duas buscas com regras
+ * diferentes na mesma lista seria pior que uma busca fraca. */
+function casaBusca(j, termo) {
+  const q = String(termo || "").trim().toLowerCase();
+  if (!q) return true;
+  return [j.title, j.name, jobFolderName(j)]
+    .some((x) => String(x || "").toLowerCase().includes(q));
 }
 
 function jobFolderName(j) {
@@ -1190,6 +1206,14 @@ function wireProjetos() {
     busca.dataset.wired = "1";
     busca.addEventListener("input", () => {
       state.projBusca = busca.value;
+      renderJobs();
+    });
+  }
+  const buscaDone = $("#doneSearch");
+  if (buscaDone && !buscaDone.dataset.wired) {
+    buscaDone.dataset.wired = "1";
+    buscaDone.addEventListener("input", () => {
+      state.doneBusca = buscaDone.value;
       renderJobs();
     });
   }
