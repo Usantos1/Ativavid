@@ -357,17 +357,20 @@ def motivo_nao_suportado(edit_data: dict[str, Any], public: Path) -> str | None:
     """None = o renderizador próprio cobre este projeto; senão o motivo."""
     if (os.environ.get("ATIVAVID_RENDER_PROPRIO") or "").strip() == "0":
         return "desligado por ATIVAVID_RENDER_PROPRIO=0"
+    # Import LOCAL, como o de `video_layouts` neste mesmo arquivo: quem so
+    # olha o portao nao precisa carregar o resto.
+    from app import caption_styles as CAPTION_STYLES
     caps = edit_data.get("captions") or {}
     # Os 4 estilos do catalogo, todos validados quadro a quadro contra o
     # Remotion (tinta mediana; 140 quadros de fala continua cada):
     #   serifada 1,009 · recorte 1,014 · scatter 1,024 · bloco 1,033
     #   classica 1,036 · simples 1,059 · impacto 1,094
     estilo = caps.get("style") or "stacked"
-    permitidos = {"stacked", "impacto", "scatter", "karaoke", "bolha",
-                  "simples", "serifada", "classica", "bloco", "recorte",
-                  # os cinco de 30/08 — validados quadro a quadro contra o
-                  # Remotion antes de entrar aqui
-                  "metal", "vidro", "traco", "moldura", "eco"}
+    # A lista vive em `app/caption_styles.py`: ela era repetida aqui, no
+    # run_fast e no catalogo da tela — e a IA nao tinha lista nenhuma. Um
+    # estilo novo que esquecesse uma das copias nao dava erro, so nao
+    # acontecia.
+    permitidos = CAPTION_STYLES.TODOS
     # Tudo daqui para baixo so importa se a legenda VAI ser desenhada. Com ela
     # desligada o pipeline grava `style="karaoke"` fixo (run_fast: `captions if
     # cap_enabled else "karaoke"`), e sem esta guarda o job perderia o motor

@@ -59,10 +59,17 @@ def test_motor_proprio_desenha_a_bolha(tmp_path):
 
 
 def test_gate_do_motor_aceita_bolha():
+    """Sem a bolha no gate, todo job do estilo cai no caminho lento.
+
+    O literal que estava aqui virou `app/caption_styles.TODOS` — a
+    lista passou a ter um dono só, e é ela que este teste consulta.
+    """
+    import sys
+    sys.path.insert(0, str(RAIZ))
+    from app import caption_styles
+    assert "bolha" in caption_styles.TODOS
     rp = (RAIZ / "app" / "render_proprio.py").read_text(encoding="utf-8")
-    i = rp.find('permitidos = {"stacked"')
-    assert '"bolha"' in rp[i:i + 200], \
-        "sem a bolha no gate, todo job do estilo cai no caminho lento calado"
+    assert "permitidos = CAPTION_STYLES.TODOS" in rp
 
 
 def test_tipos_do_template_conhecem_os_estilos_novos():

@@ -8,6 +8,12 @@ import time
 import unicodedata
 from typing import Any
 
+from app import caption_styles
+
+# A lista de estilos que a IA pode pedir. Ela NAO tinha lista: um
+# nome inventado virava karaoke, devagar, e sem aviso.
+_ESTILOS_DE_LEGENDA = caption_styles.lista_para_ia()
+
 ALLOWED_ACTIONS = {
     "trim_range",
     "remove_range",
@@ -108,6 +114,9 @@ SYSTEM = (
     "do início ao fim do ORIGINAL (sourceDuration), não do corte atual.\n"
     "fix_captions: from/to ou replacements=[{from,to}] para corrigir palavra "
     "errada na legenda (ex.: pericô→Película). Não corta o vídeo.\n"
+    "set_captions_style: style TEM de ser um destes ids — "
+    + _ESTILOS_DE_LEGENDA
+    + ". Nome fora da lista é recusado (o vídeo sairia em karaokê, e devagar).\n"
     "Nunca invente FFmpeg. Prefira poucas ações claras.\n"
     "trim_range/remove_range/set_duration_max usam o relógio do CORTE ATUAL "
     "(0 até DURAÇÃO_CORTE_ATUAL). Os números do EDL_ATUAL são tempo da FONTE — "
@@ -198,6 +207,10 @@ def apply_actions_to_edits(
     applied: list[dict[str, Any]] = []
     timeline_ops: list[dict[str, Any]] = []
     blocked_ops: list[dict[str, Any]] = []
+    # Acoes recusadas por valor invalido. Elas PRECISAM aparecer: uma
+    # acao que some sem dizer nada e a mesma armadilha do estilo
+    # desconhecido, so que um nivel acima.
+    recusadas: list[dict[str, Any]] = []
 
     for a in actions:
         act = a["action"]
@@ -237,8 +250,17 @@ def apply_actions_to_edits(
             timeline_ops.append({"op": "mark_hook", "start": start, "end": end})
             applied.append(a)
         elif act == "set_captions_style" and a.get("style"):
-            style["captions"] = a["style"]
-            applied.append(a)
+            # Nome inventado NAO passa. Antes passava, e o estrago era
+            # mudo: o template caia no `else` (karaoke) e o job perdia
+            # o motor rapido, porque estilo desconhecido nao e
+            # suportado por ele.
+            escolhido = caption_styles.normalizar(a["style"])
+            if escolhido is None:
+                recusadas.append(dict(a, motivo=(
+                    "estilo de legenda {!r} nao existe".format(a["style"]))))
+            else:
+                style["captions"] = escolhido
+                applied.append(a)
         elif act == "fix_captions":
             reps = list(a.get("replacements") or [])
             if a.get("from") and a.get("to"):
@@ -324,6 +346,8 @@ def apply_actions_to_edits(
     blocked_ops = filtered["blocked"]
     if blocked_ops:
         print("\n".join(format_blocked_log(blocked_ops)), flush=True)
+    for recusa in recusadas:
+        print('[ia] acao recusada: ' + str(recusa.get('motivo')), flush=True)
 
     return {
         "style": style,
@@ -332,6 +356,7 @@ def apply_actions_to_edits(
         "applied": applied,
         "timelineOps": kept,
         "blockedOps": blocked_ops,
+        "recusadas": recusadas,
     }
 
 

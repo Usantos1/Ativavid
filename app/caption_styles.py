@@ -1,0 +1,89 @@
+# -*- coding: utf-8 -*-
+"""Estilos de legenda (`captions.style`) num lugar só.
+
+Mesmo remédio de `video_layouts.py`, pelo mesmo motivo: a lista vivia
+repetida em quatro lugares (o portão do motor próprio, a passagem da cor no
+run_fast, o catálogo da tela e o `SIMPLE_VARIANTS` do template), e o quarto
+— a IA — não tinha lista NENHUMA.
+
+O buraco da IA era o pior dos cinco. A ação `set_captions_style` aceitava
+qualquer texto: um pedido como "põe legenda metálica" virava
+`style="metalica"`, que não existe. Aí o vídeo saía com **karaokê** (o
+`else` do template) e ainda pelo caminho LENTO, porque um estilo
+desconhecido tira o job do motor próprio. Dois prejuízos, nenhum aviso.
+
+`TODOS` é a lista canônica; `NOMES` é como cada um aparece na tela e é o
+que se dá à IA para ela falar a mesma língua do usuário.
+"""
+from __future__ import annotations
+
+# id -> nome que aparece na tela (e que a IA usa para reconhecer o pedido)
+NOMES = {
+    "karaoke": "Karaokê",
+    "stacked": "Empilhado",
+    "impacto": "Impacto",
+    "scatter": "Disperso",
+    "recorte": "Recorte",
+    "bolha": "Bolha de conversa",
+    "simples": "Simples",
+    "serifada": "Serifada",
+    "classica": "Clássica",
+    "bloco": "Bloco",
+    # os cinco de 30/08
+    "metal": "Metálico",
+    "vidro": "Vidro",
+    "traco": "Contorno fino",
+    "moldura": "Moldura",
+    "eco": "Eco",
+}
+
+TODOS = frozenset(NOMES)
+
+# Estilos em que a cor escolhida pinta a LEGENDA (e não a ênfase). O
+# `bolha` fica de fora de propósito: o verde de chat é fixo, é ele que faz
+# a bolha ser reconhecível.
+USAM_COR_DA_LEGENDA = frozenset({
+    "karaoke", "simples", "serifada", "classica", "bloco", "recorte",
+    "metal", "vidro", "traco", "moldura", "eco",
+})
+
+# Estilos em que a cor pinta a ÊNFASE (a palavra quente), não a linha toda.
+USAM_COR_DA_ENFASE = frozenset({"stacked", "scatter", "impacto"})
+
+
+def valido(estilo: str | None) -> bool:
+    """O id existe? Vale para o que vem da IA e para o que vem de um preset
+    salvo por uma versão mais nova do app."""
+    return str(estilo or "").strip().lower() in TODOS
+
+
+def _sem_acento(t: str) -> str:
+    import unicodedata
+    return "".join(c for c in unicodedata.normalize("NFD", t)
+                   if unicodedata.category(c) != "Mn")
+
+
+# nome de tela -> id, sem acento e em caixa baixa ("metalico" -> "metal")
+_POR_NOME = {_sem_acento(v).lower(): k for k, v in NOMES.items()}
+
+
+def normalizar(estilo: str | None) -> str | None:
+    """Devolve o id, ou None se não for um estilo conhecido.
+
+    Aceita o id ("metal") e também o NOME DE TELA ("Metálico", "metalico"):
+    quando o usuário pede à IA "põe legenda metálica", é o nome de tela que
+    ele tem na frente, e é ele que a IA tende a devolver. Recusar o nome que
+    a própria tela mostra seria recusar o vocabulário do usuário.
+
+    Quem chama decide o que fazer com o None — o ponto é que ninguém siga
+    adiante com um nome inventado achando que é um estilo.
+    """
+    e = str(estilo or "").strip().lower()
+    if e in TODOS:
+        return e
+    return _POR_NOME.get(_sem_acento(e))
+
+
+def lista_para_ia() -> str:
+    """`id (Nome)` separados por vírgula — vai no prompt das ações."""
+    return ", ".join(f"{k} ({v})" for k, v in NOMES.items())

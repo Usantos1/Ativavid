@@ -1,5 +1,19 @@
 # Changelog
 
+## 3.82
+
+- **A IA passou a conhecer os estilos de legenda.** Ela nunca teve a lista:
+  um pedido como "põe legenda metálica" virava um nome que não existe, e o
+  vídeo saía em **karaokê** — e ainda pelo caminho lento, porque estilo
+  desconhecido tira o job do motor rápido. Dois prejuízos, nenhum aviso.
+  Agora ela recebe a lista, aceita o nome que aparece na tela ("Metálico")
+  e recusa o que não existe, dizendo o motivo.
+- **A lista de estilos passou a ter um dono só.** Ela vivia repetida em três
+  arquivos; um estilo novo que esquecesse uma cópia não dava erro, só não
+  acontecia.
+- **A seleção múltipla se solta ao trocar de aba e ao desfazer.** Ficava
+  marcada com índices antigos — e uma marca invisível apaga o item errado.
+
 ## 3.81
 
 - **O card "Atualizações" saiu de Configurações.** A pastilha de versão na

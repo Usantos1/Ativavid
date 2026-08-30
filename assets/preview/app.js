@@ -1814,6 +1814,12 @@ function restoreSnapshot(snap) {
   // range-delete undone): indices shift then, and holding the old one would
   // silently select a different take.
   const keepSel = snap.draft.length === S.draft.length ? S.selected : -1;
+  // O laco NAO sobrevive ao desfazer, nem quando o tamanho bate: ele marca
+  // tres listas ao mesmo tempo (take, legenda e bloco) e basta uma delas ter
+  // mudado de tamanho para os indices das outras apontarem outra coisa.
+  // Uma marca invisivel apagando o item errado e pior que remarcar.
+  S.takeSel = [];
+  S.blocosSel = [];
   S.draft = snap.draft;
   S.insertsDraft = snap.insertsDraft;
   S.notes = snap.notes;
@@ -6889,6 +6895,10 @@ function goToTab(tab) {
   });
   S.tab = tab.dataset.tab === 'style' ? 'style' : +tab.dataset.tab;
   S.selected = -1;
+  // O laco marca coisas da Edicao. Levar a marca para outra aba deixaria o
+  // Delete apagando take de onde nao se ve o take — o ramo do laco nao
+  // pergunta a aba, de proposito (ele apaga as tres especies juntas).
+  limparSelecaoMultipla(false);
   const path = HOUSE_STYLE ? '/estilo-padrao' : (BASE + TAB_TO_PATH[S.tab]);
   const search = HUB_EMBED ? '?embed=1' : '';
   // a real nav here (not applyState's replaceState) — a click is a place the

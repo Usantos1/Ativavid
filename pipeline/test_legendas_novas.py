@@ -40,10 +40,14 @@ def test_os_cinco_existem_nos_tres_motores():
 def test_o_motor_rapido_aceita_os_cinco():
     """Sem isto o job cai no caminho lento (Chrome) calado — o estilo
     funcionaria, mas cada vídeo levaria 10x mais tempo."""
-    i = PY.index("permitidos = {")
-    bloco = PY[i:i + 500]
+    import sys
+    sys.path.insert(0, str(REPO))
+    from app import caption_styles
     for e in NOVOS:
-        assert f'"{e}"' in bloco, f"{e} não está na lista do motor rápido"
+        assert e in caption_styles.TODOS, f"{e} não está na lista"
+    # a lista literal virou `app/caption_styles.TODOS`; quem exercita
+    # o portão de verdade é o test_estilos_de_legenda_fonte_unica.py
+    assert "permitidos = CAPTION_STYLES.TODOS" in PY
 
 
 def test_a_caixa_alta_e_a_mesma_nos_tres():
@@ -83,11 +87,13 @@ def test_o_tamanho_e_a_medida_batem():
 def test_a_cor_da_legenda_chega_nos_cinco():
     """O preset guardava a cor e o render nunca a recebia: sem os cinco
     nesta lista, o seletor da tela ficaria mentindo."""
-    run = (REPO / "pipeline" / "run_fast.py").read_text(encoding="utf-8")
-    i = run.index("if ca and captions in (")
-    bloco = run[i:i + 320]
+    import sys
+    sys.path.insert(0, str(REPO))
+    from app import caption_styles
     for e in NOVOS:
-        assert f'"{e}"' in bloco, f"{e} não recebe a cor da legenda"
+        assert e in caption_styles.USAM_COR_DA_LEGENDA, e
+    run = (REPO / "pipeline" / "run_fast.py").read_text(encoding="utf-8")
+    assert "if ca and captions in USAM_COR_DA_LEGENDA:" in run
     for e in NOVOS:
         assert f"'{e}'" in JS[JS.index("const CAP_BASE_STYLES = ["):
                               JS.index("const CAP_EMPH_STYLES")]
