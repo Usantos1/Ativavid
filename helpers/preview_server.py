@@ -128,6 +128,12 @@ MIME = {
 }
 
 _thumb_lock = threading.Lock()
+
+# Um refazimento de copia leve por projeto de cada vez: o editor
+# pergunta pela copia a cada abertura, e sem isto cada pergunta
+# abriria um ffmpeg novo no mesmo arquivo.
+_PROXY_LOCK = threading.Lock()
+_PROXY_REFAZENDO: set[str] = set()
 _thumb_state: dict[str, float] = {}  # video path -> mtime generated
 
 
@@ -494,6 +500,40 @@ class Handler(BaseHTTPRequestHandler):
             return None
         return p
 
+    def _refazer_proxy_atrasado(self, cut: Path) -> None:
+        """Manda refazer a copia leve deste projeto, uma vez.
+
+        A copia atrasada e ignorada (a sessao usa o video cheio), mas sem
+        ninguem refaze-la o projeto fica pesado para sempre: 46 dos 186
+        projetos do usuario chegaram assim. Aqui o conserto acontece onde
+        importa — no projeto que ele abriu — e a PROXIMA abertura ja e
+        leve.
+
+        `_PROXY_REFAZENDO` evita a enxurrada: o editor pergunta pela copia
+        a cada abertura, e sem o registro cada pergunta abriria um ffmpeg.
+        """
+        chave = str(self.root)
+        with _PROXY_LOCK:
+            if chave in _PROXY_REFAZENDO:
+                return
+            _PROXY_REFAZENDO.add(chave)
+
+        def _solta() -> None:
+            with _PROXY_LOCK:
+                _PROXY_REFAZENDO.discard(chave)
+
+        try:
+            from make_proxy import refazer_em_fundo  # type: ignore
+
+            t = refazer_em_fundo(cut, self.root)
+        except Exception:  # noqa: BLE001 — copia e conforto, nunca o produto
+            t = None
+        if t is None:
+            _solta()
+            return
+        threading.Thread(target=lambda: (t.join(), _solta()),
+                         daemon=True, name="proxy-solta").start()
+
     def _proxy_util(self) -> Path | None:
         """O `cut_proxy.mp4`, mas so enquanto ele for o corte de agora.
 
@@ -512,6 +552,7 @@ class Handler(BaseHTTPRequestHandler):
             return None
         try:
             if cut.is_file() and px.stat().st_mtime < cut.stat().st_mtime:
+                self._refazer_proxy_atrasado(cut)
                 return None
         except OSError:
             return None

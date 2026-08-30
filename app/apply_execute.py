@@ -1239,6 +1239,20 @@ def execute_apply_plan(
             _write_json(captions_path(edit), caps_new)
         if plan.get("rebuildCut") and cut_tmp.is_file():
             hooks.promote_file(cut_tmp, live_cut)
+            # O corte mudou: a copia leve que o editor usa esta velha. Sem
+            # isto ela ficava velha PARA SEMPRE — 46 dos 186 projetos do
+            # usuario estavam assim, um deles por 3,7 dias.
+            try:
+                import sys as _sys
+
+                _h = str(Path(__file__).resolve().parent.parent / "helpers")
+                if _h not in _sys.path:
+                    _sys.path.insert(0, _h)
+                from make_proxy import refazer_em_fundo  # type: ignore
+
+                refazer_em_fundo(live_cut, edit)
+            except Exception as e:  # noqa: BLE001 — nunca derruba o apply
+                log(f"PROXY_REFAZER_FALHOU {type(e).__name__}: {e}")
             public_cut = edit / "remotion" / "public" / "cut.mp4"
             if public_cut.parent.is_dir():
                 try:

@@ -1,5 +1,19 @@
 # Changelog
 
+## 4.07
+
+- **Aplicar alterações passou a refazer a cópia leve do vídeo.** Ela
+  nascia só quando o vídeo era criado; cada correção sua refazia o corte e
+  deixava a cópia para trás — 46 dos seus 186 projetos estavam assim, um
+  deles há quase quatro dias. A partir do primeiro "Aplicar" o projeto
+  perdia o vídeo leve do editor para sempre. A cópia é refeita em segundo
+  plano: você não espera por ela.
+- **E os projetos que já estavam atrasados se consertam ao abrir.** Abrir
+  um deles no editor manda refazer a cópia em segundo plano — essa vez
+  ainda usa o vídeo completo, a próxima já abre leve. Sem varredura e sem
+  espera.
+
+
 ## 4.06
 
 - **O vídeo leve só é usado enquanto for o mesmo vídeo.** Cada "Aplicar

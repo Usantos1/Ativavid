@@ -1,9 +1,11 @@
 """Gera proxy leve do cut para preview fluido."""
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 _REPO = Path(__file__).resolve().parent.parent
@@ -43,6 +45,12 @@ def make_cut_proxy(
         "h264_amf": ["-quality", "speed", "-rc", "cqp", "-qp_i", "30", "-qp_p", "32"],
     }
 
+    # ESCREVE NUM TEMPORARIO. Durante os ~10s de geracao existiria um
+    # `cut_proxy.mp4` com data NOVA e conteudo pela metade — e a guarda que
+    # decide se o proxy serve compara DATAS, entao ela serviria justamente
+    # esse arquivo. Renomear no fim e o que torna a troca instantanea.
+    tmp = dest.with_name(dest.name + ".tmp.mp4")
+
     def _cmd(e: str) -> list[str]:
         return [
             ffmpeg, "-y", "-i", str(cut),
@@ -50,18 +58,54 @@ def make_cut_proxy(
             "-c:v", e, *quality[e],
             "-an",
             "-movflags", "+faststart",
-            str(dest),
+            str(tmp),
         ]
 
     hide = hide_console_kwargs()
     try:
         r = subprocess.run(_cmd(enc), capture_output=True, text=True, timeout=180, **hide)
-        if r.returncode != 0 or not dest.exists() or dest.stat().st_size < 1000:
+        if r.returncode != 0 or not tmp.exists() or tmp.stat().st_size < 1000:
             if enc != "libx264":
                 r = subprocess.run(
                     _cmd("libx264"), capture_output=True, text=True, timeout=180, **hide)
-            if r.returncode != 0 or not dest.exists():
+            if r.returncode != 0 or not tmp.exists():
+                tmp.unlink(missing_ok=True)
                 return None
+        os.replace(tmp, dest)
         return dest
     except (OSError, subprocess.TimeoutExpired):
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
         return None
+
+
+def refazer_em_fundo(cut: Path, edit_dir: Path) -> threading.Thread | None:
+    """Refaz `edit/cut_proxy.mp4` depois que o corte mudou. Nao espera.
+
+    O proxy nascia so no fim do pipeline. O APPLY tambem refaz o
+    `cut.mp4` e nao refazia a copia: medido nos projetos do usuario, **46
+    de 186** ficaram com a copia atrasada, uma delas por 3,7 dias — a
+    partir do primeiro apply o projeto perdia o video leve para sempre.
+
+    Em segundo plano porque o usuario esta esperando o apply (mediana de
+    107s) e a copia leva 3 a 12s. Ela so serve na PROXIMA vez que ele
+    abrir o editor.
+    """
+    if os.environ.get("ATIVAVID_PROXY", "1") in ("0", "false", "False"):
+        return None
+
+    def _trabalho() -> None:
+        try:
+            make_cut_proxy(
+                cut, Path(edit_dir) / "cut_proxy.mp4",
+                height=int(os.environ.get("ATIVAVID_PROXY_HEIGHT") or 540),
+                encoder=os.environ.get("ATIVAVID_ENCODER") or "libx264",
+            )
+        except Exception:  # noqa: BLE001 — copia e conforto, nunca o produto
+            pass
+
+    t = threading.Thread(target=_trabalho, daemon=True, name="proxy-do-apply")
+    t.start()
+    return t
