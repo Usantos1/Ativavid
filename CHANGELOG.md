@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.67
+
+- **A imagem que você insere não some mais no refazer.** O render reconstrói a
+  pasta interna do projeto, e a imagem escolhida morava só lá: ela sumia antes
+  de entrar no vídeo. Agora fica guardada fora dessa pasta e volta sozinha na
+  hora de renderizar. Vale também para o som que vem da sua Biblioteca.
+- Provado num vídeo de ponta a ponta: emoji na tela, cartão da imagem no lugar
+  certo e o efeito sonoro 7 dB acima do mesmo trecho sem ele.
+
 ## 3.66
 
 - **A manchete se troca na própria linha do tempo.** Clique no bloco GANCHO e

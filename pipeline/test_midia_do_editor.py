@@ -139,3 +139,40 @@ def test_o_aplicar_alteracoes_tambem_le_a_midia():
     i = fonte.index("midia_do_editor(edit, public, edit_data)")
     # e grava, senão o render (que lê o arquivo) não veria a mudança
     assert "_write_json(edit_data_path(edit), edit_data)" in fonte[i:i + 400]
+
+
+def test_a_midia_sobrevive_ao_render_que_refaz_o_public(tmp_path):
+    """O render refaz `remotion/public` do zero. A mídia que a tela copiou
+    para lá sumia ANTES do pipeline olhar — a prova fim a fim de 29/08
+    mostrou o emoji e o som entrando e a imagem não ("não achei em
+    public/"). A cópia durável mora em `<edit>/midia/`."""
+    edit = tmp_path / "edit"
+    public = edit / "remotion" / "public"
+    (public / "sfx").mkdir(parents=True)
+    # nada em public/: e o estado depois do scaffold
+    (edit / "midia" / "library").mkdir(parents=True)
+    (edit / "midia" / "library" / "foto.jpg").write_bytes(b"x")
+    (edit / "midia" / "sfx").mkdir(parents=True)
+    (edit / "midia" / "sfx" / "risada.mp3").write_bytes(b"x")
+    (edit / "preview_edits.json").write_text(json.dumps({"editData": {
+        "newInserts": [{"src": "library/foto.jpg", "start": 3.0, "end": 5.0}],
+        "sfxManual": [{"src": "sfx/risada.mp3", "atSec": 4.0}]}}),
+        encoding="utf-8")
+
+    ed: dict = {"inserts": []}
+    midia_do_editor(edit, public, ed)
+    assert len(ed["inserts"]) == 1 and len(ed["sfxManual"]) == 1
+    # e os arquivos voltaram para public/, que é de onde o render lê
+    assert (public / "library" / "foto.jpg").exists()
+    assert (public / "sfx" / "risada.mp3").exists()
+
+
+def test_a_biblioteca_guarda_a_copia_duravel(tmp_path):
+    from app.broll_library import copy_into_public
+
+    (tmp_path / "foto.jpg").write_bytes(b"x")
+    public = tmp_path / "proj" / "edit" / "remotion" / "public"
+    r = copy_into_public(tmp_path / "foto.jpg", public)
+    assert r["src"] == "library/foto.jpg"
+    # a cópia que sobrevive ao scaffold
+    assert (tmp_path / "proj" / "edit" / "midia" / "library" / "foto.jpg").exists()

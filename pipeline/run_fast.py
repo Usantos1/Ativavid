@@ -788,6 +788,25 @@ def midia_do_editor(edit_dir: Path, public: Path, edit_data: dict) -> None:
     ed = (_preview_edits(edit_dir).get("editData") or {})
     if not isinstance(ed, dict):
         return
+
+    def _repor(rel: str) -> bool:
+        """True se o arquivo esta (ou voltou a estar) em public/.
+
+        O render refaz public/ do zero, e a midia escolhida na tela morava
+        so la. A copia de fora (`<edit>/midia/`) e a que sobrevive.
+        """
+        destino = public / rel
+        if destino.exists():
+            return True
+        guardado = edit_dir / "midia" / rel
+        if not guardado.is_file():
+            return False
+        try:
+            destino.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(guardado, destino)
+            return True
+        except OSError:
+            return False
     inseridos, perdidos = 0, []
     inserts = list(edit_data.get("inserts") or [])
     # Ja aplicado? Esta funcao roda no render completo E no "Aplicar
@@ -801,7 +820,7 @@ def midia_do_editor(edit_dir: Path, public: Path, edit_data: dict) -> None:
         src = str(it.get("src") or "").replace("\\", "/").lstrip("/")
         if not src or ".." in src.split("/"):
             continue
-        if not (public / src).exists():
+        if not _repor(src):
             perdidos.append(src)
             continue
         try:
@@ -863,7 +882,7 @@ def midia_do_editor(edit_dir: Path, public: Path, edit_data: dict) -> None:
         if not isinstance(it, dict):
             continue
         nome = str(it.get("src") or "").replace("\\", "/").split("/")[-1]
-        if not nome or not (public / "sfx" / nome).exists():
+        if not nome or not _repor(f"sfx/{nome}"):
             if nome:
                 perdidos.append(f"sfx/{nome}")
             continue

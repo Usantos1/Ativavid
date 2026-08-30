@@ -337,6 +337,18 @@ def copy_into_public(src: Path, public_dir: Path) -> dict[str, Any]:
     dest = dest_dir / src.name
     if not dest.exists() or dest.stat().st_size != src.stat().st_size:
         shutil.copy2(src, dest)
+    # Uma copia FORA de public/. O render refaz public/ do zero (scaffold),
+    # entao a midia que o usuario acabou de escolher sumia antes do pipeline
+    # olhar — visto na prova fim a fim de 29/08: "nao achei em public/".
+    # `midia_do_editor` repoe a partir daqui.
+    try:
+        guarda = public_dir.parents[1] / "midia" / pasta
+        guarda.mkdir(parents=True, exist_ok=True)
+        alvo = guarda / dest.name
+        if not alvo.exists() or alvo.stat().st_size != dest.stat().st_size:
+            shutil.copy2(dest, alvo)
+    except (OSError, IndexError):
+        pass
     kind = ("sfx" if som else
             "clip" if dest.suffix.lower() in {".mp4", ".mov", ".webm"}
             else "image")
