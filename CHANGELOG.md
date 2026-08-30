@@ -1,5 +1,37 @@
 # Changelog
 
+## 4.19
+
+- **O apito no meio do vídeo: era um efeito da sua Biblioteca, longo
+  demais para a vaga.** No lugar do "whoosh" do corte — que dura 0,45s —
+  entrou o `swoosh--070.mp3`, de **10,78 segundos**. Um som de transição de
+  quase 11s toca por cima de tudo. Agora o substituto tem de caber: no
+  máximo 2,5x o som que ele troca, e ganha o mais parecido em duração, não
+  o mais recente. Dos seus 70 `swoosh`, só 9 cabiam nessa vaga — e a
+  escolha era por data, com todos importados no mesmo dia. Na sua pasta,
+  82 dos 233 efeitos passam de 3 segundos.
+- **O som do app volta antes de cada troca.** Sem isso o arquivo errado de
+  um render antigo ficava no projeto para sempre. O vídeo que já saiu
+  continua com o apito — refaça esse um e ele sai limpo.
+- **O ajuste de volume do efeito voltou a ser aplicado.** Ele existia desde
+  a 4.13, e uma mudança seguinte reescreveu a linha da cópia e o deixou
+  pelo caminho. Agora o efeito entra no volume do som que substitui.
+
+- **Marca e Presets viraram uma tela só: Presets.** Você pediu ("quero
+  apenas um deles"), e os seus arquivos diziam a mesma coisa: as marcas
+  salvas e os presets tinham os mesmos nomes — Prime Camp, Uander, Prime
+  Camp [Centro] —, a mesma identidade criada duas vezes em duas telas. As
+  outras marcas guardavam só o que o app tinha gerado sozinho. Nada foi
+  apagado: os três presets continuam lá, com o mesmo padrão marcado.
+- **O que a tela de Marca tinha de próprio mudou de casa.** O formato de
+  saída (Reels, YouTube, Quadrado, Feed) ficou no topo de Presets, ao lado
+  de "Criar preset novo", e os atalhos de identidade — cor de destaque,
+  fontes, cartão final e logo — viraram um cartão no pé da mesma tela. Só
+  saiu o que existia em dobro: trocar de marca e criar marca.
+- **A palavra "marca" saiu do caminho.** O cartão do preset dizia "padrão
+  da marca" e "usa o estilo padrão da marca"; agora diz "padrão" e "usa o
+  estilo base". Link ou botão antigo que apontava para Marca abre Presets.
+
 ## 4.18
 
 - **A legenda "Impacto" ficou igual ao desenho original — agora de

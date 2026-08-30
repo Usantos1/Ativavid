@@ -29,14 +29,18 @@ BL = (REPO / "app" / "broll_library.py").read_text(encoding="utf-8")
 
 def test_a_troca_pula_o_que_estoura():
     i = BL.index("def aplicar_sfx_do_usuario(")
-    corpo = BL[i:i + 2200]
+    # A funcao inteira: por janela fixa, o teto de duracao (4.19) ficou de
+    # fora e o teste acusou o que nao havia.
+    corpo = BL[i:BL.index("\ndef ", i + 10)]
     assert "not _ja_estoura(f)" in corpo
     assert "escolhido is None" in corpo
 
 
 def test_sem_candidato_limpo_fica_o_som_do_app():
     i = BL.index("def aplicar_sfx_do_usuario(")
-    corpo = BL[i:i + 2200]
+    # A funcao inteira: por janela fixa, o teto de duracao (4.19) ficou de
+    # fora e o teste acusou o que nao havia.
+    corpo = BL[i:BL.index("\ndef ", i + 10)]
     j = corpo.index("escolhido is None")
     assert "fica o som do app" in corpo[j:j + 400]
     assert "continue" in corpo[j:j + 400]

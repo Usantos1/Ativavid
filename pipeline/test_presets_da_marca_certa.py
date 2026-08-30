@@ -40,16 +40,17 @@ def test_a_tela_usa_a_marca_que_o_servidor_listou():
     )
 
 
-def test_o_rotulo_nomeia_a_marca_listada():
+def test_a_tela_pega_a_marca_do_servidor_e_nao_do_proprio_estado():
+    """O rótulo nomeava a marca listada — ele saiu na 4.19, junto com a
+    palavra "marca" na tela. O que ele protegia continua de pé, e é a parte
+    que importa: quem manda é a marca que o SERVIDOR listou. Pelo estado da
+    tela, abrir Presets direto deixava isto em "padrao", e criar, renomear e
+    apagar iam todos para a marca errada."""
     js = JS.read_text(encoding="utf-8")
-    # ancorado DENTRO do loadPresetsUi: há outro `const marca` antes no arquivo,
-    # e sem isso o teste olhava o trecho errado
     base = js.index("async function loadPresetsUi(")
-    i = js.index("const marca = ", base)
+    i = js.index("state.presetBrandId = ", base)
     linha = js[i:js.index("\n", i)]
-    assert "pack.brandName" in linha, (
-        "o rótulo dizia 'Padrão' para os presets de outra marca"
-    )
+    assert "pack.brandId" in linha, linha
 
 
 def test_o_servidor_diz_qual_marca_listou():

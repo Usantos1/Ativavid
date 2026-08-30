@@ -95,10 +95,20 @@ def test_brand_id_explicito_ainda_atualiza_aquela_marca(marcas):
     assert _ler(marcas) == {"prime-camp": "Prime Camp Oficial"}
 
 
-def test_o_botao_de_criar_nao_manda_a_identidade_da_ativa():
-    """A metade do cliente. Sem isto o servidor recebe o brandId da ativa e a
-    guarda acima nem chega a ser consultada (brandId explicito = atualizar)."""
+def test_a_tela_nao_cria_marca_por_cima_da_ativa():
+    """A metade do cliente — enquanto ela existir.
+
+    O botao "criar marca nova" saiu com a tela de Marca na 4.19. Hoje o
+    unico POST de marca que a tela faz e `action: "format"`, que troca so
+    o formato de saida e nem passa por `save_brand`. Se um botao de criar
+    voltar, ele cai nas mesmas duas condicoes de antes.
+    """
     js = (REPO / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
+    if '$("#brandNewName")' not in js:
+        assert "brandName:" not in js, (
+            "a tela voltou a mandar um nome de marca sem passar por este guarda"
+        )
+        return
     i = js.index('$("#brandNewName")')
     trecho = js[i:i + 2000]
     assert "brandId: _bid" in trecho, "o brandId da marca ativa ainda vai no corpo"

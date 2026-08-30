@@ -330,6 +330,83 @@ def _pico_dbfs(arquivo: Path) -> float | None:
     return float(m[-1]) if m else None
 
 
+def _copiar_no_nivel(origem: Path, destino: Path) -> None:
+    """Copia o efeito do usuario ajustado ao PICO do que ele substitui.
+
+    O video toca o arquivo com um volume FIXO escrito no template (0,1 no
+    whoosh da manchete). Medido na biblioteca do usuario: os `swoosh` vao
+    de -24,6 a **-6,4 LUFS**, e um deles ja estoura sozinho (pico +4,9
+    dBFS) — 7 dB acima do whoosh do app. Sem ajuste, essa diferenca toda
+    cai em cima da voz, em todo video.
+
+    Pelo PICO e nao pelo LUFS: efeito e transiente curto, e o proprio
+    `pop.mp3` do app mede -70 LUFS integrado — numero sem sentido aqui.
+
+    Se a medida falhar, copia como antes: som e enfeite, video e o produto.
+
+    (Nasceu na 4.13, saiu sem querer quando a escolha ganhou o filtro de
+    distorcao — a linha da copia foi reescrita por cima. Voltou na 4.19.)
+    """
+    import subprocess as _sp
+
+    alvo_pico = _pico_dbfs(destino) if destino.exists() else None
+    novo_pico = _pico_dbfs(origem)
+    if alvo_pico is None or novo_pico is None:
+        shutil.copy2(origem, destino)
+        return
+    ganho = alvo_pico - novo_pico
+    if abs(ganho) < 0.5:
+        shutil.copy2(origem, destino)
+        return
+    try:
+        from app.ffmpeg_tools import ffmpeg_bin
+
+        exe = ffmpeg_bin()
+    except Exception:  # noqa: BLE001
+        exe = "ffmpeg"
+    tmp = destino.with_name(destino.name + ".tmp.mp3")
+    try:
+        r = _sp.run([exe, "-y", "-hide_banner", "-loglevel", "error",
+                     "-i", str(origem), "-af", f"volume={ganho:.2f}dB",
+                     "-c:a", "libmp3lame", "-q:a", "4", str(tmp)],
+                    capture_output=True, text=True, timeout=60)
+        if r.returncode == 0 and tmp.exists() and tmp.stat().st_size > 500:
+            tmp.replace(destino)
+            return
+    except (OSError, _sp.SubprocessError):
+        pass
+    finally:
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+    shutil.copy2(origem, destino)
+
+
+def _dur_seg(arquivo: Path) -> float | None:
+    """Duracao em segundos, ou `None` quando nao deu para medir."""
+    import subprocess as _sp
+
+    try:
+        from app.ffmpeg_tools import ffprobe_bin
+
+        exe = ffprobe_bin()
+    except Exception:  # noqa: BLE001
+        exe = "ffprobe"
+    try:
+        r = _sp.run([exe, "-v", "error", "-show_entries", "format=duration",
+                     "-of", "csv=p=0", str(arquivo)],
+                    capture_output=True, text=True, timeout=20)
+    except (OSError, _sp.SubprocessError):
+        return None
+    for linha in (r.stdout or "").splitlines():
+        try:
+            return float(linha.strip())
+        except ValueError:
+            continue
+    return None
+
+
 def _ja_estoura(arquivo: Path) -> bool:
     """O arquivo ja vem distorcido (pico colado em 0 dBFS)?
 
@@ -361,22 +438,48 @@ def aplicar_sfx_do_usuario(public_dir: Path,
         destino = Path(public_dir) / "sfx"
         if not pasta.is_dir() or not destino.is_dir():
             return trocados
+        base = REPO / "assets" / "shortform" / "public" / "sfx"
         for vaga, alvo in SFX_VAGAS.items():
-            cands = sorted(
-                (f for f in pasta.iterdir()
-                 if f.is_file() and f.suffix.lower() in AUDIO_EXTS
-                 and vaga_do_efeito(f.name) == vaga),
-                key=lambda f: f.stat().st_mtime, reverse=True)
-            # O primeiro que NAO vem distorcido. O som toca em todo video,
-            # por cima da voz, e a distorcao ja vem dentro do arquivo — nao
-            # sai baixando o volume.
-            escolhido = next((f for f in cands if not _ja_estoura(f)), None)
+            # O som do app VOLTA antes de qualquer troca. Sem isto um
+            # arquivo ruim escolhido num render anterior fica no projeto
+            # para sempre — foi o que aconteceu com o `whoosh` de 10,78s.
+            original = base / alvo
+            if original.is_file():
+                try:
+                    shutil.copy2(original, destino / alvo)
+                except OSError:
+                    pass
+            odur = _dur_seg(original) if original.is_file() else None
+            # Teto de duracao: o substituto nao pode ser MUITO mais longo
+            # que o som que ele substitui. Medido na biblioteca dele: a
+            # vaga `whoosh` tem 70 candidatos e so 9 cabem — o sorteado
+            # pelo mtime tinha 10,78s contra 0,45s do app, e virou um
+            # apito por cima da voz.
+            teto = max(2.5 * odur, odur + 0.6) if odur else None
+            cands = [f for f in pasta.iterdir()
+                     if f.is_file() and f.suffix.lower() in AUDIO_EXTS
+                     and vaga_do_efeito(f.name) == vaga]
+            medidos = []
+            for f in cands:
+                d = _dur_seg(f)
+                if teto is not None and (d is None or d > teto):
+                    continue
+                medidos.append((f, d))
+            # Vence o que MAIS SE PARECE com o som do app em duracao. Era
+            # o mais recente — e os 281 sons dele entraram no mesmo dia,
+            # entao "mais recente" era sorteio.
+            medidos.sort(key=lambda par: (
+                abs((par[1] or 0.0) - (odur or 0.0)), par[0].name))
+            escolhido = next((f for f, _ in medidos if not _ja_estoura(f)),
+                             None)
             if escolhido is None:
                 if cands:
-                    print(f"[sfx] {vaga}: todos os candidatos vem estourados "
-                          f"— fica o som do app", flush=True)
+                    motivo = ("nenhum cabe na vaga" if not medidos
+                              else "todos vem estourados")
+                    print(f"[sfx] {vaga}: {motivo} ({len(cands)} candidato(s))"
+                          f" — fica o som do app", flush=True)
                 continue
-            shutil.copy2(escolhido, destino / alvo)
+            _copiar_no_nivel(escolhido, destino / alvo)
             trocados.append(f"{alvo} <- {escolhido.name}")
     except OSError:
         return trocados

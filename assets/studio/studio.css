@@ -3726,3 +3726,19 @@ video.lib-thumb { aspect-ratio: 9 / 16; max-height: 260px; object-fit: contain;
   color: var(--muted, #9aa3ad);
   background: color-mix(in srgb, currentColor 14%, transparent);
 }
+
+/* Presets: o formato de saida entrou na barra (4.19), ao lado do botao.
+   Sem isto o `<label>` empilha o texto sobre o select e desalinha a
+   barra inteira. */
+.preset-fmt {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted, #8b93a7);
+  white-space: nowrap;
+}
+.preset-fmt select { min-width: 132px; }
+/* O cartao de identidade fecha a tela de Presets — respiro entre ele e a
+   lista, que antes terminava no fim da tela. */
+#view-presets .pane-card { margin-top: 18px; }

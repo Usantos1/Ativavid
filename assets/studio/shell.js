@@ -69,11 +69,12 @@
     });
     const ws = $("#btnWorkspace");
     if (ws) {
-      // Na página de edição o card do workspace é um atalho: leva para a
-      // tela de Marca no hub, onde ele é interativo de verdade.
+      // Na página de edição o card do workspace é um atalho: leva para
+      // Presets no hub, onde ele é interativo de verdade. (Era a tela de
+      // Marca, que virou Presets na 4.19.)
       ws.addEventListener("click", (e) => {
         e.preventDefault();
-        (window.top || window).location.href = "/?view=marca";
+        (window.top || window).location.href = "/?view=presets";
       });
     }
     const home = $("#btnHome");

@@ -57,7 +57,9 @@ def test_arquivo_sem_categoria_cai_na_heuristica():
 
 def test_a_troca_usa_a_vaga_e_nao_o_prefixo():
     i = BL.index("def aplicar_sfx_do_usuario(")
-    corpo = BL[i:i + 1400]
+    # A funcao inteira: por janela fixa, o teto de duracao (4.19) ficou de
+    # fora e o teste acusou o que nao havia.
+    corpo = BL[i:BL.index("\ndef ", i + 10)]
     assert "vaga_do_efeito(f.name) == vaga" in corpo
     assert "categoria_de(f.name) == vaga" not in corpo
 

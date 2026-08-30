@@ -65,13 +65,18 @@ def test_a_tela_usa_a_largura_do_monitor():
 
 
 def test_a_tela_de_presets_diz_o_que_e_um_preset():
-    """"nao e a mesma coisa que marca?" — a tela não respondia isso."""
+    """"nao e a mesma coisa que marca?" — a tela nao respondia isso.
+
+    A 4.11 respondeu explicando a diferenca. A 4.19 respondeu de outro
+    jeito, que e o que ele pediu: as duas telas viraram uma. Por isso o
+    texto NAO pode voltar a ensinar a separacao — ela nao existe mais.
+    """
     i = HTML.index('id="view-presets"')
-    bloco = HTML[i:i + 1600]
-    assert "Preset é um jeito de cortar" in bloco
-    assert "<strong>Marca</strong> é quem" in bloco
-    assert "uma marca tem vários presets" in bloco
+    bloco = HTML[i:i + 2000]
+    assert "Cada preset é um jeito de cortar" in bloco
     assert "Criar preset novo" in bloco
+    assert "<strong>Marca</strong> é quem" not in bloco
+    assert "uma marca tem vários presets" not in bloco
 
 
 def test_cada_preset_mostra_o_que_ele_decide():
@@ -91,9 +96,15 @@ def test_cada_preset_mostra_o_que_ele_decide():
 
 
 def test_o_texto_diz_como_criar_outro():
-    """Ele perguntou "se nao da pra criar outros?" — dava, por Duplicar."""
-    i = JS.index("preset(s) da marca ${marca}")
-    assert "Duplicar" in JS[i:i + 260]
+    """Ele perguntou "se nao da pra criar outros?" — dava, por Duplicar.
+
+    A frase morava no texto que a tela montava com o nome da marca. Com a
+    fusao de 4.19 ela virou paragrafo fixo, e o texto de baixo so conta.
+    """
+    i = HTML.index('id="view-presets"')
+    bloco = HTML[i:i + 2000]
+    assert "Duplicar" in bloco
+    assert "padrão</strong> é o que a importação usa" in bloco
 
 
 def test_atualizacoes_saiu_de_configuracoes():

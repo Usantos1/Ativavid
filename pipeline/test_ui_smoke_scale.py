@@ -79,7 +79,7 @@ def test_studio_has_content_type_and_simple_system():
         assert f'<p class="sb-label">{secao}</p>' in html, secao
     itens = (
         "import", "fila", "done", "projetos",           # trabalho
-        "estilo", "marca", "biblioteca", "presets",     # criação
+        "estilo", "biblioteca", "presets",              # criação
         "ia", "integracoes",                            # automação
         "sistema",                                      # aplicativo
     )
@@ -88,6 +88,14 @@ def test_studio_has_content_type_and_simple_system():
         assert f'data-view-panel="{v}"' in html, f"{v} sem tela"
     # Saíram do menu principal (licença foi para o menu do workspace, chaves
     # viraram IA/Integrações, sistema virou Configurações).
+    # "Marca" saiu na 4.19: era a mesma coisa que Presets com outro nome —
+    # as marcas gravadas e os presets tinham os MESMOS nomes (Prime Camp,
+    # Uander, Prime Camp [Centro]). O que a tela tinha de proprio (formato
+    # de saida e os atalhos de identidade) mudou de casa para Presets.
+    assert 'data-view="marca"' not in html
+    assert 'id="view-marca"' not in html
+    assert 'id="identGrid"' in html, "os atalhos de identidade sumiram junto"
+    assert 'id="exportPresetSelect"' in html, "o formato de saida sumiu junto"
     assert 'data-view="licenca"' not in html
     assert 'data-view="keys"' not in html
     assert 'data-view="historico"' not in html

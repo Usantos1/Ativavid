@@ -238,6 +238,28 @@ def save_brand(body: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
+def set_export_preset(fmt: str) -> dict[str, Any]:
+    """Troca SO o formato de saida da marca ativa.
+
+    `save_brand` grava `dict(body)` — o corpo do pedido vira o arquivo
+    inteiro. A tela de Presets (4.19) so quer mexer no formato, e mandar
+    `{exportPreset}` por ali apagaria o estilo base, o texto do cartao
+    final e a cor de destaque de uma vez.
+    """
+    valido = ("reels", "youtube", "square", "feed")
+    v = str(fmt or "").strip().lower()
+    if v not in valido:
+        raise ValueError("formato desconhecido")
+    ensure_brands_dir()
+    bid = get_active_id()
+    path = BRANDS_DIR / f"{_slug(bid)}.json"
+    data = load_brand(bid)
+    data["exportPreset"] = v
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+                    encoding="utf-8")
+    return data
+
+
 def write_user_preset(data: dict[str, Any]) -> None:
     """Espelha o estilo ativo onde o pipeline/UI leem (pasta do usuário)."""
     USER_DIR.mkdir(parents=True, exist_ok=True)

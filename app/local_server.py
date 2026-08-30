@@ -2926,11 +2926,16 @@ class StudioHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/brands":
-            from app.brand_kits import activate_brand, save_brand
+            from app.brand_kits import (
+                activate_brand, save_brand, set_export_preset,
+            )
             body = self._read_json() or {}
             action = (body.get("action") or "save").strip().lower()
             try:
-                if action == "activate":
+                if action == "format":
+                    self._json(set_export_preset(
+                        str(body.get("exportPreset") or "")))
+                elif action == "activate":
                     self._json(activate_brand(str(body.get("id") or "")))
                 else:
                     saved = save_brand(body)

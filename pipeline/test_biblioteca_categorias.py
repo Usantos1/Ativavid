@@ -82,6 +82,26 @@ def test_som_nunca_vira_broll():
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def _tom(destino: Path, segundos: float) -> Path:
+    """Um som de verdade, com duracao de verdade.
+
+    `b"MEU" * 40` nao e audio: nao tem duracao para medir, e desde o teto
+    de 4.19 e recusado — com razao. O tom sai a -6 dB para nao cair no
+    filtro de distorcao (pico >= -0,1 dBFS).
+    """
+    import subprocess
+
+    from app.ffmpeg_tools import ffmpeg_bin
+
+    subprocess.run(
+        [ffmpeg_bin(), "-y", "-hide_banner", "-loglevel", "error",
+         "-f", "lavfi", "-i", f"sine=frequency=900:duration={segundos}",
+         "-af", "volume=-6dB", "-c:a", "libmp3lame", "-q:a", "5",
+         str(destino)],
+        check=True, capture_output=True, timeout=60)
+    return destino
+
+
 def test_efeito_do_usuario_troca_o_do_app():
     """A categoria do efeito e a VAGA que ele ocupa no video.
 
@@ -92,17 +112,56 @@ def test_efeito_do_usuario_troca_o_do_app():
     tmp = Path(tempfile.mkdtemp())
     try:
         raiz = _raiz(tmp)
-        bl.add_bytes("meu whoosh.mp3", b"MEU" * 40, kind="sfx",
+        curto = _tom(tmp / "curto.mp3", 0.40)
+        bl.add_bytes("meu whoosh.mp3", curto.read_bytes(), kind="sfx",
                      categoria="whoosh", projects_root=raiz)
         public = tmp / "projeto" / "remotion" / "public"
         (public / "sfx").mkdir(parents=True)
-        (public / "sfx" / "whoosh.mp3").write_bytes(b"APP" * 40)
         (public / "sfx" / "pop.mp3").write_bytes(b"APP" * 40)
         trocados = bl.aplicar_sfx_do_usuario(public, raiz)
         assert len(trocados) == 1, trocados
-        assert (public / "sfx" / "whoosh.mp3").read_bytes().startswith(b"MEU")
+        assert "whoosh.mp3" in trocados[0]
+        d = bl._dur_seg(public / "sfx" / "whoosh.mp3")
+        assert d is not None and 0.3 < d < 0.6, d
         # vaga sem arquivo do usuario fica com o som do app
-        assert (public / "sfx" / "pop.mp3").read_bytes().startswith(b"APP")
+        assert bl._dur_seg(public / "sfx" / "pop.mp3") is not None
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_efeito_longo_demais_nao_entra_na_vaga():
+    """O defeito de 30/08: um `swoosh` de 10,78s no lugar do whoosh de
+    0,45s do app — "saiu com um apito" no video dele. Um som de transicao
+    longo toca por cima de tudo."""
+    tmp = Path(tempfile.mkdtemp())
+    try:
+        raiz = _raiz(tmp)
+        longo = _tom(tmp / "longo.mp3", 6.0)
+        bl.add_bytes("meu whoosh.mp3", longo.read_bytes(), kind="sfx",
+                     categoria="whoosh", projects_root=raiz)
+        public = tmp / "projeto" / "remotion" / "public"
+        (public / "sfx").mkdir(parents=True)
+        assert bl.aplicar_sfx_do_usuario(public, raiz) == []
+        # e a vaga fica com o som do app, medido
+        d = bl._dur_seg(public / "sfx" / "whoosh.mp3")
+        assert d is not None and d < 1.0, d
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_o_som_do_app_volta_antes_da_troca():
+    """Sem isto o arquivo ruim de um render anterior fica no projeto para
+    sempre: a troca so grava quando ACHA candidato. Foi assim que o whoosh
+    de 10,78s sobreviveu no projeto dele."""
+    tmp = Path(tempfile.mkdtemp())
+    try:
+        raiz = _raiz(tmp)
+        public = tmp / "projeto" / "remotion" / "public"
+        (public / "sfx").mkdir(parents=True)
+        _tom(public / "sfx" / "whoosh.mp3", 8.0)   # o erro de ontem
+        bl.aplicar_sfx_do_usuario(public, raiz)    # biblioteca vazia
+        d = bl._dur_seg(public / "sfx" / "whoosh.mp3")
+        assert d is not None and d < 1.0, d
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

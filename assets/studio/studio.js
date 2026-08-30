@@ -43,15 +43,15 @@ const VIEW_COPY = {
   done: ["Concluídos", "Vídeos prontos para abrir, ajustar ou exportar."],
   projetos: ["Projetos", "Todo trabalho que ainda pode ser reaberto, revisado ou refeito."],
   estilo: ["Estilos", "Como os vídeos da sua marca normalmente devem parecer."],
-  marca: ["Marca", "Qual marca está ativa e o que define a identidade dela."],
   biblioteca: ["Biblioteca", "Arquivos reutilizáveis que a IA pode usar nos vídeos."],
-  presets: ["Presets", "Combinações salvas de estilo e formato, prontas para reusar."],
+  presets: ["Presets", "Como seus vídeos são cortados, e a identidade que vale para todos."],
   ia: ["IA", "A inteligência que corta, escreve e legenda — sessão do navegador e modelo."],
   integracoes: ["Integrações", "Serviços externos que o pipeline chama: transcrição, voz e b-roll."],
   licenca: ["Licença", "Status da assinatura e contas."],
   sistema: ["Configurações", "Máquina, pastas, atualizações e diagnóstico."],
   // aliases antigos → redirecionados em setView (links salvos continuam abrindo)
   keys: ["IA", "Sessão do navegador e chaves de API."],
+  marca: ["Presets", "Como seus vídeos são cortados, e a identidade que vale para todos."],
   doutor: ["Configurações", "Desempenho e pastas."],
 };
 
@@ -152,7 +152,7 @@ function queueCopy(j, view) {
       return { badge: "CANCELADO", text: "Cancelado pelo usuário" };
     }
     if (j.reason === "missing_brand_copy" || /marca|end.?card|card final/i.test(raw)) {
-      return { badge: "REVISAR", text: "Falta o texto da marca em Estilos (card final)" };
+      return { badge: "REVISAR", text: "Falta o texto do card final em Estilos" };
     }
     const friendly = String(j.message || "").trim();
     const text = friendly && !TECH_LEAK.test(friendly)
@@ -306,6 +306,9 @@ function setView(name) {
   // `keys` era o nome antigo da tela de IA — links e atalhos salvos ainda
   // chegam por ele, então continua valendo como apelido.
   if (name === "keys") name = "ia";
+  // "marca" virou Presets na 4.19 (a tela era a mesma coisa, com outros
+  // nomes). Link salvo e botao antigo continuam abrindo.
+  if (name === "marca") name = "presets";
   if (name === "doutor") name = "sistema";
   state.view = name;
   $$(".sb-item[data-view]").forEach((b) => b.classList.toggle("active", b.dataset.view === name));
@@ -326,9 +329,13 @@ function setView(name) {
       if (r) r.textContent = "Não deu para rodar a checagem agora.";
     });
   }
-  if (name === "marca") loadBrandsUi().catch(() => {});
   if (name === "biblioteca") loadLibraryUi().catch(() => {});
-  if (name === "presets") loadPresetsUi().catch(() => {});
+  if (name === "presets") {
+    loadPresetsUi().catch(() => {});
+    // A identidade e o formato moram aqui desde a 4.19 — quem preenche os
+    // dois e `loadBrandsUi`, que antes so rodava ao abrir a tela de Marca.
+    loadBrandsUi().catch(() => {});
+  }
   if (name === "estilo") {
     loadBrandsUi().catch(() => {});
     const fr = $("#estiloFrame");
@@ -388,7 +395,9 @@ function mandarAlvoAoEstilo() {
 }
 
 function estiloFrameSrc() {
-  const id = ($("#brandSelect") && $("#brandSelect").value) || "";
+  // A marca ATIVA, e nao mais o que estava escolhido num seletor: o
+  // seletor deixava editar o estilo de uma marca sem ativa-la.
+  const id = (state.brandActive && state.brandActive.id) || "";
   const q = new URLSearchParams({ embed: "1" });
   if (id) q.set("brandId", id);
   q.set("t", String(Date.now()));
@@ -1779,7 +1788,7 @@ function collectImportIntent() {
     // mudar num refazer replaneja o corte.
     rhythm: $("#importRhythm")?.value || null,
     speechClean: $("#importSpeechClean")?.value || null,
-    brandId: $("#brandSelect")?.value || null,
+    brandId: state.brandActive?.id || null,
     brandPresetId: $("#importPresetSelect")?.value || null,
     sourceDurationSec: state.pendingDuration || null,
   };
@@ -3342,7 +3351,6 @@ function wireWorkspaceMenu() {
       else openLoginDialog();
       return;
     }
-    if (acao === "empresa") return setView("marca");
     if (acao === "licenca") return setView("licenca");
     if (acao === "updates") {
       try {
@@ -4439,64 +4447,23 @@ function wireForms() {
   if (btnUpdateOpen) {
     btnUpdateOpen.onclick = () => instalarAtualizacao(btnUpdateOpen);
   }
-  const btnBrandAct = $("#btnBrandActivate");
-  if (btnBrandAct) {
-    btnBrandAct.onclick = async () => {
+  // O formato de saida morava na tela de Marca. Ele grava na marca ativa,
+  // e por isso vai pelo `action: "format"` — `save_brand` troca o arquivo
+  // inteiro pelo corpo do pedido, entao mandar so o formato daqui apagaria
+  // o estilo base junto.
+  const selFmt = $("#exportPresetSelect");
+  if (selFmt) {
+    selFmt.onchange = async () => {
       try {
-        const id = $("#brandSelect").value;
-        if (!id) {
-          toast("Escolha uma marca na lista");
-          return;
-        }
         await api("/api/brands", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "activate", id }),
+          body: JSON.stringify({ action: "format", exportPreset: selFmt.value }),
         });
-        toast("Marca ativada");
-        await loadBrandsUi();
-        const fr = $("#estiloFrame");
-        if (fr) {
-          fr.dataset.loaded = "1";
-          fr.src = estiloFrameSrc();
-        }
-      } catch (e) {
-        toast(e.message || "Falha ao ativar marca");
-      }
-    };
-  }
-  const btnBrandSave = $("#btnBrandSave");
-  if (btnBrandSave) {
-    btnBrandSave.onclick = async () => {
-      try {
-        const name = ($("#brandNewName").value || "").trim();
-        if (!name) {
-          toast("Digite o nome da marca");
-          $("#brandNewName")?.focus();
-          return;
-        }
-        const exportPreset = $("#exportPresetSelect").value || "reels";
-        const preset = await api("/api/preset");
-        // `/api/preset` devolve o estilo da marca ATIVA — inclusive o brandId
-        // dela. Mandar isso num "criar marca NOVA" fazia o servidor gravar por
-        // cima da marca ativa: o nome digitado apenas a renomeava, a antiga
-        // sumia e nenhuma nova nascia. Aqui o estilo vai, a identidade nao.
-        const { brandId: _bid, id: _id, brandName: _bn, ...estilo } = preset || {};
-        await api("/api/brands", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ...estilo,
-            brandName: name,
-            exportPreset,
-            activate: true,
-          }),
-        });
-        toast("Marca salva e ativada");
-        $("#brandNewName").value = "";
+        toast("Formato salvo");
         await loadBrandsUi();
       } catch (e) {
-        toast(e.message || "Falha ao salvar marca");
+        toast(e.message || "Falha ao salvar o formato");
       }
     };
   }
@@ -4999,30 +4966,25 @@ async function loadImportPresets() {
       `<option value="${escapeHtml(p.id)}" ${p.id === activeId ? "selected" : ""}>${escapeHtml(p.name || p.id)}</option>`
     ).join("") || `<option value="">Padrão</option>`;
     const cur = presets.find((p) => p.id === sel.value) || pack.active || presets[0];
-    if (hint) hint.textContent = cur ? `Usar: ${cur.name}` : "Usar: padrão da marca";
+    if (hint) hint.textContent = cur ? `Usar: ${cur.name}` : "Usar: o preset padrão";
     if (cur && cur.contentType && $("#importContentType")) {
       $("#importContentType").value = cur.contentType;
     }
     sel.onchange = () => {
       const p = presets.find((x) => x.id === sel.value);
-      if (hint) hint.textContent = p ? `Usar: ${p.name}` : "Usar: padrão da marca";
+      if (hint) hint.textContent = p ? `Usar: ${p.name}` : "Usar: o preset padrão";
       if (p && p.contentType && $("#importContentType")) {
         $("#importContentType").value = p.contentType;
       }
     };
   } catch {
-    if (hint) hint.textContent = "Usar: padrão da marca";
+    if (hint) hint.textContent = "Usar: o preset padrão";
   }
 }
 
 async function loadBrandsUi() {
   const data = await api("/api/brands");
-  const sel = $("#brandSelect");
-  if (!sel) return;
   const brands = data.brands || [];
-  sel.innerHTML = brands.map((b) =>
-    `<option value="${escapeHtml(b.id)}" ${b.active ? "selected" : ""}>${escapeHtml(b.name || b.id)}</option>`
-  ).join("") || `<option value="padrao">Padrão</option>`;
   const active = brands.find((b) => b.active) || brands[0];
   state.brandActive = active || null;
   renderWorkspaceCard();
@@ -5032,12 +4994,8 @@ async function loadBrandsUi() {
   const fmtNames = { reels: "Reels/Shorts", youtube: "YouTube 16:9", square: "Quadrado 1:1", feed: "Feed 4:5" };
   const formato = fmtNames[active && active.exportPreset] || "Reels/Shorts";
   if ($("#brandHint")) {
-    $("#brandHint").textContent = active ? `Sai em ${formato}.` : "";
-  }
-  if ($("#brandHintMarca")) {
-    $("#brandHintMarca").textContent = active
-      ? `Os vídeos desta marca saem em ${formato}. O estilo edita-se em Estilos.`
-      : "";
+    $("#brandHint").textContent = active
+      ? `Vale para todos os presets. Sai em ${formato}.` : "";
   }
   if ($("#estiloBrandName")) $("#estiloBrandName").textContent = (active && active.name) || "Padrão";
   const sw = $("#identAccent");
@@ -5636,11 +5594,11 @@ async function loadPresetsUi() {
   if (empty) empty.classList.toggle("hidden", presets.length > 0);
   const hint = $("#presetsHint");
   if (hint) {
-    const marca = pack.brandName || (state.brandActive && state.brandActive.name) || "Padrão";
+    // Sem "da marca X": a marca deixou de ser uma tela na 4.19, e o
+    // paragrafo fixo acima ja explica o padrao e o Duplicar.
     hint.textContent = presets.length
-      ? `${presets.length} preset(s) da marca ${marca}. O marcado como padrão é o que a importação usa — `
-        + `"Duplicar" cria outro a partir dele.`
-      : `Nenhum preset salvo para a marca ${marca}. Ajuste o estilo em Estilos e salve a combinação aqui.`;
+      ? `${presets.length} preset(s) salvos.`
+      : "Nenhum preset salvo ainda. Ajuste o estilo em Estilos e salve a combinação aqui.";
   }
 /* Nome de tela de cada id de estilo.
  *
@@ -5720,11 +5678,11 @@ function nomeDoEstilo(eixo, id) {
     return `<article class="preset-row${on ? " on" : ""}" data-preset="${escapeHtml(p.id)}">
       <div class="preset-main">
         <strong class="preset-name">${escapeHtml(p.name || p.id)}</strong>
-        <span class="preset-meta">${tipo}${on ? " · padrão da marca" : ""}</span>
+        <span class="preset-meta">${tipo}${on ? " · padrão" : ""}</span>
         ${chips
           ? `<div class="preset-chips">${chips}</div>`
           : `<div class="preset-chips"><span class="preset-chip preset-chip--vazio">`
-            + `não define o visual — usa o estilo padrão da marca</span></div>`}
+            + `não define o visual — usa o estilo base</span></div>`}
       </div>
       <div class="preset-acts">
         ${on ? "" : `<button type="button" class="ghost-btn ghost-btn--sm" data-preset-act="default">Usar como padrão</button>`}
@@ -5792,7 +5750,7 @@ function wirePresets() {
           toast("Preset duplicado");
         } else if (act === "default") {
           await presetAction("default", { id });
-          toast("Preset virou o padrão da marca");
+          toast("Preset virou o padrão");
         }
       } catch (err) {
         toast(err.message || "Não deu para aplicar");
