@@ -1831,6 +1831,32 @@ def _legenda_from_edl(edit_dir: Path, spoken: str, preset: dict) -> str:
     return "\n".join(lines).strip() + "\n"
 
 
+# A IA as vezes RECUSA em vez de escrever, e a recusa passa em qualquer
+# checagem de tamanho: nos projetos do usuario, dois `legenda.txt` sao
+# "Sou apenas um modelo de linguagem. Nao posso ajudar com isso." por
+# inteiro — a legenda que ele copia para o Instagram. Um deles virou ate o
+# titulo do cartao.
+_RECUSA_DA_IA = re.compile(
+    r"(modelo de linguagem|sou (apenas )?uma? (ia|intelig)"
+    r"|n[ãa]o posso (ajudar|fazer|criar|gerar)"
+    r"|n[ãa]o consigo ajudar"
+    r"|al[ée]m das minhas (habilidades|habiliades|capacidades)"
+    r"|as an ai|i'm sorry|i cannot|i can't help)",
+    re.I,
+)
+
+
+def _parece_recusa(texto: str) -> bool:
+    """A IA disse que nao vai escrever, em vez de escrever.
+
+    So vale para texto CURTO: uma legenda de verdade pode mencionar "IA"
+    falando do produto ("nossa IA acha o defeito"), e barrar isso seria
+    jogar fora legenda boa. Recusa nao passa de um paragrafo.
+    """
+    t = (texto or "").strip()
+    return len(t) <= 320 and bool(_RECUSA_DA_IA.search(t))
+
+
 def _llm_polish_legenda(draft: str, *, spoken: str, preset: dict) -> str | None:
     """Optional short IG caption via sessão IA. Soft-fail → keep draft."""
     try:
@@ -1880,6 +1906,11 @@ def _llm_polish_legenda(draft: str, *, spoken: str, preset: dict) -> str | None:
     if text.startswith("```"):
         text = re.sub(r"^```\w*\n?", "", text).removesuffix("```").strip()
     if len(text) < 12 or len(text) > 900:
+        return None
+    # Recusa passa em tamanho (60 caracteres) e em hashtags (nenhuma), e
+    # sobrescreveria o rascunho do EDL, que estava certo.
+    if _parece_recusa(text):
+        print("[legenda] a IA recusou — fica o rascunho do corte", flush=True)
         return None
     # teto de hashtags acompanha a lista fixa do dono (que pode passar de 6)
     if text.count("#") > max(6, len(fixas) + 2):

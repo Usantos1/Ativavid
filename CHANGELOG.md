@@ -1,5 +1,22 @@
 # Changelog
 
+## 4.09
+
+- **A recusa da IA não vira mais a legenda do post.** Dois dos seus
+  `legenda.txt` são, por inteiro, *"Sou apenas um modelo de linguagem.
+  Não posso ajudar com isso."* — o texto que você copia para o Instagram.
+  A checagem só olhava tamanho e hashtags, e uma recusa passa nas duas.
+  Agora ela é reconhecida e fica valendo o rascunho montado do corte.
+- **A lista de prontos mostra o vídeo, não o nome do arquivo.** 61 dos
+  seus 184 vídeos apareciam como *Elizangela001_08291440_C039* ou
+  *A001_08191405_C003* — 33% da lista, e justamente os mais recentes.
+  Agora aparecem pelo que são: *"Celular na lanterna? Você acredita"*.
+- **E o título passou a vir da manchete do vídeo.** Ele saía da primeira
+  linha da legenda do post e vinha cortado no meio da palavra em 10
+  casos — num deles era a tal recusa da IA. A manchete é curta por
+  natureza, e o corte, quando precisa, respeita a palavra.
+
+
 ## 4.08
 
 - **Mexer na linha do tempo não apaga mais a fala de cada trecho.** Ao

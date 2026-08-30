@@ -556,6 +556,16 @@ _OPAQUE_NAME = re.compile(
     re.I,
 )
 
+# `reel_clip` de camera: `A001_08191405_C003`, `Elizangela001_08291440_C039`.
+# Era o buraco mais caro da lista: 61 dos 184 videos do usuario apareciam
+# com o nome do arquivo, e sao os mais recentes — o padrao que ele usa
+# hoje. O `_C<numero>` no fim e o que torna a regra segura: nenhum dos 164
+# nomes escritos por ele tem isso.
+_NOME_DE_CAMERA = re.compile(r"^[A-Za-z][A-Za-z0-9]*\d{3}_\d{6,}_C\d{2,}$")
+
+# Arquivo chamado so "1", "2", "12". Nao e nome, e um contador.
+_SO_NUMERO = re.compile(r"^\d{1,4}$")
+
 
 def _is_opaque_title(name: str) -> bool:
     """Camera codes / UUIDs — ruim como título na UI."""
@@ -569,6 +579,8 @@ def _is_opaque_title(name: str) -> bool:
     if re.search(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}", stem, re.I):
         return True
     if re.fullmatch(r"[A-Za-z]{0,4}_?\d{3,}", stem):
+        return True
+    if _NOME_DE_CAMERA.match(stem) or _SO_NUMERO.fullmatch(stem):
         return True
     return False
 
@@ -785,8 +797,52 @@ def _default_job_title(name: str, created_at: str | None = None, extra_takes: in
     return title[:80]
 
 
+def _corta_bonito(texto: str, limite: int = 72) -> str:
+    """Corta no espaço, não no meio da palavra.
+
+    Medido nos 61 vídeos que mostram nome de arquivo: 10 títulos saíam
+    cortados no meio ("…qualquer desculpa pra não leva…").
+    """
+    t = (texto or "").strip()
+    if len(t) <= limite:
+        return t
+    corte = t[:limite].rstrip()
+    espaco = corte.rfind(" ")
+    if espaco >= limite - 20:
+        corte = corte[:espaco].rstrip()
+    return corte.rstrip(" ,;:-") + "…"
+
+
+def _manchete_do_edit(edit_dir: Path) -> str | None:
+    """A manchete do vídeo — o título que ele já tem, escrito para ser um.
+
+    É curta por natureza ("Celular na lanterna? Você acredita") e existe
+    nos 61 vídeos do usuário que hoje aparecem com nome de arquivo. A
+    primeira linha da legenda do post, que era a primeira escolha, vinha
+    cortada no meio em 10 deles — e em um caso era uma RECUSA da IA
+    ("Sou apenas um modelo de linguagem…") virada em título de cartão.
+    """
+    ed = edit_dir / "remotion" / "public" / "edit-data.json"
+    try:
+        data = json.loads(ed.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError, TypeError):
+        return None
+    hook = data.get("hook") or {}
+    linhas = hook.get("lines") or hook.get("text") or []
+    if isinstance(linhas, str):
+        linhas = [linhas]
+    junto = " ".join(str(x or "").strip() for x in linhas if str(x or "").strip())
+    if len(junto) >= 6:
+        return _corta_bonito(junto)
+    hl = str(data.get("headline") or data.get("aiHeadline") or "").strip()
+    return _corta_bonito(hl) if len(hl) >= 6 else None
+
+
 def _suggest_title_from_edit(edit_dir: Path) -> str | None:
-    """Primeira linha útil da legenda ou gancho do edit-data."""
+    """A manchete do vídeo; se não houver, a primeira linha útil da legenda."""
+    manchete = _manchete_do_edit(edit_dir)
+    if manchete:
+        return manchete
     leg = edit_dir / "legenda.txt"
     if leg.exists():
         try:
@@ -796,7 +852,7 @@ def _suggest_title_from_edit(edit_dir: Path) -> str | None:
                     # corta hashtags no fim
                     s = re.split(r"\s+#", s, maxsplit=1)[0].strip()
                     if len(s) >= 8:
-                        return (s[:72] + ("…" if len(s) > 72 else ""))
+                        return _corta_bonito(s)
         except OSError:
             pass
     ed = edit_dir / "remotion" / "public" / "edit-data.json"

@@ -679,6 +679,12 @@ class Handler(BaseHTTPRequestHandler):
             self._waveform()
         elif path.startswith("/gen/thumbs/"):
             self._thumbs(path[len("/gen/thumbs/"):])
+        elif path == "/api/health":
+            self._health()
+        elif path == "/api/brand-presets":
+            self._brand_presets()
+        elif path == "/api/events":
+            self._events()
         elif path == "/api/state":
             self._state()
         elif path == "/api/intent":
@@ -1638,6 +1644,68 @@ class Handler(BaseHTTPRequestHandler):
         print(f"[restaurar] trecho {ini:.2f}-{fim:.2f}s de volta ao corte",
               flush=True)
         self._json({"ok": True, "changed": True})
+
+    def _health(self) -> None:
+        """Versao do sistema. O rodape e a etiqueta do topo leem daqui.
+
+        Sem esta rota o preview solto mostra "Versão sistema: —" e "v?".
+        Magra de proposito: este servidor serve UM projeto, nao tem fila
+        nem trabalhador para relatar.
+        """
+        try:
+            from app.update_check import boot_fingerprint, running_version
+
+            self._json({"ok": True, "version": running_version(),
+                        "fingerprint": boot_fingerprint(),
+                        "projectsRoot": str(self.root.parent.parent)})
+        except Exception as e:  # noqa: BLE001
+            self._json({"ok": False, "erro": f"{type(e).__name__}: {e}"[:200]})
+
+    def _brand_presets(self) -> None:
+        """Presets da marca ativa — a aba Estilo lista a partir daqui."""
+        # MESMA resposta do servidor do hub, inclusive o `brandName`: a tela
+        # rotula os presets com ele, e sem o nome ela dizia "Padrao" para os
+        # presets de outra marca.
+        try:
+            from app.brand_kits import list_brands
+            from app.brand_presets import get_active, load as load_presets
+
+            qs = parse_qs(urlparse(self.path).query)
+            bid = (qs.get("brandId") or [""])[0].strip()
+            marcas = list_brands()
+            if not bid:
+                ativa = next((b for b in marcas if b.get("active")),
+                             marcas[0] if marcas else None)
+                bid = str((ativa or {}).get("id") or "padrao")
+            pack = load_presets(bid)
+            nome = next((str(b.get("name") or "") for b in marcas
+                         if str(b.get("id") or "") == bid), "")
+            self._json({"ok": True, **pack, "brandName": nome,
+                        "active": get_active(bid)})
+        except Exception as e:  # noqa: BLE001
+            self._json({"ok": False, "presets": [],
+                        "erro": f"{type(e).__name__}: {e}"[:200]})
+
+    def _events(self) -> None:
+        """Batida de coracao, so para o cliente parar de tentar num 404.
+
+        Nada AQUI muda estado de fila — este servidor nao tem fila. Quem
+        precisa de atualizacao usa o proprio relogio (o poll do editor).
+        """
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        try:
+            self.wfile.write(b"retry: 5000\n\n")
+            self.wfile.flush()
+            for _ in range(240):          # ~20 min e a conexao se renova
+                time.sleep(5.0)
+                self.wfile.write(b": ping\n\n")
+                self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError,
+                ConnectionAbortedError, OSError):
+            return
 
     def _versions_get(self) -> None:
         from app.project_versions import list_versions
