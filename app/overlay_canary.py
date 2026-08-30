@@ -148,9 +148,14 @@ def pause_canary(reason: str) -> None:
 
     if overlay_rollout() != "canary":
         return
+    from datetime import datetime
+
     st = load_state()
     st["paused"] = True
     st["pausedReason"] = str(reason or "unknown")
+    # QUANDO. Sem a data, uma pausa antiga por um defeito ja consertado fica
+    # indistinguivel de uma pausa de agora — e o estado sobrevive a versoes.
+    st["pausedAt"] = datetime.now().astimezone().isoformat(timespec="seconds")
     save_state(st)
     _set_rollout("off")
     print(f"CANARY_PAUSED {st['pausedReason']}", flush=True)
@@ -169,9 +174,20 @@ def close_canary_if_done() -> None:
 
 
 def record_canary_job(job: dict[str, Any]) -> None:
+    """Guarda o registro do job — com a DATA.
+
+    Sem ela os 416 registros viram um monte sem tempo: em 30/08, 21 deles
+    estavam com o pico acima de -1,0 dBTP e nao havia como saber se eram
+    anteriores ao `garantir_true_peak` (que existe justamente para isso) ou
+    um defeito vivo. Ficar sem resposta ja custou caro aqui — totais sem
+    data fizeram perseguir tres defeitos que ja estavam consertados.
+    """
+    from datetime import datetime
+
     st = load_state()
     jobs = list(st.get("jobs") or [])
-    jobs.append(job)
+    jobs.append(dict(job, at=datetime.now().astimezone().isoformat(
+        timespec="seconds")))
     st["jobs"] = jobs
     save_state(st)
 

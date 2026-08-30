@@ -5440,7 +5440,10 @@ async function loadPresetsUi() {
       <div class="preset-main">
         <strong class="preset-name">${escapeHtml(p.name || p.id)}</strong>
         <span class="preset-meta">${tipo}${on ? " · padrão da marca" : ""}</span>
-        ${chips ? `<div class="preset-chips">${chips}</div>` : ""}
+        ${chips
+          ? `<div class="preset-chips">${chips}</div>`
+          : `<div class="preset-chips"><span class="preset-chip preset-chip--vazio">`
+            + `não define o visual — usa o estilo padrão da marca</span></div>`}
       </div>
       <div class="preset-acts">
         ${on ? "" : `<button type="button" class="ghost-btn ghost-btn--sm" data-preset-act="default">Usar como padrão</button>`}

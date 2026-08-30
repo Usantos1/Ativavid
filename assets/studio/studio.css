@@ -3694,3 +3694,10 @@ video.lib-thumb { aspect-ratio: 9 / 16; max-height: 260px; object-fit: contain;
   width: 11px; height: 11px; border-radius: 3px;
   border: 1px solid rgba(255, 255, 255, .25);
 }
+/* Preset que so guarda contentType e flags: sem isto a linha ficava vazia e
+   parecia igual a de um preset completo. Dizer "nao define o visual" e a
+   resposta para "qual a finalidade desta tela" naquela linha. */
+.preset-chip--vazio {
+  border-style: dashed;
+  color: var(--muted, #9aa0a6);
+}

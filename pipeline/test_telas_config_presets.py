@@ -114,3 +114,15 @@ def test_atualizacoes_saiu_de_configuracoes():
     # os três elementos que o JS escreve continuam existindo
     for eid in ("updateHint", "updateSoftHint", "btnUpdateCheck"):
         assert f'id="{eid}"' in HTML, eid
+
+
+def test_preset_sem_visual_diz_que_nao_define_nada():
+    """O preset "Uander" na máquina do usuário só guarda contentType e
+    flags — nenhum campo de aparência. Sem esta nota a linha ficava vazia e
+    parecia igual à de um preset completo, que é exatamente a confusão que
+    gerou a pergunta "qual a finalidade desta tela?"."""
+    i = JS.index("// O que este preset DECIDE")
+    bloco = JS[i:i + 1800]
+    assert "não define o visual" in bloco
+    assert "preset-chip--vazio" in bloco
+    assert ".preset-chip--vazio {" in CSS

@@ -348,6 +348,18 @@ def ancoras_de_headline() -> dict[str, dict[str, object]]:
 # ele desligado o karaoke volta pelo Remotion e o motivo fica gravado em
 # `overlayEngineSkip`, como qualquer outra recusa. O Remotion nao sai: ele
 # continua sendo a queda das janelas de posicao e de tudo que o gate recusar.
+# MEDIDO DE NOVO em 30/08, no projeto mais recente do usuario: tinta
+# mediana 2,557 (p5 1,01, p95 4,28) contra 1,000 na aprovacao de 22/08. No
+# mesmo quadro o template mostra so a palavra corrente e o motor proprio
+# mostra a linha inteira MAIS a anterior — nao e deslocamento de tempo (o
+# melhor encaixe das curvas e em 0 quadros), e desenho.
+#
+# Nada mudou no `_montar_karaoke` nem no componente desde a aprovacao
+# (`git log -S` em ambos), entao a diferenca depende dos DADOS: a aprovacao
+# usou outro projeto. Fica registrado e NAO desligado: o usuario usa
+# `stacked` em 114 de 114 videos (que mede 1,014), e desligar custaria o
+# caminho lento a quem usa karaoke sem que se saiba ainda qual dos dois
+# lados esta certo. Reproducao: `scratchpad/onde_difere_karaoke.py`.
 def karaoke_aprovado() -> bool:
     return (os.environ.get("ATIVAVID_KARAOKE_PROPRIO", "").strip()
             not in ("0", "false", "no", "off"))

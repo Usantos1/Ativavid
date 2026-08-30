@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.84
+
+- **Preset que não define visual agora diz isso.** Um dos seus presets só
+  guarda o tipo de conteúdo e umas opções — nenhum campo de aparência. A
+  linha ficava vazia e parecia igual à de um preset completo.
+- **Os registros de render passaram a ter data.** Sem ela, 416 registros
+  viram um monte sem tempo: hoje 21 deles estavam com o pico de áudio acima
+  do teto e não havia como saber se eram antigos (de antes do conserto que
+  já existe) ou um defeito vivo.
+
 ## 3.83
 
 - **A Bolha de conversa estava saindo sem sombra.** O borrão era calculado
