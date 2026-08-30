@@ -3267,6 +3267,21 @@ function desenharMidiaNoPreview() {
 /* A roda sobre o bloco do efeito muda o VOLUME. Era fixo em 0,5: som
  * gravado alto entrava alto demais e nao havia como baixar sem editar
  * arquivo. Passo multiplicativo, como no tamanho do emoji. */
+/* Tira um bloco posto na mao. Guarda no historico ANTES, para o Ctrl+Z
+ * trazer de volta — remover por engano nao pode custar o trabalho todo. */
+function removerBlocoDaMao(i) {
+  const c = S.insertsDraft[i];
+  if (!c || !c.isNew) return;
+  pushHistory();
+  S.insertsDraft.splice(i, 1);
+  renderAll();
+  desenharMidiaNoPreview();
+  refreshHeader();
+  scheduleAutosave();
+  const que = c.kind === 'sfx' ? 'Som' : c.kind === 'emoji' ? 'Emoji' : 'Mídia';
+  toast(`${que} tirado — Ctrl+Z traz de volta`, 2600);
+}
+
 function somComVolume(chip, c) {
   if (chip.dataset.vol) return;
   chip.dataset.vol = '1';
@@ -4081,6 +4096,19 @@ function desenharFaixasDeInsert(phase2) {
       if (c.start !== c.orig.start || c.end !== c.orig.end) chip.classList.add('dirty');
       el('div', 'handle l', chip).dataset.i = i;
       el('div', 'handle r', chip).dataset.i = i;
+      // Tirar o que FOI POSTO NA MAO. Sem isto, so o Ctrl+Z imediato — e
+      // passado esse instante o emoji errado ficava no video para sempre.
+      if (c.isNew) {
+        const x = el('button', 'chip-x', chip);
+        x.type = 'button';
+        x.textContent = '✕';
+        x.title = 'Tirar da linha do tempo';
+        x.dataset.i = i;
+        x.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          removerBlocoDaMao(+ev.currentTarget.dataset.i);
+        });
+      }
     }
   }
 

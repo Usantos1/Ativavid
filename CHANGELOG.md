@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.68
+
+- **Dá para tirar o que você pôs.** Passe o mouse no bloco de imagem, som ou
+  emoji e clique no **✕**. Antes só o Ctrl+Z imediato desfazia: passado esse
+  instante, o emoji errado ficava no vídeo.
+- O ✕ só aparece no que você criou. O bloco do GANCHO não some por aí — a
+  manchete se desliga no Estilo, e apagá-la com um ✕ seria surpresa demais.
+
 ## 3.67
 
 - **A imagem que você insere não some mais no refazer.** O render reconstrói a

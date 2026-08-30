@@ -127,3 +127,24 @@ def test_da_para_somar_pela_propria_linha_do_tempo():
     assert "setImgTab('emoji')" in JS[i:i + 200]
     j = JS.index("$('somarLegenda')")
     assert "escreverLegendaAqui()" in JS[j:j + 160]
+
+
+def test_da_para_tirar_o_que_foi_posto_na_mao():
+    """Somar sem tirar é armadilha: o emoji errado ficava no vídeo, e só o
+    Ctrl+Z imediato salvava. O ✕ aparece só no que o usuário criou."""
+    assert "function removerBlocoDaMao" in JS
+    i = JS.index("function removerBlocoDaMao")
+    bloco = JS[i:i + 700]
+    # histórico ANTES: remover por engano não pode custar o trabalho
+    assert bloco.index("pushHistory()") < bloco.index("splice(i, 1)")
+    assert "if (!c || !c.isNew) return;" in bloco
+    # e o ✕ só nasce no bloco do usuário
+    j = JS.index("if (c.isNew) {")
+    assert "chip-x" in JS[j:j + 400]
+
+
+def test_o_gancho_nao_se_apaga_pela_linha_do_tempo():
+    """Ele é parte do estilo — desliga-se no Estilo, não com um ✕ que
+    apagaria a manchete do vídeo sem dizer isso."""
+    i = JS.index("function removerBlocoDaMao")
+    assert "!c.isNew" in JS[i:i + 300]

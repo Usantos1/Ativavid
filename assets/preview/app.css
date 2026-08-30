@@ -3657,3 +3657,26 @@ body.styles-wide .setup-actions .btn.primary {
   border-color: color-mix(in srgb, var(--interact) 55%, transparent);
   color: var(--text, #f4f4f5);
 }
+
+/* O ✕ do bloco posto na mao: discreto ate o mouse chegar, para nao virar
+   um campo minado de botoes na linha do tempo. */
+.chip .chip-x {
+  position: absolute;
+  top: 50%;
+  right: 2px;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 10px;
+  line-height: 16px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.chip:hover .chip-x { opacity: 1; }
+.chip .chip-x:hover { background: var(--rose-fg, #ff5470); }
