@@ -3917,7 +3917,7 @@ class Renderizador:
                 chave.append(("flash", f))
         return tuple(chave)
 
-    def _gravar_video(self, alvo: Path) -> None:
+    def _gravar_video(self, alvo: Path, *, progresso=None) -> None:
         ff = subprocess.Popen(
             ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
              "-f", "rawvideo", "-pix_fmt", "rgba",
@@ -3936,6 +3936,17 @@ class Renderizador:
         ass_ant, bytes_ant = None, None
         try:
             for f in range(self.frames):
+                # O aviso vem NO LACO, nao na escrita: quadro identico ao
+                # anterior e reaproveitado com um `continue`, e contar so os
+                # escritos fazia a barra travar em video parado.
+                # De 30 em 30 (1s de video): contar de mais custa mais que
+                # informar.
+                if progresso is not None and f % 30 == 0:
+                    try:
+                        progresso(f + 1, self.frames)
+                    except Exception:  # noqa: BLE001
+                        progresso = None   # quem escuta quebrou; o render
+                        # NAO para por causa disso
                 ass = self._assinatura(f)
                 if ass == ass_ant and bytes_ant is not None:
                     ff.stdin.write(bytes_ant)
@@ -4000,12 +4011,17 @@ class Renderizador:
             raise RuntimeError(f"RENDER_PROPRIO_SFX {(r.stderr or '')[-300:]}")
         return True
 
-    def render(self, out: Path) -> Path:
-        """Escreve o overlay.mov (vídeo com alpha + SFX)."""
+    def render(self, out: Path, *, progresso=None) -> Path:
+        """Escreve o overlay.mov (vídeo com alpha + SFX).
+
+        `progresso(feitos, total)` e chamado a cada ~30 quadros. Ele
+        existe porque o redesenho e 80% da espera de quem corrige uma
+        legenda, e uma frase parada nao diz se aquilo anda.
+        """
         out.parent.mkdir(parents=True, exist_ok=True)
         t0 = time.perf_counter()
         so_video = out.with_name(out.stem + "._video.mov")
-        self._gravar_video(so_video)
+        self._gravar_video(so_video, progresso=progresso)
         sfx = out.with_name(out.stem + "._sfx.wav")
         tem_sfx = self._gravar_sfx(sfx)
         if tem_sfx:
@@ -4027,12 +4043,12 @@ class Renderizador:
 
 def render_overlay_proprio(public: Path, edit_data: dict[str, Any], *,
                            frames: int, fps: float, width: int, height: int,
-                           out: Path) -> Path:
+                           out: Path, progresso=None) -> Path:
     """Entrada única: monta e renderiza. Levanta em qualquer problema —
     o caller decide o fallback."""
     r = Renderizador(public, edit_data, frames=frames, fps=fps,
                      width=width, height=height)
-    return r.render(out)
+    return r.render(out, progresso=progresso)
 
 
 # ------------------------------------------------------ camada do layout ----

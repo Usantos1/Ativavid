@@ -733,6 +733,7 @@ def try_overlay_final(
     edit_data: dict[str, Any],
     duration: float | None = None,
     dest: Path,
+    progresso=None,
 ) -> dict[str, Any]:
     """Render Overlay + compose. Levanta se não der — o caller faz fallback FULL."""
     from app.overlay_compose import compose_overlay, validate_overlay_alpha
@@ -847,7 +848,8 @@ def try_overlay_final(
             try:
                 overlay = render_overlay_proprio(
                     public, edit_data, frames=frames, fps=fps,
-                    width=width, height=height, out=work / "overlay.mov")
+                    width=width, height=height, out=work / "overlay.mov",
+                    progresso=progresso)
             except Exception as e:  # noqa: BLE001
                 print(f"RENDER_PROPRIO_FALLBACK erro: {e}", flush=True)
                 overlay = None

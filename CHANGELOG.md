@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.93
+
+- **A espera de "Aplicar alterações" agora mostra quanto já andou.**
+  "Redesenhando o vídeo com as suas correções… 47%" — a porcentagem vem do
+  próprio desenho, quadro a quadro. É o passo mais longo da espera (80% do
+  tempo) e até agora era uma frase parada.
+  Não é uma previsão de quanto falta: é a conta do que já foi feito.
+
 ## 3.92
 
 - **A espera de "Aplicar alterações" diz o que está acontecendo.** O minuto

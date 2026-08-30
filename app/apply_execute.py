@@ -600,6 +600,25 @@ def _touch_edit_data_duration(edit_dir: Path, duration: float, fps: float | None
     _write_json(path, data)
 
 
+def _avisar_redesenho(edit_dir: Path, feitos: int, total: int) -> None:
+    """Quantos por cento do redesenho ja foram.
+
+    O redesenho e 80,7% da espera de quem corrige uma legenda
+    (mediana 52,4s, medido em 57 aplicacoes), e ate aqui a tela
+    mostrava uma frase parada. Prever QUANTO FALTA ja foi tentado e
+    reprovado (a faixa acertava 47%); contar o que JA FOI e verdade.
+    """
+    if total <= 0:
+        return
+    pct = min(99, max(1, round(100.0 * feitos / total)))
+    try:
+        write_apply_status(
+            edit_dir, running=True, ok=None, stage="visual",
+            message=f"Redesenhando o vídeo com as suas correções… {pct}%")
+    except Exception:  # noqa: BLE001
+        pass          # avisar nunca pode derrubar o render
+
+
 def _render_visual_real(
     edit_dir: Path,
     *,
@@ -688,6 +707,7 @@ def _render_visual_real(
                         edit_data=edit_data,
                         duration=duration,
                         dest=dest,
+                        progresso=lambda f, n: _avisar_redesenho(edit, f, n),
                     )
                     bad = _canary_validate_overlay(dest, edit_data, ov)
                     if bad:
