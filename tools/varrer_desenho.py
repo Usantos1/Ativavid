@@ -47,6 +47,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -57,6 +58,13 @@ sys.path.insert(0, str(REPO))
 
 FAIXA = (0.93, 1.10)
 JANELA = (120, 260)          # quadros de fala contínua no projeto de teste
+
+# `--curva`: tinta quadro a quadro. A razao publicada e a MEDIANA e o
+# par de imagens e o quadro de PICO — um desenho pode bater no pico e
+# divergir no resto (foi o caso do `impacto`: 0,846 de mediana com o
+# quadro de pico em 0,992).
+CURVA = False
+SO: set[str] = set()   # `--so nome,nome` varre so esses
 NOWIN = ({"creationflags": subprocess.CREATE_NO_WINDOW}
          if hasattr(subprocess, "CREATE_NO_WINDOW") else {})
 
@@ -120,11 +128,26 @@ def varrer(edit: Path, grupo: str) -> int:
     from app.video_layouts import CAMADA
     from app.win_process import resolve_remotion_argv
 
-    ov = edit / "remotion"
+    from app.overlay_path import prepare_overlay_remotion
+
+    fonte = edit / "remotion"
+    pub_orig = fonte / "public"
+    if not (pub_orig / "edit-data.json").exists():
+        print(f"não achei {pub_orig / 'edit-data.json'}")
+        return 2
+
+    # A composicao `Overlay` NAO existe no template do projeto: ela e
+    # montada na copia de trabalho que o render usa e apaga no fim.
+    # Apontando para o template, a varredura respondia "Could not find
+    # composition with ID Overlay" nos 15 estilos — a ferramenta que acha
+    # defeito de desenho estava fora do ar, e varredura sem referencia nao
+    # mede nada.
+    ov = edit / ".varredura_ov"
+    print("preparando a cópia de trabalho do Remotion…", flush=True)
+    prepare_overlay_remotion(fonte, ov)
     pub = ov / "public"
     if not (pub / "edit-data.json").exists():
-        print(f"não achei {pub / 'edit-data.json'}")
-        return 2
+        shutil.copy2(pub_orig / "edit-data.json", pub / "edit-data.json")
 
     backup = (pub / "edit-data.json").read_text(encoding="utf-8-sig")
     base = json.loads(backup)
@@ -136,6 +159,10 @@ def varrer(edit: Path, grupo: str) -> int:
     itens = {"legendas": lambda: _catalogo("captions"),
              "headlines": lambda: _catalogo("headlines"),
              "layouts": lambda: list(CAMADA)}[grupo]()
+    # `--so`: rever UM desenho custa 20s; rever os quinze custa 5 minutos, e
+    # depois do primeiro achado é sempre um que se quer olhar de novo.
+    if SO:
+        itens = [x for x in itens if x in SO]
     print(f"varrendo {len(itens)} de {grupo}: {' '.join(itens)}\n")
     fora = []
     try:
@@ -165,7 +192,12 @@ def varrer(edit: Path, grupo: str) -> int:
             r = subprocess.run(cmd, cwd=str(ov), capture_output=True, text=True,
                                encoding="utf-8", errors="replace", **NOWIN)
             if r.returncode != 0 or not rm.exists():
-                print(f"  {nome:12s} FALHOU o Remotion")
+                # POR QUE falhou. Sem isto a varredura dizia so "FALHOU" em
+                # todos os 15 estilos e nao dava para saber se era o
+                # ambiente (node fora do PATH) ou o desenho — e uma
+                # varredura sem referencia nao mede nada.
+                erro = ((r.stderr or r.stdout or "").strip().splitlines() or [""])[-1]
+                print(f"  {nome:12s} FALHOU o Remotion — {erro[:120]}")
                 fora.append(nome)
                 continue
             t_rm = time.perf_counter() - t0
@@ -202,6 +234,17 @@ def varrer(edit: Path, grupo: str) -> int:
                 fora.append(nome)
                 continue
             razao = float(np.median(tn[com] / np.maximum(tr[com], 1)))
+            if CURVA:
+                # A razao publicada e a MEDIANA e o par salvo e o quadro de
+                # PICO: um desenho pode bater no pico e divergir no resto
+                # (entrada, saida, animacao). Sem a curva, "0,846" acusa
+                # sem dizer ONDE.
+                print(f"    curva de {nome} (quadro: remotion / nosso / razao)")
+                for i in range(m):
+                    if tr[i] <= 500:
+                        continue
+                    print(f"      {A + i:4d}  {int(tr[i]):7d} {int(tn[i]):7d}"
+                          f"  {tn[i] / max(tr[i], 1):.3f}")
             i = int(np.argmax(tr))
             a, b = qr[i], qn[i]
             aa, ab = a[..., 3].astype(np.int16), b[..., 3].astype(np.int16)
@@ -223,6 +266,9 @@ def varrer(edit: Path, grupo: str) -> int:
     finally:
         (pub / "edit-data.json").write_text(backup, encoding="utf-8")
         print("\nedit-data devolvido ao original")
+        # A copia de trabalho e descartavel e carrega um junction de
+        # node_modules: deixar isso na pasta do projeto so confunde.
+        shutil.rmtree(ov, ignore_errors=True)
 
     if fora:
         print("FORA DA FAIXA (olhe `.varredura_par_<nome>.png` antes de "
@@ -239,7 +285,14 @@ def main() -> int:
     ap.add_argument("grupo", choices=["legendas", "headlines", "layouts"])
     ap.add_argument("--projeto", required=True, type=Path,
                     help="a pasta `edit` de um projeto já renderizado")
+    ap.add_argument("--curva", action="store_true",
+                    help="tinta quadro a quadro — para achar ONDE diverge")
+    ap.add_argument("--so", default="",
+                    help="varrer só estes desenhos (separados por vírgula)")
     a = ap.parse_args()
+    global CURVA, SO
+    CURVA = bool(a.curva)
+    SO = {x.strip() for x in str(a.so or "").split(",") if x.strip()}
     return varrer(a.projeto, a.grupo)
 
 

@@ -509,6 +509,7 @@ class DesktopHandler(ps.Handler):
             "/api/jobs/retry",
             "/api/jobs/cancel",
             "/api/jobs/requeue-folder",
+            "/api/jobs/open-log",
             "/api/jobs/append-cta",
             "/api/jobs/delete",
         ):

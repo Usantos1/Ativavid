@@ -45,6 +45,7 @@ if hasattr(sys.stdout, "reconfigure"):
 
 REPO = Path(__file__).resolve().parent.parent
 HELPERS = REPO / "helpers"
+NOVA_LINHA = chr(10)
 STUDIO = REPO / "assets" / "studio"
 PREVIEW = REPO / "assets" / "preview"
 PRESET_PATH = PREVIEW / "default-style.json"
@@ -1106,6 +1107,38 @@ def run_doutor() -> dict:
 # do app e os testes importam.
 JobStore = SqliteJobStore
 
+# O log do render ao lado do video que ele explica.
+#
+# Ate aqui o stdout do pipeline ia para um arquivo temporario APAGADO no
+# fim do job: `TIMING_CORTE`, `RENDER_PROPRIO_PULADO`, `[legenda] a IA
+# recusou`, os motivos de queda do motor rapido — tudo escrito para ser
+# lido depois e apagado antes. So os ultimos 800 caracteres do stderr
+# sobreviviam, e so quando o job falhava.
+_LOG_DO_JOB_MAX = 400_000     # ~150 KB num render longo; o teto e para o laco
+
+
+def _guardar_log_do_job(edit_dir: Path, saida: str, erro: str) -> None:
+    """Grava `edit/pipeline.log`. Nunca levanta — o video e o produto."""
+    try:
+        from app.app_log import scrub
+
+        partes = [scrub(saida or "")]
+        if (erro or "").strip():
+            partes.append(NOVA_LINHA + "===== stderr =====" + NOVA_LINHA
+                          + scrub(erro))
+        texto = "".join(partes)
+        if len(texto) > _LOG_DO_JOB_MAX:
+            # o FIM e o que interessa: e onde esta o erro e o resumo
+            texto = ("[... {} caracteres do comeco cortados ...]".format(
+                len(texto) - _LOG_DO_JOB_MAX) + NOVA_LINHA
+                + texto[-_LOG_DO_JOB_MAX:])
+        alvo = Path(edit_dir) / "pipeline.log"
+        alvo.parent.mkdir(parents=True, exist_ok=True)
+        alvo.write_text(texto, encoding="utf-8")
+    except Exception:  # noqa: BLE001
+        pass
+
+
 class Worker:
     def __init__(self, store: JobStore):
         self.store = store
@@ -1495,6 +1528,7 @@ class Worker:
             stderr = err_path_tmp.read_text(encoding="utf-8", errors="replace")
         except OSError:
             stderr = ""
+        _guardar_log_do_job(edit_dir, stdout, stderr)
         for p in (out_path_tmp, err_path_tmp):
             try:
                 p.unlink(missing_ok=True)
@@ -1734,6 +1768,13 @@ class StudioHandler(BaseHTTPRequestHandler):
             alvo = STUDIO / path[len("/assets/studio/"):]
         elif path.startswith("/assets/"):
             alvo = PREVIEW / path[len("/assets/"):]
+        if path.startswith("/media/"):
+            # Este servidor nao serve midia de projeto (o editor e outro).
+            # 404 e a resposta honesta; 405 dizia "metodo errado" para uma
+            # pergunta que o metodo certo tambem nao responderia.
+            self.send_response(404)
+            self.end_headers()
+            return
         if alvo is None or ".." in Path(path).parts:
             self.send_response(405)
             self.end_headers()
@@ -3131,6 +3172,30 @@ class StudioHandler(BaseHTTPRequestHandler):
             self._json({"ok": True, "path": str(target)})
             return
 
+        if path == "/api/jobs/open-log":
+            # O log do render, ao lado do video. Existe desde a 4.11; antes
+            # dela o stdout do pipeline era apagado no fim do job.
+            body = self._read_json() or {}
+            job = self.store.get(body.get("id", ""))
+            if not job:
+                self._json({"error": "job not found"}, 404)
+                return
+            alvo = Path(job.get("editDir") or "") / "pipeline.log"
+            if not alvo.is_file():
+                self._json({"error": "este vídeo é anterior ao log"}, 404)
+                return
+            try:
+                if sys.platform == "win32":
+                    os.startfile(str(alvo))  # noqa: S606
+                elif sys.platform == "darwin":
+                    subprocess.Popen(["open", str(alvo)])
+                else:
+                    subprocess.Popen(["xdg-open", str(alvo)])
+            except OSError as e:
+                self._json({"error": str(e)}, 500)
+                return
+            self._json({"ok": True, "path": str(alvo)})
+            return
         if path == "/api/jobs/open-final":
             body = self._read_json() or {}
             job = self.store.get(body.get("id", ""))

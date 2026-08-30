@@ -246,6 +246,44 @@ def _qualidade_do_corte(job: dict, edit: Path) -> None:
         job["corteQualidade"] = " · ".join(partes)
 
 
+def _aviso_do_motor(job: dict, edit: Path) -> None:
+    """Diz quando o vídeo saiu pelo caminho LENTO — e por quê.
+
+    O motor próprio desenha sem abrir o Chrome e é 3,3x mais rápido (423s
+    contra 1391s de média nos 404 jobs do usuário). Quando ele fica de
+    fora, o vídeo demora o triplo e nada na tela contava: o motivo ia para
+    o `timing.json` e morria lá.
+
+    Aparece pouco de propósito — 79% dos vídeos usam o motor rápido. Aviso
+    raro é aviso que se lê.
+    """
+    try:
+        d = json.loads((edit / "timing.json").read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError):
+        return
+    if not isinstance(d, dict):
+        return
+    motivo = str(d.get("overlayEngineSkip") or "").strip()
+    if motivo:
+        job["motorNota"] = f"desenho pelo caminho lento — {motivo}"[:160]
+        return
+    razoes = {str(x) for x in (d.get("renderPathReasons") or [])}
+    # O caminho completo por FALHA do rápido — isto é notícia. O caminho
+    # completo puro NÃO entra: 33 dos projetos do usuário são de antes do
+    # motor próprio existir, e avisar sobre o que ele não pode mudar
+    # ensina a ignorar aviso (a lição que este arquivo já carrega).
+    if {"OVERLAY_FAILED", "FALLBACK_FULL_REMOTION"} & razoes:
+        job["motorNota"] = ("o desenho rápido falhou e o vídeo foi refeito "
+                            "pelo caminho completo, cerca de 3x mais lento")
+        return
+    # Motor próprio de fora SEM motivo registrado: acontece em projeto
+    # anterior à versão que passou a gravar o porquê. Dizer que foi lento
+    # continua sendo verdade — inventar o motivo é que não.
+    if str(d.get("overlayEngine") or "") == "remotion":
+        job["motorNota"] = ("desenho pelo caminho lento (motivo não "
+                            "registrado nesta versão)")
+
+
 def _modo_de_edicao(job: dict, edit: Path) -> None:
     try:
         d = json.loads((edit / "job_intent.json").read_text(encoding="utf-8-sig"))
@@ -320,6 +358,9 @@ def build(store: Any, projects_root: Path, *, com_links: bool = False) -> list[d
         j["hasCut"] = (edit / "cut.mp4").exists()
         j["hasFinal"] = resolve_delivery_mp4(edit) is not None
         j["hasThumb"] = (edit / "thumb.jpg").exists()
+        # O log do render (`pipeline.log`) so passou a existir na 4.11.
+        # Projeto antigo nao tem, e o menu nao pode oferecer o que nao ha.
+        j["temLog"] = (edit / "pipeline.log").exists()
         j["thumbUrl"] = f"/api/jobs/{j['id']}/thumb"
         if com_links:
             enc = quote(Path(j.get("projectDir") or "").name, safe="-_.")
@@ -341,6 +382,7 @@ def build(store: Any, projects_root: Path, *, com_links: bool = False) -> list[d
         _aviso_de_trilha(j, edit)
         _estado_de_publicacao(j, edit)
         _aviso_de_ia(j, edit)
+        _aviso_do_motor(j, edit)
         enrich_job_display(j, edit)
         if j.get("sourceDurationSec") in (None, "") and (j.get("sources") or j.get("source")):
             # Projeto de antes deste campo existir. A medicao vai para o fundo

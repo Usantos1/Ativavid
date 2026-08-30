@@ -2286,9 +2286,19 @@ class Renderizador:
                             # drop-shadow, onde o Chrome usa ~raio). Medido:
                             # com sigma=raio o halo saia 49% maior que o do
                             # Remotion.
+                            #
+                            # E ESTE COMENTARIO desmentia a propria linha: o
+                            # codigo usava `26 * 0.25`, que e raio/4 — a
+                            # correcao de "sigma=raio" passou do ponto e
+                            # dividiu por quatro. Sombra pela metade e menos
+                            # tinta: a razao contra o Remotion ficou em 0,846
+                            # (faixa saudavel 0,93-1,10) por semanas, e o
+                            # quadro parado parecia certo porque a diferenca
+                            # esta no halo, nao no corpo. Com raio/2: 1,032.
+                            # Quinto estilo mordido pelos dois sigmas do CSS.
                             b = np.asarray(
                                 Image.fromarray((a_caixa * 255).astype(np.uint8))
-                                .filter(ImageFilter.GaussianBlur(26 * 0.25)),
+                                .filter(ImageFilter.GaussianBlur(26 * 0.5)),
                                 dtype=np.float32) / 255.0
                             sombra = np.zeros_like(b)
                             sombra[10:, :] = b[:-10, :] * 0.45
@@ -4139,6 +4149,7 @@ def render_final_uma_passada(
     cut: Path, dest: Path, frames: int, fps: float,
     width: int = 1080, height: int = 1920,
     trilha: Path | None = None, trilha_volume: float = 0.12,
+    progresso=None,
 ) -> dict[str, Any]:
     """Desenha, compõe e encoda numa passada — sem overlay.mov intermediário.
 
@@ -4231,6 +4242,15 @@ def render_final_uma_passada(
         ass_ant, bytes_ant = None, None
         try:
             for f in range(frames):
+                # Quantos quadros JA foram. O redesenho e 80,7% da espera
+                # de um apply, e a barra so tinha isto no caminho de duas
+                # etapas — que quase nunca roda. Cada 30 quadros: contar em
+                # todos custaria uma escrita de arquivo por quadro.
+                if progresso is not None and f % 30 == 0:
+                    try:
+                        progresso(f, frames)
+                    except Exception:  # noqa: BLE001
+                        progresso = None      # avisar nao pode custar o render
                 ass = r._assinatura(f)
                 if ass == ass_ant and bytes_ant is not None:
                     ff.stdin.write(bytes_ant)

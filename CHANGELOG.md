@@ -1,5 +1,28 @@
 # Changelog
 
+## 4.11
+
+- **A legenda "Impacto" voltou a ter a sombra do desenho original.** Ela
+  saía com a sombra pela metade — o quadro parado parecia certo porque a
+  diferença está no halo, não na letra. Achado medindo o desenho contra o
+  original: 0,846 de 1,00, agora 1,032.
+- **O log de cada vídeo passou a ser guardado.** Tudo que o programa conta
+  enquanto faz o vídeo — tempo de cada etapa, motor usado, motivo de cada
+  queda — ia para um arquivo temporário apagado no fim. Agora fica ao lado
+  do vídeo, e o menu ⋯ do card tem "Abrir o log deste vídeo".
+- **O "Aplicar alterações" volta a mostrar quanto já andou.** A barra
+  contava os quadros só no caminho que quase nunca roda; no caminho normal
+  ficava parada. O redesenho é 80% da sua espera quando você corrige uma
+  legenda.
+- **O card diz quando um vídeo saiu pelo caminho lento.** Aparece só
+  quando há o que contar (17 dos seus 187 projetos) — em 15 deles o
+  desenho rápido falhou e o vídeo foi refeito, três vezes mais devagar.
+- **O diagnóstico passou a olhar também o disco dos modelos.** Ele só
+  media o disco dos projetos (552 GB livres) e nunca o `C:`, onde ficam os
+  1,9 GB de modelos de transcrição, os caches e o instalador da
+  atualização — e que está com pouco espaço.
+
+
 ## 4.10
 
 - **Os efeitos que você importou passaram a entrar no vídeo.** Você tem

@@ -825,7 +825,8 @@ def try_overlay_final(
                         public, edit_data, cut=cut, dest=dest,
                         frames=frames, fps=fps, width=width, height=height,
                         trilha=trilha_up,
-                        trilha_volume=float(st.get("volume") or 0.12))
+                        trilha_volume=float(st.get("volume") or 0.12),
+                        progresso=progresso)
                     result = {
                         "overlay": None,
                         "alpha": {},   # o canário valida o FINAL; alpha é do intermediário

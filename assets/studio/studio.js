@@ -548,6 +548,9 @@ function fichaHtml(j) {
   // Nota (nao erro): o plano veio do Groq porque as sessoes web cairam.
   if (j.iaNota) linhas.push(["IA", j.iaNota]);
   if (j.corteQualidade) linhas.push(["Revisar no corte", j.corteQualidade]);
+  // Por que ESTE video demorou o triplo. O motivo ficava so no
+  // `timing.json`; aparece em menos de um quinto dos videos.
+  if (j.motorNota) linhas.push(["Render", j.motorNota]);
   // Trecho que pedia tempo inexistente no arquivo. Sem esta linha o
   // defeito e mudo: o video sai pronto com pedaco sem som e travado.
   if (j.corteNota) linhas.push(["Corte", j.corteNota]);
@@ -610,6 +613,7 @@ function cardSig(j, opts) {
     j.trilhaNota || "",
     (j.score && (j.score.tips || [])[0]) || "",
     j.corteQualidade || "",
+    j.motorNota || "",
     j.corteNota || "",
     j.fonteNota || "",
     j.midiaNota || "",
@@ -758,6 +762,7 @@ function cardMenuHtml(j, opts) {
         ${(copy.badge === "ERRO" || copy.badge === "REVISAR" || j.detail)
           ? `<button type="button" role="menuitem" data-act="detail" data-id="${safeId}">Ver detalhe</button>`
           : ""}
+        ${j.temLog ? `<button type="button" role="menuitem" data-act="log" data-id="${safeId}">Abrir o log deste vídeo</button>` : ""}
         <button type="button" role="menuitem" class="danger" data-act="delete" data-id="${safeId}" data-name="${escapeHtml(title)}">Apagar</button>
       </div>
     </div>`;
@@ -2723,7 +2728,17 @@ function wireList() {
           return;
         }
       }
-      if (act === "folder") {
+      if (act === "log") {
+      // O log conta o que o render fez: tempos por etapa, motor usado,
+      // por que caiu para o caminho lento. Ate a 4.11 ele era apagado.
+      api("/api/jobs/open-log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      }).catch((e) => toast(e.message || "Não achei o log deste vídeo"));
+      return;
+    }
+    if (act === "folder") {
         await api("/api/jobs/open-folder", {
           method: "POST",
           headers: { "Content-Type": "application/json" },

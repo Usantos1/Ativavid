@@ -151,17 +151,34 @@ def checar_espaco() -> None:
     ignorar o diagnostico. Os recortes e o render nascem ao lado do video, no
     disco do PROJETO.
     """
+    # `~/ATIVAVID` entra na lista: na maquina do usuario ele esta noutro
+    # disco (C:, com 7% livres) e guarda 1,9 GB de modelos de transcricao,
+    # o cache do Remotion, a Biblioteca e o instalador que a atualizacao
+    # baixa. Cheio ele, a transcricao nao carrega o modelo e a atualizacao
+    # nao baixa — e o diagnostico dizia "tudo certo", porque so media o
+    # disco dos projetos.
+    dados = Path.home() / "ATIVAVID"
     alvos: dict[str, Path] = {}
-    for p in (Path.cwd(), SKILL):
+    para_que: dict[str, str] = {}
+    for p, papel in ((Path.cwd(), "onde voce esta editando"),
+                     (SKILL, "onde a skill esta"),
+                     (dados, "modelos, biblioteca e atualizacao")):
+        try:
+            existe = p.exists()
+        except OSError:
+            existe = False
+        if not existe:
+            continue
         d = (p.drive or str(p)).rstrip(":") or str(p)
-        alvos.setdefault(d, p)
+        if alvos.setdefault(d, p) is p:
+            para_que[d] = papel
 
     for letra, caminho in alvos.items():
         try:
             livre = shutil.disk_usage(str(caminho)).free / (1024 ** 3)
         except OSError:
             continue
-        onde = "onde a skill esta" if caminho == SKILL else "onde voce esta editando"
+        onde = para_que.get(letra) or "onde voce esta editando"
         # um reel de 60s gera fonte + extracts por segmento + cut + render
         # final; 5 GB e o piso pra um video sem sustos, nao uma media
         if livre < 5:

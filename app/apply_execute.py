@@ -183,6 +183,37 @@ def _print_log(line: str) -> None:
     print(line, flush=True)
 
 
+# O log do apply so ia para a tela — e o apply roda DENTRO do app, cujo
+# stdout no pacote (pythonw) nao vai a lugar nenhum. O comentario la em
+# cima ja dizia o preco disso: deu para diagnosticar o desperdicio do
+# RENDER, que grava arquivos, e nao o do APPLY, que so imprimia. Medido no
+# historico do usuario, o mesmo tipo de apply variou de 1,2x a 31,3x o
+# tempo real e nao havia como saber qual foi qual.
+_APPLY_LOG_MAX = 200_000       # o arquivo cresce a cada apply do projeto
+
+
+def _log_do_apply(edit_dir: Path):
+    """Log que vai para a tela E para `edit/apply.log`."""
+    alvo = Path(edit_dir) / "apply.log"
+
+    def _log(line: str) -> None:
+        print(line, flush=True)
+        try:
+            from app.app_log import scrub
+
+            with alvo.open("a", encoding="utf-8") as fh:
+                fh.write(scrub(str(line)) + chr(10))
+            # Aparar so quando passa do teto: reescrever a cada linha
+            # custaria um arquivo inteiro por linha de log.
+            if alvo.stat().st_size > _APPLY_LOG_MAX * 1.5:
+                texto = alvo.read_text(encoding="utf-8", errors="replace")
+                alvo.write_text(texto[-_APPLY_LOG_MAX:], encoding="utf-8")
+        except Exception:  # noqa: BLE001 — log e extra, o video e o produto
+            pass
+
+    return _log
+
+
 def _default_progress(edit_dir: Path) -> ProgressFn:
     def progress(stage: str, message: str) -> None:
         write_apply_status(edit_dir, running=True, ok=None, message=message, stage=stage)
@@ -860,7 +891,7 @@ def default_hooks(edit_dir: Path) -> ApplyHooks:
         promote_file=_promote_file,
         sync_pack=_sync_pack_real,
         probe_duration=_probe_duration_real,
-        log=_print_log,
+        log=_log_do_apply(edit_dir),
         progress=_default_progress(edit_dir),
     )
 
@@ -920,10 +951,11 @@ def _stamp_captions_clock(edit_dir: Path, data: dict[str, Any]) -> dict[str, Any
 # minutos"), a faixa acertava **21 de 45 vezes (47%)** — cara ou coroa.
 # Dizer "cerca de 2 minutos" e levar 40s e pior que nao dizer nada.
 #
-# O que falta para uma barra HONESTA e progresso de verdade: o
-# `_gravar_video` sabe em que quadro esta, e levar isso ate a tela pede
-# passar uma funcao por `_render_visual_real` -> run_fast -> overlay_path
-# -> `render_overlay_proprio`. E o caminho certo, e nao um palpite.
+# O caminho honesto ja esta ligado: o desenho conta o QUADRO em que esta,
+# de `_render_visual_real` -> run_fast -> overlay_path -> motor proprio, e
+# `_avisar_redesenho` transforma isso em porcentagem. Vale para os DOIS
+# caminhos do motor — a passada unica (o padrao) e a de duas etapas; ligar
+# so um deles deixava a barra parada em quase todo apply.
 
 
 def record_apply_metric(edit_dir: Path, rec: dict[str, Any]) -> None:
