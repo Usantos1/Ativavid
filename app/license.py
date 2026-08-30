@@ -531,6 +531,14 @@ _GATE_FREE_EXACT = frozenset({
     "/api/brands",
     "/api/brand-presets",
     "/api/hardware/bench",
+    # Medicoes de LEITURA da propria maquina: o card de Desempenho, o
+    # espaco e o cache. Quem esta bloqueado ainda precisa ver o estado do
+    # computador — e `hardware/bench` (que MEDE) ja era livre enquanto
+    # `hardware` (que so LE o resultado) nao era.
+    "/api/hardware",
+    "/api/espaco",
+    "/api/espaco/liberar",
+    "/api/cache",
     "/api/llm-gateway",
     "/v1/chat/completions",
     "/api/jobs/open-folder",

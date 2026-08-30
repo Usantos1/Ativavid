@@ -125,23 +125,66 @@ def strip_ansi(s: str) -> str:
     return _ANSI_RE.sub("", s or "")
 
 
+# Causas conhecidas de um render que nao terminou, e o proximo passo de
+# cada uma. Varridas dos `result.json` dos projetos do usuario:
+#
+#     56x  'viral'                        KeyError do planejador (corrigido)
+#      4x  Expecting ',' delimiter …      a IA devolveu JSON quebrado
+#      1x  Invalid control character …    idem
+#      1x  Sessao Gemini incompleta…      ja tinha mensagem boa
+#      1x  cmd failed (1): … render.py    o corte falhou
+#
+# Ate aqui TODAS mostravam a mesma frase, e a da sessao — escrita para o
+# usuario pelo proprio pipeline — era jogada fora e trocada pela generica.
+MOTIVOS_DO_RENDER: tuple[tuple[tuple[str, ...], str], ...] = (
+    (("expecting ',' delimiter", "expecting property name",
+      "invalid control character", "jsondecodeerror",
+      "expecting value: line"),
+     "A IA respondeu num formato que não deu para ler. Tente de novo — "
+     "costuma passar na segunda."),
+    (("keyerror", "'viral'"),
+     "Um passo do planejamento falhou dentro do app. Tente de novo; se "
+     "repetir, mande o log deste vídeo."),
+    (("no space left", "espaço em disco", "disk full", "errno 28"),
+     "Faltou espaço em disco no meio do vídeo. Libere espaço e tente de "
+     "novo."),
+    (("render.py", "cmd failed"),
+     "O corte do vídeo falhou. Abra o log deste vídeo no menu ⋯ para ver "
+     "onde parou."),
+    (("ffmpeg", "encoder"),
+     "O FFmpeg parou no meio. Abra o log deste vídeo no menu ⋯."),
+)
+
+
 def friendly_error(raw: str) -> str:
-    """Short UI label; keep the raw string in `detail` for diagnostics."""
+    """Frase do card. O texto cru continua no `detail`, para diagnóstico."""
     text = strip_ansi((raw or "").strip())
     if not text:
         return "Não foi possível concluir este vídeo."
     low = text.lower()
     if "cancel" in low:
         return "Cancelado pelo usuário"
-    return "Não foi possível concluir este vídeo."
+    # Mensagem que o PIPELINE escreveu para o usuário passa inteira: ele
+    # sabe mais do que esta função. (A da sessão do Gemini era descartada.)
+    if "sess" in low and len(text) <= 220 and "traceback" not in low:
+        return text
+    for chaves, frase in MOTIVOS_DO_RENDER:
+        if any(k in low for k in chaves):
+            return frase
+    return ("Não foi possível concluir este vídeo. Abra o log deste vídeo "
+            "no menu ⋯ para ver onde parou.")
 
 
+# O PASSO, com nome proprio. As quatro primeiras etapas — olhar, ouvir,
+# planejar, cortar — diziam todas "Preparando vídeo...", e sao elas que
+# levam a primeira metade dos minutos de espera: quem olhava a Fila nao
+# sabia se tinha andado.
 STAGE_LABELS = {
     "queued": "Aguardando",
-    "analyzing": "Preparando vídeo...",
-    "transcribing": "Preparando vídeo...",
-    "planning": "Preparando vídeo...",
-    "cutting": "Preparando vídeo...",
+    "analyzing": "Olhando o vídeo...",
+    "transcribing": "Ouvindo o que foi falado...",
+    "planning": "Escolhendo os cortes...",
+    "cutting": "Cortando o vídeo...",
     "visuals": "Aplicando legendas e efeitos...",
     "preview": "Aplicando legendas e efeitos...",
     "waiting_render": "Aplicando edição...",

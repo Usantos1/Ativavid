@@ -177,6 +177,20 @@ function queueCopy(j, view) {
   if (finishing) return { badge: "PROCESSANDO", text: `Finalizando vídeo...${eta}` };
   if (captions) return { badge: "PROCESSANDO", text: `Aplicando legendas e efeitos...${eta}` };
   if (editing) return { badge: "PROCESSANDO", text: `Aplicando edição...${eta}` };
+  // O PASSO, quando o pipeline diz qual é. As quatro etapas da primeira
+  // metade — ouvir, planejar, cortar — mostravam a mesma frase
+  // ("Preparando vídeo..."), e essa metade leva minutos: quem olha não
+  // sabia se andou. Cada uma tem nome próprio agora; o genérico fica só
+  // para quando o passo não chegou.
+  const PASSO = {
+    analyzing: "Olhando o vídeo",
+    transcribing: "Ouvindo o que foi falado",
+    planning: "Escolhendo os cortes",
+    cutting: "Cortando o vídeo",
+  };
+  if (PASSO[stage]) {
+    return { badge: "PROCESSANDO", text: `${PASSO[stage]}...${eta}` };
+  }
   if (preparing) return { badge: "PROCESSANDO", text: `Preparando vídeo...${eta}` };
   return { badge: "PROCESSANDO", text: `Preparando vídeo...${eta}` };
 }

@@ -1,5 +1,22 @@
 # Changelog
 
+## 4.13
+
+- **A Fila diz em que passo o vídeo está.** *Olhando o vídeo… Ouvindo o
+  que foi falado… Escolhendo os cortes… Cortando o vídeo…* — as quatro
+  mostravam a mesma frase, "Preparando vídeo...", e são elas que levam
+  quase metade da espera. Dava para ficar minutos sem saber se tinha
+  andado.
+- **Quando um vídeo falha, o card diz por quê.** Antes era sempre a mesma
+  frase. Agora: resposta ilegível da IA, falta de espaço em disco, falha
+  no corte — cada uma com o que fazer. E quando o próprio programa já
+  tinha escrito uma explicação (como "Sessão Gemini incompleta"), ela
+  passa inteira em vez de ser trocada pela frase genérica.
+- **Diagnóstico, espaço e placa de vídeo continuam acessíveis com a
+  licença bloqueada.** São leitura da sua própria máquina — como "Abrir
+  pasta" e "Ver vídeo final" já eram.
+
+
 ## 4.12
 
 - **As manchetes "Carimbo" e "Fita" giravam para o lado errado.** O
