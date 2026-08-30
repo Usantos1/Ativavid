@@ -246,9 +246,13 @@
         <section class="view hidden view-estilo" id="view-estilo" data-view-panel="estilo">
           <div class="estilo-brand-bar estilo-brand-bar--slim" id="estiloBrandBar">
             <div class="brand-group">
-              <span class="brand-group-title">Editando o estilo de</span>
+              <!-- Dois alvos, dois destinos: o estilo base vale para todos
+                   os presets, um preset vale so para ele. Ver
+                   `barraDoEstilo` no studio.js. -->
+              <span class="brand-group-title" id="estiloBrandTitulo">Editando o estilo base</span>
               <div class="brand-group-row">
                 <strong class="brand-active-name" id="estiloBrandName">Padrão</strong>
+                <button type="button" class="ghost-btn hidden" id="btnEstiloBase">Voltar ao estilo base</button>
               </div>
               <p class="hint" id="brandHint"></p>
             </div>

@@ -338,6 +338,15 @@ function setView(name) {
   }
   if (name === "estilo") {
     loadBrandsUi().catch(() => {});
+    barraDoEstilo();
+    const fr0 = $("#estiloFrame");
+    if (fr0 && fr0.dataset.loaded === "1") {
+      // O iframe fica montado entre as visitas. Sem esta troca, "Editar
+      // estilo" num preset reabria o editor no alvo da visita anterior.
+      const atual = new URL(fr0.src, location.origin)
+        .searchParams.get("presetId") || "";
+      if (atual !== (state.editPresetId || "")) fr0.src = estiloFrameSrc();
+    }
     const fr = $("#estiloFrame");
     if (fr && !fr.dataset.loaded) {
       fr.dataset.loaded = "1";
@@ -394,12 +403,36 @@ function mandarAlvoAoEstilo() {
   } catch { /* iframe indisponível: o editor abre no topo, como antes */ }
 }
 
+/* O que a barra de Estilos diz que esta sendo editado.
+ *
+ * Sao dois alvos e eles gravam em lugares diferentes: o ESTILO BASE (que
+ * vale para todos os presets) e um PRESET. Sem dizer qual, salvar viraria
+ * aposta. */
+function barraDoEstilo() {
+  const nome = $("#estiloBrandName");
+  const titulo = $("#estiloBrandTitulo");
+  const voltar = $("#btnEstiloBase");
+  const editandoPreset = !!state.editPresetId;
+  if (titulo) {
+    titulo.textContent = editandoPreset ? "Editando o preset" : "Editando o estilo base";
+  }
+  if (nome && editandoPreset) nome.textContent = state.editPresetNome || "Preset";
+  if (voltar) voltar.classList.toggle("hidden", !editandoPreset);
+  const hint = $("#brandHint");
+  if (hint && editandoPreset) {
+    hint.textContent = "Salvar aqui muda só este preset — o estilo base e os outros presets ficam como estão.";
+  }
+}
+
 function estiloFrameSrc() {
   // A marca ATIVA, e nao mais o que estava escolhido num seletor: o
   // seletor deixava editar o estilo de uma marca sem ativa-la.
   const id = (state.brandActive && state.brandActive.id) || "";
   const q = new URLSearchParams({ embed: "1" });
   if (id) q.set("brandId", id);
+  // Com preset, o editor edita AQUELE preset e salva nele. Sem preset,
+  // edita o estilo base — que e o caminho de sempre.
+  if (state.editPresetId) q.set("presetId", state.editPresetId);
   q.set("t", String(Date.now()));
   return `/estilo-padrao?${q.toString()}`;
 }
@@ -2715,6 +2748,13 @@ function wireList() {
     if (nav && nav.dataset.view) {
       e.preventDefault();
       closeCardMenus();
+      // Chegar em Estilos por aqui (menu, atalho de identidade) e sempre
+      // o ESTILO BASE. So o "Editar estilo" de um preset, que nao passa
+      // por `data-view`, aponta o editor para um preset.
+      if (nav.dataset.view === "estilo") {
+        state.editPresetId = "";
+        state.editPresetNome = "";
+      }
       setView(nav.dataset.view);
       return;
     }
@@ -4451,6 +4491,17 @@ function wireForms() {
   // e por isso vai pelo `action: "format"` — `save_brand` troca o arquivo
   // inteiro pelo corpo do pedido, entao mandar so o formato daqui apagaria
   // o estilo base junto.
+  const btnBase = $("#btnEstiloBase");
+  if (btnBase) {
+    btnBase.onclick = () => {
+      state.editPresetId = "";
+      state.editPresetNome = "";
+      barraDoEstilo();
+      const fr = $("#estiloFrame");
+      if (fr) fr.src = estiloFrameSrc();
+      loadBrandsUi().catch(() => {});
+    };
+  }
   const selFmt = $("#exportPresetSelect");
   if (selFmt) {
     selFmt.onchange = async () => {
@@ -4994,10 +5045,14 @@ async function loadBrandsUi() {
   const fmtNames = { reels: "Reels/Shorts", youtube: "YouTube 16:9", square: "Quadrado 1:1", feed: "Feed 4:5" };
   const formato = fmtNames[active && active.exportPreset] || "Reels/Shorts";
   if ($("#brandHint")) {
-    $("#brandHint").textContent = active
-      ? `Vale para todos os presets. Sai em ${formato}.` : "";
+    if (!state.editPresetId) {
+      $("#brandHint").textContent = active
+        ? `Vale para todos os presets. Sai em ${formato}.` : "";
+    }
   }
-  if ($("#estiloBrandName")) $("#estiloBrandName").textContent = (active && active.name) || "Padrão";
+  if ($("#estiloBrandName") && !state.editPresetId) {
+    $("#estiloBrandName").textContent = (active && active.name) || "Padrão";
+  }
   const sw = $("#identAccent");
   if (sw) sw.style.background = (active && active.accent) || "var(--accent)";
   if ($("#identAccentVal")) $("#identAccentVal").textContent = (active && active.accent) || "padrão";
@@ -5685,6 +5740,7 @@ function nomeDoEstilo(eixo, id) {
             + `não define o visual — usa o estilo base</span></div>`}
       </div>
       <div class="preset-acts">
+        <button type="button" class="export-btn export-btn--sm" data-preset-act="edit">Editar estilo</button>
         ${on ? "" : `<button type="button" class="ghost-btn ghost-btn--sm" data-preset-act="default">Usar como padrão</button>`}
         <button type="button" class="ghost-btn ghost-btn--sm" data-preset-act="duplicate">Duplicar</button>
         <button type="button" class="ghost-btn ghost-btn--sm" data-preset-act="rename">Renomear</button>
@@ -5751,6 +5807,13 @@ function wirePresets() {
         } else if (act === "default") {
           await presetAction("default", { id });
           toast("Preset virou o padrão");
+        } else if (act === "edit") {
+          // O editor e o mesmo de Estilos; o `presetId` diz o que ele
+          // esta editando — e para onde o Salvar vai.
+          state.editPresetId = id;
+          state.editPresetNome =
+            row.querySelector(".preset-name")?.textContent || "";
+          setView("estilo");
         }
       } catch (err) {
         toast(err.message || "Não deu para aplicar");
@@ -6112,7 +6175,16 @@ async function boot() {
   await wireTitlebar();
   window.addEventListener("message", (e) => {
     if (!e.data || e.data.type !== "ativavid-house-style-saved") return;
-    toast("Estilo padrão salvo");
+    toast(state.editPresetId ? "Preset salvo" : "Estilo padrão salvo");
+    if (state.editPresetId) {
+      // Volta para a lista: e de la que ele veio, e e la que da para ver
+      // o resultado (as pastilhas do cartao mudam).
+      state.editPresetId = "";
+      state.editPresetNome = "";
+      loadPresetsUi().catch(() => {});
+      setView("presets");
+      return;
+    }
     const fr = $("#estiloFrame");
     if (fr) {
       fr.dataset.loaded = "";

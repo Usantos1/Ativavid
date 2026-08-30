@@ -1152,6 +1152,12 @@ function mediaHref(rel) {
 const HOUSE_STYLE = location.pathname === '/estilo-padrao';
 // Hub embeds the catalog inside sidebar/appbar — hide preview chrome
 const HUB_EMBED = HOUSE_STYLE && new URLSearchParams(location.search).get('embed') === '1';
+/* Editando UM preset, e nao o estilo base.
+ *
+ * "onde edita o estilo de um preset?" (30/08) — nao editava: o Salvar do
+ * editor gravava o estilo base e copiava por cima do preset PADRAO, fosse
+ * qual fosse o preset carregado na tela. Com `presetId` o alvo e um so. */
+const EDIT_PRESET_ID = new URLSearchParams(location.search).get('presetId') || '';
 if (HUB_EMBED) {
   document.documentElement.classList.add('hub-embed');
   document.body.classList.add('hub-embed');
@@ -3967,7 +3973,9 @@ function renderSetup() {
   wasShowing = true;
   renderStyleTemplates();
 
-  $('setupGo').textContent = HOUSE_STYLE
+  $('setupGo').textContent = EDIT_PRESET_ID
+    ? 'Salvar preset e voltar'
+    : HOUSE_STYLE
     ? 'Salvar padrão e voltar'
     : (S.state.awaitingStyle
       ? 'Confirmar e iniciar a Fase 2'
@@ -4127,6 +4135,35 @@ $('setupGo').addEventListener('click', async () => {
       contentType: S.contentType || $('autoContentType')?.value || null,
       note: S.style.note || '',
     };
+    // Editando UM preset: grava so nele. O estilo base e os outros
+    // presets ficam como estao — era isso que faltava, e por isso o
+    // Salvar antigo escrevia sempre no preset padrao.
+    if (EDIT_PRESET_ID) {
+      const alvo = await fetch('/api/brand-presets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'update',
+          brandId: (S.brandPresets && S.brandPresets.brandId) || 'padrao',
+          id: EDIT_PRESET_ID,
+          style: house,
+        }),
+      });
+      const dado = await alvo.json().catch(() => ({}));
+      if (dado && dado.ok !== false && !dado.error) {
+        toast('✓ Preset salvo', 2000);
+        if (HUB_EMBED) {
+          try {
+            window.parent.postMessage({ type: 'ativavid-house-style-saved' }, '*');
+          } catch { /* ignore */ }
+        } else {
+          setTimeout(() => { location.href = '/'; }, 450);
+        }
+      } else {
+        toast((dado && dado.error) || 'Erro ao salvar o preset', 4000);
+      }
+      return;
+    }
     const res = await fetch('/api/default-style', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -8220,7 +8257,13 @@ async function loadBrandPresets(opts) {
     if (!sel.innerHTML) {
       sel.innerHTML = `<option value="">${projectBrand || 'Deste vídeo'}</option>`;
     }
-    if (applyActive) {
+    if (EDIT_PRESET_ID) {
+      const alvo = presets.find((p) => p.id === EDIT_PRESET_ID);
+      if (alvo) {
+        sel.value = alvo.id;
+        applyPresetToUi(alvo);
+      }
+    } else if (applyActive) {
       applyPresetToUi(presets.find((p) => p.id === sel.value) || pack.active);
     }
   } catch { /* hub sem rota em preview isolado */ }

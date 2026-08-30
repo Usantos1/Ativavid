@@ -1,5 +1,21 @@
 # Changelog
 
+## 4.20
+
+- **Agora dá para editar o estilo de um preset.** Cada preset ganhou
+  "Editar estilo": abre o mesmo editor de Estilos, já com aquele preset
+  carregado, e o botão vira "Salvar preset e voltar". Salvar ali muda só
+  aquele preset — o estilo base e os outros ficam como estão.
+- **Antes disso, editar um preset era impossível — e perigoso.** Estilos
+  editava o estilo base e, ao salvar, copiava por cima do preset marcado
+  como padrão, qualquer que fosse o preset em questão. Dos seus três, só o
+  padrão mudava; o "Uander" dizia "não define o visual" e não havia como
+  definir. Testado com os seus presets: depois de salvar o Uander, o estilo
+  base ficou idêntico e os outros dois presets também.
+- **A barra de Estilos diz o que você está editando** — "Editando o estilo
+  base" ou "Editando o preset X", com um botão para voltar à base. Entrar
+  por Estilos no menu sempre abre a base.
+
 ## 4.19
 
 - **O apito no meio do vídeo: era um efeito da sua Biblioteca, longo
