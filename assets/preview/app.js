@@ -4099,7 +4099,9 @@ function desenharFaixasDeInsert(phase2) {
       // Tirar o que FOI POSTO NA MAO. Sem isto, so o Ctrl+Z imediato — e
       // passado esse instante o emoji errado ficava no video para sempre.
       if (c.isNew) {
-        const x = el('button', 'chip-x', chip);
+        // sempre visivel: no bloco de som (0,6s, ~24px) o ✕ escondido no
+        // hover era alvo pequeno demais, e o usuario nao conseguia apagar
+        const x = el('button', 'chip-x sempre', chip);
         x.type = 'button';
         x.textContent = '✕';
         x.title = 'Tirar da linha do tempo';
@@ -4809,14 +4811,18 @@ panel.addEventListener('pointerdown', (e) => {
     e.preventDefault();
     return;
   }
-  if (handle && chip && S.tab === 2) {
+  // O bloco POSTO NA MAO tambem se ajusta na Edicao: ele nasce em tempo de
+  // rascunho, que e o relogio daquela tela. So os inserts da IA continuam
+  // presos ao Visual, onde o relogio deles bate.
+  const daMao = chip && S.insertsDraft[+chip.dataset.i]?.isNew;
+  if (handle && chip && (S.tab === 2 || daMao)) {
     const i = +handle.dataset.i;
     drag = { type: 'chip-trim', i, side: handle.classList.contains('l') ? 'l' : 'r', x0: e.clientX, c: { ...S.insertsDraft[i] }, preSnapshot: snapshotState() };
     try { panel.setPointerCapture(e.pointerId); } catch (err) { /* synthetic/touch */ }
     e.preventDefault();
     return;
   }
-  if (chip && S.tab === 2) {
+  if (chip && (S.tab === 2 || daMao)) {
     const i = +chip.dataset.i;
     drag = { type: 'chip-move', i, x0: e.clientX, c: { ...S.insertsDraft[i] }, preSnapshot: snapshotState() };
     try { panel.setPointerCapture(e.pointerId); } catch (err) { /* synthetic/touch */ }

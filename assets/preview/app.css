@@ -3679,4 +3679,14 @@ body.styles-wide .setup-actions .btn.primary {
   transition: opacity 0.12s;
 }
 .chip:hover .chip-x { opacity: 1; }
+/* No bloco curto (som: 0,6s) o ✕ escondido no hover era alvo pequeno
+   demais — no print de 30/08 o usuario nao conseguia apagar o som. */
+.chip .chip-x.sempre { opacity: 0.75; }
+.chip:hover .chip-x.sempre { opacity: 1; }
+/* area de toque maior que o desenho, sem crescer o botao na tela */
+.chip .chip-x::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+}
 .chip .chip-x:hover { background: var(--rose-fg, #ff5470); }

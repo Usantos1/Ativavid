@@ -148,3 +148,28 @@ def test_o_gancho_nao_se_apaga_pela_linha_do_tempo():
     apagaria a manchete do vídeo sem dizer isso."""
     i = JS.index("function removerBlocoDaMao")
     assert "!c.isNew" in JS[i:i + 300]
+
+
+def test_o_bloco_da_mao_se_pega_tambem_na_edicao():
+    """Print de 30/08: o usuário põe um som e não consegue apagá-lo —
+    clicar no bloco só levava a agulha para o ponto. Mover e esticar eram
+    coisas só do Visual; mas o que ele põe à mão nasce em tempo de rascunho,
+    que é o relógio da Edição."""
+    assert "const daMao = chip && S.insertsDraft[+chip.dataset.i]?.isNew;" in JS
+    i = JS.index("const daMao =")
+    bloco = JS[i:i + 700]
+    assert "(S.tab === 2 || daMao)" in bloco
+    # duas vezes: esticar (handle) e mover (corpo)
+    assert bloco.count("S.tab === 2 || daMao") == 2
+
+
+def test_o_x_do_bloco_curto_nao_depende_do_hover():
+    """O bloco de som tem 0,6s (~24px): um ✕ escondido no hover, encostado
+    na borda, é alvo pequeno demais."""
+    css = (REPO / "assets" / "preview" / "app.css").read_text(encoding="utf-8")
+    i = css.index(".chip .chip-x.sempre")
+    assert "opacity: 0.75" in css[i:i + 120]
+    # e a área de toque é maior que o desenho
+    j = css.index(".chip .chip-x::after")
+    assert "inset: -6px" in css[j:j + 160]
+    assert "chip-x sempre" in JS

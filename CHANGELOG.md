@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.69
+
+- **Agora dá para pegar e apagar o som que você põe.** Clicar no bloco levava
+  só a agulha para o ponto, e o ✕ ficava escondido até o mouse passar por
+  cima — num bloco de meio segundo (24px) isso era alvo pequeno demais.
+- O ✕ do bloco que você criou fica **sempre visível**, com área de toque
+  maior que o desenho.
+- **O bloco da mão também se move e se estica na Edição**, não só no Visual:
+  ele nasce no relógio da Edição, que é onde você monta a linha do tempo.
+
 ## 3.68
 
 - **Dá para tirar o que você pôs.** Passe o mouse no bloco de imagem, som ou
