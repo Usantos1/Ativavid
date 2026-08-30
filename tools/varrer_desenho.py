@@ -118,6 +118,15 @@ def _monta(rend, f: int, larg: int, alt: int):
             rend.desenhar(leg, f - leg.inicio_f, buf, sujo,
                           mesclar=not primeira)
             primeira = False
+    # O FLASH e um passo A PARTE, como o `dim`: ele nao e uma camada, e
+    # aplicado sobre o quadro montado. Sem esta chamada a varredura media
+    # 0,000 de tinta e acusaria o motor de nao desenhar nada — defeito do
+    # arnes, nao do desenho. (Mesma armadilha do `leg.dim`, que fazia o
+    # card final medir 0,087.)
+    for at in getattr(rend, "flashes", ()) or ():
+        a = rend._flash_quadro(at, f)
+        if a is not None:
+            rend._aplicar_flash(buf, sujo, a)
     return buf
 
 
@@ -159,7 +168,12 @@ def varrer(edit: Path, grupo: str) -> int:
 
     itens = {"legendas": lambda: _catalogo("captions"),
              "headlines": lambda: _catalogo("headlines"),
-             "layouts": lambda: list(CAMADA)}[grupo]()
+             "layouts": lambda: list(CAMADA),
+             # O FLASH do corte nunca tinha sido comparado: os outros
+             # grupos zeram `transitions` para isolar o desenho, e ninguem
+             # media o que sobrava. Ele aparece em quase todo video do
+             # usuario (mediana de 8 por video).
+             "transicoes": lambda: ["flash"]}[grupo]()
     # `--so`: rever UM desenho custa 20s; rever os quinze custa 5 minutos, e
     # depois do primeiro achado é sempre um que se quer olhar de novo.
     if SO:
@@ -169,7 +183,9 @@ def varrer(edit: Path, grupo: str) -> int:
     try:
         for nome in itens:
             ed = json.loads(json.dumps(base))
-            ed["transitions"] = []
+            # No grupo `transicoes` as transicoes sao o objeto do exame.
+            if grupo != "transicoes":
+                ed["transitions"] = []
             ed["hook"] = dict(ed.get("hook") or {}, enabled=grupo == "headlines")
             ed["endCard"] = dict(ed.get("endCard") or {}, enabled=False)
             ed["captions"] = dict(ed.get("captions") or {},
@@ -179,6 +195,8 @@ def varrer(edit: Path, grupo: str) -> int:
             elif grupo == "headlines":
                 ed["hook"]["style"] = nome
                 ed["hook"]["endSec"] = 12.0
+            elif grupo == "transicoes":
+                pass          # o edit-data ja traz as transicoes reais
             else:
                 ed["videoLayout"] = nome
             (pub / "edit-data.json").write_text(
@@ -290,7 +308,8 @@ def varrer(edit: Path, grupo: str) -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("grupo", choices=["legendas", "headlines", "layouts"])
+    ap.add_argument("grupo",
+                    choices=["legendas", "headlines", "layouts", "transicoes"])
     ap.add_argument("--projeto", required=True, type=Path,
                     help="a pasta `edit` de um projeto já renderizado")
     ap.add_argument("--curva", action="store_true",

@@ -1,5 +1,20 @@
 # Changelog
 
+## 4.15
+
+- **Instalação em outra pasta não paga mais a instalação longa do
+  Remotion.** Para não repetir um download demorado, o app procura uma
+  cópia pronta num projeto existente — e o lugar onde procurar estava
+  escrito à mão, apontando para a pasta de projetos de uma máquina só.
+  Quem instalasse com a pasta noutro lugar não achava nada e esperava do
+  zero. Agora ele olha a pasta que você configurou.
+- **A conferência de desenho passou a cobrir o flash do corte.** Ele
+  aparece em quase todo vídeo seu — uns oito por vídeo — e era a única
+  peça que nunca tinha sido comparada com o desenho original. A primeira
+  medida mostra diferença no fim do flash; ficou registrada com os números
+  e uma ressalva, sem mexer no desenho por palpite.
+
+
 ## 4.14
 
 - **Efeito que já vem distorcido não entra mais no vídeo.** 40 dos seus

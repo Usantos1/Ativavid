@@ -135,10 +135,20 @@ def _npm_install(cwd: Path) -> None:
 
 def _seed_from_donor(cache_nm: Path) -> bool:
     """Copia node_modules de um projeto existente se o pin bater."""
-    roots = [
-        Path(r"E:\ATIVAVID\Projetos"),
-        Path.home() / "ATIVAVID" / "Projetos",
-    ]
+    # A pasta de projetos CONFIGURADA vem primeiro. Aqui havia um caminho
+    # fixo de uma maquina so (`E:\ATIVAVID\Projetos`): quem instalasse o
+    # app com a pasta noutro lugar nao achava doador nenhum e pagava um
+    # `npm install` inteiro — e o app e revendido.
+    roots: list[Path] = []
+    try:
+        from app.settings_store import load_settings
+
+        cfg = str((load_settings() or {}).get("projectsRoot") or "").strip()
+        if cfg:
+            roots.append(Path(cfg))
+    except Exception:  # noqa: BLE001 — doador e atalho, nao requisito
+        pass
+    roots.append(Path.home() / "ATIVAVID" / "Projetos")
     for root in roots:
         if not root.is_dir():
             continue
