@@ -2022,6 +2022,18 @@ class StudioHandler(BaseHTTPRequestHandler):
 
             self._json({"ok": True, "items": choices()})
             return
+        if path == "/api/fontes":
+            # As fontes que ele poe em ~/ATIVAVID/Fontes, pelo nome delas.
+            # "cade a fonte Integral?" (30/08): estava la desde 29/08, e a
+            # lista so dizia "Sua fonte (pasta Fontes)".
+            from app.fontes import listar as listar_fontes
+
+            try:
+                self._json({"fontes": listar_fontes()})
+            except OSError as e:
+                self._json({"fontes": [], "erro": str(e)})
+            return
+
         if path == "/api/brand-presets":
             from app.brand_presets import get_active, load as load_presets
 

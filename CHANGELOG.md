@@ -1,5 +1,25 @@
 # Changelog
 
+## 4.21
+
+- **A sua fonte aparece pelo nome.** A lista de fontes dizia só "Sua fonte
+  (pasta Fontes)" — agora diz **FONTSPRING DEMO - Integral CF Bold**, que é
+  o arquivo que está em `%USERPROFILE%\ATIVAVID\Fontes` desde 29/08. Ela
+  sempre esteve instalada; a tela é que nunca disse o nome. Aviso
+  importante: esse arquivo é a versão **DEMO**, que carimba "DEMO" no lugar
+  de todo acento — o app já avisa quando você usa. Ponha o arquivo da
+  Integral completa na mesma pasta e ela aparece na lista igual.
+- **Mais de uma fonte na pasta agora dá para escolher.** Antes o app pegava
+  sempre o primeiro arquivo em ordem alfabética e não dizia; a segunda fonte
+  nunca tocava.
+- **As listas de seleção pararam de abrir brancas no tema escuro.** O
+  editor de estilo não tinha o ajuste que o resto do app ganhou em 29/08 —
+  por isso o seletor de fonte abria branco. Um teste passa a cobrir as duas
+  folhas de estilo de uma vez.
+- **"Conferir os vídeos entregues" saiu de Configurações e foi para
+  Projetos.** Ela lê os seus projetos e refaz o que saiu torto — é trabalho,
+  não ajuste de máquina. Configurações fica com a instalação.
+
 ## 4.20
 
 - **Agora dá para editar o estilo de um preset.** Cada preset ganhou

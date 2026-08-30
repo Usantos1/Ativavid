@@ -238,6 +238,25 @@
                      autocomplete="off">
             </label>
           </div>
+          <!-- A conferencia mora aqui: ela le estes projetos e refaz os
+               que sairam tortos. Fica fechada ate ser pedida — sao ~11s
+               lendo 187 projetos, e quem abre Projetos quase sempre quer
+               a lista, nao a checagem. -->
+          <div class="sys-card sys-card--wide" id="auditoriaCard">
+            <div class="doutor-head">
+              <div class="doutor-head-copy">
+                <h4>Conferir os vídeos entregues</h4>
+                <p class="hint" id="auditoriaResumo">Passa uma checagem em
+                  todos os seus projetos e mostra o que saiu torto — trecho
+                  pedindo tempo que a fonte não tem, pausa sobrando no
+                  corte, vídeo sem trilha.</p>
+              </div>
+              <div class="doutor-head-acts">
+                <button type="button" class="export-btn export-btn--sm" id="btnAuditoria">Conferir agora</button>
+              </div>
+            </div>
+            <div id="auditoriaOut" class="doutor"></div>
+          </div>
           <div id="jobListProjetos" class="project-grid"></div>
           <div id="emptyProjetos" class="hub-empty hidden">Nenhum projeto por aqui ainda.</div>
         </section>
@@ -703,25 +722,10 @@
                    chega aqui quer SABER se esta tudo bem, nao apertar um
                    botao para descobrir. Uma acao so; o "copiar" e um link ao
                    lado do resumo, porque so o suporte pede. -->
-              <!-- Duas checagens, e o nome de cada uma diz o que ela
-                   olha: o Diagnostico olha a INSTALACAO; a auditoria olha
-                   os VIDEOS JA ENTREGUES. -->
-              <div class="sys-card sys-card--wide" id="auditoriaCard">
-                <div class="doutor-head">
-                  <div class="doutor-head-copy">
-                    <h4>Conferir os vídeos entregues</h4>
-                    <p class="hint" id="auditoriaResumo">Passa uma checagem em
-                      todos os seus projetos e mostra o que saiu torto — trecho
-                      pedindo tempo que a fonte não tem, pausa sobrando no
-                      corte, vídeo sem trilha.</p>
-                  </div>
-                  <div class="doutor-head-acts">
-                    <button type="button" class="export-btn export-btn--sm" id="btnAuditoria">Conferir agora</button>
-                  </div>
-                </div>
-                <div id="auditoriaOut" class="doutor"></div>
-              </div>
-
+              <!-- Aqui so o Diagnostico, que olha a INSTALACAO. A
+                   conferencia dos videos entregues mudou para Projetos na
+                   4.21 ("isso nao quero em configuracoes"): ela le os
+                   projetos e refaz video, e isso e trabalho, nao ajuste. -->
               <div class="sys-card sys-card--wide" id="doutorCard">
                 <div class="doutor-head">
                   <div class="doutor-head-copy">

@@ -7,6 +7,13 @@
    regardless of UI theme — a stark white timeline is bad practice for judging
    footage. --panel-bg is intentionally absent from the light override below. */
 :root {
+  /* A lista que abre num <select> e desenhada pelo SISTEMA, nao pelo CSS:
+     sem `color-scheme` ela abre BRANCA sobre o app escuro. O hub ganhou
+     esta linha em 29/08, quando ele mandou o print; o EDITOR ficou sem, e
+     em 30/08 veio o print de novo — desta vez o seletor de fonte da
+     legenda, que so existe aqui. Vale para todo controle nativo da
+     pagina: select, input de data, barra de rolagem. */
+  color-scheme: dark;
   --orange: #ff7713;
   --teal: #09b5b7;
   --olive: #738b03;
@@ -74,6 +81,7 @@
 }
 
 :root[data-theme="light"] {
+  color-scheme: light;
   --bg0: #eef0f4;
   --bg1: #fbfbfa;
   --glass: rgba(20, 22, 30, 0.04);

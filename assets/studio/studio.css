@@ -3742,3 +3742,7 @@ video.lib-thumb { aspect-ratio: 9 / 16; max-height: 260px; object-fit: contain;
 /* O cartao de identidade fecha a tela de Presets — respiro entre ele e a
    lista, que antes terminava no fim da tela. */
 #view-presets .pane-card { margin-top: 18px; }
+
+/* A conferencia dos videos entregues mudou de Configuracoes para Projetos
+   (4.21). Ela nasceu dentro do `sys-grid`, que ja dava o espacamento. */
+#view-projetos #auditoriaCard { margin: 0 0 16px; }

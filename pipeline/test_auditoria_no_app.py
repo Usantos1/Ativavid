@@ -46,6 +46,18 @@ def test_a_tela_tem_o_cartao_e_o_botao():
     assert '$("#btnAuditoria")' in JS
 
 
+def test_a_conferencia_mora_em_projetos():
+    """"isso nao quero em configuracoes" (30/08). Ela le os projetos e
+    refaz video — e trabalho, nao ajuste de maquina. Configuracoes fica
+    com a instalacao (Diagnostico, pastas, atualizacao)."""
+    i = HTML.index('id="view-projetos"')
+    j = HTML.index('id="view-estilo"')
+    assert 'id="auditoriaCard"' in HTML[i:j], "saiu de Projetos"
+    assert HTML.count('id="auditoriaCard"') == 1, "ficou em dois lugares"
+    k = HTML.index('class="sys-grid"')
+    assert 'id="auditoriaCard"' not in HTML[k:HTML.index('id="sysSupport"')]
+
+
 def test_a_auditoria_nao_roda_sozinha():
     """O Diagnóstico roda ao abrir porque é barato e é a primeira pergunta
     de quem chega ali. Esta lê 187 projetos em ~11s — é uma pergunta que se

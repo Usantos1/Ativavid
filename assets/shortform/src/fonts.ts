@@ -54,7 +54,9 @@ function loadBrandFile(): Resolved | null {
 }
 
 function load(id: string): Resolved | null {
-  if (id === 'arquivo') return loadBrandFile();
+  // `arquivo` ou `arquivo:<nome do arquivo>`: qual delas o pipeline já
+  // decidiu ao copiar para public/fonts e apontar brandFontFile.
+  if (id === 'arquivo' || id.startsWith('arquivo:')) return loadBrandFile();
   switch (id) {
     case 'poppins':
       return {family: loadPoppins('normal', {weights: ['400', '600', '800', '900']}).fontFamily};

@@ -271,6 +271,7 @@ class DesktopHandler(ps.Handler):
             "/api/musica/motor",
             "/api/brands",
             "/api/brand-presets",
+            "/api/fontes",
             "/api/content-types",
             "/api/headline-anchors",
             "/api/library",

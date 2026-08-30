@@ -3164,9 +3164,14 @@ def _apply_brand_fonts(ed: dict, preset: dict) -> None:
     """captionFont/headlineFont do preset → fontFamily no edit-data."""
     cf = str(preset.get("captionFont") or "").strip().lower()
     hf = str(preset.get("headlineFont") or "").strip().lower()
-    if cf in _FONT_IDS:
+    # `arquivo:<nome do arquivo>` diz QUAL fonte da pasta, quando ha mais
+    # de uma. `arquivo` puro continua sendo a primeira, como sempre foi.
+    def _vale(v: str) -> bool:
+        return v in _FONT_IDS or v.startswith("arquivo:")
+
+    if _vale(cf):
         ed.setdefault("captions", {})["fontFamily"] = cf
-    if hf in _FONT_IDS:
+    if _vale(hf):
         ed.setdefault("hook", {})["fontFamily"] = hf
 
 
@@ -3283,23 +3288,23 @@ def _attach_brand_font_file(ed: dict, public) -> None:
     app redistribuí-las."""
     from pathlib import Path as _P
 
-    uses = [k for k in ("captions", "hook")
-            if str((ed.get(k) or {}).get("fontFamily") or "") == "arquivo"]
+    from app.fontes import escolher as escolher_fonte, pasta as pasta_fontes
+
+    ids = {k: str((ed.get(k) or {}).get("fontFamily") or "")
+           for k in ("captions", "hook")}
+    uses = [k for k, v in ids.items() if v.lower().startswith("arquivo")]
     if not uses:
         return
-    fonts_dir = _P.home() / "ATIVAVID" / "Fontes"
+    fonts_dir = pasta_fontes()
     fonts_dir.mkdir(parents=True, exist_ok=True)
-    cand = sorted(
-        [f for f in fonts_dir.iterdir()
-         if f.is_file() and f.suffix.lower() in (".ttf", ".otf", ".woff2", ".woff")],
-        key=lambda f: f.name.lower(),
-    )
-    if not cand:
+    # O id pode nomear a fonte (`arquivo:Integral.otf`) quando ha mais de
+    # uma na pasta. Sem nome, a primeira — que e o que sempre foi.
+    src = escolher_fonte(ids[uses[0]])
+    if src is None:
         print(f"[warn] fonte da marca: nenhum .ttf/.otf em {fonts_dir} — usando padrão", flush=True)
         for k in uses:
             ed[k].pop("fontFamily", None)
         return
-    src = cand[0]
     dest_dir = _P(public) / "fonts"
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest = dest_dir / f"brand{src.suffix.lower()}"

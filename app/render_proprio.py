@@ -661,7 +661,9 @@ class Renderizador:
         ident = (ident or "").strip().lower()
         if not ident:
             return None
-        if ident == "arquivo":
+        # `arquivo` ou `arquivo:<nome>` — o pipeline ja resolveu QUAL e
+        # copiou para public/fonts; aqui so importa que e a do usuario.
+        if ident.startswith("arquivo"):
             if not arquivo_marca:
                 return None
             cam = self.public / str(arquivo_marca)

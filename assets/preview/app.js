@@ -8219,6 +8219,41 @@ function trocarMarcaDoVideo(id) {
   loadBrandPresets({ applyActive: false }).catch(() => {});
 }
 
+/* As fontes da pasta ~/ATIVAVID/Fontes, com o NOME de cada uma.
+ *
+ * "cade a fonte Integral que pedi pra voce instalar?" (30/08) — ela estava
+ * instalada desde 29/08. A lista e que nao dizia: a unica opcao se chamava
+ * "Sua fonte (pasta Fontes)", e o pipeline pegava a primeira em ordem
+ * alfabetica sem dizer qual. Agora cada fonte tem sua linha.
+ *
+ * Falhar aqui deixa a opcao generica de antes, que continua funcionando. */
+async function carregarFontesDoUsuario() {
+  let fontes = [];
+  try {
+    const r = await fetch('/api/fontes');
+    fontes = (await r.json()).fontes || [];
+  } catch { return; }
+  if (!fontes.length) return;
+  for (const id of ['autoCapFont', 'autoHlFont']) {
+    const sel = document.getElementById(id);
+    if (!sel) continue;
+    const antigo = sel.value;
+    const generica = sel.querySelector('option[value="arquivo"]');
+    if (!generica) continue;
+    const pai = generica.parentNode;
+    generica.remove();
+    fontes.forEach((f, i) => {
+      const o = document.createElement('option');
+      // A PRIMEIRA responde pelo id antigo `arquivo`: estilo salvo antes
+      // desta versao tem de cair exatamente na mesma fonte.
+      o.value = i === 0 ? 'arquivo' : `arquivo:${f.arquivo}`;
+      o.textContent = f.nome;
+      pai.appendChild(o);
+    });
+    if (antigo) sel.value = antigo;
+  }
+}
+
 async function loadBrandPresets(opts) {
   const applyActive = !!(opts && opts.applyActive);
   const sel = $('presetSelect');
@@ -8390,6 +8425,7 @@ function wirePresets() {
   const bar = $('presetBar');
   if (!bar) return;
   loadBrandPresets({ applyActive: !!(HOUSE_STYLE || HUB_EMBED) });
+  carregarFontesDoUsuario().catch(() => {});
   const sel = $('presetSelect');
   if (sel) {
     sel.onchange = () => {
