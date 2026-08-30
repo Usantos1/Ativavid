@@ -2496,8 +2496,15 @@ class Renderizador:
         tam = max(8, int(round(int(C.get("fontSize") or 76) * 0.62)))
         safe_w = float(C.get("safeWidth") or 720)
         pad_b = float(C.get("paddingBottom") or 420)
-        f = self.fonte(4, tam, 500, marca="cap")
-        f_meta = self.fonte(4, max(8, int(round(tam * 0.52))), 500, marca="cap")
+        # Poppins REGULAR, nao Black. O indice 4 e o `Poppins-Black.ttf`, um
+        # arquivo de peso unico: pedir 500 nele nao muda nada, entao a bolha
+        # saia em 900. O template pede `fontWeight: 500` numa familia com
+        # 400/600/900 carregados, e a regra de casamento do CSS para 500
+        # escolhe o MENOR peso <= 500 — ou seja, 400. Medido: a bolha do
+        # motor proprio tinha 0,744 da tinta da do template; todos os outros
+        # estilos ficam entre 0,93 e 1,09.
+        f = self.fonte(1, tam, 400, marca="cap")
+        f_meta = self.fonte(1, max(8, int(round(tam * 0.52))), 400, marca="cap")
         asc, desc = f.getmetrics()
         alt_linha = int(round(tam * 1.3))
 
@@ -2606,10 +2613,32 @@ class Renderizador:
                 * t3[my - 2:, chk_x0:, :]
                 + rgb[my - 2:, chk_x0:, :] * 0)
             alpha = np.maximum(base_a, texto_a)
-            sombra = self._sombra_de(alpha, [(0, 8, 26, 0.45)])
 
-            x0 = int(round((self.w - larg) / 2))
-            y0 = int(round(self.h - pad_b - alt))
+            # FOLGA em volta, antes da sombra. Sem ela o borrao era calculado
+            # num quadro do tamanho exato do balao e ficava preso DENTRO dele,
+            # onde o proprio balao o cobre: media 126 pixels de halo contra
+            # 23.279 do template — ou seja, a bolha saia sem sombra nenhuma.
+            # Todos os outros estilos ja faziam isto; este era o unico sem.
+            #
+            # `box-shadow` tambem pede sigma = raio/2 (k=0,5), nao o raio
+            # inteiro do drop-shadow. E ele parte do BALAO, nao do balao mais
+            # o texto: a sombra segue a caixa, e o texto esta dentro dela.
+            folga_b = 70
+            def _com_folga(a2d):
+                out = np.zeros((alt + 2 * folga_b, larg + 2 * folga_b),
+                               dtype=np.float32)
+                out[folga_b:folga_b + alt, folga_b:folga_b + larg] = a2d
+                return out
+
+            base_pad = _com_folga(base_a)
+            alpha = _com_folga(alpha)
+            rgb_pad = np.zeros((*alpha.shape, 3), dtype=np.float32)
+            rgb_pad[folga_b:folga_b + alt, folga_b:folga_b + larg] = rgb
+            rgb = rgb_pad
+            sombra = self._sombra_de(base_pad, [(0, 8, 26, 0.45)], k=0.5)
+
+            x0 = int(round((self.w - larg) / 2)) - folga_b
+            y0 = int(round(self.h - pad_b - alt)) - folga_b
             leg = Camada(inicio_f=ini_f, fim_f=fim_f, saida_f=fim_f - ini_f,
                          palavras=[])
             leg.palavras.append(Palavra(

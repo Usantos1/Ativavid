@@ -631,7 +631,11 @@ def prepare_overlay_remotion(src_remotion: Path, dest: Path) -> Path:
     shutil.copy2(PROTO_SRC / "Root.tsx", dest / "src" / "Root.tsx")
     main_tsx = dest / "src" / "Main.tsx"
     text = main_tsx.read_text(encoding="utf-8")
-    for name in ("Karaoke", "Inserts", "EndCard", "HookIntro"):
+    # `BubbleCaptions` entrou aqui em 30/08: sem ela exportada, o ramo
+    # novo do Overlay nao compila. Sem o ramo, a Bolha de conversa
+    # saia como KARAOKE toda vez que a rede de seguranca entrava.
+    for name in ("Karaoke", "Inserts", "EndCard", "HookIntro",
+                 "BubbleCaptions"):
         text = text.replace(f"const {name}:", f"export const {name}:", 1)
     main_tsx.write_text(text, encoding="utf-8")
     return dest

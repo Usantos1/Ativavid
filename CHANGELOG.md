@@ -1,5 +1,18 @@
 # Changelog
 
+## 3.83
+
+- **A Bolha de conversa estava saindo sem sombra.** O borrão era calculado
+  num quadro do tamanho exato do balão e ficava preso dentro dele, onde o
+  próprio balão o cobre: 126 pixels de halo contra 23.279 do desenho de
+  referência. Sobre imagem clara isso custa leitura, não só acabamento.
+  Depois do conserto a bolha bate 0,964 com a referência (era 0,743).
+- **A Bolha também estava com a letra errada** — Poppins Black (900) em vez
+  do peso 400 que o navegador usa.
+- **A Bolha virava Karaokê na rede de segurança.** Quando o motor rápido
+  declina, o render cai numa composição que não conhecia esse estilo: o
+  vídeo saía com outra legenda e nenhuma linha de aviso.
+
 ## 3.82
 
 - **A IA passou a conhecer os estilos de legenda.** Ela nunca teve a lista:

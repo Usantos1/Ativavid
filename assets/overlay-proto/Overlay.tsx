@@ -10,7 +10,7 @@ import {ScatterCaptions} from './ScatterCaptions';
 import {SimpleCaptions, SIMPLE_VARIANTS} from './SimpleCaptions';
 import {ImpactCaptions} from './ImpactCaptions';
 import {ListCounter} from './ListCounter';
-import {EndCard, HookIntro, Inserts, Karaoke, LayoutScrim} from './Main';
+import {BubbleCaptions, EndCard, HookIntro, Inserts, Karaoke, LayoutScrim} from './Main';
 import editData from '../public/edit-data.json';
 
 const D = editData as {
@@ -30,6 +30,8 @@ export const Overlay: React.FC = () => {
       {D.captions?.enabled
         ? D.captions.style === 'stacked'
           ? <StackedCaptions />
+          : D.captions.style === 'bolha'
+            ? <BubbleCaptions />
           : D.captions.style === 'scatter'
             ? <ScatterCaptions />
             : D.captions.style === 'impacto'

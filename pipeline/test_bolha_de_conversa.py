@@ -82,3 +82,48 @@ def test_tipos_do_template_conhecem_os_estilos_novos():
     st = (RAIZ / "assets" / "shortform" / "src" / "StackedCaptions.tsx").read_text(encoding="utf-8")
     assert "emphasisStyle?: 'circle' | 'marker'" in st, \
         "CapCfg perdeu o tipo do emphasisStyle"
+
+
+def test_a_bolha_tem_sombra_de_verdade():
+    """A bolha saía SEM sombra no motor próprio — 126 pixels de halo contra
+    23.279 do template (medido em 140 quadros).
+
+    O borrão era calculado num quadro do tamanho exato do balão e ficava
+    preso dentro dele, onde o próprio balão o cobre. Todos os outros estilos
+    já reservavam folga; este era o único sem. Depois do conserto: razão de
+    tinta 0,964 (era 0,743) e halo 0,927 (era 0,005).
+    """
+    rp = (RAIZ / "app" / "render_proprio.py").read_text(encoding="utf-8")
+    i = rp.index("def _montar_bolha")
+    bloco = rp[i:rp.index("def _montar_karaoke", i)]
+    assert "folga_b = 70" in bloco, "sem folga a sombra fica presa no balão"
+    assert "base_pad = _com_folga(base_a)" in bloco
+    # `box-shadow` pede sigma = raio/2, não o raio inteiro do drop-shadow
+    assert "self._sombra_de(base_pad, [(0, 8, 26, 0.45)], k=0.5)" in bloco
+    # e a posição desconta a folga, senão o balão desce 70px
+    assert "- folga_b" in bloco
+
+
+def test_a_bolha_usa_o_peso_que_o_chrome_usa():
+    """O índice 4 é o `Poppins-Black.ttf`, arquivo de peso único: pedir 500
+    nele não muda nada e a bolha saía em 900. O template pede 500 numa
+    família com 400/600/900 carregados, e a regra do CSS para 500 escolhe o
+    menor peso ≤ 500 — 400."""
+    rp = (RAIZ / "app" / "render_proprio.py").read_text(encoding="utf-8")
+    i = rp.index("def _montar_bolha")
+    bloco = rp[i:rp.index("def _montar_karaoke", i)]
+    assert 'self.fonte(1, tam, 400, marca="cap")' in bloco
+    assert 'self.fonte(4,' not in bloco
+
+
+def test_o_overlay_conhece_a_bolha():
+    """`Overlay.tsx` é a rede de segurança (o `overlayRollout` está em
+    `default`). Sem o ramo, a bolha caía no `else` — `<Karaoke/>` — e o
+    vídeo saía com outra legenda, sem uma linha de aviso."""
+    ov = (RAIZ / "assets" / "overlay-proto" / "Overlay.tsx").read_text(encoding="utf-8")
+    assert "BubbleCaptions" in ov
+    assert "D.captions.style === 'bolha'" in ov
+    # e o proto precisa exportar o componente, senão nem compila
+    op = (RAIZ / "app" / "overlay_path.py").read_text(encoding="utf-8")
+    i = op.index('for name in ("Karaoke"')
+    assert '"BubbleCaptions"' in op[i:i + 200]
