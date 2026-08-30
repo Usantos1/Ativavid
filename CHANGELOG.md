@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.16
+
+- **A conferência de desenho passou a pegar defeito de forma.** Ela
+  comparava só a quantidade de tinta — e foi assim que a manchete
+  "Carimbo" ficou espelhada com o número dentro do normal. Agora ela
+  também mede a diferença ponto a ponto e avisa quando a forma foge, com
+  o limite calibrado no catálogo inteiro.
+
+
 ## 4.15
 
 - **Instalação em outra pasta não paga mais a instalação longa do

@@ -57,6 +57,16 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
 FAIXA = (0.93, 1.10)
+
+# Teto da diferenca media de alfa. A razao de TINTA e cega para FORMA: o
+# `carimbo` saiu girado ao contrario — espelhado — com a tinta em 1,057,
+# dentro da faixa. Quem denunciou foi este numero, 107 de 255.
+#
+# Distribuicao medida no catalogo inteiro (30/08), com o carimbo ja
+# corrigido: camadas de layout 0,0-0,6 · manchetes 1,8-59,8 · legendas
+# 16,9-73,0. O maior saudavel e 73; 80 deixa folga sem perder o proximo
+# espelhamento.
+TETO_ALFA = 80.0
 JANELA = (120, 260)          # quadros de fala contínua no projeto de teste
 
 # `--curva`: tinta quadro a quadro. A razao publicada e a MEDIANA e o
@@ -269,10 +279,13 @@ def varrer(edit: Path, grupo: str) -> int:
             aa, ab = a[..., 3].astype(np.int16), b[..., 3].astype(np.int16)
             uniao = (aa > 8) | (ab > 8)
             d_alfa = float(np.abs(aa - ab)[uniao].mean()) if uniao.any() else 0.0
-            ok = FAIXA[0] <= razao <= FAIXA[1]
+            ok = (FAIXA[0] <= razao <= FAIXA[1]) and d_alfa <= TETO_ALFA
+            porque = ""
+            if not ok:
+                porque = ("   <- FORA (forma)" if FAIXA[0] <= razao <= FAIXA[1]
+                          else "   <- FORA")
             print(f"  {nome:12s} tinta {razao:.3f}  d_alfa {d_alfa:5.1f}  "
-                  f"| Remotion {t_rm:.1f}s vs nosso {t_ns:.1f}s"
-                  f"{'' if ok else '   <- FORA'}")
+                  f"| Remotion {t_rm:.1f}s vs nosso {t_ns:.1f}s{porque}")
             if not ok:
                 fora.append(nome)
             par = Image.new("RGB", (larg, alt // 2), (26, 26, 26))
