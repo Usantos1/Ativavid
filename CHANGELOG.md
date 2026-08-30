@@ -1,5 +1,20 @@
 # Changelog
 
+## 4.08
+
+- **Mexer na linha do tempo não apaga mais a fala de cada trecho.** Ao
+  salvar, o corte era remontado só com os tempos: a frase que cada trecho
+  carrega, o motivo e o papel (gancho, CTA) sumiam. Todos os 17 projetos
+  seus que passaram por "Aplicar alterações" estavam sem nenhuma frase,
+  contra 11% dos que nunca passaram. Agora o trecho que continua no mesmo
+  lugar mantém o que já se sabia dele.
+- **A nota do vídeo passou a acompanhar o corte.** Ela é a nota do corte,
+  e o "Aplicar alterações" refaz o corte — 13 dos seus 17 projetos
+  corrigidos mostravam a nota do corte anterior, uma delas de 90 horas
+  antes, com dicas sobre pausas que talvez você já tivesse tirado. Agora
+  a nota é refeita junto.
+
+
 ## 4.07
 
 - **Aplicar alterações passou a refazer a cópia leve do vídeo.** Ela

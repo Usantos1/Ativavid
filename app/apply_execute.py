@@ -588,6 +588,69 @@ def _rebuild_cut_real(edit_dir: Path, dest: Path) -> Path:
     return dest
 
 
+def _refazer_nota(edit_dir: Path, cut: Path, captions: list | None,
+                  log: Any) -> None:
+    """Recalcula `score.json` para o corte que acabou de ser promovido.
+
+    A nota e do CORTE, e o apply refaz o corte. Medido nos projetos do
+    usuario: 13 dos 17 que passaram por um apply ficaram com a nota velha,
+    uma delas 90 horas velha — com dicas sobre pausas de um corte que nao
+    existe mais.
+
+    Sem `verificacao.json` novo nao ha como saber de pausa: entra
+    `silence_flags=0` de proposito, e o arquivo velho e apagado logo
+    abaixo. Afirmar pausa que ninguem mediu seria inventar.
+
+    Nunca levanta: a nota e um extra, o video ja esta entregue.
+    """
+    edit = Path(edit_dir)
+    try:
+        import sys as _sys
+
+        _h = str(Path(__file__).resolve().parent.parent / "helpers")
+        if _h not in _sys.path:
+            _sys.path.insert(0, _h)
+        from video_score import score_structural  # type: ignore
+
+        # A duracao sai DAQUI DE DENTRO: `_probe_duration_real` roda um
+        # ffprobe e pode levantar, e nota nenhuma vale derrubar um apply
+        # que ja entregou o video.
+        duracao = float(_probe_duration_real(cut) or 0)
+        edl = _read_json(edit / "edl.json", {}) or {}
+        ranges = [r for r in (edl.get("ranges") or []) if isinstance(r, dict)]
+        if not ranges or duracao <= 0:
+            return
+        falado = " ".join(
+            str(w.get("text") or "").strip()
+            for w in (captions or []) if isinstance(w, dict)
+        ).strip()
+        modo = str((_read_json(edit / "job_intent.json", {}) or {}).get(
+            "editingIntent") or "dynamic")
+        nota = score_structural(
+            mode=modo,
+            duration=float(duracao),
+            ranges=ranges,
+            has_hook_beat=any(str(r.get("beat") or "").upper() == "HOOK"
+                              for r in ranges),
+            has_cta=any(str(r.get("beat") or "").upper() == "CTA"
+                        for r in ranges),
+            silence_flags=0,
+            transcript_ok=True,
+            spoken=falado,
+        )
+        _write_json(edit / "score.json", nota)
+        # O diagnostico de audio descreve o corte ANTERIOR e nao da para
+        # refaze-lo aqui sem reanalisar o audio. Mesmo criterio do run_fast:
+        # diagnostico que nao vale nao sobrevive.
+        try:
+            (edit / "verificacao.json").unlink(missing_ok=True)
+        except OSError:
+            pass
+        log(f"QUICK_APPLY_SCORE overall={nota.get('overall')}")
+    except Exception as e:  # noqa: BLE001 — nota e extra, nunca o produto
+        log(f"QUICK_APPLY_SCORE_FALHOU {type(e).__name__}: {e}")
+
+
 def _touch_edit_data_duration(edit_dir: Path, duration: float, fps: float | None = None) -> None:
     """Atualiza só a duração. Não mexe em hook.lines (headline do operador)."""
     path = edit_data_path(edit_dir)
@@ -1268,6 +1331,11 @@ def execute_apply_plan(
                 except OSError:
                     pass
         log("QUICK_APPLY_PROMOTE_FINAL")
+        # A nota e do CORTE, e o corte acabou de mudar. Sem isto ela ficava
+        # descrevendo o corte anterior — 13 dos 17 projetos do usuario que
+        # passaram por um apply estavam assim, um deles ha 90 horas.
+        if plan.get("rebuildCut"):
+            _refazer_nota(edit, live_cut, caps_new, log)
         # Titulo trocado = ARQUIVO renomeado. O conteudo ja saia certo, mas o
         # nome do mp4, o state.finalVideo e a pasta publicar/ ficavam com o
         # titulo VELHO — visto no fluxo real: trocar para "FLUXO REAL DO

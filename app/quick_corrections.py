@@ -478,6 +478,46 @@ def _same_ranges(a: list, b: list) -> bool:
     return all(_norm_range(x) == _norm_range(y) for x, y in zip(a, b) if isinstance(x, dict) and isinstance(y, dict))
 
 
+# O que o planejador escreve em cada trecho e que a tela nao tem como
+# devolver. `quote` e a fala daquele trecho: a nota de clareza conta
+# trechos com fala, e o texto do post e montado a partir dela.
+_HERDAVEIS = ("quote", "reason", "beat", "gain_db")
+
+
+def _herdar_do_anterior(novo: dict, antigos: list[dict]) -> dict:
+    """Completa `novo` com o que o trecho antigo do mesmo lugar sabia.
+
+    Medido nos projetos do usuario: 100% dos que passaram por um apply
+    ficaram SEM NENHUMA `quote` no EDL, contra 11% dos que nunca
+    passaram — o salvamento da linha do tempo montava cada trecho do zero.
+
+    O casamento e por sobreposicao de tempo, e exige que a maior parte do
+    trecho novo esteja dentro do antigo: encostar de raspao numa fala
+    vizinha herdaria a fala errada, que e pior que herdar nada.
+    """
+    a0, a1 = float(novo["start"]), float(novo["end"])
+    dur = a1 - a0
+    if dur <= 0:
+        return novo
+    melhor, melhor_cob = None, 0.0
+    for velho in antigos:
+        try:
+            b0, b1 = float(velho.get("start")), float(velho.get("end"))
+        except (TypeError, ValueError):
+            continue
+        if (velho.get("source") or "SRC") != novo.get("source"):
+            continue
+        cob = max(0.0, min(a1, b1) - max(a0, b0)) / dur
+        if cob > melhor_cob:
+            melhor, melhor_cob = velho, cob
+    if melhor is None or melhor_cob < 0.6:
+        return novo
+    for campo in _HERDAVEIS:
+        if campo not in novo and melhor.get(campo) not in (None, ""):
+            novo[campo] = melhor[campo]
+    return novo
+
+
 def write_edl_ranges(edit_dir: Path, ranges: list[dict], *, mark: bool = True) -> dict[str, Any]:
     path = edl_path(edit_dir)
     data = _read_json(path, {})
@@ -498,8 +538,13 @@ def write_edl_ranges(edit_dir: Path, ranges: list[dict], *, mark: bool = True) -
         }
         if r.get("beat"):
             item["beat"] = r["beat"]
+        for campo in _HERDAVEIS:
+            if r.get(campo) not in (None, ""):
+                item.setdefault(campo, r[campo])
         clean.append(item)
     old = [r for r in (data.get("ranges") or []) if isinstance(r, dict)]
+    # O que a tela nao devolve, o EDL anterior devolve.
+    clean = [_herdar_do_anterior(item, old) for item in clean]
     if _same_ranges(old, clean):
         return {"ok": True, "ranges": clean, "corrections": load(edit_dir), "changed": False}
     old_jcut = data.get("jcut_timeline")
