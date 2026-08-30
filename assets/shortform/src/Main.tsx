@@ -147,7 +147,8 @@ export type EditData = {
     // live in SimpleCaptions.tsx and take no tunables — they ARE the tuning.
     // "impacto" (ImpactCaptions.tsx) boxes the spoken word in emphasisAccent.
     style?: 'karaoke' | 'stacked' | 'scatter' | 'impacto' | 'bolha'
-      | 'simples' | 'serifada' | 'classica' | 'bloco' | 'recorte';
+      | 'simples' | 'serifada' | 'classica' | 'bloco' | 'recorte'
+      | 'metal' | 'vidro' | 'traco' | 'moldura' | 'eco';
     scatterOffsetY?: number;   // scatter: block centre, fraction of height
     scatterFontSize?: number;  // scatter: ordinary word size (default 74)
     scatterSafeWidth?: number; // scatter: layout width budget (default 940)
@@ -571,6 +572,10 @@ const InsertCard: React.FC<{
   // largura e ALTURA soltas: com a proporcao travada a imagem nunca cobria
   // a tela (o cartao e 780x500 e o quadro e 9:16)
   const larg = Math.max(16, Math.round(Math.min(1, Math.max(0.08, w ?? size ?? CARD_W / 1080)) * qLarg));
+  // PNG/WebP entram como ARTE: inteiros, sem cartao. O motor proprio decide
+  // pelo alpha de verdade; aqui a extensao e o que da para saber sem ler o
+  // arquivo, e e a mesma regra que o usuario enxerga.
+  const arte = /\.(png|webp)$/i.test(String(src || ''));
   const altPadrao = (larg * CARD_H) / CARD_W / qAlt;
   const alt = Math.max(16, Math.round(Math.min(1, Math.max(0.05, h ?? altPadrao)) * qAlt));
   const cx = Math.min(1, Math.max(0, x ?? 0.5)) * qLarg;
@@ -578,14 +583,18 @@ const InsertCard: React.FC<{
   return (
     <AbsoluteFill>
       <Sfx src="whoosh.mp3" />
-      <div style={{position: 'absolute', width: larg, height: alt, left: cx - larg / 2, top: cy - alt / 2, borderRadius: Math.max(4, Math.round((28 * larg) / CARD_W)), overflow: 'hidden', opacity, scale: String(scale), translate: `0px ${yEnt}px`, boxShadow: '0 18px 50px rgba(0,0,0,0.45)'}}>
+      <div style={{position: 'absolute', width: larg, height: alt, left: cx - larg / 2, top: cy - alt / 2, borderRadius: arte ? 0 : Math.max(4, Math.round((28 * larg) / CARD_W)), overflow: 'hidden', opacity, scale: String(scale), translate: `0px ${yEnt}px`,
+        // Arte com transparencia (uma logo em PNG) nao quer cartao: a sombra
+        // sai da FORMA dela, nao de um retangulo atras dela.
+        boxShadow: arte ? undefined : '0 18px 50px rgba(0,0,0,0.45)',
+        filter: arte ? 'drop-shadow(0 14px 34px rgba(0,0,0,0.45))' : undefined}}>
         {/* Take de video da Biblioteca entra igual a uma foto. Mudo de
             proposito: o som do take passaria por cima da fala. */}
         {ehVideo(src) ? (
           <OffthreadVideo src={staticFile(src)} muted
             style={{width: '100%', height: '100%', objectFit: 'cover'}} />
         ) : (
-          <Img src={staticFile(src)} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
+          <Img src={staticFile(src)} style={{width: '100%', height: '100%', objectFit: arte ? 'contain' : 'cover'}} />
         )}
       </div>
     </AbsoluteFill>

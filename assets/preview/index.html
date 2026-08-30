@@ -734,13 +734,10 @@
 
 </main>
 
-<!-- Ficava FLUTUANDO sobre o preview, tapando o canto do video (print de
-     30/08). O lugar dele e o menu, com as outras acoes da tela; segue no
-     HTML, escondido, porque e ele que abre o painel de atalhos. -->
-<button id="btnHelp" class="help-fab hidden" type="button" title="Atalhos e gestos do editor" aria-label="Ajuda — atalhos e gestos">
-  <span class="help-fab-label">ajuda</span>
-  <span class="help-fab-q" aria-hidden="true">?</span>
-</button>
+<!-- O botao flutuante de ajuda NAO EXISTE MAIS. Escondelo nao bastou: o
+     `refreshStyleTab` tirava o `hidden` toda vez que a aba de Edicao abria,
+     e ele voltava para cima do video (print de 30/08, 04:03). Quem abre a
+     ajuda agora e o item "Atalhos e gestos" do menu ⋯. -->
 
 <div id="helpBackdrop" class="help-backdrop hidden"></div>
 <div id="helpModal" class="help-modal glass hidden" role="dialog" aria-labelledby="helpTitle">

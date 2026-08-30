@@ -311,6 +311,11 @@ const STYLE_CATALOG = {
     {id: 'serifada', name: 'Serifada', stat: 'serifada'},
     {id: 'classica', name: 'Clássica', stat: 'classica'},
     {id: 'bloco', name: 'Bloco', stat: 'bloco'},
+    {id: 'metal', name: 'Metálico', stat: 'metal'},
+    {id: 'vidro', name: 'Vidro', stat: 'vidro'},
+    {id: 'traco', name: 'Contorno fino', stat: 'traco'},
+    {id: 'moldura', name: 'Moldura', stat: 'moldura'},
+    {id: 'eco', name: 'Eco', stat: 'eco'},
     // opts out of burned captions (captions.enabled:false) — same reasoning.
     {id: 'nenhuma', name: 'Nenhuma', none: true},
   ],
@@ -811,7 +816,44 @@ const STATIC_VARIANTS = {
   bloco: {family: "'Poppins',sans-serif", weight: 800, size: 76, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: -2, maxW: 760, block: true},
   recorte: {family: "'Poppins',sans-serif", weight: 800, size: 78, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: -1, maxW: 800, sticker: true},
   bolha: {family: "'Inter',sans-serif", weight: 500, size: 46, maxWords: 12, lines: 2, sx: 1, sy: 1, tracking: 0, maxW: 760, bubble: true},
+  metal: {family: "'Poppins',sans-serif", weight: 800, size: 76, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: -1, maxW: 800, modo: 'metal'},
+  vidro: {family: "'Inter',sans-serif", weight: 500, size: 50, maxWords: 12, lines: 2, sx: 1, sy: 1, tracking: 0, maxW: 700, modo: 'vidro'},
+  traco: {family: "'Poppins',sans-serif", weight: 800, size: 74, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: -1, maxW: 820, modo: 'traco'},
+  moldura: {family: "'Inter',sans-serif", weight: 600, size: 44, maxWords: 6, lines: 1, sx: 1, sy: 1, tracking: 6, maxW: 700, modo: 'moldura'},
+  eco: {family: "'Poppins',sans-serif", weight: 800, size: 78, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: -2, maxW: 800, modo: 'eco'},
 };
+
+// Quem desenha em CAIXA ALTA — muda a MEDIDA das linhas, entao esta lista
+// tem de ser a mesma nos tres motores (SimpleCaptions.tsx e render_proprio).
+const CAP_MAIUSCULA = new Set(['metal', 'moldura', 'eco']);
+const CAP_LH = {metal: 1.1, vidro: 1.34, traco: 1.16, moldura: 1.2, eco: 1.14};
+
+/* As cinco paradas do cromado, tiradas DA COR escolhida — mesma conta do
+ * `degradeMetal` no template. A parada escura no meio com o estalo de luz
+ * logo abaixo e o que o olho le como metal. */
+function degradeMetal(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim());
+  const n = m ? parseInt(m[1], 16) : 0xe8edf3;
+  const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  return [[0, 1.45], [34, 0.55], [50, 0.38], [56, 1.6], [100, 0.72]]
+    .map(([pos, f]) => {
+      const rgb = c.map((v) => Math.round(f > 1 ? v + (255 - v) * Math.min(1, f - 1) : v * f));
+      return `rgb(${rgb.join(',')}) ${pos}%`;
+    })
+    .join(', ');
+}
+
+/* Contorno por sombras em 8 direcoes (nao `-webkit-text-stroke`, que come
+ * metade da espessura para dentro do glifo). */
+function contornoCss(r, cor) {
+  const d = (0.7071 * r).toFixed(1);
+  return [
+    `${r}px 0 0 ${cor}`, `-${r}px 0 0 ${cor}`,
+    `0 ${r}px 0 ${cor}`, `0 -${r}px 0 ${cor}`,
+    `${d}px ${d}px 0 ${cor}`, `-${d}px ${d}px 0 ${cor}`,
+    `${d}px -${d}px 0 ${cor}`, `-${d}px -${d}px 0 ${cor}`,
+  ];
+}
 const ORPHAN_PT = /^(o|a|os|as|e|é|de|do|da|em|no|na|um|uma|que|se|ao|à|por|com)$/i;
 
 // Ink for the "bloco" slab, from the slab's own brightness. Must stay in step
@@ -832,8 +874,9 @@ function buildStaticDemo(host, id) {
   host.innerHTML = '';
   const wrap = el('div', 'cap-demo', host);
   const words = CAP_TEXT.split(' ');
+  const caixaAlta = !!V.sticker || CAP_MAIUSCULA.has(V.modo);
   const wOf = (ws) => measureType(
-    (V.sticker ? ws.join(' ').toUpperCase() : ws.join(' ')),
+    (caixaAlta ? ws.join(' ').toUpperCase() : ws.join(' ')),
     V.size, V.weight, V.family, V.tracking,
   ) * V.sx;
 
@@ -896,6 +939,69 @@ function buildStaticDemo(host, id) {
         b.style.color = inkOn(slab);
         b.textContent = ln.join(' ');
       }
+      return box;
+    }
+    if (V.modo) {
+      const t = (ln) => (caixaAlta ? ln.join(' ').toUpperCase() : ln.join(' '));
+      box.style.lineHeight = String(CAP_LH[V.modo]);
+      const cor = S.style.captionAccent || '';
+      if (V.modo === 'metal') {
+        // duas copias: a de baixo so o contorno, a de cima o cromado. Uma
+        // copia so nao serve — com `background-clip: text` o fundo e pintado
+        // antes das sombras, e o contorno taparia o degrade.
+        const R = Math.max(1, Math.round(V.size * 0.035 * s));
+        const dentro = el('div', 'stat-metal', box);
+        dentro.style.position = 'relative';
+        const baixo = el('div', '', dentro);
+        baixo.style.color = 'transparent';
+        baixo.style.textShadow = [...contornoCss(R, '#0e1013'),
+                                  '0 5px 12px rgba(0,0,0,0.5)'].join(', ');
+        const cima = el('div', '', dentro);
+        cima.style.position = 'absolute';
+        cima.style.left = '0';
+        cima.style.top = '0';
+        cima.style.width = '100%';
+        cima.style.backgroundImage = `linear-gradient(180deg, ${degradeMetal(cor || '#e8edf3')})`;
+        cima.style.webkitBackgroundClip = 'text';
+        cima.style.backgroundClip = 'text';
+        cima.style.color = 'transparent';
+        cima.style.webkitTextFillColor = 'transparent';
+        for (const alvo of [baixo, cima]) {
+          for (const ln of lines) el('div', '', alvo).textContent = t(ln);
+        }
+        return box;
+      }
+      if (V.modo === 'traco' || V.modo === 'eco') {
+        box.style.color = cor || '#fff';
+        if (V.modo === 'traco') {
+          const R = Math.max(1, Math.round(V.size * 0.035 * s));
+          box.style.textShadow = [...contornoCss(R, '#101215'),
+                                  '0 4px 10px rgba(0,0,0,0.4)'].join(', ');
+        } else {
+          // a PRIMEIRA sombra da lista e a que fica por cima
+          const d = Math.max(2, Math.round(V.size * 0.085 * s));
+          box.style.textShadow = [`${-d}px ${-d}px 0 #28e0d8`,
+                                  `${d}px ${d}px 0 #ff2e88`,
+                                  '0 5px 13px rgba(0,0,0,0.45)'].join(', ');
+        }
+        for (const ln of lines) el('div', '', box).textContent = t(ln);
+        return box;
+      }
+      const vidro = V.modo === 'vidro';
+      box.style.display = 'flex';
+      box.style.flexDirection = 'column';
+      box.style.alignItems = 'center';
+      box.style.gap = `${V.size * 0.16 * s}px`;
+      box.style.padding = `${V.size * (vidro ? 0.44 : 0.4) * s}px ${V.size * (vidro ? 0.62 : 0.72) * s}px`;
+      box.style.borderRadius = vidro ? `${V.size * 0.6 * s}px` : '4px';
+      box.style.background = vidro
+        ? 'linear-gradient(180deg, rgba(255,255,255,0.16), rgba(255,255,255,0.02)), rgba(13,15,20,0.46)'
+        : 'rgba(11,13,16,0.30)';
+      box.style.border = vidro
+        ? '2px solid rgba(255,255,255,0.34)'
+        : `2px solid ${cor || '#ffffff'}d9`;
+      box.style.color = cor || (vidro ? '#f7f9fc' : '#ffffff');
+      for (const ln of lines) el('div', '', box).textContent = t(ln);
       return box;
     }
     if (V.sticker) {
@@ -3104,7 +3210,11 @@ const capAccentUsed = () => S.style.captions !== 'nenhuma';
 // belongs here; the note in the Estilo tab is what explains where it lands.
 // "recorte" pinta o TEXTO do sticker (o contorno escuro é fixo — é ele que
 // garante a leitura); "impacto" usa a cor de ênfase na CAIXA da palavra atual.
-const CAP_BASE_STYLES = ['karaoke', 'simples', 'serifada', 'classica', 'bloco', 'recorte', 'bolha'];
+// Os cinco de 30/08 tambem consomem a cor: no `metal` ela e a LIGA de que o
+// cromado e feito (o degrade sai dela), no `traco` e no `eco` ela pinta o
+// texto, na `moldura` a linha e o texto, no `vidro` o texto.
+const CAP_BASE_STYLES = ['karaoke', 'simples', 'serifada', 'classica', 'bloco', 'recorte', 'bolha',
+  'metal', 'vidro', 'traco', 'moldura', 'eco'];
 const CAP_EMPH_STYLES = ['stacked', 'scatter', 'impacto'];
 const CAP_CIRCLE_STYLES = ['stacked'];
 const legendaAccentUsed = () => capAccentUsed() && CAP_BASE_STYLES.includes(S.style.captions);
@@ -3356,7 +3466,11 @@ function desenharMidiaNoPreview() {
       emojiArrastavel(d, c, box);
       continue;
     }
-    const card = el('div', 'midia-previa-card', box);
+    // PNG/WebP entram como ARTE: inteiros, sem cartao e sem fundo. O
+    // retangulo escuro daqui aparecia atras da logo do usuario — e o
+    // render nao desenha cartao nenhum nesse caso.
+    const arte = /\.(png|webp)$/i.test(String(c.src || ''));
+    const card = el('div', `midia-previa-card${arte ? ' arte' : ''}`, box);
     // mesma conta dos dois motores: x/y sao o CENTRO e `size` a largura,
     // ambos em fracao do quadro; a altura segue a proporcao do cartao
     posicionarCartao(card, c, box);
@@ -3365,7 +3479,9 @@ function desenharMidiaNoPreview() {
       img.src = `${BASE}/media/remotion/public/${c.src}`;
       img.alt = '';
     }
-    el('div', 'midia-previa-nome', card).textContent = c.label || '';
+    // a etiqueta com o nome do arquivo nao entra na arte: ela e uma faixa
+    // preta, que e justamente o que a arte nao quer atras dela
+    if (!arte) el('div', 'midia-previa-nome', card).textContent = c.label || '';
     cartaoArrastavel(card, c, box);
   }
 }
@@ -3729,9 +3845,6 @@ function renderSetup() {
   const hasVideo = S.videoDuration > 0 || !!S.hasCut;
   $('stage').classList.toggle('hidden', show || !hasVideo);
   $('emptyState').classList.toggle('hidden', hasVideo || show);
-  // Ajuda é da timeline — some na aba Estilos / embed do hub
-  const help = $('btnHelp');
-  if (help) help.classList.toggle('hidden', show || HUB_EMBED || HOUSE_STYLE);
 
   if (!show) {
     capAnims = []; // stop stepping demos that are not on screen
@@ -5375,9 +5488,26 @@ function togglePlay() {
 $('btnPlay').innerHTML = ICON.play;
 $('btnMute').innerHTML = ICON.vol;
 $('btnPlay').addEventListener('click', togglePlay);
+// Um ARRASTO termina em `click` no quadro. Sem isto, mover ou
+// redimensionar a imagem dava play no fim do gesto — "isso atrapalha
+// demais" (30/08).
+let andouNoQuadro = null;
+document.querySelector('.player-frame')?.addEventListener('pointerdown', (e) => {
+  andouNoQuadro = {x: e.clientX, y: e.clientY, longe: false};
+});
+document.addEventListener('pointermove', (e) => {
+  if (!andouNoQuadro) return;
+  if (Math.abs(e.clientX - andouNoQuadro.x) > 4
+      || Math.abs(e.clientY - andouNoQuadro.y) > 4) andouNoQuadro.longe = true;
+});
 document.querySelector('.player-frame')?.addEventListener('click', (e) => {
+  const arrastou = andouNoQuadro && andouNoQuadro.longe;
+  andouNoQuadro = null;
+  if (arrastou) return;
   if (isTypingContext()) return;
-  if (e.target.closest('button, .cap-overlay-line, .hl-overlay-line, #capEditor, #hlOverlay')) return;
+  // tudo que se PEGA no quadro: legenda, headline, e o que foi posto na mao
+  if (e.target.closest('button, .cap-overlay-line, .hl-overlay-line, #capEditor,'
+      + ' #hlOverlay, .midia-previa-card, .midia-previa-emoji, .previa-alca')) return;
   togglePlay();
 });
 video.addEventListener('play', () => { $('btnPlay').innerHTML = ICON.pause; });
@@ -5417,7 +5547,7 @@ if ($('btnHelpMenu')) {
     // fazia o menu inteiro sumir do cabecalho depois do primeiro uso — foi
     // exatamente o que o usuario viu ("cade o menu abaixo do minimizar?").
     closeHeadMore();
-    $('btnHelp')?.click();
+    toggleHelp(true);
   });
 }
 
@@ -6492,7 +6622,7 @@ function toggleHelp(open) {
   $('helpModal').classList.toggle('hidden', !open);
   $('helpBackdrop').classList.toggle('hidden', !open);
 }
-$('btnHelp').addEventListener('click', () => toggleHelp($('helpModal').classList.contains('hidden')));
+
 $('helpClose').addEventListener('click', () => toggleHelp(false));
 $('helpBackdrop').addEventListener('click', () => toggleHelp(false));
 $('noteText').addEventListener('keydown', (e) => {

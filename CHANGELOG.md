@@ -1,5 +1,25 @@
 # Changelog
 
+## 3.79
+
+- **Cinco estilos de legenda novos**: **Metálico** (letras cromadas, com a
+  liga tirada da cor que você escolher), **Vidro** (painel de vidro fumado
+  atrás do texto), **Contorno fino** (o Recorte com traço de 3px em vez de
+  7px), **Moldura** (caixa alta pequena dentro de uma linha fina) e **Eco**
+  (a cópia ciano/magenta deslocada). Os cinco foram conferidos quadro a
+  quadro contra o desenho de referência.
+- **PNG transparente não ganha mais fundo preto.** O cartão substituía o
+  alpha da imagem pela máscara de canto arredondado: toda logo em PNG
+  chegava ao vídeo com um retângulo preto atrás. Agora arte com
+  transparência entra inteira, sem cartão, com a sombra da própria forma.
+- **O botão de ajuda saiu de cima do vídeo de verdade.** Escondê-lo não
+  bastava — ele voltava toda vez que a aba de Edição abria.
+- **Arrastar no vídeo não dá mais play.** Mover ou redimensionar a imagem
+  terminava em play no fim do gesto.
+- **Player novo na Biblioteca**: play, **forma de onda** do arquivo, tempo
+  e clique em qualquer lugar da linha para tocar. Saiu o controle do
+  navegador espremido no canto.
+
 ## 3.78
 
 - **Conserto do menu ⋯.** Na 3.77 abrir "Atalhos e gestos" escondia o próprio

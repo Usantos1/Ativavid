@@ -2383,7 +2383,12 @@ def build_edit_data(cut: Path, preset: dict, hook: list[str], duration: float, f
             ed["transitions"] = transitions
 
     ca = preset.get("captionAccent")
-    if ca and captions in ("karaoke", "simples", "serifada", "classica", "bloco", "recorte"):
+    # Os cinco de 30/08 tambem consomem a cor da legenda: sem eles nesta
+    # lista o preset guardaria a cor e o render nunca a receberia — o
+    # seletor da tela ficaria mentindo.
+    if ca and captions in ("karaoke", "simples", "serifada", "classica",
+                           "bloco", "recorte", "metal", "vidro", "traco",
+                           "moldura", "eco"):
         ed["captions"]["accent"] = ca
     ea = preset.get("emphasisAccent")
     if ea and captions in ("stacked", "scatter", "impacto"):

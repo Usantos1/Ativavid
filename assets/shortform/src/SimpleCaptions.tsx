@@ -52,7 +52,14 @@ type Variant = {
   // the picked caption colour tints the TEXT (accent over dark edge always
   // reads); the outline itself is never user-coloured.
   sticker?: boolean;
+  // Os cinco de 30/08. `modo` decide o RAMO de desenho; `bloco`/`sticker`
+  // continuam como flags proprias porque ja estavam no contrato.
+  modo?: 'metal' | 'vidro' | 'traco' | 'moldura' | 'eco';
 };
+
+// Quem desenha em CAIXA ALTA. Muda a MEDIDA das linhas, entao os tres
+// motores (este, o render_proprio e a previa) tem de concordar.
+const MAIUSCULA = new Set(['metal', 'moldura', 'eco']);
 
 const C = (editData as any).captions ?? {};
 export const SIMPLE_VARIANTS: Record<string, Variant> = {
@@ -121,7 +128,65 @@ export const SIMPLE_VARIANTS: Record<string, Variant> = {
     maxW: 800,
     sticker: true,
   },
+  // ---- os cinco de 30/08 -------------------------------------------------
+  metal: {
+    family: POPPINS, weight: 800, size: 76, maxWords: 3, lines: 1,
+    squeeze: 1, squeezeY: 1, tracking: -1, bottom: 430, maxW: 800,
+    modo: 'metal',
+  },
+  vidro: {
+    family: INTER, weight: 500, size: 50, maxWords: 12, lines: 2,
+    squeeze: 1, squeezeY: 1, tracking: 0, bottom: 430, maxW: 700,
+    modo: 'vidro',
+  },
+  traco: {
+    family: POPPINS, weight: 800, size: 74, maxWords: 3, lines: 1,
+    squeeze: 1, squeezeY: 1, tracking: -1, bottom: 430, maxW: 820,
+    modo: 'traco',
+  },
+  moldura: {
+    family: INTER, weight: 600, size: 44, maxWords: 6, lines: 1,
+    squeeze: 1, squeezeY: 1, tracking: 6, bottom: 430, maxW: 700,
+    modo: 'moldura',
+  },
+  eco: {
+    family: POPPINS, weight: 800, size: 78, maxWords: 3, lines: 1,
+    squeeze: 1, squeezeY: 1, tracking: -2, bottom: 430, maxW: 800,
+    modo: 'eco',
+  },
 };
+
+/* As cinco paradas do cromado, tiradas DA COR escolhida. `f > 1` clareia
+ * em direcao ao branco, `f < 1` escurece. A parada escura em 50% com o
+ * estalo de luz logo abaixo e o que o olho le como metal — um degrade
+ * suave de claro para escuro parece papel. */
+function degradeMetal(hex: string): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  const n = m ? parseInt(m[1], 16) : 0xe8edf3;
+  const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  const paradas: [number, number][] = [
+    [0, 1.45], [34, 0.55], [50, 0.38], [56, 1.6], [100, 0.72],
+  ];
+  return paradas
+    .map(([pos, f]) => {
+      const rgb = c.map((v) =>
+        Math.round(f > 1 ? v + (255 - v) * Math.min(1, f - 1) : v * f));
+      return `rgb(${rgb.join(',')}) ${pos}%`;
+    })
+    .join(', ');
+}
+
+/* Contorno por sombras em 8 direcoes — nao `-webkit-text-stroke`, que come
+ * metade da espessura para dentro do glifo. */
+function contornoCss(r: number, cor: string): string[] {
+  const d = (0.7071 * r).toFixed(1);
+  return [
+    `${r}px 0 0 ${cor}`, `-${r}px 0 0 ${cor}`,
+    `0 ${r}px 0 ${cor}`, `0 -${r}px 0 ${cor}`,
+    `${d}px ${d}px 0 ${cor}`, `-${d}px ${d}px 0 ${cor}`,
+    `${d}px -${d}px 0 ${cor}`, `-${d}px -${d}px 0 ${cor}`,
+  ];
+}
 
 /* Text colour for the "bloco" slab, decided from the slab's own brightness.
  * Hardcoding white text broke the moment the picked caption colour was light:
@@ -145,7 +210,11 @@ const widthOf = (words: Word[], V: Variant) =>
   measureText({
     // recorte renders UPPERCASE — measuring the lowercase form would group
     // lines ~10% too wide and run the sticker past the safe area
-    text: words.map((w) => (V.sticker ? clean(w.text).toUpperCase() : clean(w.text))).join(' '),
+    text: words
+      .map((w) => (V.sticker || MAIUSCULA.has(V.modo ?? '')
+        ? clean(w.text).toUpperCase()
+        : clean(w.text)))
+      .join(' '),
     fontFamily: V.family,
     fontSize: V.size,
     fontWeight: V.weight,
@@ -261,6 +330,129 @@ export const SimpleCaptions: React.FC<{variant: string}> = ({variant}) => {
               {ln.map((w) => clean(w.text)).join(' ')}
             </div>
           ))}
+        </div>
+      </AbsoluteFill>
+    );
+  }
+
+  if (V.modo) {
+    const CAIXA = MAIUSCULA.has(V.modo);
+    const txt = (ln: Word[]) =>
+      ln.map((w) => (CAIXA ? clean(w.text).toUpperCase() : clean(w.text))).join(' ');
+    const LH: Record<string, number> = {
+      metal: 1.1, vidro: 1.34, traco: 1.16, moldura: 1.2, eco: 1.14,
+    };
+    const tipo = {
+      fontFamily: V.family,
+      fontWeight: V.weight,
+      fontSize: V.size,
+      letterSpacing: V.tracking,
+      lineHeight: LH[V.modo],
+      whiteSpace: 'pre' as const,
+      textAlign: 'center' as const,
+    };
+    const fora = {
+      justifyContent: 'flex-end' as const,
+      alignItems: 'center' as const,
+      paddingBottom: V.bottom,
+    };
+
+    if (V.modo === 'metal') {
+      // Duas copias: a de baixo so o contorno (fill transparente — a sombra
+      // sai do GLIFO, nao do preenchimento), a de cima o cromado. Uma copia
+      // so nao serve: com `background-clip: text` o fundo e pintado antes
+      // das sombras, e o contorno taparia o degrade.
+      const R = Math.max(2, Math.round(V.size * 0.035));
+      const borda = contornoCss(R, '#0e1013').join(', ');
+      const corpo = lines.map((ln, i) => <div key={i}>{txt(ln)}</div>);
+      return (
+        <AbsoluteFill style={fora}>
+          <div style={{position: 'relative'}}>
+            <div style={{...tipo, color: 'transparent',
+                         textShadow: `${borda}, 0 10px 24px rgba(0,0,0,0.5)`}}>
+              {corpo}
+            </div>
+            <div
+              style={{
+                ...tipo,
+                position: 'absolute',
+                left: 0,
+                top: 0,
+                width: '100%',
+                backgroundImage: `linear-gradient(180deg, ${degradeMetal(C.accent ?? '#e8edf3')})`,
+                WebkitBackgroundClip: 'text',
+                backgroundClip: 'text',
+                color: 'transparent',
+                WebkitTextFillColor: 'transparent',
+              }}
+            >
+              {corpo}
+            </div>
+          </div>
+        </AbsoluteFill>
+      );
+    }
+
+    if (V.modo === 'traco') {
+      // o Recorte com contorno FINO: 3px em vez dos 7px dele
+      const R = Math.max(2, Math.round(V.size * 0.035));
+      return (
+        <AbsoluteFill style={fora}>
+          <div style={{...tipo, color: C.accent ?? '#fff',
+                       textShadow: [...contornoCss(R, '#101215'),
+                                    '0 8px 20px rgba(0,0,0,0.4)'].join(', ')}}>
+            {lines.map((ln, i) => <div key={i}>{txt(ln)}</div>)}
+          </div>
+        </AbsoluteFill>
+      );
+    }
+
+    if (V.modo === 'eco') {
+      // As sombras do CSS pintam na ordem INVERSA da lista: a primeira fica
+      // por cima. Ciano em cima, magenta embaixo, o texto sobre os dois.
+      const d = Math.max(3, Math.round(V.size * 0.085));
+      return (
+        <AbsoluteFill style={fora}>
+          <div style={{...tipo, color: C.accent ?? '#fff',
+                       textShadow: [`${-d}px ${-d}px 0 #28e0d8`,
+                                    `${d}px ${d}px 0 #ff2e88`,
+                                    '0 10px 26px rgba(0,0,0,0.45)'].join(', ')}}>
+            {lines.map((ln, i) => <div key={i}>{txt(ln)}</div>)}
+          </div>
+        </AbsoluteFill>
+      );
+    }
+
+    // vidro e moldura: UM painel em volta do cue inteiro (o bloco da uma
+    // lapide por linha — aqui a caixa e uma so, com as duas dentro)
+    const vidro = V.modo === 'vidro';
+    const padX = Math.round(V.size * (vidro ? 0.62 : 0.72));
+    const padY = Math.round(V.size * (vidro ? 0.44 : 0.4));
+    return (
+      <AbsoluteFill style={fora}>
+        <div
+          style={{
+            ...tipo,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: Math.round(V.size * 0.16),
+            padding: `${padY}px ${padX}px`,
+            borderRadius: vidro ? Math.round(V.size * 0.6) : 4,
+            // Vidro FUMADO: o take fica escuro atras da letra em vez de
+            // desfocado. O motor rapido desenha um overlay, SEM o take
+            // embaixo — um desfoque de verdade so existiria num dos dois.
+            background: vidro
+              ? 'linear-gradient(180deg, rgba(255,255,255,0.16), rgba(255,255,255,0.02)), rgba(13,15,20,0.46)'
+              : 'rgba(11,13,16,0.30)',
+            border: vidro
+              ? '2px solid rgba(255,255,255,0.34)'
+              : `2px solid ${C.accent ?? '#ffffff'}d9`,
+            color: C.accent ?? (vidro ? '#f7f9fc' : '#ffffff'),
+            boxShadow: '0 18px 40px rgba(0,0,0,0.45)',
+          }}
+        >
+          {lines.map((ln, i) => <div key={i}>{txt(ln)}</div>)}
         </div>
       </AbsoluteFill>
     );

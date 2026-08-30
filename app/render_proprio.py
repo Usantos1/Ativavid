@@ -364,7 +364,10 @@ def motivo_nao_suportado(edit_data: dict[str, Any], public: Path) -> str | None:
     #   classica 1,036 · simples 1,059 · impacto 1,094
     estilo = caps.get("style") or "stacked"
     permitidos = {"stacked", "impacto", "scatter", "karaoke", "bolha",
-                  "simples", "serifada", "classica", "bloco", "recorte"}
+                  "simples", "serifada", "classica", "bloco", "recorte",
+                  # os cinco de 30/08 — validados quadro a quadro contra o
+                  # Remotion antes de entrar aqui
+                  "metal", "vidro", "traco", "moldura", "eco"}
     # Tudo daqui para baixo so importa se a legenda VAI ser desenhada. Com ela
     # desligada o pipeline grava `style="karaoke"` fixo (run_fast: `captions if
     # cap_enabled else "karaoke"`), e sem esta guarda o job perderia o motor
@@ -413,6 +416,19 @@ def motivo_nao_suportado(edit_data: dict[str, Any], public: Path) -> str | None:
         if not (FONTES / nome[0]).exists():
             return f"fonte ausente: {nome[0]}"
     return None
+
+
+def _tem_transparencia(im) -> bool:
+    """A imagem usa MESMO o canal alpha, ou so o carrega?
+
+    Um JPEG convertido para RGBA tem alpha 255 em tudo — tratar isso como
+    arte tiraria o cartao de fotos comuns. O teste e pelo minimo.
+    """
+    try:
+        faixa = im.getchannel("A").getextrema()
+    except (ValueError, KeyError):
+        return False
+    return bool(faixa and faixa[0] < 250)
 
 
 def _cor_hex(h: str) -> np.ndarray:
@@ -2379,13 +2395,27 @@ class Renderizador:
         "classica": ("Inter[opsz,wght].ttf", "Medium", 52, 14, 2, 1.0, 1.0, 0, 430, 840, ""),
         "bloco":    ("Poppins-ExtraBold.ttf", None, 76, 3, 1, 1.0, 1.0, -2, 430, 760, "bloco"),
         "recorte_simple": ("Poppins-ExtraBold.ttf", None, 78, 3, 1, 1.0, 1.0, -1, 430, 800, "sticker"),
+        # --- os cinco de 30/08 -------------------------------------------
+        "metal":    ("Poppins-ExtraBold.ttf", None, 76, 3, 1, 1.0, 1.0, -1, 430, 800, "metal"),
+        "vidro":    ("Inter[opsz,wght].ttf", "Medium", 50, 12, 2, 1.0, 1.0, 0, 430, 700, "vidro"),
+        "traco":    ("Poppins-ExtraBold.ttf", None, 74, 3, 1, 1.0, 1.0, -1, 430, 820, "traco"),
+        "moldura":  ("Inter[opsz,wght].ttf", "SemiBold", 44, 6, 1, 1.0, 1.0, 6, 430, 700, "moldura"),
+        "eco":      ("Poppins-ExtraBold.ttf", None, 78, 3, 1, 1.0, 1.0, -2, 430, 800, "eco"),
     }
+    # Modos que desenham em CAIXA ALTA. Isso muda a MEDIDA das linhas, entao
+    # os tres motores tem de concordar sobre quem esta nesta lista.
+    SIMPLE_MAIUSCULA = ("sticker", "metal", "moldura", "eco")
+    # Modos com um painel em volta do cue INTEIRO (e nao por linha, como o
+    # bloco): a caixa e uma so para as duas linhas.
+    SIMPLE_PAINEL = ("vidro", "moldura")
     # Peso que cada variante estatica tem no template (`capWeight(base.weight)`
     # em SimpleCaptions.tsx:218). Aqui ele fica implicito no ARQUIVO —
     # `Poppins-SemiBold.ttf` E o 600 — entao, quando a fonte da marca
     # substitui o arquivo, o peso se perdia junto. Escrito, ele sobrevive.
     SIMPLE_PESO = {"simples": 600, "serifada": 700, "classica": 500,
-                   "bloco": 800, "recorte_simple": 800}
+                   "bloco": 800, "recorte_simple": 800,
+                   "metal": 800, "vidro": 500, "traco": 800,
+                   "moldura": 600, "eco": 800}
 
     _ORFAO = ("o", "a", "os", "as", "e", "\u00e9", "de", "do", "da", "em", "no",
               "na", "um", "uma", "que", "se", "ao", "\u00e0", "por", "com")
@@ -2777,7 +2807,7 @@ class Renderizador:
 
         def limpar(t):
             t = re.sub(r"[.,!?\u2026]+$", "", t)
-            return t.upper() if modo == "sticker" else t
+            return t.upper() if modo in self.SIMPLE_MAIUSCULA else t
 
         def largura(ws):
             txt = " ".join(limpar(w["text"]) for w in ws)
@@ -2817,7 +2847,8 @@ class Renderizador:
             return [ws[:melhor], ws[melhor:]]
 
         camadas = []
-        lh = {"bloco": 1.06, "sticker": 1.16}.get(modo, 1.18)
+        lh = {"bloco": 1.06, "sticker": 1.16, "metal": 1.10, "vidro": 1.34,
+              "traco": 1.16, "moldura": 1.20, "eco": 1.14}.get(modo, 1.18)
         for ci, cue in enumerate(cues):
             ini_f = int(round(cue[0]["startMs"] / 1000 * self.fps))
             nxt = cues[ci + 1] if ci + 1 < len(cues) else None
@@ -2833,6 +2864,12 @@ class Renderizador:
             linhas = duas(cue)
             asc, desc = f.getmetrics()
             alt_l = tam * lh
+            if modo in self.SIMPLE_PAINEL:
+                leg.palavras.append(
+                    self._painel_legenda(modo, linhas, f, track, tam, alt_l,
+                                         bottom, accent, limpar))
+                camadas.append(leg)
+                continue
             gap_l = round(tam * 0.14) if modo == "bloco" else 0
             alt_total = alt_l * len(linhas) * sq_y + gap_l * (len(linhas) - 1)
             y = self.h - bottom - alt_total
@@ -2901,6 +2938,15 @@ class Renderizador:
                 pad_m = np.zeros((h_m + 2 * folga, w_m + 2 * folga),
                                  dtype=np.float32)
                 pad_m[folga:folga + h_m, folga:folga + w_m] = m
+                if modo in ("metal", "traco", "eco"):
+                    rgb, alpha, sombra = self._tinta_dos_novos(
+                        modo, pad_m, folga, h_m, tam, accent, cor_emj)
+                    leg.palavras.append(Palavra(
+                        x0 - folga,
+                        int(y + (alt_l - (asc + desc)) / 2) - folga,
+                        rgb, alpha, sombra, inicio_f=-1, enter=1, sobe=0.0))
+                    y += alt_l * sq_y + gap_l
+                    continue
                 if modo == "sticker":
                     R = max(5, round(tam * 0.09))
                     D = int(round(0.7071 * R))
@@ -2940,6 +2986,193 @@ class Renderizador:
                 y += alt_l * sq_y + gap_l
             camadas.append(leg)
         return camadas
+
+    # ---- os cinco estilos de 30/08 ---------------------------------------
+    @staticmethod
+    def _contorno(mask, r: int):
+        """Uniao da mascara deslocada em 8 direcoes — o mesmo contorno que o
+        CSS faz com `text-shadow` repetido (nao com `-webkit-text-stroke`,
+        que come metade da espessura para dentro do glifo)."""
+        import numpy as np
+        d = int(round(0.7071 * r))
+        out = np.zeros_like(mask)
+        for dx, dy in ((r, 0), (-r, 0), (0, r), (0, -r),
+                       (d, d), (-d, d), (d, -d), (-d, -d)):
+            desl = np.zeros_like(mask)
+            ys = slice(max(0, dy), mask.shape[0] + min(0, dy))
+            xs = slice(max(0, dx), mask.shape[1] + min(0, dx))
+            ys2 = slice(max(0, -dy), mask.shape[0] + min(0, -dy))
+            xs2 = slice(max(0, -dx), mask.shape[1] + min(0, -dx))
+            desl[ys, xs] = mask[ys2, xs2]
+            out = np.maximum(out, desl)
+        return out
+
+    @staticmethod
+    def _degrade_metal(cor, n: int):
+        """As cinco paradas do cromado, tiradas DA COR escolhida.
+
+        `f > 1` clareia em direcao ao branco, `f < 1` escurece. A parada
+        escura em 0,50 com o estalo em 0,56 e o que o olho le como metal: um
+        degrade suave de claro para escuro parece papel, nao cromo.
+        """
+        import numpy as np
+        paradas = ((0.00, 1.45), (0.34, 0.55), (0.50, 0.38),
+                   (0.56, 1.60), (1.00, 0.72))
+        t = np.linspace(0.0, 1.0, max(1, n), dtype=np.float32)
+        fs = np.interp(t, [q for q, _ in paradas], [v for _, v in paradas])
+        fs = fs.astype(np.float32)[:, None]
+        c = np.asarray(cor, dtype=np.float32)[None, :]
+        claro = c + (255.0 - c) * np.clip(fs - 1.0, 0.0, 1.0)
+        escuro = c * np.clip(fs, 0.0, 1.0)
+        return np.where(fs > 1.0, claro, escuro).astype(np.float32)
+
+    def _tinta_dos_novos(self, modo, pad_m, folga, h_m, tam, accent, cor_emj):
+        """(rgb, alpha, sombra) de metal / traco / eco — os tres que pintam
+        a LINHA, sem painel em volta."""
+        import numpy as np
+
+        if modo == "metal":
+            base = self._cor(accent or "#e8edf3")
+            faixa = self._degrade_metal(base, h_m)          # (h_m, 3)
+            rgb = np.zeros((*pad_m.shape, 3), dtype=np.float32)
+            rgb[folga:folga + h_m, :, :] = faixa[:, None, :]
+            rgb[:folga] = faixa[0]
+            rgb[folga + h_m:] = faixa[-1]
+            r = max(2, round(tam * 0.035))
+            borda = self._contorno(pad_m, r)
+            cor_b = self._cor("#0e1013")
+            alpha = np.maximum(borda, pad_m)
+            rgb = rgb * pad_m[..., None] + cor_b * (1.0 - pad_m[..., None])
+            self._pintar_emoji(rgb, cor_emj, folga)
+            return rgb, alpha, self._sombra_de(pad_m, [(0, 10, 24, 0.5)], k=0.5)
+
+        if modo == "traco":
+            # o Recorte com contorno FINO: 3px em vez dos 7px dele
+            r = max(2, round(tam * 0.035))
+            borda = self._contorno(pad_m, r)
+            cor_t = self._cor(accent or "#ffffff")
+            cor_b = self._cor("#101215")
+            alpha = np.maximum(borda, pad_m)
+            rgb = np.broadcast_to(cor_b, (*pad_m.shape, 3)).copy()
+            rgb = rgb * (1 - pad_m[..., None]) + cor_t * pad_m[..., None]
+            self._pintar_emoji(rgb, cor_emj, folga)
+            return rgb, alpha, self._sombra_de(pad_m, [(0, 8, 20, 0.4)], k=0.5)
+
+        # eco: ciano atras, magenta na frente, e o texto por cima das duas
+        d = max(3, round(tam * 0.085))
+        rgb = np.zeros((*pad_m.shape, 3), dtype=np.float32)
+        alpha = np.zeros_like(pad_m)
+        # magenta primeiro, ciano depois: no CSS a PRIMEIRA sombra da lista
+        # e a que fica por cima, e aqui quem pinta depois e que fica.
+        for desloc, cor_hex in (((d, d), "#ff2e88"), ((-d, -d), "#28e0d8")):
+            dx, dy = desloc
+            copia = np.zeros_like(pad_m)
+            ys = slice(max(0, dy), pad_m.shape[0] + min(0, dy))
+            xs = slice(max(0, dx), pad_m.shape[1] + min(0, dx))
+            ys2 = slice(max(0, -dy), pad_m.shape[0] + min(0, -dy))
+            xs2 = slice(max(0, -dx), pad_m.shape[1] + min(0, -dx))
+            copia[ys, xs] = pad_m[ys2, xs2]
+            cor = self._cor(cor_hex)
+            inv = 1.0 - copia
+            rgb = rgb * inv[..., None] + cor * copia[..., None]
+            alpha = alpha * inv + copia
+        cor_t = self._cor(accent or "#ffffff")
+        inv = 1.0 - pad_m
+        rgb = rgb * inv[..., None] + cor_t * pad_m[..., None]
+        alpha = alpha * inv + pad_m
+        self._pintar_emoji(rgb, cor_emj, folga)
+        return rgb, alpha, self._sombra_de(pad_m, [(0, 10, 26, 0.45)], k=0.5)
+
+    def _painel_legenda(self, modo, linhas, f, track, tam, alt_l, bottom,
+                        accent, limpar):
+        """Vidro e Moldura: UM painel em volta do cue inteiro.
+
+        Diferente do `bloco`, que da uma lapide para cada linha — aqui a
+        caixa e uma so, com as duas linhas dentro, que e o que faz o vidro
+        parecer uma placa e nao duas etiquetas.
+        """
+        import numpy as np
+
+        folga = 60
+        gap = round(tam * 0.16)
+        masks = []
+        for ln in linhas:
+            texto = " ".join(limpar(w["text"]) for w in ln)
+            masks.append(self._mascara_cor(f, texto, float(track)))
+        w_txt = max(m.shape[1] for m, _ in masks)
+        h_txt = alt_l * len(masks) + gap * (len(masks) - 1)
+        pad_x = round(tam * (0.62 if modo == "vidro" else 0.72))
+        pad_y = round(tam * (0.44 if modo == "vidro" else 0.40))
+        cw = int(w_txt + 2 * pad_x)
+        ch = int(h_txt + 2 * pad_y)
+        raio = round(tam * 0.60) if modo == "vidro" else 4
+        L, A = cw + 2 * folga, ch + 2 * folga
+
+        cheio = Image.new("L", (L, A), 0)
+        ImageDraw.Draw(cheio).rounded_rectangle(
+            [folga, folga, folga + cw, folga + ch], radius=raio, fill=255)
+        a_cheio = np.asarray(cheio, dtype=np.float32) / 255.0
+        largura_b = 2
+        dentro = Image.new("L", (L, A), 0)
+        ImageDraw.Draw(dentro).rounded_rectangle(
+            [folga + largura_b, folga + largura_b,
+             folga + cw - largura_b, folga + ch - largura_b],
+            radius=max(0, raio - largura_b), fill=255)
+        a_dentro = np.asarray(dentro, dtype=np.float32) / 255.0
+        a_borda = np.clip(a_cheio - a_dentro, 0.0, 1.0)
+
+        if modo == "vidro":
+            # Vidro FUMADO. O motor rapido desenha um overlay, sem o take
+            # embaixo — entao um desfoque de verdade nao cabe aqui. O que
+            # cabe, e o que faz a letra descolar, e escurecer: 46% de tinta
+            # escura, com o brilho de luz caindo de cima.
+            escuro = self._cor("#0d0f14")
+            branco = self._cor("#ffffff")
+            g = np.linspace(0.16, 0.02, A, dtype=np.float32)[:, None]
+            a_pan = (1.0 - (1.0 - 0.46) * (1.0 - g)) * a_cheio
+            num = branco * g + escuro * 0.46 * (1.0 - g)
+            rgb_pan = num / np.maximum(1.0 - (1.0 - 0.46) * (1.0 - g), 1e-6)
+            rgb_pan = np.broadcast_to(rgb_pan[:, None, :], (A, L, 3)).copy()
+            cor_b = branco
+            a_b = a_borda * 0.34
+            cor_txt = self._cor(accent or "#f7f9fc")
+        else:
+            escuro = self._cor("#0b0d10")
+            a_pan = a_cheio * 0.30
+            rgb_pan = np.broadcast_to(escuro, (A, L, 3)).copy()
+            cor_b = self._cor(accent or "#ffffff")
+            a_b = a_borda * 0.85
+            cor_txt = self._cor(accent or "#ffffff")
+
+        # borda POR CIMA do fundo (o `border` do CSS cobre o background)
+        alpha = a_b + a_pan * (1.0 - a_b)
+        rgb = (cor_b * a_b[..., None]
+               + rgb_pan * (a_pan * (1.0 - a_b))[..., None]) \
+            / np.maximum(alpha[..., None], 1e-6)
+
+        asc, desc = f.getmetrics()
+        ty = folga + pad_y
+        for m, cor_emj in masks:
+            h_m, w_m = m.shape
+            tx = folga + int((cw - w_m) / 2)
+            # `alt_l` e float (tam * lh): sem o int aqui o recorte da fatia
+            # recebe um float e o numpy recusa
+            oy = int(ty + (alt_l - (asc + desc)) / 2)
+            hh = min(h_m, A - oy)
+            ww = min(w_m, L - tx)
+            if hh > 0 and ww > 0:
+                sub = np.zeros_like(alpha)
+                sub[oy:oy + hh, tx:tx + ww] = m[:hh, :ww]
+                inv = 1.0 - sub
+                rgb = rgb * inv[..., None] + cor_txt * sub[..., None]
+                alpha = alpha * inv + sub
+                self._pintar_emoji(rgb, cor_emj, tx, oy)
+            ty += alt_l + gap
+
+        sombra = self._sombra_de(a_cheio, [(0, 18, 40, 0.45)], k=0.5)
+        return Palavra(int((self.w - cw) / 2) - folga,
+                       int(self.h - bottom - ch) - folga,
+                       rgb, alpha, sombra, inicio_f=-1, enter=1, sobe=0.0)
 
     @staticmethod
     def _ordinal(f, n: int) -> str:
@@ -3137,16 +3370,34 @@ class Renderizador:
                 continue
             cw, ch, ccx, ccy = geometria_do_insert(it, self.w, self.h)
             raio = max(4, int(round(INSERT_RAIO * cw / INSERT_W)))
-            # objectFit: cover — recorta o excedente, nao deforma
-            esc = max(cw / im.width, ch / im.height)
-            nw, nh = max(1, round(im.width * esc)), max(1, round(im.height * esc))
-            im = im.resize((nw, nh), Image.LANCZOS).crop((
-                (nw - cw) // 2, (nh - ch) // 2,
-                (nw - cw) // 2 + cw, (nh - ch) // 2 + ch))
-            masc = Image.new("L", (cw, ch), 0)
-            ImageDraw.Draw(masc).rounded_rectangle(
-                [0, 0, cw - 1, ch - 1], radius=raio, fill=255)
-            im.putalpha(masc)
+            # ARTE com transparencia (uma logo em PNG) nao e uma foto: ela
+            # nao quer cartao, nao quer ser recortada e a sombra dela sai da
+            # PROPRIA forma. Foto continua entrando em `cover`, no cartao.
+            arte = (not video) and cam.suffix.lower() in (".png", ".webp") \
+                and _tem_transparencia(im)
+            if arte:
+                esc = min(cw / im.width, ch / im.height)     # objectFit: contain
+                nw = max(1, round(im.width * esc))
+                nh = max(1, round(im.height * esc))
+                menor = im.resize((nw, nh), Image.LANCZOS)
+                im = Image.new("RGBA", (cw, ch), (0, 0, 0, 0))
+                im.paste(menor, ((cw - nw) // 2, (ch - nh) // 2))
+                masc = im.getchannel("A")
+            else:
+                # objectFit: cover — recorta o excedente, nao deforma
+                esc = max(cw / im.width, ch / im.height)
+                nw = max(1, round(im.width * esc))
+                nh = max(1, round(im.height * esc))
+                im = im.resize((nw, nh), Image.LANCZOS).crop((
+                    (nw - cw) // 2, (nh - ch) // 2,
+                    (nw - cw) // 2 + cw, (nh - ch) // 2 + ch))
+                masc = Image.new("L", (cw, ch), 0)
+                ImageDraw.Draw(masc).rounded_rectangle(
+                    [0, 0, cw - 1, ch - 1], radius=raio, fill=255)
+                # MULTIPLICAR, nao substituir: o `putalpha(masc)` que estava
+                # aqui jogava fora o alpha da imagem, e todo PNG chegava ao
+                # video com o fundo preto dentro do cartao (print de 30/08).
+                im.putalpha(ImageChops.multiply(im.getchannel("A"), masc))
             folga = 70
             base = np.zeros((ch + 2 * folga, cw + 2 * folga), dtype=np.float32)
             base[folga:folga + ch, folga:folga + cw] = \

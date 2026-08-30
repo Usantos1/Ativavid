@@ -3458,7 +3458,47 @@ body.home-working .hero-import .hero-inner { padding: 10px 0; }
   background: rgba(255, 59, 92, .16); color: var(--accent, #ff3b5c);
 }
 .lib-track-tag--solta { background: rgba(255, 255, 255, .08); color: var(--muted, #9aa0a6); }
-.lib-track audio { flex: none; height: 30px; max-width: 240px; }
+/* ---- Player da casa: play, onda, tempo, volume ----
+   O `<audio controls>` ficava espremido em 240px no canto e o vao entre o
+   nome e ele ficava vazio. Aqui a onda OCUPA esse vao — e ela e a unica
+   coisa da linha que cresce. */
+.lib-track { cursor: pointer; }
+.lib-track:hover { border-color: color-mix(in srgb, var(--accent, #ff3b5c) 40%, transparent); }
+.lib-track.tocando {
+  border-color: color-mix(in srgb, var(--accent, #ff3b5c) 62%, transparent);
+  background: color-mix(in srgb, var(--accent, #ff3b5c) 7%, var(--panel, rgba(255,255,255,.04)));
+}
+.lib-play {
+  flex: none;
+  display: grid; place-items: center;
+  width: 26px; height: 26px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--text, #fff) 16%, transparent);
+  background: color-mix(in srgb, var(--text, #fff) 6%, transparent);
+  color: var(--text, #fff);
+  cursor: pointer;
+}
+.lib-track.tocando .lib-play {
+  background: var(--accent, #ff3b5c);
+  border-color: transparent;
+  color: #fff;
+}
+.lib-track-name { flex: 0 1 auto; }
+.lib-onda {
+  flex: 1 1 auto;
+  min-width: 90px;
+  height: 26px;
+  cursor: pointer;
+}
+.lib-tempo {
+  flex: none;
+  min-width: 34px;
+  text-align: right;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted, #9aa0a6);
+}
 
 /* ---- Biblioteca: tres acervos, cada um com suas categorias ---- */
 .lib-tabs {

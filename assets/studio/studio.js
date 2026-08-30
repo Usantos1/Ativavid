@@ -5038,9 +5038,11 @@ function renderLibraryAba() {
     ? Object.fromEntries(Object.entries(lib.clima || {}).map(([k, v]) => [k, `clima ${v}`]))
     : Object.fromEntries([...new Set([...vagas, ...contagem.keys()])].map(
         (k) => [k, vagas.includes(k) ? "entra no v\u00eddeo" : "s\u00f3 guardado"]));
+  pararAudio();          // a lista mudou: o que estava tocando saiu do DOM
   painel.innerHTML = (aba === "image" || aba === "clip")
     ? libGradeImagens(filtrados, aba)
     : libListaAudio(filtrados, aba, notas, ordem);
+  ligarPlayersDaBiblioteca(painel);
 }
 
 /* Guardar take nao basta: no layout limpo com o b-roll no padrao o
@@ -5104,6 +5106,197 @@ function libGradeImagens(itens, aba) {
   }).join("")}</div>`;
 }
 
+/* ---------------------------------------------------------------------
+ * Player da Biblioteca.
+ *
+ * O `<audio controls>` do navegador ocupava 240px no canto e deixava o
+ * resto da linha vazio — e um menu de tres pontinhos que aqui nao serve
+ * para nada. Este e da casa: play, forma de onda no vao, tempo e volume.
+ *
+ * A onda vem dos PICOS reais do arquivo. Decodificar 242 efeitos de uma
+ * vez travaria a pagina, entao cada linha so decodifica quando aparece
+ * na tela, de quatro em quatro, e o resultado fica guardado por caminho.
+ * ------------------------------------------------------------------ */
+const ICO_PLAY = '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path d="M4.5 2.9v10.2l8-5.1z" fill="currentColor"/></svg>';
+const ICO_PAUSE = '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path d="M4.6 2.8h2.6v10.4H4.6zM8.8 2.8h2.6v10.4H8.8z" fill="currentColor"/></svg>';
+
+const PICOS = new Map();      // rel -> Float32Array de picos
+let audioAtual = null;        // um de cada vez
+let linhaAtual = null;
+let ctxAudio = null;
+const filaPicos = [];
+let baixando = 0;
+
+function volumeDaBiblioteca() {
+  const v = parseFloat(localStorage.getItem("ativavid-lib-vol"));
+  return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0.8;
+}
+
+/* Picos por coluna: o maximo absoluto de cada fatia. Media faria um efeito
+ * curto (um clique de 0,2s) virar uma linha reta — e o pico e justamente o
+ * que se quer ver num efeito sonoro. */
+async function picosDoArquivo(rel, src) {
+  if (PICOS.has(rel)) return PICOS.get(rel);
+  ctxAudio = ctxAudio || new (window.AudioContext || window.webkitAudioContext)();
+  const buf = await (await fetch(src)).arrayBuffer();
+  const audio = await ctxAudio.decodeAudioData(buf);
+  const dados = audio.getChannelData(0);
+  const N = 160;
+  const passo = Math.max(1, Math.floor(dados.length / N));
+  const out = new Float32Array(N);
+  let teto = 1e-6;
+  for (let i = 0; i < N; i++) {
+    let m = 0;
+    const ini = i * passo;
+    for (let k = ini; k < ini + passo && k < dados.length; k++) {
+      const v = Math.abs(dados[k]);
+      if (v > m) m = v;
+    }
+    out[i] = m;
+    if (m > teto) teto = m;
+  }
+  for (let i = 0; i < N; i++) out[i] /= teto;   // normalizado: o pico e 1
+  PICOS.set(rel, out);
+  return out;
+}
+
+function desenharOnda(linha, prog) {
+  const cv = linha.querySelector(".lib-onda");
+  if (!cv) return;
+  const larg = Math.max(40, Math.round(cv.clientWidth));
+  const alt = Math.max(18, Math.round(cv.clientHeight));
+  const dpr = window.devicePixelRatio || 1;
+  if (cv.width !== Math.round(larg * dpr)) {
+    cv.width = Math.round(larg * dpr);
+    cv.height = Math.round(alt * dpr);
+  }
+  const g = cv.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, larg, alt);
+  const picos = PICOS.get(linha.dataset.rel);
+  const meio = alt / 2;
+  const css = getComputedStyle(document.documentElement);
+  const forte = (css.getPropertyValue("--accent") || "#ff3b5c").trim();
+  const fraco = "rgba(255,255,255,0.22)";
+  if (!picos) {                       // ainda decodificando: uma linha guia
+    g.fillStyle = fraco;
+    g.fillRect(0, meio - 0.5, larg, 1);
+    return;
+  }
+  const n = picos.length;
+  const lb = Math.max(1, (larg / n) * 0.62);
+  for (let i = 0; i < n; i++) {
+    const x = (i / n) * larg;
+    const h = Math.max(1.5, picos[i] * (alt - 3));
+    g.fillStyle = (i / n) <= prog ? forte : fraco;
+    g.fillRect(x, meio - h / 2, lb, h);
+  }
+}
+
+function tempoCurto(s) {
+  if (!Number.isFinite(s)) return "0:00";
+  const m = Math.floor(s / 60);
+  return `${m}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+}
+
+function pararAudio() {
+  if (audioAtual) {
+    audioAtual.pause();
+    audioAtual = null;
+  }
+  if (linhaAtual) {
+    linhaAtual.classList.remove("tocando");
+    const b = linhaAtual.querySelector(".lib-play");
+    if (b) b.innerHTML = ICO_PLAY;
+    desenharOnda(linhaAtual, 0);
+    const t = linhaAtual.querySelector(".lib-tempo");
+    if (t) t.textContent = tempoCurto(0);
+    linhaAtual = null;
+  }
+}
+
+function tocarLinha(linha) {
+  if (linhaAtual === linha) { pararAudio(); return; }
+  pararAudio();
+  const a = new Audio(linha.dataset.src);
+  a.volume = volumeDaBiblioteca();
+  audioAtual = a;
+  linhaAtual = linha;
+  linha.classList.add("tocando");
+  const btn = linha.querySelector(".lib-play");
+  if (btn) btn.innerHTML = ICO_PAUSE;
+  const tempo = linha.querySelector(".lib-tempo");
+  a.addEventListener("timeupdate", () => {
+    if (audioAtual !== a) return;
+    const p = a.duration ? a.currentTime / a.duration : 0;
+    desenharOnda(linha, p);
+    if (tempo) tempo.textContent = tempoCurto(a.currentTime);
+  });
+  a.addEventListener("ended", () => { if (audioAtual === a) pararAudio(); });
+  a.play().catch(() => pararAudio());
+}
+
+/* Decodifica so o que esta na tela, de quatro em quatro. */
+function enfileirarPicos(linha) {
+  if (PICOS.has(linha.dataset.rel)) { desenharOnda(linha, 0); return; }
+  filaPicos.push(linha);
+  puxarFila();
+}
+function puxarFila() {
+  while (baixando < 4 && filaPicos.length) {
+    const linha = filaPicos.shift();
+    if (!linha.isConnected) continue;
+    baixando++;
+    picosDoArquivo(linha.dataset.rel, linha.dataset.src)
+      .then(() => desenharOnda(linha, 0))
+      .catch(() => {})
+      .finally(() => { baixando--; puxarFila(); });
+  }
+}
+
+let olhoDasOndas = null;
+function ligarPlayersDaBiblioteca(raiz) {
+  const linhas = (raiz || document).querySelectorAll(".lib-track[data-src]");
+  if (!linhas.length) return;
+  if (!olhoDasOndas && "IntersectionObserver" in window) {
+    olhoDasOndas = new IntersectionObserver((ents) => {
+      for (const e of ents) {
+        if (!e.isIntersecting) continue;
+        olhoDasOndas.unobserve(e.target);
+        enfileirarPicos(e.target);
+      }
+    }, {rootMargin: "200px"});
+  }
+  for (const linha of linhas) {
+    if (linha.dataset.ligado) continue;
+    linha.dataset.ligado = "1";
+    if (olhoDasOndas) olhoDasOndas.observe(linha);
+    else enfileirarPicos(linha);
+    linha.addEventListener("click", (e) => {
+      // o seletor de categoria e o menu tem acao propria — o resto da linha
+      // (o nome inclusive) e o play, que e o que o usuario pediu
+      if (e.target.closest("select, option, .lib-onda")) return;
+      tocarLinha(linha);
+    });
+    const onda = linha.querySelector(".lib-onda");
+    if (onda) {
+      onda.addEventListener("click", (e) => {
+        const r = onda.getBoundingClientRect();
+        const p = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+        if (linhaAtual !== linha) tocarLinha(linha);
+        const a = audioAtual;
+        if (!a) return;
+        const ir = () => { a.currentTime = p * (a.duration || 0); };
+        if (a.duration) ir();
+        else a.addEventListener("loadedmetadata", ir, {once: true});
+      });
+    }
+  }
+  window.addEventListener("resize", () => {
+    for (const linha of linhas) if (linha.isConnected) desenharOnda(linha, 0);
+  }, {passive: true});
+}
+
 /* Audio (trilha e efeito) em lista com play. Vendo TODAS, agrupa por
  * categoria: sem isso, 171 faixas viram um rolo unico. */
 function libListaAudio(itens, aba, notas, ordem) {
@@ -5117,13 +5310,16 @@ function libListaAudio(itens, aba, notas, ordem) {
     const uso = it.origem === "app" && SFX_USO[it.name]
       ? `<span class="lib-track-uso">${escapeHtml(SFX_USO[it.name])}</span>`
       : "";
-    return `<div class="lib-track" title="${escapeHtml(it.name)}">
-      ${chip}
+    return `<div class="lib-track" title="${escapeHtml(it.name)}"
+                 data-src="${src}" data-rel="${escapeHtml(it.rel)}">
+      <button type="button" class="lib-play" aria-label="Tocar">${ICO_PLAY}</button>
       <span class="lib-track-name">${escapeHtml(it.name)}</span>
+      ${chip}
       ${uso}
+      <canvas class="lib-onda" aria-hidden="true"></canvas>
+      <span class="lib-tempo">0:00</span>
       <span class="lib-size">${libTamanho(it.bytes)}</span>
       ${libSeletorCategoria(it, opcoes)}
-      <audio controls preload="none" src="${src}"></audio>
     </div>`;
   };
   if (state.libCat) return `<div class="lib-tracks">${itens.map(linha).join("")}</div>`;
@@ -5361,6 +5557,7 @@ function wireBiblioteca() {
     painel.addEventListener("play", (ev) => {
       const alvo = ev.target;
       if (!alvo || !("pause" in alvo)) return;
+      pararAudio();          // o player da casa nao e um <audio> no DOM
       for (const m of painel.querySelectorAll("audio, video")) {
         if (m !== alvo && !m.paused) m.pause();
       }

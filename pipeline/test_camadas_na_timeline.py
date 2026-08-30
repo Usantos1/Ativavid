@@ -323,13 +323,50 @@ def test_o_menu_do_proteger_abre_para_baixo():
 
 def test_a_ajuda_saiu_de_cima_do_preview():
     """O botão flutuante tapava o canto do vídeo — e o canto de baixo é onde
-    a legenda mora. A ajuda foi para o menu, com as outras ações da tela."""
+    a legenda mora.
+
+    Escondê-lo não bastou: o `refreshStyleTab` tirava o `hidden` toda vez que
+    a aba de Edição abria, e ele voltava (print de 30/08, 04:03). Agora o
+    elemento não existe — quem abre a ajuda é o item do menu.
+    """
     html = (REPO / "assets" / "preview" / "index.html").read_text(encoding="utf-8")
-    i = html.index('id="btnHelp"')
-    assert 'class="help-fab hidden"' in html[i - 40:i + 120]
+    assert 'id="btnHelp"' not in html
+    assert "help-fab" not in html
     j = html.index('id="btnHelpMenu"')
     assert 'class="head-more-item"' in html[j:j + 120]
-    assert "$('btnHelpMenu')" in JS and "$('btnHelp')?.click()" in JS
+    assert "$('btnHelpMenu')" in JS and "toggleHelp(true);" in JS
+    # e ninguem mais mexe na visibilidade de um botao que nao existe
+    assert "$('btnHelp')" not in JS
+
+
+def test_png_transparente_nao_ganha_fundo():
+    """`putalpha(masc)` SUBSTITUÍA o alpha da imagem pela máscara de canto
+    arredondado: todo PNG chegava ao vídeo com o fundo preto dentro do
+    cartão. Arte com transparência agora entra inteira e sem cartão."""
+    py = (REPO / "app" / "render_proprio.py").read_text(encoding="utf-8")
+    assert "im.putalpha(masc)" not in py
+    assert 'im.putalpha(ImageChops.multiply(im.getchannel("A"), masc))' in py
+    assert "def _tem_transparencia(" in py
+    i = py.index("arte = (not video)")
+    assert "_tem_transparencia(im)" in py[i:i + 200]
+    # e a prévia deixa de pintar o retângulo escuro atrás dela
+    css = (REPO / "assets" / "preview" / "app.css").read_text(encoding="utf-8")
+    i = css.index(".midia-previa-card.arte {")
+    bloco = css[i:css.index("}", i)]
+    assert "background: none;" in bloco and "box-shadow: none;" in bloco
+    assert ".midia-previa-card.arte img { object-fit: contain; }" in css
+
+
+def test_arrastar_no_quadro_nao_da_play():
+    """O clique no quadro alterna o play, e um ARRASTO termina em `click`:
+    mover ou redimensionar a imagem dava play no fim do gesto."""
+    assert "andouNoQuadro" in JS
+    i = JS.index("const arrastou = andouNoQuadro")
+    assert "if (arrastou) return;" in JS[i:i + 200]
+    # e os cartões postos na mão não são "clicar no vídeo"
+    j = JS.index(".cap-overlay-line, .hl-overlay-line")
+    assert ".midia-previa-card" in JS[j:j + 260]
+    assert ".previa-alca" in JS[j:j + 260]
 
 
 def test_a_ajuda_nao_esconde_o_proprio_botao_do_menu():

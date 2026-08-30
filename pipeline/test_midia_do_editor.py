@@ -269,7 +269,10 @@ def test_altura_livre_nao_deforma_a_foto():
     tsx = (Path(__file__).resolve().parent.parent / "assets" / "shortform"
            / "src" / "Main.tsx").read_text(encoding="utf-8")
     j = tsx.index("const InsertCard")
-    assert "objectFit: 'cover'" in tsx[j:j + 2600]
+    # `cover` continua sendo a regra da FOTO; arte com transparência entra em
+    # `contain` (uma logo recortada não serve para nada) — ver o teste
+    # `test_png_transparente_nao_ganha_fundo`.
+    assert "objectFit: arte ? 'contain' : 'cover'" in tsx[j:j + 3400]
 
 
 def test_oito_alcas_e_o_lado_oposto_parado():
