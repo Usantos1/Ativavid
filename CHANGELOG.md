@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.89
+
+- **O som da manchete estava igual em todos os estilos, e não é.** A
+  **Pílula** não tem som nenhum no desenho de referência — e ganhava um. O
+  **Carimbo** é um pouco mais alto que os outros — e saía igual.
+- O resto do som foi conferido e está certo: cliques da legenda, risco,
+  pop da bolha, whoosh do cartão de imagem e o clique do corte marcado.
+
 ## 3.88
 
 - **Conserto de um estrago meu na 3.87.** A guarda que impedia a legenda

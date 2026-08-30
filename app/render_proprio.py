@@ -231,6 +231,11 @@ CLICK_VOL = 0.55
 STACK_CLICK_VOL = min(0.28, CLICK_VOL * 0.5)
 SCRATCH_VOL = 0.28
 WHOOSH_VOL = 0.1
+# O whoosh da manchete NAO e o mesmo em todo estilo. Lido um por um no
+# `Main.tsx`: quase todos tem `volume={0.1}`, o `carimbo` tem `{0.12}` e a
+# `pilula` NAO TEM `<Sfx>` NENHUM. O motor proprio tocava 0,1 em todos —
+# ou seja, um som a mais na pilula e um som fraco demais no carimbo.
+WHOOSH_HL = {"carimbo": 0.12, "pilula": None}
 
 
 def _pos(d: dict, chave: str, padrao: float) -> float:
@@ -945,7 +950,10 @@ class Renderizador:
         if hook.get("enabled"):
             self.camadas.append(self._montar_headline(hook))
             if self.sfx_on:
-                self.eventos_sfx.append(("whoosh.mp3", 0.0, WHOOSH_VOL))
+                vol_hl = WHOOSH_HL.get(hook.get("style") or "outline",
+                                       WHOOSH_VOL)
+                if vol_hl is not None:
+                    self.eventos_sfx.append(("whoosh.mp3", 0.0, vol_hl))
         caps_cfg = self.ed.get("captions") or {}
         # LEGENDA DESLIGADA nao desenha — o template tem
         # `{D.captions.enabled ? ... : null}` e aqui nao havia guarda nenhuma.
