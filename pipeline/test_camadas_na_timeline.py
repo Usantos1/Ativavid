@@ -175,14 +175,20 @@ def test_o_x_do_bloco_curto_nao_depende_do_hover():
     assert "chip-x sempre" in JS
 
 
-def test_a_capa_fica_no_comeco_da_faixa():
-    """No CapCut a capa é um bloco ANTES do primeiro clipe, e o usuário
-    disse que aquele lugar é melhor que o nosso (era um botão na barra).
-    Ela é o quadro zero do que vai ser publicado."""
+def test_a_capa_fica_na_coluna_e_nao_na_faixa():
+    """Como no CapCut: a capa é um botão na COLUNA da esquerda, junto do
+    ícone da faixa de vídeo — fora da linha do tempo. Dentro da faixa (a
+    primeira tentativa, 3.73) ela empurrava os clipes e virava mais um
+    bloco: "capa deve ser ali fora da timeline... onde mostra o icone de
+    video na esquerda" (30/08).
+
+    E JUNTO do ícone, não no lugar dele: os dois ficam na mesma coluna."""
     html = (REPO / "assets" / "preview" / "index.html").read_text(encoding="utf-8")
-    i = html.index('id="capaChip"')
-    j = html.index('id="laneVideo"')
-    assert i < j, "a capa tem de vir ANTES da faixa de vídeo"
+    i = html.index('class="track-label track-label-video"')
+    fim = html.index('id="laneVideo"')
+    coluna = html[i:fim]
+    assert 'data-icon="video"' in coluna, "o ícone da faixa não pode sumir"
+    assert 'id="capaChip"' in coluna, "a capa tem de morar na coluna"
     assert "$('capaChip')" in JS and "saveCoverFromPlayhead()" in JS
 
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.74
+
+- **A Capa foi para o lugar certo**: na coluna da esquerda, logo abaixo do
+  ícone da faixa de vídeo — fora da linha do tempo, como no CapCut. Na 3.73
+  eu a tinha posto dentro da faixa, onde ela empurrava os clipes e virava
+  mais um bloco.
+
 ## 3.73
 
 - **A Capa foi para o começo da faixa de vídeo**, como no CapCut: ela é o

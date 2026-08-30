@@ -3738,22 +3738,28 @@ body.styles-wide .setup-actions .btn.primary {
 /* --- capa no comeco da faixa de video (como no CapCut) -------------------
  * Ela e o quadro zero do que vai ser publicado: o lugar dela e o inicio da
  * linha do tempo, nao um botao na barra. */
+/* A coluna da faixa de video guarda o icone E a capa, empilhados. Ela e a
+   unica que precisa de duas linhas, entao so ela muda de largura. */
+.track-label.track-label-video {
+  flex: 0 0 62px;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 0;
+}
 .capa-chip {
-  flex: 0 0 auto;
-  width: 46px;
-  align-self: stretch;
-  margin-right: 6px;
+  width: 52px;
+  height: 34px;
   border: 1px dashed var(--stroke);
-  border-radius: 8px;
+  border-radius: 6px;
   background: transparent center/cover no-repeat;
   color: var(--fg-soft, #b9bec7);
   font: inherit;
-  font-size: 11px;
+  font-size: 10px;
   cursor: pointer;
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  padding-bottom: 3px;
+  padding-bottom: 2px;
   position: relative;
   overflow: hidden;
 }
@@ -3774,3 +3780,4 @@ body.styles-wide .setup-actions .btn.primary {
   outline: 2px solid var(--interact, #ff5470);
   outline-offset: 1px;
 }
+

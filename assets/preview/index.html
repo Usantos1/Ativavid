@@ -639,14 +639,16 @@
         <div class="lane" id="laneCaptions"></div>
       </div>
       <div class="track">
-        <div class="track-label"><span class="tl-chip" data-icon="video" title="Vídeo"></span></div>
-        <!-- A capa mora ANTES do primeiro clipe, como no CapCut: ela e o
-             quadro zero do que vai ser publicado. Antes era um botao na
-             barra, longe da linha do tempo. -->
-        <button type="button" id="capaChip" class="capa-chip"
-                title="Capa do vídeo — clique para usar o quadro da agulha">
-          <span class="capa-chip-txt">Capa</span>
-        </button>
+        <!-- A capa fica na COLUNA da esquerda, junto do icone da faixa de
+             video — fora da linha do tempo, como no CapCut. Dentro da faixa
+             ela empurrava os clipes e virava mais um bloco. -->
+        <div class="track-label track-label-video">
+          <span class="tl-chip" data-icon="video" title="Vídeo"></span>
+          <button type="button" id="capaChip" class="capa-chip"
+                  title="Clique para editar a capa (usa o quadro da agulha)">
+            <span class="capa-chip-txt">Capa</span>
+          </button>
+        </div>
         <div class="lane tall" id="laneVideo"></div>
       </div>
       <div class="track">
