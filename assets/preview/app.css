@@ -3603,3 +3603,57 @@ body.styles-wide .setup-actions .btn.primary {
   background: rgba(0, 0, 0, 0.55);
   color: #fff;
 }
+
+/* Ouvir o som sem sair do seletor. Fica no canto do cartao para o clique
+   do cartao continuar sendo "inserir" — dois alvos, duas acoes. */
+.img-card { position: relative; }
+.img-ouvir {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--stroke);
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+.img-ouvir:hover { background: rgba(0, 0, 0, 0.75); }
+
+/* --- somar na agulha, pela linha do tempo -------------------------------- */
+.somar-track { margin-top: 2px; }
+.somar-lane {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  background: transparent;
+  border: 0;
+}
+.tl-chip.somar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 15px;
+  color: var(--fg-soft, #b9bec7);
+}
+.somar-btn {
+  border: 1px dashed var(--stroke);
+  background: transparent;
+  color: var(--fg-soft, #b9bec7);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.somar-btn:hover {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--interact) 55%, transparent);
+  color: var(--text, #f4f4f5);
+}

@@ -53,7 +53,9 @@ def test_o_bloco_do_gancho_abre_o_editor_da_manchete():
     i = JS.index("O bloco GANCHO da linha do tempo")
     bloco = JS[i:i + 900]
     assert "c.kind !== 'hook'" in bloco
-    assert "beginHeadlineEdit()" in bloco
+    # a janela do app, e nao o editor de dentro do quadro: para quem esta na
+    # linha do tempo, ser levado para o video e o mesmo que nao editar ali
+    assert "editarManchetePelaLinhaDoTempo()" in bloco
 
 
 def test_soltar_o_bloco_nao_abre_o_editor():
@@ -90,3 +92,38 @@ def test_projeto_sem_legenda_tambem_mostra_o_gancho():
     assert "function desenharFaixasDeInsert" in JS
     i = JS.index("if (!showCaps) {")
     assert "desenharFaixasDeInsert(phase2);" in JS[i:i + 400]
+
+
+def test_o_bloco_do_gancho_edita_ALI_e_nao_no_video():
+    """A 3.65 abria o editor da manchete — que escreve DENTRO do quadro.
+    Para quem estava na linha do tempo isso continuava sendo "só edita no
+    vídeo" (print do usuário na 3.65). Agora o clique abre a janela do app
+    com o texto atual."""
+    assert "function editarManchetePelaLinhaDoTempo" in JS
+    i = JS.index("function editarManchetePelaLinhaDoTempo")
+    bloco = JS[i:i + 1200]
+    assert "pedirTexto('Texto da manchete'" in bloco
+    assert "persistHeadline([limpo])" in bloco
+    # o editor de dentro do quadro continua existindo para o ajuste fino
+    assert "function beginHeadlineEdit" in JS
+
+
+def test_uma_linha_so_no_salvar_da_manchete():
+    """Os dois motores reequilibram em duas linhas pela largura medida —
+    mandar a quebra na mão só atrapalha."""
+    i = JS.index("function editarManchetePelaLinhaDoTempo")
+    assert "persistHeadline([limpo])" in JS[i:i + 1200]
+
+
+def test_da_para_somar_pela_propria_linha_do_tempo():
+    """Tudo já existia, mas cada coisa por um caminho: ícone na barra,
+    pastilha ao lado da manchete. Quem olhava a linha do tempo não achava."""
+    html = (REPO / "assets" / "preview" / "index.html").read_text(encoding="utf-8")
+    for alvo in ("somarMidia", "somarSom", "somarEmoji", "somarLegenda"):
+        assert f'id="{alvo}"' in html, alvo
+        assert f"$('{alvo}')" in JS, alvo
+    # e todos agem na agulha, pelos caminhos que já existiam
+    i = JS.index("$('somarEmoji')")
+    assert "setImgTab('emoji')" in JS[i:i + 200]
+    j = JS.index("$('somarLegenda')")
+    assert "escreverLegendaAqui()" in JS[j:j + 160]

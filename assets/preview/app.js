@@ -3264,6 +3264,27 @@ function desenharMidiaNoPreview() {
  * rosto de quem fala exigia mexer no arquivo.
  * A posicao vive no proprio bloco e viaja no salvar; `x`/`y` sao fracao do
  * quadro, que e o que os dois motores desenham. */
+/* A roda sobre o bloco do efeito muda o VOLUME. Era fixo em 0,5: som
+ * gravado alto entrava alto demais e nao havia como baixar sem editar
+ * arquivo. Passo multiplicativo, como no tamanho do emoji. */
+function somComVolume(chip, c) {
+  if (chip.dataset.vol) return;
+  chip.dataset.vol = '1';
+  chip.addEventListener('wheel', (e) => {
+    if (S.applying) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const fator = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+    const novo = Math.max(0.05, Math.min(1.5, (c.volume ?? 0.5) * fator));
+    c.volume = +novo.toFixed(3);
+    const pct = Math.round(c.volume * 100);
+    chip.textContent = `${c.label} · ${pct}%`;
+    chip.title = `${c.label} — ${pct}% de volume (roda do mouse muda)`;
+    refreshHeader();
+    scheduleAutosave();
+  }, { passive: false });
+}
+
 function emojiArrastavel(d, c, box) {
   if (d.dataset.arrasta) return;
   d.dataset.arrasta = '1';
@@ -4049,8 +4070,13 @@ function desenharFaixasDeInsert(phase2) {
       const chip = el('div', `chip insert ${isText(c) ? 'hook' : ''}`, lanes[assign.get(i) ?? 0]);
       chip.style.left = `${c.start * S.pps}px`;
       chip.style.width = `${Math.max((c.end - c.start) * S.pps, 10)}px`;
-      chip.textContent = c.label;
-      chip.title = c.label;
+      const ehSom = c.kind === 'sfx';
+      const vol = Math.round((c.volume ?? 0.5) * 100);
+      chip.textContent = ehSom ? `${c.label} · ${vol}%` : c.label;
+      chip.title = ehSom
+        ? `${c.label} — ${vol}% de volume (roda do mouse muda)`
+        : c.label;
+      if (ehSom) somComVolume(chip, c);
       chip.dataset.i = i;
       if (c.start !== c.orig.start || c.end !== c.orig.end) chip.classList.add('dirty');
       el('div', 'handle l', chip).dataset.i = i;
@@ -5282,6 +5308,24 @@ $('imgQuery').addEventListener('keydown', (e) => {
 $('imgTabPexels')?.addEventListener('click', () => setImgTab('pexels'));
 $('imgTabLibrary')?.addEventListener('click', () => setImgTab('library'));
 $('imgTabEmoji')?.addEventListener('click', () => setImgTab('emoji'));
+
+/* Os botoes de somar, na propria linha do tempo. Cada um abre o caminho que
+ * ja existia — o que faltava era estar AQUI, onde a atencao esta. */
+$('somarMidia')?.addEventListener('click', () => {
+  toggleImgPicker(true);
+  setImgTab('library');
+});
+$('somarSom')?.addEventListener('click', () => {
+  toggleImgPicker(true);
+  setImgTab('library');
+  // a Biblioteca lista imagem, clipe e som juntos; o aviso diz onde olhar
+  toast('Escolha um som da pasta Efeitos — ▶ ouve antes de pôr', 3200);
+});
+$('somarEmoji')?.addEventListener('click', () => {
+  toggleImgPicker(true);
+  setImgTab('emoji');
+});
+$('somarLegenda')?.addEventListener('click', () => escreverLegendaAqui());
 $('imgLibRefresh')?.addEventListener('click', () => loadLibraryResults());
 $('imgLibFolder')?.addEventListener('click', async () => {
   try {
@@ -5386,12 +5430,47 @@ async function loadLibraryResults() {
       card.innerHTML = `<div class="img-clip-ph">▶</div><span class="img-credit">${it.name}</span>`;
     } else if (it.kind === 'sfx') {
       // som nao tem miniatura: o cartao dizia `<img src=...mp3>` e saia quebrado
-      card.innerHTML = `<div class="img-clip-ph som">♪</div><span class="img-credit">${it.name}</span>`;
+      card.innerHTML = `<div class="img-clip-ph som">♪</div>`
+        + `<button type="button" class="img-ouvir" title="Ouvir">▶</button>`
+        + `<span class="img-credit">${it.name}</span>`;
+      // Ouvir ANTES de por: o nome do arquivo nao diz como o som e, e sem
+      // isto o usuario so descobria que era o errado no video pronto.
+      card.querySelector('.img-ouvir').addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        ouvirSom(`/api/library/file?rel=${encodeURIComponent(it.rel)}`, ev.currentTarget);
+      });
     } else {
       card.innerHTML = `<img src="${thumb}" alt=""><span class="img-credit">${it.name}</span>`;
     }
     card.addEventListener('click', () => pickLibraryAsset(it));
   });
+}
+
+/* Um som por vez: dois tocando juntos viram barulho e nao da para julgar
+ * nenhum dos dois. Clicar de novo no mesmo para. */
+let _somOuvindo = null;
+function ouvirSom(url, botao) {
+  if (_somOuvindo) {
+    const igual = _somOuvindo.src.endsWith(url) || _somOuvindo._url === url;
+    _somOuvindo.pause();
+    if (_somOuvindo._botao) _somOuvindo._botao.textContent = '▶';
+    _somOuvindo = null;
+    if (igual) return;
+  }
+  const a = new Audio(url);
+  a._url = url;
+  a._botao = botao;
+  a.volume = 0.8;
+  if (botao) botao.textContent = '❚❚';
+  a.addEventListener('ended', () => {
+    if (botao) botao.textContent = '▶';
+    if (_somOuvindo === a) _somOuvindo = null;
+  });
+  a.play().catch(() => {
+    if (botao) botao.textContent = '▶';
+    toast('Não consegui tocar esse som', 2400);
+  });
+  _somOuvindo = a;
 }
 
 async function pickLibraryAsset(it) {
@@ -6047,8 +6126,37 @@ panel.addEventListener('click', (e) => {
   const c = S.insertsDraft[+chip.dataset.i];
   if (!c || c.kind !== 'hook') return;
   e.stopPropagation();
-  beginHeadlineEdit();
+  editarManchetePelaLinhaDoTempo();
 });
+
+/* A janela para quem esta na linha do tempo. O editor de dentro do quadro
+ * (`beginHeadlineEdit`) continua valendo para quem clica na manchete SOBRE
+ * o video — la se ajusta letra a letra, com o resultado a vista. */
+async function editarManchetePelaLinhaDoTempo() {
+  if (S.applying) {
+    toast('Estou aplicando as alterações. Espere terminar para editar.', 2400);
+    return;
+  }
+  const atual = headlineLines().join(' ');
+  const novo = await pedirTexto('Texto da manchete', atual, 'Salvar');
+  if (novo == null) return;
+  const limpo = String(novo).trim();
+  if (!limpo || limpo === atual) return;
+  // UMA linha: os dois motores reequilibram em duas pela largura medida.
+  const r = await persistHeadline([limpo]);
+  if (r && r.ok === false) {
+    toast(r.erro || r.error || 'Não consegui salvar a manchete', 3600);
+    return;
+  }
+  if (S.editData && S.editData.hook) {
+    S.editData.hook.lines = [limpo];
+    S.editData.hook.text = limpo;
+  }
+  buildInsertsDraft();
+  renderAll();
+  refreshHeader();
+  toast('Manchete trocada', 2000);
+}
 
 if ($('hlOverlay')) {
   $('hlOverlay').addEventListener('click', (e) => {

@@ -75,3 +75,37 @@ def test_o_efeito_tem_faixa_propria_na_linha_do_tempo():
     bloco = JS[i:i + 500]
     assert "icon: 'music'" in bloco
     assert "!isText(c) && !isSfx(c)" in bloco
+
+
+def test_da_para_ouvir_antes_de_por():
+    """O nome do arquivo não diz como o som é: sem ouvir, o usuário só
+    descobria que era o errado no vídeo pronto."""
+    assert "function ouvirSom" in JS
+    i = JS.index("function ouvirSom")
+    bloco = JS[i:i + 900]
+    # um som por vez: dois juntos viram barulho e não dá para julgar nenhum
+    assert "_somOuvindo.pause()" in bloco
+    # clicar de novo no mesmo PARA (o botão é play/pause, não só play)
+    assert "if (igual) return;" in bloco
+    # e toca do próprio projeto, sem copiar nada para lugar nenhum
+    assert "/api/library/file?rel=" in JS
+
+
+def test_o_botao_de_ouvir_nao_insere():
+    """Dois alvos, duas ações: o cartão insere, o ▶ só toca. Sem parar a
+    propagação, ouvir também colocaria o som na linha do tempo."""
+    i = JS.index("img-ouvir')")
+    assert "ev.stopPropagation();" in JS[i:i + 300]
+
+
+def test_a_roda_muda_o_volume_do_efeito():
+    """Era fixo em 0,5: som gravado alto entrava alto demais e não havia
+    como baixar sem editar arquivo."""
+    assert "function somComVolume" in JS
+    i = JS.index("function somComVolume")
+    bloco = JS[i:i + 900]
+    assert "c.volume" in bloco
+    assert "Math.max(0.05, Math.min(1.5" in bloco
+    assert "1.12" in bloco          # passo multiplicativo
+    # o bloco mostra o valor: volume que não se vê é volume que não se ajusta
+    assert "%`" in bloco

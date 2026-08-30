@@ -664,6 +664,18 @@
         <div class="lane jcut-lane" id="laneAudioA2"></div>
       </div>
       <div id="insertTracks" class="hidden"></div>
+      <!-- Somar na agulha, da propria linha do tempo. Estava tudo espalhado
+           (icone na barra, pastilha ao lado da manchete) e quem olhava a
+           linha do tempo nao achava. -->
+      <div class="track somar-track">
+        <div class="track-label"><span class="tl-chip somar" title="Somar na agulha">+</span></div>
+        <div class="lane somar-lane">
+          <button type="button" class="somar-btn" id="somarMidia">imagem ou vídeo</button>
+          <button type="button" class="somar-btn" id="somarSom">som</button>
+          <button type="button" class="somar-btn" id="somarEmoji">emoji</button>
+          <button type="button" class="somar-btn" id="somarLegenda">legenda</button>
+        </div>
+      </div>
       <div id="gutterLine" class="gutter-line"></div>
       <div id="needle" class="needle"><div class="needle-head"></div></div>
       </div>

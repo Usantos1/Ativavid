@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.66
+
+- **A manchete se troca na própria linha do tempo.** Clique no bloco GANCHO e
+  abre uma janela com o texto atual — antes o clique levava você para editar
+  dentro do vídeo, o que dava no mesmo que não editar ali.
+- **Somar coisas ficou na linha do tempo.** Embaixo das faixas agora tem
+  **+ imagem ou vídeo · som · emoji · legenda**, e tudo entra na posição da
+  agulha. Antes cada um estava num canto diferente da tela.
+- **Dá para ouvir o som antes de pôr** (▶ no cartão) e **a roda do mouse sobre
+  o bloco de som muda o volume** — que era fixo em 50%.
+
 ## 3.65
 
 - **O bloco GANCHO agora aparece na Edição** — e é lá que você estava. Na 3.58
