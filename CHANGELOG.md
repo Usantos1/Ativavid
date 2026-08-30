@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.91
+
+- **Quando "Aplicar alterações" falha, agora diz o que houve e o que
+  fazer.** Antes era sempre a mesma frase — "não foi possível preparar este
+  corte" — sem motivo e sem saída. No seu histórico, 14 de 99 aplicações
+  falharam e todas mostraram essa mesma linha.
+  Cada motivo conhecido virou uma frase com o próximo passo: legenda que
+  não casou com o corte novo, corte no disco diferente do que a tela
+  mostra, fila cheia. O que ninguém conhece continua na frase de antes.
+
 ## 3.90
 
 - **"Conferir os vídeos entregues"**, em Configurações. Passa uma checagem

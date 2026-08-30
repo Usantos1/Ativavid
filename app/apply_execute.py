@@ -51,6 +51,43 @@ APPLY_STATUS = "apply_status.json"
 APPLY_HISTORY = "apply_history.json"
 APPLY_HISTORY_MAX = 80
 MIN_FINAL_BYTES = 12_000
+# Cada motivo conhecido vira UMA frase com o proximo passo. Sem isto o
+# usuario lia sempre a mesma linha generica (14 de 99 aplicacoes falharam no
+# historico dele) e o motivo tecnico ficava num campo que a tela nem mostra.
+#
+# A chave e um pedaco do erro interno; a primeira que casar vence.
+MOTIVOS_DO_APPLY: tuple[tuple[str, str], ...] = (
+    ("ordem das palavras",
+     "As legendas não casaram com o corte novo. Use "
+     "“Salvar e refazer a Fase 2” para recriá-las a partir do corte atual "
+     "— as suas correções de texto são mantidas."),
+    ("token duplicado",
+     "As legendas não casaram com o corte novo (uma palavra aparece duas "
+     "vezes). Use “Salvar e refazer a Fase 2” para recriá-las."),
+    ("OLD map",
+     "O corte que está no disco não é o que a tela mostra — ele deve ter "
+     "sido refeito por fora. Recarregue o projeto e tente de novo."),
+    ("o mapa previa",
+     "O corte saiu com um tamanho diferente do previsto e nada foi "
+     "alterado. Tente de novo; se repetir, use “Salvar e refazer a Fase 2”."),
+    ("fila cheia",
+     "Outro vídeo está sendo processado agora. Tente de novo quando a fila "
+     "esvaziar."),
+    ("timestamp fora da duração",
+     "Uma legenda aponta para um instante que não existe mais no corte. "
+     "Use “Salvar e refazer a Fase 2” para recriá-las."),
+)
+
+
+def motivo_do_apply(erro: str | None) -> str | None:
+    """A frase em portugues para um erro interno conhecido, ou None."""
+    t = str(erro or "").lower()
+    for chave, frase in MOTIVOS_DO_APPLY:
+        if chave.lower() in t:
+            return frase
+    return None
+
+
 FAIL_MSG = "Não foi possível aplicar as alterações. Seu vídeo anterior foi mantido."
 PREPARE_FAIL_MSG = "Não foi possível preparar este corte. O vídeo anterior foi mantido."
 PROVENANCE_FAIL_MSG = "Este projeto antigo precisa ser atualizado antes de aplicar cortes manuais."
@@ -1097,7 +1134,11 @@ def execute_apply_plan(
             err, new_map, prepared_caps = prepare_edl_apply(edit)
             if err:
                 log(f"QUICK_APPLY_INVARIANT {err}")
-                user = PROVENANCE_FAIL_MSG if err == OVERLAP_FAIL else PREPARE_FAIL_MSG
+                # O motivo conhecido vem ANTES da frase generica: e aqui
+                # que a mensagem e escolhida, e o `user_message` explicito
+                # vencia o mapa la embaixo.
+                user = (PROVENANCE_FAIL_MSG if err == OVERLAP_FAIL
+                        else (motivo_do_apply(err) or PREPARE_FAIL_MSG))
                 raise PrepareError(err, user_message=user)
 
         if plan.get("rebuildCut"):
@@ -1274,9 +1315,12 @@ def execute_apply_plan(
         }
     except Exception as e:
         _cleanup_temps(edit)
-        msg = getattr(e, "user_message", None) or (
-            PREPARE_FAIL_MSG if isinstance(e, PrepareError) else FAIL_MSG
-        )
+        # O motivo VEM PRIMEIRO quando se conhece: a frase generica so
+        # informa que nada mudou, e o usuario fica sem saber o que fazer.
+        msg = (getattr(e, "user_message", None)
+               or motivo_do_apply(str(e))
+               or (PREPARE_FAIL_MSG if isinstance(e, PrepareError)
+                   else FAIL_MSG))
         write_apply_status(
             edit,
             running=False,
@@ -1364,7 +1408,7 @@ def start_apply(
                 edit,
                 running=False,
                 ok=False,
-                message=FAIL_MSG,
+                message=motivo_do_apply("fila cheia") or FAIL_MSG,
                 error="fila cheia",
                 stage="error",
             )
