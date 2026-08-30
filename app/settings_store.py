@@ -41,6 +41,11 @@ DEFAULTS: dict[str, Any] = {
     "musicEngine": "auto",  # auto | local | nuvem
     "llmFallback": True,  # Gemini → ChatGPT se explícito no gateway
     "oneClickDefault": True,
+    # Trocar os efeitos do app pelos da Biblioteca do usuario. DESLIGADO:
+    # a troca nasceu na 4.10 por iniciativa nossa, nunca foi pedida, e
+    # rendeu duas queixas em dois dias ("apito de galinha", "efeitos
+    # sonoros nada a ver"). A Biblioteca serve para ele ESCOLHER.
+    "sfxDoUsuario": False,
     "updateChannel": "stable",
     "updateCheckEnabled": True,
     "githubRepo": "",  # ex.: "sua-org/ativa-vid" — releases para auto-check

@@ -105,9 +105,19 @@ def test_a_tela_nao_cria_marca_por_cima_da_ativa():
     """
     js = (REPO / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
     if '$("#brandNewName")' not in js:
-        assert "brandName:" not in js, (
-            "a tela voltou a mandar um nome de marca sem passar por este guarda"
-        )
+        # Nenhum POST para /api/brands pode criar/renomear marca. O unico
+        # que sobrou e o do formato de saida (`action: "format"`), que nem
+        # passa por `save_brand`. (Substring solta nao serve: a criacao de
+        # PRESET desestrutura `brandName` justamente para nao mandar.)
+        i = 0
+        while True:
+            i = js.find('"/api/brands"', i)
+            if i < 0:
+                break
+            bloco = js[i:i + 400]
+            if 'method: "POST"' in bloco:
+                assert 'action: "format"' in bloco, bloco[:200]
+            i += 10
         return
     i = js.index('$("#brandNewName")')
     trecho = js[i:i + 2000]

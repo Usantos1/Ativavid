@@ -1803,10 +1803,25 @@ function parseProtectedRanges(text) {
   return out;
 }
 
+/* Cartoes que sao PACOTE: uma intencao de corte + um tipo de conteudo,
+ * os dois ja existentes no motor. O "Viral" nasceu assim; os tres de
+ * 4.23 seguem o mesmo desenho, entao nenhum deles pede codigo novo no
+ * planejador — o tipo de conteudo e que muda as regras do corte
+ * (`app/content_type.py`).
+ *
+ * Um `data-intent` que NAO esteja aqui tem de ser um valor de
+ * `app/editing_intent.py::INTENTS`, senao o servidor descarta a escolha
+ * calado e cai no recomendado. */
+const PACOTES_DE_MODO = {
+  viral: { intent: "dynamic", tipo: "viral" },
+  tutorial: { intent: "dynamic", tipo: "educational" },
+  anuncio: { intent: "dynamic", tipo: "ad" },
+  depoimento: { intent: "complete", tipo: "review" },
+};
+
 function collectImportIntent() {
   const mode = document.querySelector(".intent-card.on")?.dataset.intent || "dynamic";
-  // "viral" é um pacote da UI: intenção dinâmica + tipo de conteúdo viral
-  const realMode = mode === "viral" ? "dynamic" : mode;
+  const realMode = PACOTES_DE_MODO[mode]?.intent || mode;
   return {
     editingIntent: realMode,
     preserveHook: !!$("#protHook")?.checked,
@@ -1839,8 +1854,9 @@ function applyIntentDefaults(mode, recommended) {
   if ($("#protCta")) $("#protCta").checked = !loose;
   if ($("#protSentence")) $("#protSentence").checked = true;
   if ($("#protContext")) $("#protContext").checked = true;
-  // o card Viral também define o tipo de conteúdo — um clique, o pacote todo
-  if (mode === "viral" && $("#importContentType")) $("#importContentType").value = "viral";
+  // cartao-pacote também define o tipo de conteúdo — um clique, o pacote todo
+  const pacote = PACOTES_DE_MODO[mode];
+  if (pacote && $("#importContentType")) $("#importContentType").value = pacote.tipo;
 }
 
 // A duracao so serve para RECOMENDAR um preset (>=90s vira "complete"), entao
@@ -4518,6 +4534,31 @@ function wireForms() {
       }
     };
   }
+  const chkSfx = $("#sfxDoUsuario");
+  if (chkSfx) {
+    // Estado real do servidor: a caixa desmarcada de HTML mentiria para
+    // quem ja tivesse ligado a troca.
+    api("/api/settings")
+      .then((cfg) => { chkSfx.checked = !!(cfg && cfg.sfxDoUsuario); })
+      .catch(() => {});
+    chkSfx.onchange = async () => {
+      try {
+        await api("/api/settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sfxDoUsuario: !!chkSfx.checked }),
+        });
+        toast(chkSfx.checked
+          ? "Seus efeitos entram nos próximos vídeos"
+          : "Voltou para os efeitos do app");
+        // Os selos "toca no vídeo" de cada arquivo mudam junto.
+        loadLibraryUi().catch(() => {});
+      } catch (e) {
+        chkSfx.checked = !chkSfx.checked;
+        toast(e.message || "Não deu para salvar");
+      }
+    };
+  }
   const btnLib = $("#btnLibraryRefresh");
   if (btnLib) {
     btnLib.onclick = async () => {
@@ -5262,6 +5303,9 @@ function renderLibraryAba() {
           : `${itens.length} ${itens.length === 1 ? cfg.um : cfg.titulo} \u00b7 ${state.libraryRoot || ""}`)
       : "";
   }
+  // O interruptor da troca so faz sentido sobre os efeitos.
+  const swi = $("#sfxSwitch");
+  if (swi) swi.classList.toggle("hidden", aba !== "sfx");
   const btn = $("#btnLibraryAdd");
   if (btn) {
     btn.textContent = cfg.botao;
@@ -5775,6 +5819,35 @@ function wireIdentidade() {
 }
 
 function wirePresets() {
+  const btnNovo = $("#btnPresetNovo");
+  if (btnNovo && !btnNovo.dataset.wired) {
+    btnNovo.dataset.wired = "1";
+    btnNovo.onclick = async () => {
+      const nome = await pedirTexto("Nome do preset novo", "", "Criar");
+      if (!nome || !nome.trim()) return;
+      try {
+        // O estilo BASE e o ponto de partida — e o que a marca ativa
+        // desenha hoje. `/api/preset` devolve ele inteiro.
+        const base = await api("/api/preset").catch(() => ({}));
+        const { brandId: _b, id: _i, brandName: _n, ...estilo } = base || {};
+        const pack = await presetAction("create", {
+          name: nome.trim(), style: estilo,
+        });
+        const novo = (pack.presets || []).find((x) => x.name === nome.trim());
+        // `create` marca o novo como padrao (comportamento do servidor,
+        // o mesmo do editor). Dizer isso e melhor que ele descobrir
+        // quando o proximo video sair diferente.
+        toast("Preset criado — e já virou o padrão");
+        if (novo) {
+          state.editPresetId = novo.id;
+          state.editPresetNome = novo.name;
+          setView("estilo");
+        }
+      } catch (e) {
+        toast(e.message || "Não deu para criar o preset");
+      }
+    };
+  }
   const lista = $("#presetList");
   if (lista && !lista.dataset.wired) {
     lista.dataset.wired = "1";

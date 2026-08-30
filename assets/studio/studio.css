@@ -3746,3 +3746,27 @@ video.lib-thumb { aspect-ratio: 9 / 16; max-height: 260px; object-fit: contain;
 /* A conferencia dos videos entregues mudou de Configuracoes para Projetos
    (4.21). Ela nasceu dentro do `sys-grid`, que ja dava o espacamento. */
 #view-projetos #auditoriaCard { margin: 0 0 16px; }
+
+/* Interruptor da troca de efeitos (4.22). Fica na barra da Biblioteca, ao
+   lado dos botoes, e so na aba de efeitos. */
+.lib-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--dim);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.lib-switch input { accent-color: var(--accent); cursor: pointer; }
+.lib-switch:hover { color: var(--text); }
+
+/* Cartao sozinho na ultima linha ocupa a linha toda (4.23).
+   "quero mais 3 pra nao ficar apenas 1 ali sobrando" — com 3 colunas, 7
+   cartoes deixavam um orfao e 10 deixariam de novo. A regra resolve para
+   qualquer quantidade: se o ultimo cartao abre uma linha nova sozinho,
+   ele se estica. Vale nas duas larguras de coluna que o dialogo usa. */
+.intent-grid > .intent-card:last-child:nth-child(3n + 1) { grid-column: 1 / -1; }
+@media (max-width: 700px) {
+  .intent-grid > .intent-card:last-child:nth-child(3n + 1) { grid-column: auto; }
+}

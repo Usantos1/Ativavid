@@ -173,7 +173,10 @@ def list_assets(projects_root: Path | None = None) -> dict[str, Any]:
                 "name": p.name,
                 "kind": kind,
                 "vaga": vaga,
-                "tocaNoVideo": bool(vaga) if kind == "sfx" else None,
+                # Com a troca desligada NADA toca — dizer "toca no video"
+                # seria a tela mentindo sobre o que o render faz.
+                "tocaNoVideo": (bool(vaga) and _sfx_do_usuario_ligado()
+                                if kind == "sfx" else None),
                 "categoria": (familia_sfx(p.name) if kind == "sfx"
                               else categoria_de(p.name)),
                 "origem": "usuario",
@@ -383,6 +386,21 @@ def _copiar_no_nivel(origem: Path, destino: Path) -> None:
     shutil.copy2(origem, destino)
 
 
+def _sfx_do_usuario_ligado() -> bool:
+    """O usuario pediu para os efeitos dele entrarem no lugar dos do app?
+
+    Desligado por padrao. A troca automatica nasceu na 4.10 sem ele pedir
+    e rendeu duas queixas em dois dias; a Biblioteca continua guardando
+    tudo, e o interruptor mora na aba de efeitos.
+    """
+    try:
+        from app.settings_store import load_settings
+
+        return bool(load_settings().get("sfxDoUsuario"))
+    except Exception:  # noqa: BLE001 — sem settings, o som do app
+        return False
+
+
 def _dur_seg(arquivo: Path) -> float | None:
     """Duracao em segundos, ou `None` quando nao deu para medir."""
     import subprocess as _sp
@@ -439,6 +457,10 @@ def aplicar_sfx_do_usuario(public_dir: Path,
         if not pasta.is_dir() or not destino.is_dir():
             return trocados
         base = REPO / "assets" / "shortform" / "public" / "sfx"
+        # Desligado por padrao (4.22). Mesmo assim o laco roda: ele
+        # RESTAURA o som do app, e e isso que limpa os projetos onde uma
+        # troca antiga ficou gravada.
+        ligado = _sfx_do_usuario_ligado()
         for vaga, alvo in SFX_VAGAS.items():
             # O som do app VOLTA antes de qualquer troca. Sem isto um
             # arquivo ruim escolhido num render anterior fica no projeto
@@ -449,13 +471,18 @@ def aplicar_sfx_do_usuario(public_dir: Path,
                     shutil.copy2(original, destino / alvo)
                 except OSError:
                     pass
+            if not ligado:
+                continue
             odur = _dur_seg(original) if original.is_file() else None
             # Teto de duracao: o substituto nao pode ser MUITO mais longo
             # que o som que ele substitui. Medido na biblioteca dele: a
             # vaga `whoosh` tem 70 candidatos e so 9 cabem — o sorteado
             # pelo mtime tinha 10,78s contra 0,45s do app, e virou um
             # apito por cima da voz.
-            teto = max(2.5 * odur, odur + 0.6) if odur else None
+            # `+0,15` e nao `+0,6`: num clique de 57ms o piso antigo dava
+            # 0,657s de folga e deixava entrar um som 11x mais longo — foi
+            # o `corte--025.mp3` (0,63s) do render das 18:51.
+            teto = max(2.0 * odur, odur + 0.15) if odur else None
             cands = [f for f in pasta.iterdir()
                      if f.is_file() and f.suffix.lower() in AUDIO_EXTS
                      and vaga_do_efeito(f.name) == vaga]

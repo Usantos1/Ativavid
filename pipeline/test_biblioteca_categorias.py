@@ -11,6 +11,8 @@ from __future__ import annotations
 import shutil
 import sys
 import tempfile
+
+import pytest
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -102,7 +104,17 @@ def _tom(destino: Path, segundos: float) -> Path:
     return destino
 
 
-def test_efeito_do_usuario_troca_o_do_app():
+@pytest.fixture()
+def troca_ligada(monkeypatch):
+    """A troca dos efeitos e OPCIONAL e nasce desligada desde a 4.22 (duas
+    queixas em dois dias: "apito de galinha", "efeitos nada a ver"). Estes
+    testes medem o que ela faz QUANDO ligada."""
+    from app import settings_store as ss
+
+    monkeypatch.setattr(ss, "load_settings", lambda: {"sfxDoUsuario": True})
+
+
+def test_efeito_do_usuario_troca_o_do_app(troca_ligada):
     """A categoria do efeito e a VAGA que ele ocupa no video.
 
     Sem isto "Adicionar efeitos" seria um botao que guarda arquivo e nao
@@ -129,7 +141,7 @@ def test_efeito_do_usuario_troca_o_do_app():
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-def test_efeito_longo_demais_nao_entra_na_vaga():
+def test_efeito_longo_demais_nao_entra_na_vaga(troca_ligada):
     """O defeito de 30/08: um `swoosh` de 10,78s no lugar do whoosh de
     0,45s do app — "saiu com um apito" no video dele. Um som de transicao
     longo toca por cima de tudo."""
@@ -149,7 +161,7 @@ def test_efeito_longo_demais_nao_entra_na_vaga():
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-def test_o_som_do_app_volta_antes_da_troca():
+def test_o_som_do_app_volta_antes_da_troca(troca_ligada):
     """Sem isto o arquivo ruim de um render anterior fica no projeto para
     sempre: a troca so grava quando ACHA candidato. Foi assim que o whoosh
     de 10,78s sobreviveu no projeto dele."""

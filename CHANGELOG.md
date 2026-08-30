@@ -1,5 +1,34 @@
 # Changelog
 
+## 4.23
+
+- **Três modos novos na importação, e a última linha deixou de ter um
+  cartão sobrando.** Os novos: **Tutorial / passo a passo** (a IA mantém a
+  ordem dos passos e não pula nenhum), **Anúncio / oferta** (gancho nos 2
+  primeiros segundos, problema, prova e convite no fim — nunca termina sem
+  chamar para a ação) e **Depoimento de cliente** (corte conservador,
+  preserva o veredito e o motivo dele). Cada um junta uma intenção de corte
+  com um tipo de conteúdo que a IA já obedecia — o "Viral" sempre foi feito
+  assim.
+- Quando um cartão fica sozinho na última linha, ele passa a ocupar a linha
+  inteira, em qualquer quantidade e em qualquer largura de janela.
+
+## 4.22
+
+- **Os efeitos sonoros voltaram a ser os do app.** A troca automática pelos
+  efeitos da sua Biblioteca virou uma opção, **desligada**. Ela nunca foi
+  pedida — foi ideia minha na 4.10 — e saiu errada duas vezes em dois dias.
+  Se quiser ligar de novo, o interruptor está na Biblioteca, na aba
+  "Efeitos sonoros". Projetos que já tinham som trocado voltam ao som do
+  app sozinhos no próximo render.
+- **E o que ainda passava, agora não passa.** O clique do corte tem 0,057s
+  e a folga que eu tinha dado deixava entrar um som de 0,63s — 11 vezes
+  maior. Foi o que sobrou no vídeo das 18:51. A folga agora é proporcional
+  ao som que está sendo trocado.
+- **"Criar preset novo" cria de verdade.** Ele só trocava de tela. Agora
+  pergunta o nome, cria o preset a partir do estilo base e abre o editor
+  nele — e avisa que o preset novo já vira o padrão.
+
 ## 4.21
 
 - **A sua fonte aparece pelo nome.** A lista de fontes dizia só "Sua fonte

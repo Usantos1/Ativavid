@@ -314,6 +314,13 @@
               <p class="hint" id="libraryHint">Carregando…</p>
             </div>
             <div class="lib-bar-actions">
+              <!-- So na aba de efeitos (JS mostra/esconde). Desligado por
+                   padrao desde a 4.22: a troca automatica nunca foi
+                   pedida e saiu errada duas vezes. -->
+              <label class="lib-switch hidden" id="sfxSwitch">
+                <input type="checkbox" id="sfxDoUsuario">
+                <span>Usar meus efeitos no lugar dos do app</span>
+              </label>
               <button type="button" class="export-btn export-btn--sm" id="btnLibraryAdd">Adicionar</button>
               <button type="button" class="ghost-btn" id="btnLibraryRefresh">Abrir pasta</button>
               <input type="file" id="libraryFileInput" accept="image/*" multiple hidden>
@@ -354,9 +361,11 @@
                   <option value="feed">Feed 4:5</option>
                 </select>
               </label>
-              <!-- Criar preset exige o retrato do estilo que está aberto, e
-                   só o editor de Estilos tem isso — daqui sairia vazio. -->
-              <button type="button" class="export-btn export-btn--sm" data-view="estilo">Criar preset novo</button>
+              <!-- Cria de verdade: pergunta o nome, copia o estilo base e
+                   abre o editor no preset novo. Antes era um `data-view`
+                   que so trocava de tela — "nao funciona" (30/08), e de
+                   fato nao fazia nada do que o nome promete. -->
+              <button type="button" class="export-btn export-btn--sm" id="btnPresetNovo">Criar preset novo</button>
             </div>
           </div>
           <div class="preset-list" id="presetList"></div>
@@ -844,6 +853,21 @@
       <button type="button" class="intent-card" data-intent="clips">
         <strong>Clipes de podcast</strong>
         <span>De um vídeo longo, a IA separa vários clipes independentes — cada um vira um vídeo próprio na Fila, com headline própria.</span>
+      </button>
+      <!-- Os tres abaixo sao PACOTES: intencao de corte + tipo de conteudo,
+           os dois ja existentes. O "Viral" acima e feito assim desde que
+           nasceu. Ver PACOTES_DE_MODO no studio.js. -->
+      <button type="button" class="intent-card" data-intent="tutorial">
+        <strong>Tutorial / passo a passo</strong>
+        <span>A IA mantém a ordem dos passos e não pula nenhum para acelerar — tira só silêncio, erro e repetição.</span>
+      </button>
+      <button type="button" class="intent-card" data-intent="anuncio">
+        <strong>Anúncio / oferta</strong>
+        <span>Monta o corte como anúncio: gancho nos 2 primeiros segundos, o problema, a prova e o convite no fim — nunca termina sem chamar para a ação.</span>
+      </button>
+      <button type="button" class="intent-card" data-intent="depoimento">
+        <strong>Depoimento de cliente</strong>
+        <span>Para quem está falando de você: preserva o veredito e o motivo dele, e não reordena a fala. Corte conservador.</span>
       </button>
     </div>
     <details class="import-block import-adv">
