@@ -702,17 +702,12 @@
                 </div>
               </div>
 
-              <div class="sys-card">
-                <h4>Atualizações</h4>
-                <p class="hint" id="updateHint">Baixe a última versão no GitHub.</p>
-                <p class="hint" id="updateSoftHint" hidden></p>
-                <div class="panel-actions">
-                  <!-- Sem atualização pendente, baixar não é a ação principal:
-                       o JS promove este botão a primário só quando há uma. -->
-                  <button type="button" class="ghost-btn" id="btnUpdateOpen">Reinstalar a última versão</button>
-                  <button type="button" class="ghost-btn" id="btnUpdateCheck">Verificar</button>
-                </div>
-              </div>
+              <!-- O card "Atualizações" SAIU daqui (30/08): a pastilha de
+                   versão na barra do título já checa ao abrir, avisa sozinha
+                   quando sai versão nova e instala no clique. Isto repetia a
+                   mesma coisa onde ninguém procura. O que sobrou — reinstalar
+                   por cima quando algo quebrou — é conserto, e conserto mora
+                   no "Avançado". -->
 
               <!-- Diagnóstico saiu de dentro do "Avançado": é a primeira coisa
                    que o suporte pede, e escondida ela deixava metade da tela
@@ -759,6 +754,18 @@
                     </label>
                     <div class="panel-actions">
                       <button type="button" class="ghost-btn" id="btnSaveLicenseCfg">Salvar</button>
+                    </div>
+                  </div>
+                  <div>
+                    <h4>Reinstalar o aplicativo</h4>
+                    <p class="hint">Baixa a última versão e instala por cima —
+                      use se algo parou de funcionar. Atualização normal a
+                      pastilha de versão lá em cima já faz sozinha.</p>
+                    <p class="hint" id="updateHint" hidden></p>
+                    <p class="hint" id="updateSoftHint" hidden></p>
+                    <div class="panel-actions">
+                      <button type="button" class="ghost-btn" id="btnUpdateOpen">Reinstalar a última versão</button>
+                      <button type="button" class="ghost-btn hidden" id="btnUpdateCheck">Verificar</button>
                     </div>
                   </div>
                   <div>

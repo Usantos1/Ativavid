@@ -92,3 +92,25 @@ def test_o_texto_diz_como_criar_outro():
     """Ele perguntou "se nao da pra criar outros?" — dava, por Duplicar."""
     i = JS.index("preset(s) da marca ${marca}")
     assert "Duplicar" in JS[i:i + 260]
+
+
+def test_atualizacoes_saiu_de_configuracoes():
+    """"Reinstalar a última versão / Verificar — isso pode remover do menu de
+    configuração" (30/08).
+
+    A pastilha de versão na barra do título já checa ao abrir, avisa sozinha
+    quando sai versão nova e instala no clique; o card repetia isso onde
+    ninguém procura. O que sobrou — reinstalar por cima quando algo quebrou
+    — é conserto, e conserto mora no "Avançado".
+    """
+    i = HTML.index('class="sys-grid"')
+    grade = HTML[i:HTML.index('id="sysSupport"')]
+    assert "<h4>Atualizações</h4>" not in grade
+    assert 'id="btnUpdateCheck"' not in grade
+    # e o caminho de reinstalar não se perdeu
+    avancado = HTML[HTML.index('id="sysSupport"'):]
+    assert "<h4>Reinstalar o aplicativo</h4>" in avancado
+    assert 'id="btnUpdateOpen"' in avancado
+    # os três elementos que o JS escreve continuam existindo
+    for eid in ("updateHint", "updateSoftHint", "btnUpdateCheck"):
+        assert f'id="{eid}"' in HTML, eid

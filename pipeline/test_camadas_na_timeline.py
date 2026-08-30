@@ -358,6 +358,17 @@ def test_png_transparente_nao_ganha_fundo():
     assert ".midia-previa-card.arte img { object-fit: contain; }" in css
 
 
+def test_o_que_se_pega_no_quadro_nao_da_play():
+    """Provado no navegador: com o vídeo carregado e nenhum diálogo aberto,
+    clicar no FUNDO toca; arrastar no fundo não toca; e legenda, headline,
+    cartão de mídia, alça de tamanho e emoji não tocam em nenhum caso."""
+    j = JS.index(".cap-overlay-line, .hl-overlay-line")
+    lista = JS[j:j + 260]
+    for alvo in (".midia-previa-card", ".midia-previa-emoji", ".previa-alca",
+                 "#capEditor", "#hlOverlay"):
+        assert alvo in lista, alvo
+
+
 def test_arrastar_no_quadro_nao_da_play():
     """O clique no quadro alterna o play, e um ARRASTO termina em `click`:
     mover ou redimensionar a imagem dava play no fim do gesto."""

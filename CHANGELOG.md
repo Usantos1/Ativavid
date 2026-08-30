@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.81
+
+- **O card "Atualizações" saiu de Configurações.** A pastilha de versão na
+  barra do título já checa ao abrir, avisa sozinha quando sai versão nova e
+  instala no clique — o card repetia isso num lugar onde ninguém procura.
+  O "Reinstalar a última versão" foi para o **Avançado**: quando não há
+  atualização, reinstalar por cima é conserto, não atualização.
+
 ## 3.80
 
 - **Vidro e Metálico refeitos.** O Vidro agora é a **letra** que é de vidro
