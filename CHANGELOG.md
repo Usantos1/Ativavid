@@ -1,5 +1,17 @@
 # Changelog
 
+## 4.04
+
+- **"Traço da ênfase" voltou a funcionar.** O seletor entre *círculo* e
+  *marca-texto* aparecia na tela, aceitava o clique e não mudava nada: ele
+  era ligado antes do estilo carregar, dava erro no meio, e a segunda
+  tentativa achava que já estava ligado e desistia.
+- **A primeira tela não tem mais um buraco.** Com o app vazio, o Início
+  mostrava o título "Recentes", um botão "Ver fila" e meia tela em branco.
+  Agora diz o que vai acontecer, e o botão some enquanto não há nada na
+  fila.
+
+
 ## 4.03
 
 - **A tela de Presets mostra nome, não código interno.** O cartão dizia

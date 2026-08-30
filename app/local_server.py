@@ -1671,7 +1671,29 @@ class StudioHandler(BaseHTTPRequestHandler):
         path = parsed.path
 
         if path in ("/", "/studio"):
-            self._file(STUDIO / "index.html", "text/html; charset=utf-8")
+            # A digital de cache do `index.html`. O app poe a digital do
+            # arranque; aqui vale mais o MTIME dos arquivos: salvou o
+            # `studio.js`, a URL muda e o navegador busca o novo.
+            #
+            # Servindo `VERSION_PLACEHOLDER` literal (como era) a URL do
+            # script nunca mudava e o navegador guardava a versao antiga
+            # para sempre — a mudanca estava no disco, o servidor entregava
+            # o arquivo novo em `/assets/studio/studio.js`, e a tela
+            # continuava a de antes.
+            html = (STUDIO / "index.html").read_text(encoding="utf-8")
+            marca = "0"
+            try:
+                marca = str(max(int((STUDIO / n).stat().st_mtime)
+                                for n in ("studio.js", "studio.css",
+                                          "index.html")
+                                if (STUDIO / n).exists()))
+            except (OSError, ValueError):
+                pass
+            html = html.replace("VERSION_PLACEHOLDER", marca).replace(
+                'src="/assets/studio/studio.js"',
+                f'src="/assets/studio/studio.js?v={marca}"',
+            )
+            self._send(200, "text/html; charset=utf-8", html.encode("utf-8"))
             return
         # Mesmas rotas do desktop/preview: catálogo de Estilos no iframe do hub.
         if path in ("/estilo-padrao", "/estilo", "/fase1", "/fase2"):

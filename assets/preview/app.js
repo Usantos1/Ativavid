@@ -2636,6 +2636,9 @@ async function applyState(data) {
     else if (typeof SHARED_DEFAULT_STYLE.fastMode === 'boolean') S.fastMode = SHARED_DEFAULT_STYLE.fastMode;
   }
   refreshAutoControls();
+  // Agora `S.style` existe: se o seletor da enfase ficou de fora no
+  // DOMContentLoaded (estado ainda nao tinha chegado), liga aqui.
+  wireEmphStyle();
   $('setupNote').value = S.style.note || '';
   // the skill opened the gate → land the user on the Estilo tab
   if (S.state.awaitingStyle || HOUSE_STYLE) S.tab = 'style';
@@ -3272,7 +3275,12 @@ const circleAccentUsed = () => capAccentUsed() && CAP_CIRCLE_STYLES.includes(S.s
 // marca sujo como qualquer knob de estilo.
 function wireEmphStyle() {
   const el = $('optEmphStyle');
-  if (!el || el.dataset.wired) return;
+  // `S.style` so nasce quando o estado carrega, e esta funcao roda no
+  // DOMContentLoaded. Marcar `wired` ANTES de ler o estado deixava o
+  // seletor vivo na tela e morto por dentro: a linha seguinte estourava,
+  // o `setTimeout` de 800ms via `wired` e desistia, e trocar entre
+  // "circulo" e "marca-texto" nao mudava nada — calado.
+  if (!el || el.dataset.wired || !S.style) return;
   el.dataset.wired = '1';
   el.value = S.style.emphasisStyle === 'marker' ? 'marker' : 'circle';
   el.addEventListener('change', () => {

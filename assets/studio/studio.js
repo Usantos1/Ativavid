@@ -1170,6 +1170,9 @@ function renderJobs() {
       ["importing", "queued", "processing"].includes(j.status) || applyBusy(j)
     ).length;
     verFila.textContent = busy ? `Ver fila (${busy})` : "Ver fila";
+    // Fila vazia: o botao leva a outra tela vazia — pior que botao
+    // nenhum. Some junto com a lista.
+    verFila.classList.toggle("hidden", !fila.length);
   }
 
   const counts = state.jobs.reduce((a, j) => {
@@ -1198,7 +1201,8 @@ function renderJobs() {
   }
 
   renderHomeNow();
-  renderInto("jobListRecent", null, filterJobs("recent"), { compact: true, view: "recent" });
+  renderInto("jobListRecent", "emptyRecent", filterJobs("recent"),
+             { compact: true, view: "recent" });
   renderInto("jobListFila", "emptyFila", fila, { view: "fila" });
   renderInto("jobListDone", "emptyDone", done,
              { view: "done", busca: state.doneBusca });
