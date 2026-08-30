@@ -113,8 +113,23 @@ def _aviso_de_trilha(job: dict, edit: Path) -> None:
     fonte = str(t.get("musicaFonte") or "").strip()
     if fonte and not skip:
         if fonte.startswith("motor:"):
-            job["trilhaNota"] = ("Trilha composta pela IA local (MusicGen) "
-                                 "— o ElevenLabs estava indisponível")
+            # Dois caminhos levam ao motor local e eles NAO sao a mesma
+            # noticia: no modo "IA local" (Configuracoes) ele compoe
+            # primeiro, de proposito, e a nuvem nem e chamada. A ficha
+            # dizia "o ElevenLabs estava indisponivel" nos dois — e nos
+            # dois videos de 30/08 isso era falso, porque o modo dele
+            # esta em "local". Sem o motivo gravado (render antigo), o
+            # texto fica neutro em vez de acusar.
+            motivo = str(t.get("musicaMotivo") or "").strip()
+            if motivo == "escolha":
+                job["trilhaNota"] = (
+                    "Trilha composta pela IA local (MusicGen) — é o motor "
+                    "escolhido em Configurações, sem gastar créditos")
+            elif motivo == "reserva":
+                job["trilhaNota"] = ("Trilha composta pela IA local (MusicGen) "
+                                     "— o ElevenLabs não respondeu")
+            else:
+                job["trilhaNota"] = "Trilha composta pela IA local (MusicGen)"
         else:
             # O NOME DO ARQUIVO nao serve de recado: "anuncio--20260822-
             # 193504_a001_08221324_cf96c4.mp3" nao diz nada ao usuario, nao

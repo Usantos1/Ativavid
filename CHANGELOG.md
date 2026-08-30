@@ -1,5 +1,19 @@
 # Changelog
 
+## 4.25
+
+- **A ficha do vídeo parou de culpar o ElevenLabs pela sua própria
+  escolha.** Ela dizia "Trilha composta pela IA local (MusicGen) — o
+  ElevenLabs estava indisponível" toda vez que a IA local compunha. Mas o
+  seu app está configurado em **Configurações → Motor de música: IA
+  local**, e nesse modo a IA local compõe primeiro, de propósito, sem
+  gastar créditos — a nuvem nem chega a ser chamada. Agora a ficha diz
+  qual dos dois foi.
+- **A fonte sem acento avisa na hora de escolher.** O aviso existia, mas
+  só aparecia na ficha do vídeo pronto — com o "DEMO" já gravado por cima
+  de cada acento. Agora a lista de fontes avisa no clique, embaixo do
+  próprio seletor.
+
 ## 4.24
 
 - **A legenda agora faz um tique de digitar, não um sopro.** Um vídeo de

@@ -3835,3 +3835,16 @@ body.styles-wide .setup-actions .btn.primary {
   outline: 2px solid var(--interact, #ff5470);
   outline-offset: -2px;
 }
+
+/* Aviso da fonte sem acento, embaixo do proprio seletor (4.25). Ele
+   precisa ser lido antes do clique seguinte, entao usa a cor de alerta —
+   mas sem caixa, para nao competir com o catalogo de estilos ao lado. */
+.fonte-aviso {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--warn, #f5b942);
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+}

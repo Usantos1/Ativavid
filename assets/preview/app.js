@@ -8234,6 +8234,7 @@ async function carregarFontesDoUsuario() {
     fontes = (await r.json()).fontes || [];
   } catch { return; }
   if (!fontes.length) return;
+  FONTES_DO_USUARIO = fontes;
   for (const id of ['autoCapFont', 'autoHlFont']) {
     const sel = document.getElementById(id);
     if (!sel) continue;
@@ -8251,7 +8252,42 @@ async function carregarFontesDoUsuario() {
       pai.appendChild(o);
     });
     if (antigo) sel.value = antigo;
+    sel.addEventListener('change', () => avisoDaFonte(sel));
+    avisoDaFonte(sel);
   }
+}
+
+let FONTES_DO_USUARIO = [];
+
+/* Fonte que nao desenha acento avisa NA HORA DE ESCOLHER.
+ *
+ * A checagem existe desde 29/08, mas so falava na ficha do video pronto
+ * — com "N[DEMO]O" ja gravado. A demo da Integral CF carimba "DEMO" em
+ * todo acento e no "!", e o estilo base dele esta nela: todo video sai
+ * assim ate alguem olhar a ficha. */
+function avisoDaFonte(sel) {
+  const id = String(sel.value || '');
+  const label = sel.closest('label') || sel.parentElement;
+  if (!label) return;
+  let box = label.querySelector('.fonte-aviso');
+  const f = id.startsWith('arquivo')
+    ? (id.includes(':')
+        ? FONTES_DO_USUARIO.find((x) => `arquivo:${x.arquivo}` === id)
+        : FONTES_DO_USUARIO[0])
+    : null;
+  const faltam = (f && f.faltam) || '';
+  if (!faltam) {
+    if (box) box.remove();
+    return;
+  }
+  if (!box) {
+    box = document.createElement('p');
+    box.className = 'fonte-aviso';
+    label.appendChild(box);
+  }
+  box.textContent = `Esta fonte não desenha ${faltam.slice(0, 12)} — `
+    + 'nessas letras o vídeo sai com o símbolo da fonte. É a versão de '
+    + 'demonstração; use a completa ou outra fonte.';
 }
 
 async function loadBrandPresets(opts) {

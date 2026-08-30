@@ -22,6 +22,49 @@ from typing import Any
 
 EXTS = (".ttf", ".otf", ".woff2", ".woff")
 
+ACENTOS_PT = "ÁÃÂÀÉÊÍÓÔÕÚÇáãâàéêíóôõúç!?"
+
+
+def acentos_que_faltam(arquivo: Path) -> str:
+    """Letras do portugues que a fonte nao desenha DE VERDADE.
+
+    Fonte de demonstracao nao deixa a letra faltando: ela MAPEIA o acento
+    para um carimbo ("DEMO"). Por isso comparar com o glifo de ausente
+    (.notdef) nao acha nada — a assinatura e outra: varios caracteres
+    DIFERENTES saem com o desenho identico.
+
+    Caso real (29/08): a Integral CF demo escrevia "N[DEMO]O MORRE[DEMO]"
+    onde devia sair "NAO MORRE!" — e isso so aparecia no video pronto.
+
+    (Nasceu no `run_fast`, que avisava DEPOIS do render. Mudou de casa em
+    4.25 para a lista de fontes avisar na hora de escolher.)
+    """
+    try:
+        from PIL import ImageFont
+
+        f = ImageFont.truetype(str(arquivo), 64)
+
+        def _desenho(ch: str) -> tuple:
+            # `bytes(mask)`, nao `mask.tobytes()`: o objeto do Pillow nao
+            # tem esse metodo, e o try/except engolia o AttributeError —
+            # a checagem dizia "nenhum acento faltando" justamente para a
+            # fonte que carimbava DEMO em todos eles.
+            m = f.getmask(ch)
+            return (m.size, bytes(m))
+
+        ausente = _desenho("")
+        grupos: dict[tuple, list[str]] = {}
+        for c in ACENTOS_PT:
+            grupos.setdefault(_desenho(c), []).append(c)
+        faltam: list[str] = []
+        for desenho, chars in grupos.items():
+            # o proprio .notdef, ou um carimbo que serve a varias letras
+            if desenho == ausente or len(chars) >= 3:
+                faltam.extend(chars)
+        return "".join(c for c in ACENTOS_PT if c in faltam)
+    except Exception:  # noqa: BLE001 - checagem nunca derruba o render
+        return ""
+
 
 def pasta() -> Path:
     """~/ATIVAVID/Fontes — a mesma que o `run_fast` copia para o projeto."""
@@ -59,7 +102,8 @@ def listar() -> list[dict[str, Any]]:
         (f for f in p.iterdir()
          if f.is_file() and f.suffix.lower() in EXTS),
         key=lambda f: f.name.lower())
-    return [{"arquivo": f.name, "nome": _nome_do_arquivo(f)} for f in achados]
+    return [{"arquivo": f.name, "nome": _nome_do_arquivo(f),
+             "faltam": acentos_que_faltam(f)} for f in achados]
 
 
 def escolher(ident: str) -> Path | None:

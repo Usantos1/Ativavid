@@ -241,6 +241,8 @@ def write_timing(edit_dir: Path) -> dict:
         payload["musicaSkip"] = _RENDER_META["musicaSkip"]
     if _RENDER_META.get("musicaFonte"):
         payload["musicaFonte"] = _RENDER_META["musicaFonte"]
+    if _RENDER_META.get("musicaMotivo"):
+        payload["musicaMotivo"] = _RENDER_META["musicaMotivo"]
     if _RENDER_META.get("nivelAjustado"):
         payload["nivelAjustado"] = _RENDER_META["nivelAjustado"]
     if _RENDER_META.get("musicaMotorRecusa"):
@@ -3238,46 +3240,11 @@ def _quadro_cheio() -> frozenset:
 
 _QUADRO_CHEIO = _quadro_cheio()
 
-_ACENTOS_PT = "ÁÃÂÀÉÊÍÓÔÕÚÇáãâàéêíóôõúç!?"
-
-
-def _acentos_que_faltam(arquivo: Path) -> str:
-    """Letras do portugues que a fonte nao desenha DE VERDADE.
-
-    Fonte de demonstracao nao deixa a letra faltando: ela MAPEIA o acento
-    para um carimbo ("DEMO"). Por isso comparar com o glifo de ausente
-    (.notdef) nao acha nada — a assinatura e outra: varios caracteres
-    DIFERENTES saem com o desenho identico.
-
-    Caso real (29/08): a Integral CF demo escrevia "N[DEMO]O MORRE[DEMO]"
-    onde devia sair "NAO MORRE!" — e isso so apareceria no video pronto,
-    na frente do cliente dele.
-    """
-    try:
-        from PIL import ImageFont
-
-        f = ImageFont.truetype(str(arquivo), 64)
-
-        def _desenho(ch: str) -> tuple:
-            # `bytes(mask)`, nao `mask.tobytes()`: o objeto do Pillow nao tem
-            # esse metodo, e o try/except abaixo engolia o AttributeError —
-            # a checagem dizia "nenhum acento faltando" para uma fonte que
-            # carimbava DEMO em todos eles.
-            m = f.getmask(ch)
-            return (m.size, bytes(m))
-
-        ausente = _desenho("")
-        grupos: dict[tuple, list[str]] = {}
-        for c in _ACENTOS_PT:
-            grupos.setdefault(_desenho(c), []).append(c)
-        faltam: list[str] = []
-        for desenho, chars in grupos.items():
-            # o proprio .notdef, ou um carimbo que serve a varias letras
-            if desenho == ausente or len(chars) >= 3:
-                faltam.extend(chars)
-        return "".join(c for c in _ACENTOS_PT if c in faltam)
-    except Exception:  # noqa: BLE001 - checagem nunca derruba o render
-        return ""
+# A checagem mora em `app/fontes.py`: ela serve o render (aqui) e a
+# lista de fontes do editor, que precisa avisar ANTES de renderizar.
+# Os nomes ficam para quem ja importava daqui.
+from app.fontes import ACENTOS_PT as _ACENTOS_PT  # noqa: E402
+from app.fontes import acentos_que_faltam as _acentos_que_faltam  # noqa: E402
 
 
 def _attach_brand_font_file(ed: dict, public) -> None:
@@ -4122,6 +4089,13 @@ def run(
                                         edit_dir.parents[1],
                                         tentativas=_MOTOR_TENTATIVAS):
                         _music_via["motor"] = True
+                        # POR QUE o local compos: escolha dele (modo
+                        # "local", a nuvem nem e chamada) ou reserva
+                        # (modo "auto", a nuvem falhou). A ficha dizia
+                        # "o ElevenLabs estava indisponivel" nos dois.
+                        _music_via["motivo"] = (
+                            "escolha" if _pref_musica == "local"
+                            else "reserva")
                         print("[7/9] trilha composta pelo MOTOR LOCAL "
                               "(MusicGen)", flush=True)
 
@@ -4624,6 +4598,8 @@ def run(
             os.replace(music_tmp, trilha)
             if _music_via.get("motor"):
                 _RENDER_META["musicaFonte"] = "motor: MusicGen local"
+                _RENDER_META["musicaMotivo"] = str(
+                    _music_via.get("motivo") or "reserva")
         else:
             # Antecipada falhou (rede/planned<3s) — chamada síncrona antiga.
             _mproc = _helper(
@@ -4647,6 +4623,8 @@ def run(
                                              edit_dir.parents[1])):
                     _RENDER_META.pop("musicaSkip", None)
                     _RENDER_META["musicaFonte"] = "motor: MusicGen local"
+                    # Aqui a nuvem FOI chamada e falhou — reserva de fato.
+                    _RENDER_META["musicaMotivo"] = "reserva"
                     print("[7/9] trilha composta pelo MOTOR LOCAL "
                           "(MusicGen)", flush=True)
                 try:

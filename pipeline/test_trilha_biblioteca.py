@@ -356,7 +356,12 @@ def test_com_local_primeiro_o_motor_roda_antes_da_nuvem():
     s = (RAIZ / "pipeline" / "run_fast.py").read_text(encoding="utf-8")
     i = s.find("def _music_worker")
     assert i > 0
-    corpo = s[i:i + 1800]
+    # Ate o fim da funcao, nao uma janela fixa: a 4.25 acrescentou 7 linhas
+    # dentro do `_local()` (o motivo que a ficha usa) e a janela de 1800
+    # passou a cortar antes dos dois ramos — o teste acusava sem defeito.
+    fim = s.find("music_thread = _threading.Thread", i)
+    assert fim > i, "o fio antecipado mudou de nome — reancore este teste"
+    corpo = s[i:fim]
     ramo_local = corpo[corpo.find('if _pref_musica == "local":'):]
     assert ramo_local.find("_local()") < ramo_local.find("_nuvem()"), \
         "com a preferencia local, a IA local tem de compor primeiro"
