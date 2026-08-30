@@ -946,7 +946,23 @@ class Renderizador:
             self.camadas.append(self._montar_headline(hook))
             if self.sfx_on:
                 self.eventos_sfx.append(("whoosh.mp3", 0.0, WHOOSH_VOL))
-        estilo = (self.ed.get("captions") or {}).get("style") or "stacked"
+        caps_cfg = self.ed.get("captions") or {}
+        # LEGENDA DESLIGADA nao desenha — o template tem
+        # `{D.captions.enabled ? ... : null}` e aqui nao havia guarda nenhuma.
+        # A manchete (`hook.enabled`) e o card final (`ec.enabled`) sempre
+        # tiveram a delas; a legenda passou batido.
+        #
+        # Provado ponta a ponta: com o estilo "Nenhuma" o pipeline grava
+        # `enabled: false` e `style: "karaoke"`, o portao manda para o motor
+        # rapido, e ele montava 6 camadas de legenda num video em que o
+        # usuario tinha pedido NENHUMA.
+        #
+        # `is not False` e nao `if enabled`: edit-data de projeto antigo pode
+        # nao ter o campo, e ali o certo e continuar desenhando.
+        if caps_cfg.get("enabled") is False:
+            self.cues = []
+            return
+        estilo = caps_cfg.get("style") or "stacked"
         if estilo == "impacto":
             self.camadas.extend(self._montar_impacto())
             self.cues = []

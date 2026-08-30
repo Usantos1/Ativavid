@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.87
+
+- **Escolher "Nenhuma" na legenda não tirava a legenda do vídeo.** O motor
+  rápido — que desenha a maioria dos vídeos — não olhava se a legenda estava
+  ligada: ele desenhava assim mesmo. A manchete e o card final sempre
+  tiveram essa checagem; a legenda passou batido.
+
 ## 3.86
 
 Quatro headlines saíam diferentes do desenho de referência. Medi as 15 e
