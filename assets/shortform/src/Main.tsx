@@ -556,8 +556,8 @@ const ehVideo = (s: string) => /\.(mp4|mov|webm)$/i.test(s);
 // projeto antigo nao mudar de aparencia.
 const InsertCard: React.FC<{
   src: string; totalFrames: number;
-  x?: number; y?: number; size?: number;
-}> = ({src, totalFrames, x, y, size}) => {
+  x?: number; y?: number; size?: number; w?: number; h?: number;
+}> = ({src, totalFrames, x, y, size, w, h}) => {
   const frame = useCurrentFrame();
   const enter = interpolate(frame, [0, 9], [0, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic)});
   const exit = interpolate(frame, [totalFrames - 7, totalFrames], [1, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
@@ -568,8 +568,11 @@ const InsertCard: React.FC<{
   // `y` virou a POSICAO (prop); esta e a subida de entrada
   const yEnt = interpolate(enter, [0, 1], [26, 0]);
   const {width: qLarg, height: qAlt} = useVideoConfig();
-  const larg = Math.max(16, Math.round(Math.min(1, Math.max(0.08, size ?? CARD_W / 1080)) * qLarg));
-  const alt = Math.max(16, Math.round((larg * CARD_H) / CARD_W));
+  // largura e ALTURA soltas: com a proporcao travada a imagem nunca cobria
+  // a tela (o cartao e 780x500 e o quadro e 9:16)
+  const larg = Math.max(16, Math.round(Math.min(1, Math.max(0.08, w ?? size ?? CARD_W / 1080)) * qLarg));
+  const altPadrao = (larg * CARD_H) / CARD_W / qAlt;
+  const alt = Math.max(16, Math.round(Math.min(1, Math.max(0.05, h ?? altPadrao)) * qAlt));
   const cx = Math.min(1, Math.max(0, x ?? 0.5)) * qLarg;
   const cy = Math.min(1, Math.max(0, y ?? (CARD_TOP + CARD_H / 2) / 1920)) * qAlt;
   return (
@@ -599,7 +602,8 @@ const Inserts: React.FC = () => {
         return (
           <Sequence key={i} from={from} durationInFrames={duration} layout="none">
             <InsertCard src={it.src} totalFrames={duration}
-              x={(it as any).x} y={(it as any).y} size={(it as any).size} />
+              x={(it as any).x} y={(it as any).y} size={(it as any).size}
+              w={(it as any).w} h={(it as any).h} />
           </Sequence>
         );
       })}

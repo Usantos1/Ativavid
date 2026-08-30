@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.72
+
+- **A imagem se ajusta pelos quatro lados e pelos cantos** — oito alças. Puxe
+  qualquer uma e o lado oposto fica parado, como numa caixa de verdade.
+- **Ela pode cobrir a tela inteira.** A proporção deixou de ser travada: como
+  o cartão era 780x500 e o vídeo é 9:16, antes não existia tamanho que
+  cobrisse tudo. A foto continua sem deformar — o que sobra é recorte.
+
 ## 3.71
 
 - **Alça no canto para mudar o tamanho.** A imagem e o emoji ganharam um

@@ -833,14 +833,16 @@ def midia_do_editor(edit_dir: Path, public: Path, edit_data: dict) -> None:
         if (src, round(ini, 2)) in ja:
             continue
         geo = {}
-        for chave, lim in (("x", 1.0), ("y", 1.0), ("size", 1.0)):
+        for chave, lim in (("x", 1.0), ("y", 1.0), ("size", 1.0),
+                           ("w", 1.0), ("h", 1.0)):
             if it.get(chave) is None:
                 continue
             try:
                 v = float(it[chave])
             except (TypeError, ValueError):
                 continue
-            geo[chave] = min(lim, max(0.02 if chave != "size" else 0.08, v))
+            piso = 0.02 if chave in ("x", "y") else 0.05
+            geo[chave] = min(lim, max(piso, v))
         inserts.append({"src": src, "start": round(ini, 3),
                         "end": round(fim, 3),
                         "credit": str(it.get("credit") or ""),

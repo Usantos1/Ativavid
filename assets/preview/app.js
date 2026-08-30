@@ -3252,13 +3252,7 @@ function desenharMidiaNoPreview() {
     const card = el('div', 'midia-previa-card', box);
     // mesma conta dos dois motores: x/y sao o CENTRO e `size` a largura,
     // ambos em fracao do quadro; a altura segue a proporcao do cartao
-    const larg = Math.min(1, Math.max(0.08, c.size ?? CARTAO_SIZE_PAD));
-    const lp = larg * box.clientWidth;
-    const ap = lp * (500 / 780);
-    card.style.width = `${lp}px`;
-    card.style.height = `${ap}px`;
-    card.style.left = `${(c.x ?? 0.5) * box.clientWidth - lp / 2}px`;
-    card.style.top = `${(c.y ?? CARTAO_Y_PAD) * box.clientHeight - ap / 2}px`;
+    posicionarCartao(card, c, box);
     if (c.src) {
       const img = el('img', '', card);
       img.src = `${BASE}/media/remotion/public/${c.src}`;
@@ -3354,6 +3348,83 @@ function alcaDeTamanho(alvo, box, ler, aplicar, minimo, maximo) {
   return alca;
 }
 
+/* Onde o cartao fica na previa. Uma conta so, usada pelo desenho inicial,
+ * pelo arrasto e pelas alcas — tres copias divergiriam no primeiro ajuste.
+ * Espelha `geometria_do_insert` (motor proprio) e o InsertCard (Remotion). */
+function larguraDoCartao(c) {
+  return Math.min(1, Math.max(0.08, c.w ?? c.size ?? CARTAO_SIZE_PAD));
+}
+function alturaDoCartao(c, box) {
+  const padrao = (larguraDoCartao(c) * box.clientWidth * (500 / 780))
+    / Math.max(1, box.clientHeight);
+  return Math.min(1, Math.max(0.05, c.h ?? padrao));
+}
+function posicionarCartao(card, c, box) {
+  const lp = larguraDoCartao(c) * box.clientWidth;
+  const ap = alturaDoCartao(c, box) * box.clientHeight;
+  card.style.width = `${lp}px`;
+  card.style.height = `${ap}px`;
+  card.style.left = `${(c.x ?? 0.5) * box.clientWidth - lp / 2}px`;
+  card.style.top = `${(c.y ?? CARTAO_Y_PAD) * box.clientHeight - ap / 2}px`;
+}
+
+/* Quatro cantos e quatro lados. Cada alca puxa o SEU lado e deixa o oposto
+ * parado — puxar a direita cresce para a direita, e nao para os dois lados.
+ * Por isso a conta e em bordas e o centro sai delas. */
+const ALCAS = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
+
+function alcasDoCartao(card, c, box) {
+  for (const lado of ALCAS) {
+    const alca = el('div', `previa-alca alca-${lado}`, card);
+    alca.title = 'Arraste para mudar o tamanho';
+    let arr = null;
+    alca.addEventListener('pointerdown', (e) => {
+      if (S.applying || e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();          // senao vira ARRASTO do cartao
+      const r = box.getBoundingClientRect();
+      const lw = larguraDoCartao(c);
+      const lh = alturaDoCartao(c, box);
+      const cx = c.x ?? 0.5;
+      const cy = c.y ?? CARTAO_Y_PAD;
+      arr = { x0: e.clientX, y0: e.clientY, larg: r.width, alt: r.height,
+              l: cx - lw / 2, r: cx + lw / 2, t: cy - lh / 2, b: cy + lh / 2,
+              moveu: false };
+      alca.setPointerCapture(e.pointerId);
+    });
+    alca.addEventListener('pointermove', (e) => {
+      if (!arr) return;
+      const dx = (e.clientX - arr.x0) / arr.larg;
+      const dy = (e.clientY - arr.y0) / arr.alt;
+      if (!arr.moveu && Math.abs(dx) < 0.005 && Math.abs(dy) < 0.005) return;
+      arr.moveu = true;
+      let { l, r, t, b } = arr;
+      if (lado.includes('w')) l = Math.min(r - 0.08, Math.max(0, arr.l + dx));
+      if (lado.includes('e')) r = Math.max(l + 0.08, Math.min(1, arr.r + dx));
+      if (lado.includes('n')) t = Math.min(b - 0.05, Math.max(0, arr.t + dy));
+      if (lado.includes('s')) b = Math.max(t + 0.05, Math.min(1, arr.b + dy));
+      c.w = +(r - l).toFixed(4);
+      c.size = c.w;
+      c.h = +(b - t).toFixed(4);
+      c.x = +((l + r) / 2).toFixed(4);
+      c.y = +((t + b) / 2).toFixed(4);
+      posicionarCartao(card, c, box);
+    });
+    const soltar = (e) => {
+      if (!arr) return;
+      const moveu = arr.moveu;
+      arr = null;
+      try { alca.releasePointerCapture(e.pointerId); } catch { /* ja solto */ }
+      if (!moveu) return;
+      pushHistory();
+      refreshHeader();
+      scheduleAutosave();
+    };
+    alca.addEventListener('pointerup', soltar);
+    alca.addEventListener('pointercancel', soltar);
+  }
+}
+
 function cartaoArrastavel(card, c, box) {
   if (card.dataset.arrasta) return;
   card.dataset.arrasta = '1';
@@ -3381,6 +3452,7 @@ function cartaoArrastavel(card, c, box) {
     const ny = Math.max(0.02, Math.min(0.98, arr.cy + dy / arr.alt));
     card.style.left = `${nx * arr.larg - card.offsetWidth / 2}px`;
     card.style.top = `${ny * arr.alt - card.offsetHeight / 2}px`;
+    // (a largura/altura nao mudam no arrasto — so o centro)
     card.dataset.nx = String(nx);
     card.dataset.ny = String(ny);
   });
@@ -3403,22 +3475,21 @@ function cartaoArrastavel(card, c, box) {
   card.addEventListener('pointercancel', soltar);
 
   const desenhar = (frac, gravar) => {
-    c.size = +frac.toFixed(4);
-    const lp = c.size * box.clientWidth;
-    const ap = lp * (500 / 780);
-    card.style.width = `${lp}px`;
-    card.style.height = `${ap}px`;
-    card.style.left = `${(c.x ?? 0.5) * box.clientWidth - lp / 2}px`;
-    card.style.top = `${(c.y ?? CARTAO_Y_PAD) * box.clientHeight - ap / 2}px`;
+    // a roda mexe so na largura; a altura acompanha se o usuario nunca a
+    // ajustou na mao (senao ela seria "corrigida" a cada giro)
+    c.w = +frac.toFixed(4);
+    if (c.h == null) c.h = +(c.w * (500 / 780) * (box.clientWidth / Math.max(1, box.clientHeight))).toFixed(4);
+    else c.h = +Math.min(1, Math.max(0.05, c.h * (frac / (c.size ?? frac)))).toFixed(4);
+    c.size = c.w;
+    posicionarCartao(card, c, box);
     if (gravar) {
       refreshHeader();
       scheduleAutosave();
     }
   };
-  // Alca no canto: o gesto que todo mundo procura. A roda continua valendo
-  // para quem preferir, mas ela e invisivel — o usuario mexeu na posicao e
-  // nao achou como mudar o tamanho (30/08).
-  alcaDeTamanho(card, box, () => c.size ?? CARTAO_SIZE_PAD, desenhar, 0.12, 1.0);
+  // Oito alcas: quatro cantos e quatro lados. Uma so, com proporcao
+  // travada, nunca cobria a tela.
+  alcasDoCartao(card, c, box);
   card.addEventListener('wheel', (e) => {
     if (S.applying) return;
     e.preventDefault();
@@ -5996,6 +6067,8 @@ async function saveEditsAndReturnToQueue() {
         ...(c.x != null ? { x: +c.x } : {}),
         ...(c.y != null ? { y: +c.y } : {}),
         ...(c.size != null ? { size: +c.size } : {}),
+        ...(c.w != null ? { w: +c.w } : {}),
+        ...(c.h != null ? { h: +c.h } : {}),
       })),
       // Emoji: comeco E duracao (ele fica na tela enquanto o bloco durar).
       emojis: S.insertsDraft.filter((c) => c.kind === 'emoji' && c.char).map((c) => ({

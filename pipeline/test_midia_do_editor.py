@@ -240,8 +240,47 @@ def test_o_tamanho_tem_alca_e_nao_so_a_roda():
     assert "e.stopPropagation();" in bloco
     # a diagonal manda, e o limite vem de quem chamou
     assert "Math.max(minimo, Math.min(maximo" in bloco
-    # e serve aos dois: cartão e emoji
-    assert js.count("alcaDeTamanho(") == 3   # a definição + os dois usos
+    # o emoji usa a alça de canto; a imagem ganhou as oito (lados e cantos),
+    # porque com uma só, e proporção travada, ela nunca cobria a tela
+    assert js.count("alcaDeTamanho(") == 2   # a definição + o emoji
+    assert "alcasDoCartao(card, c, box)" in js
     css = (repo / "assets" / "preview" / "app.css").read_text(encoding="utf-8")
     j = css.index(".previa-alca")
     assert "cursor: nwse-resize" in css[j:j + 400]
+
+
+def test_a_imagem_pode_cobrir_a_tela_inteira():
+    """Com a proporção travada (780x500) a imagem nunca cobria um quadro
+    9:16. Pedido de 30/08: "se quiser cobrir toda a tela deve permitir"."""
+    from app.render_proprio import geometria_do_insert
+
+    cw, ch, cx, cy = geometria_do_insert(
+        {"w": 1.0, "h": 1.0, "x": 0.5, "y": 0.5}, 1080, 1920)
+    assert (cw, ch) == (1080, 1920) and (cx, cy) == (540.0, 960.0)
+
+
+def test_altura_livre_nao_deforma_a_foto():
+    """A foto é desenhada em `cover` nos dois motores: sobra recorte, nunca
+    esticamento — por isso soltar a altura é seguro."""
+    py = (Path(__file__).resolve().parent.parent / "app"
+          / "render_proprio.py").read_text(encoding="utf-8")
+    i = py.index("# objectFit: cover")
+    assert "esc = max(cw / im.width, ch / im.height)" in py[i:i + 260]
+    tsx = (Path(__file__).resolve().parent.parent / "assets" / "shortform"
+           / "src" / "Main.tsx").read_text(encoding="utf-8")
+    j = tsx.index("const InsertCard")
+    assert "objectFit: 'cover'" in tsx[j:j + 2600]
+
+
+def test_oito_alcas_e_o_lado_oposto_parado():
+    """Puxar a direita cresce para a direita, não para os dois lados — por
+    isso a conta é em bordas e o centro sai delas."""
+    js = (Path(__file__).resolve().parent.parent / "assets" / "preview"
+          / "app.js").read_text(encoding="utf-8")
+    i = js.index("const ALCAS = [")
+    assert js[i:i + 120].count("'") == 16       # oito alças
+    k = js.index("function alcasDoCartao")
+    bloco = js[k:k + 2200]
+    for borda in ("l = Math.min", "r = Math.max", "t = Math.min", "b = Math.max"):
+        assert borda in bloco, borda
+    assert "c.x = +((l + r) / 2)" in bloco and "c.y = +((t + b) / 2)" in bloco

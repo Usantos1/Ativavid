@@ -71,9 +71,14 @@ def geometria_do_insert(it: dict, larg: int, alt: int) -> tuple[int, int, float,
         except (TypeError, ValueError):
             return padrao
 
-    frac = min(1.0, max(0.08, _f("size", INSERT_SIZE_PAD)))
-    cw = max(16, int(round(frac * larg)))
-    ch = max(16, int(round(cw * INSERT_H / INSERT_W)))
+    # Largura e ALTURA soltas: com a proporcao travada a imagem nunca cobria
+    # a tela (o cartao e 780x500 e o quadro e 9:16). Pedido de 30/08: "se
+    # quiser cobrir toda a tela deve permitir".
+    fw = min(1.0, max(0.08, _f("w", _f("size", INSERT_SIZE_PAD))))
+    cw = max(16, int(round(fw * larg)))
+    padrao_h = (cw * INSERT_H / INSERT_W) / max(1, alt)
+    fh = min(1.0, max(0.05, _f("h", padrao_h)))
+    ch = max(16, int(round(fh * alt)))
     cx = min(1.0, max(0.0, _f("x", INSERT_X_PAD))) * larg
     cy = min(1.0, max(0.0, _f("y", INSERT_Y_PAD))) * alt
     return cw, ch, cx, cy
