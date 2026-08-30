@@ -1,5 +1,20 @@
 # Changelog
 
+## 4.06
+
+- **O vídeo leve só é usado enquanto for o mesmo vídeo.** Cada "Aplicar
+  alterações" refaz o corte, e em 46 dos seus 186 projetos a cópia leve
+  ficou para trás — uma delas por quase quatro dias. Sem esta checagem o
+  editor mostraria trechos que já não existem. Agora, cópia atrasada é
+  ignorada e o editor usa o vídeo completo.
+- **A tira de miniaturas da linha do tempo abre 7x mais rápido.** Ela sai
+  da cópia leve quando esta serve: 1,2s no lugar de 8,8s, as mesmas
+  miniaturas. (A onda do áudio continua vindo do vídeo completo — a cópia
+  leve não tem som.)
+- **Correção da 4.05:** abrir o editor com a janela minimizada podia
+  deixar a tela sem vídeo até a próxima verificação.
+
+
 ## 4.05
 
 - **O editor voltou a usar o vídeo leve.** Todo projeto tem uma cópia leve

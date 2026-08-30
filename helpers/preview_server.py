@@ -494,6 +494,29 @@ class Handler(BaseHTTPRequestHandler):
             return None
         return p
 
+    def _proxy_util(self) -> Path | None:
+        """O `cut_proxy.mp4`, mas so enquanto ele for o corte de agora.
+
+        O proxy e uma copia leve do corte, e o corte muda: cada "Aplicar
+        alteracoes" refaz o `cut.mp4`. Medido nos projetos do usuario, **46
+        de 186 tem o proxy mais velho que o corte** — um deles por 3,7
+        dias. Servir esse arquivo faria o editor tocar um video que nao e o
+        corte atual, com trechos que ja nao existem: pior que lento.
+
+        Velho e o mesmo que nao existir. Quem pergunta ja sabe cair no
+        arquivo cheio.
+        """
+        px = self.root / "cut_proxy.mp4"
+        cut = self.root / "cut.mp4"
+        if not px.is_file():
+            return None
+        try:
+            if cut.is_file() and px.stat().st_mtime < cut.stat().st_mtime:
+                return None
+        except OSError:
+            return None
+        return px
+
     def _current_video(self) -> Path | None:
         state_p = self.root / "state.json"
         rel = "cut.mp4"
@@ -553,6 +576,10 @@ class Handler(BaseHTTPRequestHandler):
         alvo = None
         if path.startswith("/media/"):
             alvo = self._safe(self.root, path[len("/media/"):])
+            # A mesma regra do GET, senao a pergunta e a resposta discordam.
+            if alvo is not None and alvo.name == "cut_proxy.mp4" and not self._proxy_util():
+                self._sem_corpo(404)
+                return
         elif path.startswith("/assets/studio/"):
             alvo = self._safe(STUDIO_DIR, path[len("/assets/studio/"):])
         elif path.startswith("/assets/"):
@@ -601,6 +628,11 @@ class Handler(BaseHTTPRequestHandler):
             self._send_file(p) if p else self._json({"error": "bad path"}, 400)
         elif path.startswith("/media/"):
             p = self._safe(self.root, path[len("/media/"):])
+            # Proxy mais velho que o corte nao e proxy: entregar isso faria
+            # o editor tocar um video que nao e o corte de agora.
+            if p is not None and p.name == "cut_proxy.mp4" and not self._proxy_util():
+                self._json({"error": "proxy desatualizado"}, 404)
+                return
             self._send_file(p) if p else self._json({"error": "bad path"}, 400)
         elif path == "/gen/waveform.json":
             self._waveform()
@@ -1689,7 +1721,12 @@ class Handler(BaseHTTPRequestHandler):
         self._send_file(out)
 
     def _thumbs(self, name: str) -> None:
-        video = self._current_video()
+        # A tira de miniaturas so precisa da IMAGEM, e o proxy tem a mesma
+        # imagem 7,6x mais barato: medido no `20260829-171222`, as mesmas
+        # 62 miniaturas saem em 1,16s contra 8,79s do corte cheio. (A onda
+        # de audio, logo acima, continua no corte: o proxy nao tem faixa de
+        # audio nenhuma.)
+        video = self._proxy_util() or self._current_video()
         if not video:
             self._json({"error": "sem vídeo ainda"}, 404)
             return

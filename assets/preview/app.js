@@ -2541,7 +2541,11 @@ async function poll() {
   // volta, entao aqui basta uma batida lenta. NAO parar de vez e
   // proposital — ha embutidos que dizem "escondido" com a janela a
   // vista, e um editor que congela nesse caso seria pior que o gasto.
-  if (document.hidden && !S.applying) {
+  // `S.lastSig` vazio = ainda nao ha estado nenhum. Pular a PRIMEIRA
+  // volta deixaria o editor em branco ate a proxima — e ha embutido
+  // que ja nasce marcado como escondido. Medido: a tela abria sem
+  // video nenhum.
+  if (document.hidden && !S.applying && S.lastSig) {
     S.pollEspera = POLL_ESCONDIDO;
     if ((S.pollPulos = (S.pollPulos || 0) + 1) < 4) {
       setTimeout(poll, POLL_OCIOSO);
