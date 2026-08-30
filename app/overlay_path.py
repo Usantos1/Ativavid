@@ -802,6 +802,7 @@ def try_overlay_final(
         # Qualquer problema derruba para o Remotion; o validate_overlay_alpha
         # continua sendo o gate final para os dois.
         motivo_proprio = None
+        uma_passada_falhou = None
         try:
             from app.render_proprio import motivo_nao_suportado, render_overlay_proprio
             motivo_proprio = motivo_nao_suportado(edit_data, public)
@@ -835,6 +836,7 @@ def try_overlay_final(
                         # quando um recurso novo do template nao e suportado.
                         "engine": "proprio",
                         "engineSkip": None,
+                        "onePassFail": None,
                         "remotionSec": float(mix.get("renderSec") or 0),
                         "composeSec": float(mix.get("normSec") or 0),
                         "timeline": tl,
@@ -844,6 +846,9 @@ def try_overlay_final(
                     }
                     return result
                 except Exception as e:  # noqa: BLE001
+                    # Continua sendo o motor proprio, mas pela cadeia de
+                    # duas etapas — mais lenta. So o log sabia disso.
+                    uma_passada_falhou = f"{type(e).__name__}: {e}"[:200]
                     print(f"UMA_PASSADA_FALLBACK erro: {e}", flush=True)
             try:
                 overlay = render_overlay_proprio(
@@ -854,6 +859,11 @@ def try_overlay_final(
                 print(f"RENDER_PROPRIO_FALLBACK erro: {e}", flush=True)
                 overlay = None
                 snapshot["_engine"] = "remotion"
+                # O `engineSkip` existe para dizer POR QUE o motor rapido
+                # nao foi usado. Ficando em `None` aqui, o relatorio dizia
+                # "remotion, sem motivo" — e o motivo existia. Caso real
+                # (29/08): 479s de overlay onde o proprio faria ~130s.
+                motivo_proprio = f"o motor proprio falhou: {type(e).__name__}: {e}"[:200]
         else:
             print(f"RENDER_PROPRIO_PULADO {motivo_proprio}", flush=True)
 
@@ -928,6 +938,7 @@ def try_overlay_final(
             "mix": mix,
             "engine": snapshot.get("_engine") or "remotion",
             "engineSkip": motivo_proprio,
+            "onePassFail": uma_passada_falhou,
 
             "remotionSec": round(render_sec, 3),
             "composeSec": round(compose_sec, 3),

@@ -32,6 +32,31 @@ def test_nenhuma_rota_do_studio_fica_invisivel_no_app():
         + ", ".join(fora))
 
 
+# A direcao INVERSA. Rota que so existe no `desktop_server` nao quebra o
+# usuario — quebra quem esta consertando o app: no navegador a tela mente.
+# Custou tempo em 30/08 com o card "Desempenho" preso em "Detectando GPU...",
+# porque `loadHardwareCard` engole o erro e nao ha sintoma nenhum.
+JS = (REPO / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
+
+
+def test_o_navegador_serve_o_que_o_studio_pede():
+    chamadas = sorted(set(re.findall(r"[\"'`](/api/[a-zA-Z0-9_\-/]+)", JS)))
+    assert len(chamadas) > 40, f"achei so {len(chamadas)} chamadas — mudou o padrao?"
+    servidas = set(re.findall(r'path == "(/api/[^"]+)"', LOCAL))
+    prefixos = set(re.findall(r'path\.startswith\("(/api/[^"]+)"\)', LOCAL))
+    fora = [r for r in chamadas
+            if r not in servidas
+            and not any(r.startswith(px) or px.startswith(r) for px in prefixos)]
+    assert not fora, (
+        "rotas que o preview no navegador nao serve (a tela mente calada): "
+        + ", ".join(fora))
+
+
+def test_as_tres_que_faltavam_no_navegador():
+    for rota in ("/api/hardware", "/api/hardware/bench", "/api/events"):
+        assert f'path == "{rota}"' in LOCAL, rota
+
+
 def test_as_duas_que_ja_morderam_estao_na_lista():
     for rota in ("/api/library/categoria", "/api/update/progresso"):
         assert f'"{rota}"' in DESKTOP, rota

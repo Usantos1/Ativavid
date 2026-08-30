@@ -79,9 +79,11 @@ def test_cada_preset_mostra_o_que_ele_decide():
     que muda de um preset para o outro sem abrir os dois."""
     i = JS.index("// O que este preset DECIDE")
     bloco = JS[i:i + 1200]
-    for rot in ('chip("layout", st.edit)', 'chip("legenda", st.captions)',
-                'chip("manchete", st.headline)', 'chip("ritmo", st.rhythm)'):
-        assert rot in bloco, rot
+    # O valor passa pelo `nomeDoEstilo` desde 4.03: a linha mostrava o id
+    # interno ("stacked", "realce") numa tela que existe para explicar.
+    for rot, campo in (("layout", "st.edit"), ("legenda", "st.captions"),
+                       ("manchete", "st.headline"), ("ritmo", "st.rhythm")):
+        assert f'chip("{rot}", nomeDoEstilo("{rot}", {campo}))' in bloco, rot
     assert 'cor("cor", st.accent)' in bloco
     # a cor entra como amostra, não como texto solto
     assert 'class="preset-cor"' in bloco

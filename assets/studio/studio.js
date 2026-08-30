@@ -5567,9 +5567,64 @@ async function loadPresetsUi() {
         + `"Duplicar" cria outro a partir dele.`
       : `Nenhum preset salvo para a marca ${marca}. Ajuste o estilo em Estilos e salve a combinação aqui.`;
   }
+/* Nome de tela de cada id de estilo.
+ *
+ * O cartao de preset mostrava o id cru — "stacked", "realce",
+ * "informational" — numa tela que existe para o usuario ENTENDER o que o
+ * preset decide. Os nomes ja existiam em `app/caption_styles.py`,
+ * `app/video_layouts.py`, `app/content_type.py` e no catalogo do preview;
+ * so esta tela nao os usava.
+ *
+ * O mapa mora aqui porque e rotulo de tela. Quem impede a copia de
+ * apodrecer e `test_nomes_de_estilo_na_tela.py`, que compara cada linha
+ * com a fonte de verdade. Estilo novo sem nome aqui quebra o teste — e o
+ * pior caso, que e a tela mostrar o id de novo, nao volta calado. */
+const NOME_DO_ESTILO = {
+  layout: {
+    limpa: "Limpo", split: "Tela dividida", split2: "Tela dividida com mídia",
+    moldura: "Moldura", barra: "Barra inferior", desfocado: "Fundo desfocado",
+    degrade: "Degradê", vinheta: "Vinheta", cinema: "Cinema",
+    borda: "Borda da marca",
+  },
+  legenda: {
+    karaoke: "Karaokê", stacked: "Empilhado", impacto: "Impacto",
+    scatter: "Disperso", recorte: "Recorte", bolha: "Bolha de conversa",
+    simples: "Simples", serifada: "Serifada", classica: "Clássica",
+    bloco: "Bloco", metal: "Metálico", vidro: "Vidro",
+    traco: "Contorno fino", moldura: "Moldura", eco: "Eco",
+  },
+  manchete: {
+    outline: "Contorno", card: "Cartão", realce: "Realce", misto: "Misto",
+    sombra: "Sombra dura", sublinhado: "Sublinhado", pilula: "Pílula",
+    manchete: "Manchete", carimbo: "Carimbo",
+    pergunta: "Pergunta → Resposta", faixa: "Faixa cheia", fita: "Fita",
+    neon: "Neon", vazado: "Vazado", gradiente: "Degradê na letra",
+    nenhuma: "Nenhuma",
+  },
+  ritmo: {
+    natural: "Natural", dinamico: "Dinâmico", intenso: "Intenso",
+    cirurgico: "Cirúrgico", narrativa: "Narrativa", turbo: "Turbo",
+    comercial: "Comercial", calmo: "Calmo",
+  },
+  tipo: {
+    educational: "Educativo", humor: "Humor", sales: "Venda",
+    ad: "Anúncio (AIDA)", viral: "Viral", review: "Review",
+    institutional: "Institucional", informational: "Informativo",
+  },
+};
+
+/* O nome, ou o proprio id quando ele for de uma versao mais nova que este
+ * mapa. Mostrar o id e feio; esconder o valor seria pior. */
+function nomeDoEstilo(eixo, id) {
+  const v = String(id || "").trim();
+  if (!v) return "";
+  return (NOME_DO_ESTILO[eixo] || {})[v.toLowerCase()] || v;
+}
+
   lista.innerHTML = presets.map((p) => {
     const on = p.id === activeId;
-    const tipo = p.contentType ? escapeHtml(p.contentType) : "—";
+    const tipo = p.contentType
+      ? escapeHtml(nomeDoEstilo("tipo", p.contentType)) : "—";
     // O que este preset DECIDE. Antes a linha mostrava só um rótulo solto
     // ("viral") e o usuário perguntou para que servia a tela.
     const st = p.style || {};
@@ -5580,10 +5635,10 @@ async function loadPresetsUi() {
       ? `<span class="preset-chip"><i>${rot}</i><b class="preset-cor" style="background:${escapeHtml(hex)}"></b>${escapeHtml(hex)}</span>`
       : "");
     const chips = [
-      chip("layout", st.edit),
-      chip("legenda", st.captions),
-      chip("manchete", st.headline),
-      chip("ritmo", st.rhythm),
+      chip("layout", nomeDoEstilo("layout", st.edit)),
+      chip("legenda", nomeDoEstilo("legenda", st.captions)),
+      chip("manchete", nomeDoEstilo("manchete", st.headline)),
+      chip("ritmo", nomeDoEstilo("ritmo", st.rhythm)),
       cor("cor", st.accent),
       cor("legenda", st.captionAccent),
     ].filter(Boolean).join("");

@@ -1,5 +1,20 @@
 # Changelog
 
+## 4.03
+
+- **A tela de Presets mostra nome, não código interno.** O cartão dizia
+  *LAYOUT limpa · LEGENDA stacked · MANCHETE realce · RITMO dinamico* e,
+  embaixo, *informational*. Agora diz *Limpo · Empilhado · Realce ·
+  Dinâmico* e *Informativo* — os nomes que você vê em todo o resto do app.
+- **Quando o motor rápido cai, o relatório diz por quê.** Ele desenha o
+  vídeo 3x mais rápido; quando estoura no meio, o vídeo é refeito pelo
+  caminho lento. O relatório mostrava "lento, sem motivo" — um vídeo seu
+  levou 479s onde levaria 130s e o motivo só saiu num log que ninguém lê.
+- **O preview de desenvolvimento voltou a mostrar a mesma coisa que o
+  app.** Três rotas só existiam no app: a placa de vídeo ficava em
+  "Detectando GPU…" para sempre e a Fila não recebia aviso de mudança.
+
+
 ## 4.02
 
 - **Liberar espaço passou a ver os 10,7 GB do Remotion.** A pasta

@@ -1869,6 +1869,41 @@ class StudioHandler(BaseHTTPRequestHandler):
             from app.settings_store import public_settings
             self._json(public_settings())
             return
+        # Perfil de hardware. Existia so no `desktop_server`, e o card
+        # "Desempenho" ficava em "Detectando GPU..." para sempre no
+        # navegador — o `loadHardwareCard` engole o erro. Tela que mente no
+        # ambiente de conserto custa conserto errado.
+        if path == "/api/hardware":
+            from app.render_engine import load_profile, public_profile
+
+            self._json({"ok": True, "public": public_profile(),
+                        "profile": load_profile()})
+            return
+        # Aviso de mudanca (SSE). Sem ele a Fila do navegador so descobre o
+        # que mudou pelo poll lento do watchdog.
+        if path == "/api/events":
+            from app.event_bus import version, wait_for_change
+
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            try:
+                self.wfile.write(b"retry: 3000\n\n")
+                last = version()
+                self.wfile.write(f"event: tick\ndata: {last}\n\n".encode())
+                self.wfile.flush()
+                while True:
+                    cur = wait_for_change(last, timeout=15.0)
+                    if cur != last:
+                        last = cur
+                        self.wfile.write(f"event: tick\ndata: {cur}\n\n".encode())
+                    else:
+                        self.wfile.write(b": ping\n\n")   # batida do coracao
+                    self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError,
+                    ConnectionAbortedError, OSError):
+                return
         if path == "/api/espaco":
             sys.path.insert(0, str(HELPERS))
             from liberar_espaco import medir  # type: ignore
@@ -2365,6 +2400,13 @@ class StudioHandler(BaseHTTPRequestHandler):
             self._json(out, 200 if ok_http else 403)
             return
 
+        if path == "/api/hardware/bench":
+            from app.render_engine import build_profile, public_profile
+
+            perfil = build_profile(force_bench=True)
+            self._json({"ok": True, "public": public_profile(),
+                        "encoder": perfil.get("recommendedEncoder")})
+            return
         if path == "/api/espaco/liberar":
             sys.path.insert(0, str(HELPERS))
             from liberar_espaco import liberar  # type: ignore
