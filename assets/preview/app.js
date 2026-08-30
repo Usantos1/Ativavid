@@ -5413,7 +5413,10 @@ $('btnCover').addEventListener('click', saveCoverFromPlayhead);
 // tapava o canto do video, e o canto de baixo e onde a legenda mora.
 if ($('btnHelpMenu')) {
   $('btnHelpMenu').addEventListener('click', () => {
-    $('headMore')?.classList.add('hidden');
+    // `closeHeadMore()`, nunca `#headMore`: aquele e o BOTAO ⋯, e escondelo
+    // fazia o menu inteiro sumir do cabecalho depois do primeiro uso — foi
+    // exatamente o que o usuario viu ("cade o menu abaixo do minimizar?").
+    closeHeadMore();
     $('btnHelp')?.click();
   });
 }

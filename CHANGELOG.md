@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.78
+
+- **Conserto do menu ⋯.** Na 3.77 abrir "Atalhos e gestos" escondia o próprio
+  botão do menu — depois de um clique ele sumia do cabeçalho. Erro meu.
+- **O botão do menu agora tem nome: "Mais •••"**, para ser achado.
+- **O menu do Proteger fica por cima da linha do tempo.** A barra tem vidro
+  fosco, e isso lhe dá um empilhamento próprio: sem z-index nela, a linha do
+  tempo passava por cima do menu.
+
 ## 3.77
 
 - **"Vídeo no fim" virou "Importar"** — e o take entra **onde a agulha

@@ -330,3 +330,31 @@ def test_a_ajuda_saiu_de_cima_do_preview():
     j = html.index('id="btnHelpMenu"')
     assert 'class="head-more-item"' in html[j:j + 120]
     assert "$('btnHelpMenu')" in JS and "$('btnHelp')?.click()" in JS
+
+
+def test_a_ajuda_nao_esconde_o_proprio_botao_do_menu():
+    """Na 3.77 o item de ajuda escondia `#headMore` — que é o BOTÃO ⋯, não o
+    menu. Depois de um clique o menu inteiro sumia do cabeçalho ("cade o menu
+    abaixo do minimizar?", 30/08)."""
+    i = JS.index("$('btnHelpMenu').addEventListener")
+    bloco = JS[i:i + 500]
+    assert "closeHeadMore();" in bloco
+    assert "$('headMore')?.classList.add('hidden')" not in JS
+
+
+def test_o_botao_do_menu_tem_nome():
+    """Só `•••` não se acha: o usuário procurou o menu e não encontrou."""
+    html = (REPO / "assets" / "preview" / "index.html").read_text(encoding="utf-8")
+    i = html.index('id="btnHeadMore"')
+    assert "Mais" in html[i:i + 260]
+
+
+def test_o_menu_do_proteger_fica_acima_da_linha_do_tempo():
+    """A barra tem `backdrop-filter` (.glass) e isso lhe dá um contexto de
+    empilhamento próprio: sem z-index nela, a linha do tempo — que vem depois
+    no HTML — passava por cima do menu, por mais alto que fosse o z-index
+    dele (print de 30/08)."""
+    css = (REPO / "assets" / "preview" / "app.css").read_text(encoding="utf-8")
+    i = css.index(".transport {")
+    bloco = css[i:css.index("}", i)]
+    assert "z-index:" in bloco and "position: relative;" in bloco

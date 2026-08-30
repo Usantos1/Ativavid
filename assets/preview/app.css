@@ -700,6 +700,12 @@ body.applying-corrections .player-frame {
   flex: 0 0 auto;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
   overflow: visible;
+  /* A barra tem `backdrop-filter` (.glass), e isso ja lhe da um contexto de
+     empilhamento PROPRIO: sem um z-index aqui, o menu do Proteger — mesmo com
+     z-index 40 — ficava preso dentro dela e a linha do tempo, que vem depois
+     no HTML, passava por cima dele (print do usuario, 30/08). */
+  position: relative;
+  z-index: 60;
 }
 .head-actions .btn:disabled {
   opacity: 0.42;
