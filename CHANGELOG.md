@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.97
+
+- **Busca sem resultado não diz mais que você não tem vídeos.** Era um
+  defeito que a própria busca criou na 3.94: procurar algo inexistente
+  mostrava "Nenhum vídeo pronto ainda" para quem tem 183 prontos.
+  Agora diz *Nenhum resultado para "xyz"*, com um botão para limpar a
+  busca ali mesmo.
+
 ## 3.96
 
 - **O editor não fala mais em nome de arquivo.** Enquanto o vídeo está

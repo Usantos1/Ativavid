@@ -885,16 +885,37 @@ function openCardMenu(btn) {
 }
 
 function renderInto(boxId, emptyId, jobs, opts) {
+  const _vazio = emptyId ? $(`#${emptyId}`) : null;
+  // o texto de fabrica ('Nenhum video pronto ainda.') so existe no
+  // HTML; guardar antes de escrever por cima e o que permite voltar
+  if (_vazio && !_vazio.dataset.textoOriginal) {
+    _vazio.dataset.textoOriginal = _vazio.textContent.trim();
+  }
   const box = $(`#${boxId}`);
   if (!box) return;
   const empty = emptyId ? $(`#${emptyId}`) : null;
   const sig = jobs.map((j) => cardSig(j, opts)).join("\n");
   if (!jobs.length) {
-    if (box.dataset.cardSig === "empty") return;
+    // Vazio por BUSCA nao e vazio por falta de video: dizer "nenhum video
+    // pronto ainda" para quem tem 183 e a tela mentindo. (Defeito que a
+    // propria busca criou, na 3.94.)
+    const termo = String((opts && opts.busca) || "").trim();
+    const sigVazio = termo ? `empty:${termo}` : "empty";
+    if (box.dataset.cardSig === sigVazio) return;
     closeCardMenus(box);
     box.innerHTML = "";
-    box.dataset.cardSig = "empty";
-    if (empty) empty.classList.remove("hidden");
+    box.dataset.cardSig = sigVazio;
+    if (empty) {
+      empty.classList.remove("hidden");
+      if (termo) {
+        empty.innerHTML = `Nenhum resultado para <strong></strong>.
+          <button type="button" class="ghost-btn ghost-btn--sm" data-limpar-busca="${
+            escapeHtml(String((opts && opts.view) || ""))}">Limpar a busca</button>`;
+        empty.querySelector("strong").textContent = `“${termo}”`;
+      } else if (empty.dataset.textoOriginal) {
+        empty.textContent = empty.dataset.textoOriginal;
+      }
+    }
     return;
   }
   if (empty) empty.classList.add("hidden");
@@ -1179,9 +1200,12 @@ function renderJobs() {
   renderHomeNow();
   renderInto("jobListRecent", null, filterJobs("recent"), { compact: true, view: "recent" });
   renderInto("jobListFila", "emptyFila", fila, { view: "fila" });
-  renderInto("jobListDone", "emptyDone", done, { view: "done" });
+  renderInto("jobListDone", "emptyDone", done,
+             { view: "done", busca: state.doneBusca });
   if (state.view === "projetos") {
-    renderInto("jobListProjetos", "emptyProjetos", filterJobs("projetos"), { view: "projetos" });
+    renderInto("jobListProjetos", "emptyProjetos",
+               filterJobs("projetos"),
+               { view: "projetos", busca: state.projBusca });
   }
 }
 
@@ -4548,6 +4572,19 @@ async function refazerProjeto(pasta) {
   toast("Na fila — o vídeo vai ser recriado");
   refreshJobs().catch(() => {});
 }
+
+/* "Limpar a busca" no vazio: sem isto o usuario tem de achar o campo de
+ * novo, e o campo esta fora da lista que ele esta olhando. */
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-limpar-busca]");
+  if (!b) return;
+  const view = b.dataset.limparBusca;
+  const campo = $(view === "done" ? "#doneSearch" : "#projSearch");
+  if (campo) campo.value = "";
+  if (view === "done") state.doneBusca = "";
+  else state.projBusca = "";
+  renderJobs();
+});
 
 function ligarRefazerDaAuditoria() {
   const out = $("#auditoriaOut");

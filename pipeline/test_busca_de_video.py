@@ -56,3 +56,38 @@ def test_o_texto_do_campo_diz_o_que_da_para_buscar():
     carimbo de data que ninguém decora."""
     assert "Buscar por nome…" not in HTML
     assert HTML.count("Buscar pelo título, pelo arquivo…") == 2
+
+
+def test_vazio_por_busca_nao_mente_sobre_o_acervo():
+    """Defeito que a PRÓPRIA busca criou, na 3.94: com 183 vídeos prontos,
+    procurar algo inexistente mostrava "Nenhum vídeo pronto ainda."
+
+    Provado no navegador: com resultado o aviso some; sem resultado ele diz
+    «Nenhum resultado para “zzzz”» com um botão de limpar; sem vídeo nenhum
+    volta o texto de fábrica.
+    """
+    i = JS.index("function renderInto(")
+    bloco = JS[i:i + 2000]
+    assert "Nenhum resultado para" in bloco
+    assert "data-limpar-busca" in bloco
+    # o texto de fábrica é guardado ANTES de ser escrito por cima
+    assert "dataset.textoOriginal" in bloco
+    assert bloco.index("dataset.textoOriginal =") < bloco.index("Nenhum resultado para")
+
+
+def test_a_assinatura_do_vazio_inclui_o_termo():
+    """Sem isso, trocar de termo não repinta: o `cardSig` continuaria
+    "empty" e a mensagem ficaria com a busca anterior."""
+    i = JS.index("function renderInto(")
+    bloco = JS[i:i + 2000]
+    assert "const sigVazio = termo ? `empty:${termo}` : \"empty\";" in bloco
+    assert 'box.dataset.cardSig = sigVazio;' in bloco
+
+
+def test_limpar_a_busca_limpa_o_campo_e_o_estado():
+    i = JS.index('const b = e.target.closest("[data-limpar-busca]");')
+    bloco = JS[i:i + 500]
+    assert 'campo.value = "";' in bloco
+    assert 'state.doneBusca = "";' in bloco
+    assert 'state.projBusca = "";' in bloco
+    assert "renderJobs();" in bloco
