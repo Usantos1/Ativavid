@@ -295,3 +295,38 @@ def test_os_botoes_de_corte_existem_de_verdade():
     # então ícone de traço vira mancha
     i = JS.index("cortarEsq:")
     assert 'fill="none"' not in JS[i:i + 400]
+
+
+def test_importar_poe_o_take_na_agulha():
+    """"esse vídeo no fim pode ser chamado de importar... quero poder
+    adicionar outros takes no vídeo" (30/08). O servidor só copiava o
+    arquivo e devolvia a chave — quem decidia "no fim" era a tela."""
+    html = (REPO / "assets" / "preview" / "index.html").read_text(encoding="utf-8")
+    i = html.index('id="btnAppendCta"')
+    assert ">Importar<" in html[i:i + 400]
+    k = JS.index("const t0 = renderedToDraft(video.currentTime || 0);")
+    bloco = JS[k:k + 1500]
+    # dentro de um take: divide e entra no meio
+    assert "S.draft.splice(k + 1, 0, metadeB);" in bloco
+    # e só quem vai para o fim vira CTA
+    assert "beat: noFim ? 'CTA' : 'KEEP'," in bloco
+
+
+def test_o_menu_do_proteger_abre_para_baixo():
+    """Com a janela pequena a barra fica colada no topo: abrindo para cima o
+    menu saía da tela e o primeiro item aparecia cortado."""
+    css = (REPO / "assets" / "preview" / "app.css").read_text(encoding="utf-8")
+    i = css.index(".protect-menu {")
+    bloco = css[i:i + 400]
+    assert "top: calc(100% + 6px);" in bloco and "bottom: calc(100%" not in bloco
+
+
+def test_a_ajuda_saiu_de_cima_do_preview():
+    """O botão flutuante tapava o canto do vídeo — e o canto de baixo é onde
+    a legenda mora. A ajuda foi para o menu, com as outras ações da tela."""
+    html = (REPO / "assets" / "preview" / "index.html").read_text(encoding="utf-8")
+    i = html.index('id="btnHelp"')
+    assert 'class="help-fab hidden"' in html[i - 40:i + 120]
+    j = html.index('id="btnHelpMenu"')
+    assert 'class="head-more-item"' in html[j:j + 120]
+    assert "$('btnHelpMenu')" in JS and "$('btnHelp')?.click()" in JS

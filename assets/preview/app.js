@@ -5409,6 +5409,15 @@ $('btnDeleteTake').classList.add('icon');
 $('btnDeleteTake').addEventListener('click', toggleSelectedTake);
 $('coverIcon').innerHTML = ICON.cover;
 $('btnCover').addEventListener('click', saveCoverFromPlayhead);
+// A ajuda mora no menu (⋯). O botao flutuante saiu de cima do preview: ele
+// tapava o canto do video, e o canto de baixo e onde a legenda mora.
+if ($('btnHelpMenu')) {
+  $('btnHelpMenu').addEventListener('click', () => {
+    $('headMore')?.classList.add('hidden');
+    $('btnHelp')?.click();
+  });
+}
+
 if ($('capaChip')) {
   $('capaChip').addEventListener('click', (e) => {
     e.stopPropagation();
@@ -5486,12 +5495,12 @@ async function appendCtaFromFile(file) {
   if (!file) return;
   const folder = projectFolder();
   if (!folder && !BASE) {
-    toast('Abra o vídeo pelo app para acrescentar um take no fim', 2800);
+    toast('Abra o vídeo pelo app para importar um take', 2800);
     return;
   }
   const btn = $('btnAppendCta');
   if (btn) btn.disabled = true;
-  toast('Colocando o vídeo no fim…', 1600);
+  toast('Importando o vídeo…', 1600);
   try {
     const duration = await probeLocalDuration(file);
     const localPath = String(file.path || '').trim();
@@ -5517,27 +5526,55 @@ async function appendCtaFromFile(file) {
     }
     const dur = Math.max(0.4, Number(data.duration) || 0);
     pushHistory();
-    const last = [...S.draft].reverse().find((r) => !r.removed);
-    if (last && String(last.beat || '').toUpperCase() === 'CTA') {
-      last.beat = 'KEEP';
-    }
     S.state.sourceDurations = S.state.sourceDurations || {};
     S.state.sourceDurations[data.source] = dur;
-    S.draft.push({
+
+    // ONDE a agulha esta. Se ela cai no meio de um take, esse take e
+    // dividido e o novo entra entre as duas metades — e assim que se
+    // acrescenta um take no meio sem perder nada do que ja havia.
+    const t0 = renderedToDraft(video.currentTime || 0);
+    const layout = draftLayout();
+    let onde = S.draft.length;            // padrao: no fim
+    for (let k = 0; k < layout.length; k++) {
+      if (S.draft[k].removed) continue;
+      const ini = layout[k].out;
+      const fim = ini + layout[k].dur;
+      if (t0 <= ini + 0.02) { onde = k; break; }          // antes deste take
+      if (t0 < fim - 0.02) {                              // dentro: divide
+        const r = S.draft[k];
+        const corte = draftTimeToSource(k, t0);
+        const metadeB = { ...r, start: corte, srcIdx: null,
+                          orig: { start: r.start, end: r.end } };
+        r.end = corte;
+        r.orig = { start: r.start, end: corte };
+        S.draft.splice(k + 1, 0, metadeB);
+        onde = k + 1;
+        break;
+      }
+    }
+    const noFim = onde >= S.draft.length;
+    if (noFim) {
+      // so quem vai mesmo para o fim vira CTA: um 'CTA' no meio confundiria
+      // o planejador do proximo corte
+      const last = [...S.draft].reverse().find((r) => !r.removed);
+      if (last && String(last.beat || '').toUpperCase() === 'CTA') last.beat = 'KEEP';
+    }
+    S.draft.splice(onde, 0, {
       source: data.source,
       start: 0,
       end: dur,
-      beat: 'CTA',
+      beat: noFim ? 'CTA' : 'KEEP',
       removed: false,
       added: true,
       filePath: data.path,
       srcIdx: null,
       orig: { start: 0, end: dur },
     });
-    S.selected = S.draft.length - 1;
+    S.selected = onde;
     renderAll();
     refreshHeader();
-    toast('CTA no fim — clique em Salvar para renderizar', 3200);
+    toast(noFim ? 'Take no fim — clique em Salvar para renderizar'
+                : 'Take importado na agulha — clique em Salvar para renderizar', 3200);
   } catch (err) {
     toast((err && err.message) || 'Não deu para acrescentar esse vídeo', 3200);
   } finally {

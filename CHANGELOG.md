@@ -1,5 +1,21 @@
 # Changelog
 
+## 3.77
+
+- **"Vídeo no fim" virou "Importar"** — e o take entra **onde a agulha
+  está**: se ela cai no meio de um take, esse take é dividido e o novo entra
+  entre as duas metades. Antes o vídeo importado ia sempre para o fim, que
+  era a única coisa que o botão sabia fazer.
+- **Só quem vai mesmo para o fim vira CTA.** Um CTA no meio do vídeo
+  confundiria o planejador do próximo corte.
+- **O menu do Proteger abre para baixo.** Com a janela pequena a barra fica
+  colada no topo e o menu saía da tela — o primeiro item aparecia cortado.
+- **O Proteger explica o que faz**: ele marca um trecho para o corte
+  automático não mexer nele quando você refizer a Fase 2.
+- **A ajuda saiu de cima do preview** e foi para o menu (⋯), com as outras
+  ações da tela. O botão flutuante tapava o canto do vídeo — que é
+  justamente onde a legenda mora.
+
 ## 3.76
 
 - **Os botões de corte agora existem de verdade.** Na 3.75 eles saíram sem

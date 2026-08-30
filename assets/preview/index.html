@@ -170,6 +170,7 @@
         <button type="button" id="btnVersions" class="head-more-item" role="menuitem">Restaurar versão</button>
         <button type="button" id="btnSave" class="head-more-item" role="menuitem">Salvar e enviar à fila</button>
         <button type="button" id="btnDiscard" class="head-more-item" disabled role="menuitem" title="Nada para descartar">Descartar alterações</button>
+        <button type="button" id="btnHelpMenu" class="head-more-item" role="menuitem">Atalhos e gestos</button>
       </div>
     </div>
   </div>
@@ -603,11 +604,11 @@
       <span id="coverIcon"></span><span>Capa</span>
     </button>
     <button id="btnImage" class="btn icon" title="Buscar e inserir uma imagem na agulha"></button>
-    <button id="btnAppendCta" class="btn cover-btn" title="Adicionar um vídeo no fim da timeline (vira o CTA)">
-      <span id="appendCtaIcon"></span><span>Vídeo no fim</span>
+    <button id="btnAppendCta" class="btn cover-btn" title="Importar um vídeo para a linha do tempo — ele entra onde a agulha está">
+      <span id="appendCtaIcon"></span><span>Importar</span>
     </button>
     <div class="protect-wrap" id="protectWrap">
-      <button id="btnProtect" class="btn cover-btn" title="Proteger trecho — a IA não corta este range" aria-haspopup="menu" aria-expanded="false">
+      <button id="btnProtect" class="btn cover-btn" title="Proteger trecho: o corte automático não mexe nele quando você refizer a Fase 2" aria-haspopup="menu" aria-expanded="false">
         <span id="protectIcon"></span><span>Proteger</span>
       </button>
       <div id="protectMenu" class="protect-menu hidden" role="menu">
@@ -733,7 +734,10 @@
 
 </main>
 
-<button id="btnHelp" class="help-fab" type="button" title="Atalhos e gestos do editor" aria-label="Ajuda — atalhos e gestos">
+<!-- Ficava FLUTUANDO sobre o preview, tapando o canto do video (print de
+     30/08). O lugar dele e o menu, com as outras acoes da tela; segue no
+     HTML, escondido, porque e ele que abre o painel de atalhos. -->
+<button id="btnHelp" class="help-fab hidden" type="button" title="Atalhos e gestos do editor" aria-label="Ajuda — atalhos e gestos">
   <span class="help-fab-label">ajuda</span>
   <span class="help-fab-q" aria-hidden="true">?</span>
 </button>
