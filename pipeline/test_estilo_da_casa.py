@@ -28,7 +28,10 @@ if str(REPO) not in sys.path:
 def test_a_rota_serve_o_estilo_efetivo_e_nao_o_de_fabrica():
     """O `_json(load_preset())` tem de vir ANTES da busca pelo arquivo."""
     src = (REPO / "app" / "local_server.py").read_text(encoding="utf-8")
-    i = src.index('if path.startswith("/assets/"):')
+    # DENTRO do do_GET: o do_HEAD (4.05) também olha `/assets/`, e ancorar
+    # na primeira ocorrência do arquivo passou a cair nele.
+    get = src.index("def do_GET(self)")
+    i = src.index('if path.startswith("/assets/"):', get)
     trecho = src[i:i + 1800]
     assert 'Path(rel).name == "default-style.json"' in trecho
     assert "self._json(load_preset())" in trecho, (

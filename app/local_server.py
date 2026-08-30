@@ -1666,6 +1666,33 @@ class StudioHandler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
 
+    def do_HEAD(self) -> None:  # noqa: N802
+        """Existe o arquivo? Sem corpo. (Mesma razao do preview_server.)
+
+        Sem isto o servidor responde 501 e o editor conclui que o projeto
+        nao tem a copia leve do corte — e toca o arquivo cheio.
+        """
+        path = urlparse(self.path).path
+        alvo = None
+        if path.startswith("/assets/studio/"):
+            alvo = STUDIO / path[len("/assets/studio/"):]
+        elif path.startswith("/assets/"):
+            alvo = PREVIEW / path[len("/assets/"):]
+        if alvo is None or ".." in Path(path).parts:
+            self.send_response(405)
+            self.end_headers()
+            return
+        if not alvo.is_file():
+            self.send_response(404)
+            self.end_headers()
+            return
+        self.send_response(200)
+        ctype = mimetypes.guess_type(str(alvo))[0] or "application/octet-stream"
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(alvo.stat().st_size))
+        self.send_header("Accept-Ranges", "bytes")
+        self.end_headers()
+
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
         path = parsed.path

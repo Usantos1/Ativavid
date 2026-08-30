@@ -1178,6 +1178,7 @@ let S = {
   draft: [], // user-editable copy [{source,start,end,beat,removed,orig:{start,end}}]
   videoDuration: 0,
   fps: 24,
+  pollEspera: 2000, // ms ate o proximo /api/state (cresce ocioso)
   captions: [], // grouped caption lines [{text,start,end}] (rendered space)
   editData: null, // edit-data.json content (phase 2)
   insertsDraft: [], // editable inserts [{kind,label,start,end,ref,orig}]
@@ -2507,7 +2508,47 @@ function refreshProjectChrome() {
 }
 
 // ---------- data loading ----------
+
+/* Ritmo do poll de estado.
+ *
+ * Ocioso, o editor pedia `/api/state` a cada 2s para sempre: 1800
+ * chamadas por hora, 6,5 ms e 10 KB cada (medido na maquina do usuario),
+ * lendo state.json, edl.json e os mtimes a cada volta. Isso disputa a
+ * maquina com o RENDER, que e o trabalho de verdade.
+ *
+ * O teto de 8s e o pior caso de atraso para notar algo que comecou
+ * NOUTRA janela — contra os ~107s que um apply dura, e barato. */
+const POLL_VIVO = 2000;
+const POLL_OCIOSO = 8000;
+// Escondido, uma batida a cada ~32s (4 voltas de 8s) so para o caso de
+// o embutido estar mentindo sobre a visibilidade.
+const POLL_ESCONDIDO = 32000;
+
+function acordarPoll() {
+  S.pollEspera = POLL_VIVO;
+}
+
+// Qualquer sinal de vida zera a espera: a janela voltou, o usuario clicou,
+// o teclado foi usado. Sem isto, voltar para a janela mostraria estado
+// velho por ate 8s.
+for (const ev of ['visibilitychange', 'focus', 'pointerdown', 'keydown']) {
+  const alvo = ev === 'visibilitychange' ? document : window;
+  alvo.addEventListener(ev, acordarPoll, { passive: true });
+}
+
 async function poll() {
+  // Aba escondida: o `visibilitychange` acorda no instante em que ela
+  // volta, entao aqui basta uma batida lenta. NAO parar de vez e
+  // proposital — ha embutidos que dizem "escondido" com a janela a
+  // vista, e um editor que congela nesse caso seria pior que o gasto.
+  if (document.hidden && !S.applying) {
+    S.pollEspera = POLL_ESCONDIDO;
+    if ((S.pollPulos = (S.pollPulos || 0) + 1) < 4) {
+      setTimeout(poll, POLL_OCIOSO);
+      return;
+    }
+  }
+  S.pollPulos = 0;
   try {
     const res = await fetch(`${BASE}/api/state`);
     if (!res.ok) return;
@@ -2518,6 +2559,7 @@ async function poll() {
       // Primeira carga SEMPRE aplica. Dialog fechado / foco em select não é edição.
       const firstLoad = !S.lastSig;
       const hadEdits = !firstLoad && (dirtyCount() > 0 || S.history.length > 0);
+      acordarPoll();   // mudou algo: volta ao ritmo rapido
       if (!hadEdits) {
         S.lastSig = sig;
         S.staleNotice = false;
@@ -2528,7 +2570,15 @@ async function poll() {
       }
     }
   } catch (e) { /* server restarting; keep polling */ }
-  setTimeout(poll, S.applying ? 700 : 2000);
+  if (S.applying) {
+    S.pollEspera = POLL_VIVO;
+    setTimeout(poll, 700);   // trabalho ao vivo: a barra depende disto
+    return;
+  }
+  // Nada mudou nesta volta: espera um pouco mais na proxima, ate o teto.
+  S.pollEspera = Math.min(POLL_OCIOSO,
+                          Math.round((S.pollEspera || POLL_VIVO) * 1.5));
+  setTimeout(poll, S.pollEspera);
 }
 
 async function applyState(data) {

@@ -1,5 +1,19 @@
 # Changelog
 
+## 4.05
+
+- **O editor voltou a usar o vídeo leve.** Todo projeto tem uma cópia leve
+  do corte para o arrasto na linha do tempo ficar fluido — 2 MB no lugar
+  de 45 MB, 9 MB no lugar de 124 MB. São 186 projetos com a cópia e
+  nenhum a usava: o editor perguntava se ela existia de um jeito que o
+  servidor não sabia responder, e caía no arquivo cheio, em 4K.
+- **E parou de bater no disco à toa.** Com o editor aberto e ninguém
+  mexendo, ele pedia o estado a cada 2 segundos para sempre — 1800
+  pedidos por hora disputando a máquina com o render. Agora o intervalo
+  cresce sozinho enquanto nada muda e volta ao normal no primeiro clique.
+  Com a janela minimizada, quase para.
+
+
 ## 4.04
 
 - **"Traço da ênfase" voltou a funcionar.** O seletor entre *círculo* e

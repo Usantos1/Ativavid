@@ -537,6 +537,50 @@ class Handler(BaseHTTPRequestHandler):
         self.scope_miss = True
         return m.group(2) or "/"
 
+    def do_HEAD(self) -> None:  # noqa: N802
+        """Existe o arquivo? Sem corpo.
+
+        O editor pergunta assim se o projeto tem a copia leve do corte
+        (`cut_proxy.mp4`, 13 a 22x menor que o `cut.mp4`) antes de decidir
+        o que tocar na linha do tempo. Sem esta funcao o servidor responde
+        **501 Unsupported method**, a pergunta vira "nao tem", e o editor
+        toca o arquivo cheio — 4K HDR — em 186 projetos que TEM a copia.
+
+        So arquivo. HEAD numa rota de API responde 405: rodar o trabalho de
+        um GET para jogar a resposta fora seria pior que nao atender.
+        """
+        path = urlparse(self.path).path
+        alvo = None
+        if path.startswith("/media/"):
+            alvo = self._safe(self.root, path[len("/media/"):])
+        elif path.startswith("/assets/studio/"):
+            alvo = self._safe(STUDIO_DIR, path[len("/assets/studio/"):])
+        elif path.startswith("/assets/"):
+            alvo = self._safe(APP_DIR, path[len("/assets/"):])
+        else:
+            self._sem_corpo(405)
+            return
+        if alvo is None or not alvo.is_file():
+            self._sem_corpo(404)
+            return
+        self._sem_corpo(
+            200,
+            ctype=MIME.get(alvo.suffix.lower(), "application/octet-stream"),
+            tamanho=alvo.stat().st_size,
+        )
+
+    def _sem_corpo(self, code: int, *, ctype: str | None = None,
+                   tamanho: int | None = None) -> None:
+        self.send_response(code)
+        if ctype:
+            self.send_header("Content-Type", ctype)
+        if tamanho is not None:
+            self.send_header("Content-Length", str(tamanho))
+            # o mesmo Accept-Ranges do GET: quem pergunta por HEAD costuma
+            # querer saber se da para pedir pedaco depois
+            self.send_header("Accept-Ranges", "bytes")
+        self.end_headers()
+
     def do_GET(self) -> None:  # noqa: N802
         path = self._scope(self.path.split("?", 1)[0])
         # /p/<pasta> desconhecida não pode cair no dummy do hub (Estilo padrão /
