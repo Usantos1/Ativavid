@@ -5227,10 +5227,23 @@ function renderLibraryAba() {
   // mostra o clima que o pipeline usa para escolher; efeito mostra se a
   // categoria e uma das VAGAS do video ou se o arquivo so fica guardado.
   const vagas = (lib.categorias || {}).sfx || [];
+  // A nota do GRUPO sai da mesma verdade do selo de cada item. O servidor
+  // j\u00e1 diz a vaga de cada arquivo, e ela conhece os sin\u00f4nimos (`swoosh`
+  // ocupa a vaga do `whoosh`); comparando s\u00f3 o NOME da categoria com a
+  // lista de vagas, o cabe\u00e7alho do grupo `swoosh` dizia "s\u00f3 guardado"
+  // enquanto os itens dele diziam "toca" \u2014 duas etiquetas discordando na
+  // mesma tela.
+  const vagaDaCategoria = new Map();
+  for (const it of (lib.items || [])) {
+    if (it.kind !== "sfx" || !it.vaga) continue;
+    const k = it.categoria || "";
+    if (!vagaDaCategoria.has(k)) vagaDaCategoria.set(k, it.vaga);
+  }
   const notas = aba === "track"
     ? Object.fromEntries(Object.entries(lib.clima || {}).map(([k, v]) => [k, `clima ${v}`]))
     : Object.fromEntries([...new Set([...vagas, ...contagem.keys()])].map(
-        (k) => [k, vagas.includes(k) ? "entra no v\u00eddeo" : "s\u00f3 guardado"]));
+        (k) => [k, (vagas.includes(k) || vagaDaCategoria.has(k))
+          ? "entra no v\u00eddeo" : "s\u00f3 guardado"]));
   pararAudio();          // a lista mudou: o que estava tocando saiu do DOM
   painel.innerHTML = (aba === "image" || aba === "clip")
     ? libGradeImagens(filtrados, aba)
@@ -5448,6 +5461,30 @@ function puxarFila() {
 }
 
 let olhoDasOndas = null;
+/* Qual vaga do vídeo este som ocupa — e o aviso de quando ele não ocupa
+ * nenhuma.
+ *
+ * O vídeo tem cinco vagas de efeito (clique, risco, whoosh, pop, corte).
+ * Dos 234 efeitos importados pelo usuário, 133 são de categorias sem vaga
+ * (impacto, transição, riser): ficam guardados e nunca tocam. A tela não
+ * dizia isso — a Biblioteca parecia cheia de som em uso. */
+const VAGA_ROTULO = {
+  clique: "clique da legenda",
+  risco: "risco da legenda",
+  whoosh: "whoosh da manchete",
+  pop: "pop dos elementos",
+  corte: "clique do corte",
+};
+
+function selosDoEfeito(it) {
+  if (it.kind !== "sfx" || it.origem !== "usuario") return "";
+  if (it.vaga) {
+    const onde = VAGA_ROTULO[it.vaga] || it.vaga;
+    return `<span class="lib-selo lib-selo--toca" title="Este som entra no vídeo no lugar do ${escapeHtml(onde)}">toca: ${escapeHtml(onde)}</span>`;
+  }
+  return `<span class="lib-selo lib-selo--guardado" title="O vídeo tem vaga para clique, risco, whoosh, pop e corte — este som não ocupa nenhuma delas">só guardado</span>`;
+}
+
 function ligarPlayersDaBiblioteca(raiz) {
   const linhas = (raiz || document).querySelectorAll(".lib-track[data-src]");
   if (!linhas.length) return;
@@ -5509,6 +5546,7 @@ function libListaAudio(itens, aba, notas, ordem) {
       <span class="lib-track-name">${escapeHtml(it.name)}</span>
       ${chip}
       ${uso}
+      ${selosDoEfeito(it)}
       <canvas class="lib-onda" aria-hidden="true"></canvas>
       <span class="lib-tempo">0:00</span>
       <span class="lib-size">${libTamanho(it.bytes)}</span>

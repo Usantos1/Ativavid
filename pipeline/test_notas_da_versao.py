@@ -1,51 +1,81 @@
 # -*- coding: utf-8 -*-
-"""O aviso de versão nova diz O QUE muda.
+"""O aviso de versão nova diz O QUE mudou.
 
-"Nova versão disponível" não responde a pergunta que o usuário faz antes
-de clicar — vale a pena agora? O corpo da release já vinha na resposta da
-API e era jogado fora.
+Conferido na máquina do usuário, com ele na 4.07 e a 4.09 publicada:
+
+    {"updateAvailable": true, "message": "Nova versão 4.09 disponível",
+     "notes": []}
+
+`notes` vazio — o aviso dizia que existe versão nova e não dizia nada
+sobre ela. `_resumo_das_notas` só entendia LISTA (`- ` / `* `) e o corpo
+das releases era uma frase corrida. Aviso mudo é quase o mesmo que não
+avisar.
+
+O texto certo já existia, no CHANGELOG, escrito para ele —
+`tools/notas_da_versao.py` tira a seção da versão para virar o corpo da
+release.
 """
-from __future__ import annotations
-
 import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
+sys.path.insert(0, str(REPO / "tools"))
 
 from app.update_check import _resumo_das_notas  # noqa: E402
+from notas_da_versao import secao  # noqa: E402
 
-CHANGELOG = """- **Atualizar virou um clique.** O aviso de versão nova agora
-  aparece sozinho ao abrir o app, e a instalação roda em silêncio.
-- Quem abrir o instalador na mão também não é mais perguntado
-  sobre idioma.
-- Terceira nota.
-- Quarta nota, que não deve aparecer.
+CHANGELOG = """# Changelog
+
+## 4.09
+
+- **Primeira nota.** Continua nesta linha aqui.
+- **Segunda nota.** Outro texto.
+
+## 4.08
+
+- **Nota da versão anterior.**
 """
 
 
-def test_junta_a_linha_quebrada_do_changelog():
-    """Sem juntar, a nota chega cortada no meio da frase."""
-    notas = _resumo_das_notas(CHANGELOG)
-    assert notas[0].startswith("Atualizar virou um clique.")
-    assert "instalação roda em silêncio" in notas[0], notas[0]
-    assert "**" not in notas[0], "marcação do markdown vazou"
+def test_corpo_com_lista_vira_notas():
+    n = _resumo_das_notas("- Primeira coisa.\n- Segunda coisa.\n- Terceira.")
+    assert n == ["Primeira coisa.", "Segunda coisa.", "Terceira."]
 
 
-def test_para_em_tres_notas():
-    assert len(_resumo_das_notas(CHANGELOG)) == 3
+def test_corpo_SEM_lista_tambem_vira_notas():
+    """Era o caso real: o corpo da release era uma frase corrida."""
+    n = _resumo_das_notas(
+        "A recusa da IA não vira mais a legenda do post; a lista de "
+        "prontos mostra o vídeo.")
+    assert len(n) == 1 and "recusa da IA" in n[0]
 
 
-def test_texto_sem_lista_nao_vira_nota():
-    assert _resumo_das_notas("Só um parágrafo solto.") == []
-    assert _resumo_das_notas(None) == []
+def test_titulo_de_markdown_nao_vira_nota():
+    n = _resumo_das_notas("## 4.09\n\n- Uma nota de verdade.")
+    assert n == ["Uma nota de verdade."]
+
+
+def test_corpo_vazio_nao_inventa():
     assert _resumo_das_notas("") == []
+    assert _resumo_das_notas(None) == []
 
 
-def test_a_janela_mostra_as_notas():
-    js = (REPO / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
-    i = js.index("const notas = $(\"#updDlgNotas\")")
-    trecho = js[i:i + 400]
-    assert "upd.notes" in trecho and "escapeHtml" in trecho, trecho
-    html = (REPO / "assets" / "studio" / "index.html").read_text(encoding="utf-8")
-    assert 'id="updDlgNotas"' in html
+def test_a_secao_do_changelog_sai_inteira():
+    s = secao("4.09", CHANGELOG)
+    assert "Primeira nota" in s and "Segunda nota" in s
+    assert "versão anterior" not in s, "vazou para a seção seguinte"
+
+
+def test_secao_inexistente_devolve_vazio():
+    assert secao("9.99", CHANGELOG) == ""
+
+
+def test_a_versao_pode_vir_com_v():
+    assert secao("v4.08", CHANGELOG).startswith("- **Nota da versão anterior")
+
+
+def test_o_changelog_de_verdade_tem_a_versao_atual():
+    """Release sem seção no CHANGELOG sai com aviso mudo."""
+    versao = (REPO / "VERSION").read_text(encoding="utf-8").strip()
+    assert secao(versao), f"CHANGELOG.md sem seção `## {versao}`"

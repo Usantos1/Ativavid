@@ -87,6 +87,30 @@ def categoria_de(nome: str) -> str:
     return nome.split("--", 1)[0].lower().strip() if "--" in nome else ""
 
 
+def vaga_do_efeito(nome: str) -> str:
+    """A vaga que este arquivo ocupa no video, ou "" se nenhuma.
+
+    O casamento era pelo prefixo LITERAL (`categoria_de`), e por isso os
+    **70 arquivos `swoosh--*.mp3`** do usuario nunca tocaram: a vaga se
+    chama `whoosh`. A tabela de familias do app ja diz que sao a mesma
+    coisa — faltava consultar.
+
+    Medido na Biblioteca dele: das 234 pecas, so as 30 de `clique` batiam.
+    Categoria sem vaga (`impacto`, `riser`, `sino`) continua de fora: o
+    app nao tem lugar para elas, e inventar um mudaria o video no palpite.
+    """
+    rot = categoria_de(nome)
+    if rot in SFX_VAGAS:
+        return rot
+    if rot:
+        for fam, chaves in _FAMILIAS_SFX:
+            if fam in SFX_VAGAS and (rot == fam or rot in chaves):
+                return fam
+        return ""
+    fam = familia_sfx(nome)
+    return fam if fam in SFX_VAGAS else ""
+
+
 def familia_sfx(nome: str) -> str:
     rot = categoria_de(nome)
     if rot:
@@ -139,10 +163,17 @@ def list_assets(projects_root: Path | None = None) -> dict[str, Any]:
                 continue
             if p.suffix.lower() not in sufixos:
                 continue
+            # A VAGA que este som ocupa no video — e vazia quando ele nao
+            # ocupa nenhuma. Dos 234 efeitos do usuario, 133 sao de
+            # categorias que o video nao toca (impacto, transicao, riser):
+            # sem dizer isso, a Biblioteca parecia cheia de som em uso.
+            vaga = vaga_do_efeito(p.name) if kind == "sfx" else ""
             items.append({
                 "id": p.stem,
                 "name": p.name,
                 "kind": kind,
+                "vaga": vaga,
+                "tocaNoVideo": bool(vaga) if kind == "sfx" else None,
                 "categoria": (familia_sfx(p.name) if kind == "sfx"
                               else categoria_de(p.name)),
                 "origem": "usuario",
@@ -208,6 +239,13 @@ def add_bytes(
               "clip": root / "clips"}.get(kind, root / "images")
     stem = Path(filename).stem
     rot = _slug(categoria) if categoria else categoria_de(stem)
+    # EFEITO sem categoria: o nome costuma dizer qual e. Sem isto,
+    # `meu-whoosh.mp3` entrava como "sem categoria" e nunca tocava — o
+    # arquivo fica guardado e o botao "Adicionar efeitos" vira um botao
+    # que guarda arquivo e nao muda video nenhum. So aceita palpite que
+    # cai numa VAGA de verdade; o resto continua sem categoria.
+    if kind == "sfx" and not rot:
+        rot = vaga_do_efeito(Path(filename).name)
     if "--" in stem:
         stem = stem.split("--", 1)[1]
     stem = _slug(stem)
@@ -291,7 +329,7 @@ def aplicar_sfx_do_usuario(public_dir: Path,
             cands = sorted(
                 (f for f in pasta.iterdir()
                  if f.is_file() and f.suffix.lower() in AUDIO_EXTS
-                 and categoria_de(f.name) == vaga),
+                 and vaga_do_efeito(f.name) == vaga),
                 key=lambda f: f.stat().st_mtime, reverse=True)
             if not cands:
                 continue

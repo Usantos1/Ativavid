@@ -230,6 +230,8 @@ def _resumo_das_notas(corpo: object, limite: int = 3) -> list[str]:
             fora.append(limpa[:200])
         atual = ""
 
+    tem_lista = any(l.strip().startswith(("- ", "* "))
+                    for l in texto.splitlines())
     for linha in texto.splitlines():
         nua = linha.strip()
         if nua.startswith(("- ", "* ")):
@@ -241,6 +243,12 @@ def _resumo_das_notas(corpo: object, limite: int = 3) -> list[str]:
             atual += " " + nua
         elif not nua:
             _fechar()
+        elif not tem_lista and nua and not nua.startswith("#"):
+            # Corpo SEM lista. Conferido na maquina do usuario com ele na
+            # 4.07: `notes` vinha vazio e o aviso dizia que havia versao
+            # nova sem dizer nada sobre ela. Aviso mudo e quase o mesmo que
+            # nao avisar.
+            atual = nua
         if len(fora) >= limite:
             return fora[:limite]
     _fechar()

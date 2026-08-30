@@ -3211,8 +3211,16 @@ class StudioHandler(BaseHTTPRequestHandler):
                 self._json({"ok": False, "error": "Conecte o Instagram em Integrações (IG User ID + token da Meta)."}, 400)
                 return
             edit = Path(job.get("editDir") or "")
-            final = Path(job.get("final") or "")
-            if not final.is_file():
+            # MESMA resolucao de "Ver final" e "Abrir pasta". O arquivo leva
+            # o nome da manchete e e renomeado quando ela muda; o
+            # `result.json` fica para tras (10 projetos do usuario estao
+            # assim). Lendo `job.final` direto, a publicacao respondia
+            # "vídeo final não encontrado" com o video ali, de outro nome.
+            final = resolve_delivery_mp4(edit) if edit else None
+            if final is None or not final.is_file():
+                bruto = Path(job.get("final") or "")
+                final = bruto if bruto.is_file() else None
+            if final is None:
                 self._json({"ok": False, "error": "vídeo final não encontrado"}, 409)
                 return
             pubfile = edit / "publicacao.json"

@@ -1,5 +1,27 @@
 # Changelog
 
+## 4.10
+
+- **Os efeitos que você importou passaram a entrar no vídeo.** Você tem
+  234 efeitos na Biblioteca e só os 30 de *clique* tocavam. Os 70 de
+  *swoosh* nunca tocaram — o vídeo chama essa vaga de *whoosh*, e o app
+  comparava a palavra em vez do som. Agora são 100 que entram, e o whoosh
+  toca na manchete de todo vídeo.
+- **E a Biblioteca diz quais tocam e quais só ficam guardados.** Os 133
+  restantes (*impacto*, *transição*, *riser*) não têm vaga no vídeo: cada
+  som agora mostra onde entra — *"toca: whoosh da manchete"* — ou que está
+  só guardado. Antes a lista parecia cheia de som em uso.
+- **Efeito novo já entra com a vaga certa.** Arrastar `meu-whoosh.mp3`
+  antes deixava o arquivo sem categoria e sem tocar; agora o nome basta.
+- **O aviso de versão nova voltou a dizer o que mudou.** Ele chegava com
+  o título e a lista vazia. Agora traz as notas da versão — e as onze
+  versões já publicadas foram corrigidas também.
+- **Publicar no Instagram não diz mais que o vídeo sumiu.** Quando a
+  manchete muda, o arquivo é renomeado; 10 dos seus projetos guardavam o
+  nome antigo e a publicação respondia *"vídeo final não encontrado"* com
+  o vídeo ali do lado.
+
+
 ## 4.09
 
 - **A recusa da IA não vira mais a legenda do post.** Dois dos seus

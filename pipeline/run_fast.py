@@ -1391,6 +1391,18 @@ def promote_final_headline(
             if leftover.is_file():
                 leftover.unlink()
         print(f"[final] {dest.name}", flush=True)
+        # O `result.json` guarda o CAMINHO do final e nao acompanhava o
+        # rename: 10 projetos do usuario ficaram apontando para um arquivo
+        # que nao existe mais, e a publicacao no Instagram le esse campo.
+        try:
+            rp = edit_dir / "result.json"
+            rd = json.loads(rp.read_text(encoding="utf-8-sig"))
+            if isinstance(rd, dict) and rd.get("final"):
+                rd["final"] = str(dest)
+                rp.write_text(json.dumps(rd, ensure_ascii=False, indent=2),
+                              encoding="utf-8")
+        except (OSError, json.JSONDecodeError, TypeError):
+            pass
         return dest
     except OSError as e:
         print(f"[warn] rename final: {e}", flush=True)

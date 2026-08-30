@@ -3704,3 +3704,25 @@ video.lib-thumb { aspect-ratio: 9 / 16; max-height: 260px; object-fit: contain;
   border-style: dashed;
   color: var(--muted, #9aa0a6);
 }
+
+/* Selo do efeito na Biblioteca.
+ *
+ * O vídeo tem cinco vagas de efeito (clique, risco, whoosh, pop, corte).
+ * Dos 234 efeitos que o usuário importou, 133 são de categorias sem vaga
+ * — ficavam guardados sem tocar, e a tela não dizia. */
+.lib-selo {
+  flex: none;
+  font-size: 11px;
+  line-height: 1;
+  padding: 4px 7px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.lib-selo--toca {
+  color: #0b3b2e;
+  background: #7ee2b8;
+}
+.lib-selo--guardado {
+  color: var(--muted, #9aa3ad);
+  background: color-mix(in srgb, currentColor 14%, transparent);
+}
