@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.85
+
+- **O karaokê saía com duas legendas na tela.** Ele desenhava o estilo
+  Empilhado por cima de si mesmo. Acontecia em qualquer projeto que já
+  tivesse sido renderizado em Empilhado e depois trocasse para karaokê: o
+  arquivo de legendas do estilo antigo ficava para trás e era desenhado
+  junto. Medido: 2,557 de tinta contra o desenho de referência, agora
+  **1,010** — dentro da faixa dos outros catorze estilos.
+
 ## 3.84
 
 - **Preset que não define visual agora diz isso.** Um dos seus presets só

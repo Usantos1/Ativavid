@@ -4332,9 +4332,14 @@ def run(
                 *(["--emphasis", brand_emph] if brand_emph else []),
             )
         else:
-            cues = public / "caption-cues.json"
-            if not cues.exists():
-                cues.write_text("[]", encoding="utf-8")
+            # SEMPRE vazio, nao "vazio se nao existir". O arquivo descreve as
+            # cues do `stacked`; em qualquer outro estilo ele nao tem dono.
+            # Deixar o antigo no lugar fazia o motor proprio desenhar o
+            # stacked POR CIMA do karaoke num projeto que ja tinha sido
+            # renderizado em stacked e depois trocou de estilo (medido:
+            # 2,557 de tinta contra o template, com as duas legendas na
+            # tela).
+            (public / "caption-cues.json").write_text("[]", encoding="utf-8")
         # ABERTURA SO COM A MANCHETE: o usuario escolheu que a legenda espera
         # a manchete sair. Roda depois das cues existirem, e vale para os dois
         # motores (ambos leem caption-cues.json).

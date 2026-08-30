@@ -348,18 +348,11 @@ def ancoras_de_headline() -> dict[str, dict[str, object]]:
 # ele desligado o karaoke volta pelo Remotion e o motivo fica gravado em
 # `overlayEngineSkip`, como qualquer outra recusa. O Remotion nao sai: ele
 # continua sendo a queda das janelas de posicao e de tudo que o gate recusar.
-# MEDIDO DE NOVO em 30/08, no projeto mais recente do usuario: tinta
-# mediana 2,557 (p5 1,01, p95 4,28) contra 1,000 na aprovacao de 22/08. No
-# mesmo quadro o template mostra so a palavra corrente e o motor proprio
-# mostra a linha inteira MAIS a anterior — nao e deslocamento de tempo (o
-# melhor encaixe das curvas e em 0 quadros), e desenho.
-#
-# Nada mudou no `_montar_karaoke` nem no componente desde a aprovacao
-# (`git log -S` em ambos), entao a diferenca depende dos DADOS: a aprovacao
-# usou outro projeto. Fica registrado e NAO desligado: o usuario usa
-# `stacked` em 114 de 114 videos (que mede 1,014), e desligar custaria o
-# caminho lento a quem usa karaoke sem que se saiba ainda qual dos dois
-# lados esta certo. Reproducao: `scratchpad/onde_difere_karaoke.py`.
+# MEDIDO DE NOVO em 30/08: 2,557 de tinta contra o template — o karaoke
+# saia com a legenda `stacked` desenhada POR CIMA dele, porque o
+# despachante nao zerava `self.cues` neste ramo (o unico dos cinco sem a
+# linha). Consertado no mesmo dia: 2,557 -> 1,010, de volta a faixa dos
+# outros catorze estilos. Ver `test_karaoke_sozinho.py`.
 def karaoke_aprovado() -> bool:
     return (os.environ.get("ATIVAVID_KARAOKE_PROPRIO", "").strip()
             not in ("0", "false", "no", "off"))
@@ -962,6 +955,18 @@ class Renderizador:
             self.cues = []
         elif estilo == "karaoke":
             self.camadas.extend(self._montar_karaoke())
+            # ZERA as cues, como TODO estilo irmao. Sem esta linha o laco
+            # abaixo desenhava o `stacked` POR CIMA do karaoke: no template
+            # o `<Karaoke/>` e o `else` do despachante e nada mais desenha
+            # legenda. Aparecia quando o `caption-cues.json` tinha conteudo —
+            # o que acontece num projeto que ja foi renderizado em `stacked`
+            # e depois trocou de estilo (o pipeline so criava o arquivo vazio
+            # se ele NAO existisse; nao limpava o antigo).
+            #
+            # Medido: tinta 2,557 contra o template, com as duas legendas
+            # na tela ao mesmo tempo. Os outros 14 estilos ficam entre 0,93
+            # e 1,04.
+            self.cues = []
         elif estilo == "bolha":
             self.camadas.extend(self._montar_bolha())
             self.cues = []
