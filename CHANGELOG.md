@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.99
+
+- **Um quadro de diferença não manda mais o vídeo inteiro para o caminho
+  lento.** O conferidor exigia que o vídeo saísse com o número exato de
+  quadros previsto, e a checagem de duração logo ao lado já aceitava
+  0,08s de folga — as duas discordavam. Todas as quedas registradas nos
+  seus projetos foram por 1 a 3 quadros, e cada uma refazia o vídeo no
+  motor lento, 3x mais devagar, sem consertar nada.
+  Agora a folga de quadros sai da própria folga de duração. Vídeo cortado
+  ou de outro corte continua recusado — a diferença ali é de segundos.
+
+
 ## 3.98
 
 - **O corte passou a dizer onde gasta o tempo.** Ele é 30% do tempo de

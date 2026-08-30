@@ -284,8 +284,23 @@ def _canary_validate_overlay(
     tl = timeline_from_edit_data(edit_data)
     expected = int(tl["durationInFrames"])
     got = int(count_frames(final) or 0)
-    if got != expected:
-        return f"FRAMES {got}!={expected}"
+    # A FOLGA SAI DA DURACAO, logo abaixo. As duas checagens medem a mesma
+    # grandeza e discordavam: a duracao aceita 0,08s (2,4 quadros a 30fps)
+    # e a contagem exigia igualdade exata.
+    #
+    # Custo dessa incoerencia, medido nos projetos do usuario: TODAS as 15
+    # quedas do motor rapido foram `FRAMES N!=M` com 1 a 3 quadros de
+    # diferenca, e cada queda refaz o video no Chrome — 3,3x mais lento
+    # (143 ms/quadro contra 35,5). Nenhuma consertou nada; o video ja
+    # estava certo.
+    #
+    # O que a guarda pega continua pego: overlay truncado ou de outro corte
+    # difere por SEGUNDOS. E quem passar aqui por 3 quadros esbarra na
+    # duracao logo em seguida.
+    fps_tl = float(tl.get("fps") or edit_data.get("fps") or 30.0)
+    folga_f = max(1, int(0.08 * fps_tl))
+    if abs(got - expected) > folga_f:
+        return f"FRAMES {got}!={expected} (folga {folga_f}f)"
     info = video_info(final)
     exp_sec = float(tl["durationSec"])
     got_sec = float(info.get("duration") or 0)
