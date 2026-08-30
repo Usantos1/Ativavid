@@ -3645,6 +3645,28 @@ class StudioHandler(BaseHTTPRequestHandler):
         return job
 
 
+def esquentar_medida_do_espaco(root: Path) -> None:
+    """Mede o espaco liberavel em segundo plano, no arranque.
+
+    A medida e cacheada, mas a PRIMEIRA custa ~6s — o preco de percorrer
+    os `node_modules` dos projetos entregues, ~30 mil arquivos cada. Sem
+    isto essa espera cai em cima de quem abriu Configuracoes.
+
+    So leitura. Falhar aqui nao muda nada: a rota mede na hora.
+    """
+    def _trabalho() -> None:
+        try:
+            sys.path.insert(0, str(HELPERS))
+            from liberar_espaco import medir  # type: ignore
+
+            medir(root)
+        except Exception:  # noqa: BLE001 — conforto, nunca derruba o app
+            pass
+
+    threading.Thread(target=_trabalho, daemon=True,
+                     name="espaco-esquentar").start()
+
+
 def main() -> None:
     # load .env into process early
     for k, v in load_env_keys().items():
@@ -3671,6 +3693,8 @@ def main() -> None:
     StudioHandler.store = store
     StudioHandler.worker = worker
     StudioHandler.projects_root = root
+
+    esquentar_medida_do_espaco(root)
 
     srv = ThreadingHTTPServer(("127.0.0.1", args.port), StudioHandler)
     url = f"http://127.0.0.1:{args.port}/"

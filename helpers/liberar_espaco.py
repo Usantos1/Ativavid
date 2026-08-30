@@ -33,25 +33,70 @@ _REGENERAVEIS = (
     "edit/.preview_cache",
     "edit/clips_draft",
     "edit/clips_preview",
+    # O maior item da pasta de um projeto: 636 MB de `node_modules`. Nos
+    # projetos do usuario sao 16 copias de verdade (10,7 GB) e 168
+    # junctions para uma instalacao compartilhada — por isso a guarda de
+    # atalho abaixo nao e opcional.
+    "edit/remotion/node_modules",
 )
 
 _DIAS_PADRAO = 7
 
 
+def _e_atalho(p: Path) -> bool:
+    """Junction ou symlink de pasta — um ATALHO, nao a pasta.
+
+    O Windows do usuario tem 168 projetos cujo `node_modules` e junction
+    para uma instalacao compartilhada. `rglob` e `rmtree` atravessam
+    junction: sem esta pergunta, medir contaria o mesmo conteudo 168 vezes
+    e limpar apagaria a instalacao que os outros 167 usam.
+    """
+    try:
+        if p.is_symlink():
+            return True
+        st = os.stat(p, follow_symlinks=False)
+    except OSError:
+        return False
+    # FILE_ATTRIBUTE_REPARSE_POINT. So existe no Windows; noutros sistemas
+    # o `is_symlink` acima ja respondeu.
+    return bool(getattr(st, "st_file_attributes", 0) & 0x400)
+
+
 def _tamanho(p: Path) -> int:
+    """Bytes que somem se `p` for embora. Atalho nao ocupa disco: zero."""
+    if _e_atalho(p):
+        return 0
     if p.is_file():
         try:
             return p.stat().st_size
         except OSError:
             return 0
     total = 0
-    for f in p.rglob("*"):
-        if f.is_file():
+    for raiz, dirs, arquivos in os.walk(p):
+        # nao descer por atalho: o conteudo do outro lado nao e deste projeto
+        dirs[:] = [d for d in dirs if not _e_atalho(Path(raiz) / d)]
+        for f in arquivos:
             try:
-                total += f.stat().st_size
+                total += os.path.getsize(os.path.join(raiz, f))
             except OSError:
                 pass
     return total
+
+
+def _apagar(p: Path) -> None:
+    """Apaga `p`. Atalho e desfeito COMO atalho — o alvo fica de pe."""
+    if _e_atalho(p):
+        # `rmtree` num junction do Windows entra e apaga o conteudo do
+        # outro lado. Aqui so o atalho sai.
+        try:
+            p.unlink()
+        except OSError:
+            os.rmdir(p)
+        return
+    if p.is_dir():
+        shutil.rmtree(p)
+    else:
+        p.unlink()
 
 
 def _e_entregue(proj: Path) -> tuple[bool, float]:
@@ -110,11 +155,62 @@ def _duplicatas(proj: Path) -> list[tuple[Path, Path]]:
     return pares
 
 
+# Cache da medida dos intermediarios.
+#
+# Sem ele a tela de Configuracoes demora 6,64s em vez de 0,41s: a conta e
+# dominada pelos 16 `node_modules` de verdade (636 MB e ~30 mil arquivos
+# cada), e o preco e o `stat` de cada arquivo.
+#
+# So entra na conta projeto ENTREGUE e PARADO ha uma semana — e o que esta
+# parado nao muda de tamanho. A chave e o `mtime` do `result.json`: mexeu
+# no projeto, a medida e refeita.
+_CACHE_REL = ".ativavid/espaco-cache.json"
+
+
+def _cache_ler(root: Path) -> dict[str, Any]:
+    try:
+        d = json.loads((root / _CACHE_REL).read_text(encoding="utf-8"))
+        return d if isinstance(d, dict) else {}
+    except (OSError, json.JSONDecodeError, TypeError):
+        return {}
+
+
+def _cache_gravar(root: Path, dados: dict[str, Any]) -> None:
+    alvo = root / _CACHE_REL
+    try:
+        alvo.parent.mkdir(parents=True, exist_ok=True)
+        alvo.write_text(json.dumps(dados), encoding="utf-8")
+    except OSError:
+        pass    # cache e conforto, nao resultado: falhar aqui nao e erro
+
+
+def _cache_limpar(root: Path) -> None:
+    """Depois de apagar, a medida velha vira mentira."""
+    try:
+        (root / _CACHE_REL).unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+def _intermediarios(proj: Path) -> int:
+    total = 0
+    for rel in _REGENERAVEIS:
+        p = proj / Path(rel)
+        if p.exists():
+            total += _tamanho(p)
+    for prep in proj.glob("*.prep.mp4"):
+        total += _tamanho(prep)
+    return total
+
+
 def medir(projects_root: Path) -> dict[str, Any]:
     dup = 0
     inter = 0
     projetos = 0
-    for proj in sorted(Path(projects_root).iterdir()) if Path(projects_root).exists() else []:
+    raiz = Path(projects_root)
+    cache = _cache_ler(raiz)
+    mudou = False
+    for proj in sorted(raiz.iterdir()) if raiz.exists() else []:
         if not proj.is_dir() or proj.name.startswith((".", "_")):
             continue
         projetos += 1
@@ -123,12 +219,21 @@ def medir(projects_root: Path) -> dict[str, Any]:
                 dup += copia.stat().st_size
         entregue, idade = _e_entregue(proj)
         if entregue and idade >= _DIAS_PADRAO:
-            for rel in _REGENERAVEIS:
-                p = proj / Path(rel)
-                if p.exists():
-                    inter += _tamanho(p)
-            for prep in proj.glob("*.prep.mp4"):
-                inter += _tamanho(prep)
+            try:
+                chave = str((proj / "edit" / "result.json").stat().st_mtime_ns)
+            except OSError:
+                chave = ""
+            guardado = cache.get(proj.name)
+            if chave and isinstance(guardado, list) and guardado[:1] == [chave]:
+                inter += int(guardado[1])
+            else:
+                bytes_ = _intermediarios(proj)
+                inter += bytes_
+                if chave:
+                    cache[proj.name] = [chave, bytes_]
+                    mudou = True
+    if mudou:
+        _cache_gravar(raiz, cache)
     return {
         "ok": True,
         "projetos": projetos,
@@ -175,13 +280,11 @@ def liberar(projects_root: Path, *, dias_minimos: int = _DIAS_PADRAO) -> dict[st
                 continue
             sz = _tamanho(p)
             try:
-                if p.is_dir():
-                    shutil.rmtree(p)
-                else:
-                    p.unlink()
+                _apagar(p)
                 removido += sz
             except OSError:
                 erros += 1
+    _cache_limpar(Path(projects_root))
     return {
         "ok": True,
         "deduplicadoGb": round(dedup / (1024 ** 3), 2),

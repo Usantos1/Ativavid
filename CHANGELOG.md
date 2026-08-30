@@ -1,5 +1,25 @@
 # Changelog
 
+## 4.02
+
+- **Liberar espaço passou a ver os 10,7 GB do Remotion.** A pasta
+  `node_modules` é o maior item de um projeto — 636 MB cada — e era a
+  única que a limpeza não olhava. Nos seus projetos são 16 cópias de
+  verdade, todas de vídeo entregue e parado há mais de uma semana.
+  O que dá para liberar passou de 58 GB para 68 GB.
+- **Atalho de pasta deixou de ser tratado como pasta.** Outros 168
+  projetos apontam para uma instalação compartilhada do Remotion por
+  atalho. Sem essa distinção a limpeza anunciaria 107 GB que não existem
+  e, pior, apagaria a instalação compartilhada — quebrando os outros 167
+  projetos de uma vez. Agora o atalho é desfeito como atalho e o conteúdo
+  do outro lado fica de pé.
+- **E a conta continua instantânea.** Olhar essas pastas fazia a tela de
+  Configurações demorar 6,6s em vez de 0,4s — 16 vezes mais. A medida
+  agora fica guardada (só entra na conta projeto entregue e parado, e o
+  que está parado não muda de tamanho) e é feita no arranque, em segundo
+  plano: quando você abre a tela, o número já está lá.
+
+
 ## 4.01
 
 - **A revisão da legenda passou a saber o nome da sua loja.** *Prime Camp*
