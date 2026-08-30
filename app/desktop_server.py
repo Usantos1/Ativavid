@@ -247,6 +247,9 @@ class DesktopHandler(ps.Handler):
         if raw == "/api/doutor":
             self._json(ls.run_doutor())
             return
+        if raw == "/api/auditoria":
+            self._json(ls.rodar_auditoria())
+            return
         if raw == "/api/system":
             from app.system_info import system_payload
 
