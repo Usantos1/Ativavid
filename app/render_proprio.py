@@ -1560,15 +1560,22 @@ class Renderizador:
 
     def _hl_bloco_multi(self, leg, linhas, tam, peso, alt_cx, x0, y_topo,
                         cor, especs, raio=0, pad_xy=(0, 0, 0), borda=None,
-                        rot=0.0, sobe=24.0, fundo=None, enter=8):
+                        rot=0.0, sobe=24.0, fundo=None, enter=8,
+                        pad_esq=None):
         """Bloco de VARIAS linhas numa peca so — para molduras/fundos que
-        envolvem o conjunto (carimbo), nao cada linha."""
+        envolvem o conjunto (carimbo), nao cada linha.
+
+        `pad_esq` alinha o texto a ESQUERDA com essa margem, em vez de
+        centra-lo: e o que a manchete precisa, porque la a barra de
+        acento ocupa o comeco da lapide. Sem o parametro nada muda —
+        mexer neste ajudante compartilhado ja custou duas regressoes.
+        """
         f = self._hl_fonte(peso, tam)
         asc, desc = f.getmetrics()
         mascaras = [self._mascara(f, l, -1.0) for l in linhas]
         pad_x, pad_t, pad_b = pad_xy
         larg_txt = max((m.shape[1] for m in mascaras), default=1)
-        larg_b = int(larg_txt + 2 * pad_x)
+        larg_b = int(larg_txt + (pad_x if pad_esq is None else pad_esq) + pad_x)
         alt_b = int(alt_cx * len(mascaras) + pad_t + pad_b)
         folga = 56
         L, A = larg_b + 2 * folga, alt_b + 2 * folga
@@ -1605,7 +1612,8 @@ class Renderizador:
         y = folga + pad_t
         for m in mascaras:
             h_m, w_m = m.shape
-            tx = folga + pad_x + int((larg_txt - w_m) / 2)
+            tx = (folga + pad_esq if pad_esq is not None
+                  else folga + pad_x + int((larg_txt - w_m) / 2))
             ty = int(y + (alt_cx - (asc + desc)) / 2)
             hh, ww = min(h_m, A - ty), min(w_m, L - tx)
             t_a[ty:ty + hh, tx:tx + ww] = np.maximum(
@@ -1790,7 +1798,11 @@ class Renderizador:
                 larg_b = self._larg_hl(l, tam, 900) + 2 * pad[0]
                 alt = self._hl_bloco_texto(
                     leg, l, tam, 900, (self.w - larg_b) / 2, y, alt_cx,
-                    "#ffffff", [(0, 12, 30, 0.45)], fundo=accent, raio=10,
+                    # `filter: drop-shadow` no <svg> do template: sigma e o
+                    # RAIO INTEIRO (BLUR_K). Com o padrao 0,5 o halo saia em
+                    # 0,72 do template e a tinta do estilo em 0,856.
+                    "#ffffff", [(0, 12, 30, 0.45)], k_sombra=BLUR_K,
+                    fundo=accent, raio=10,
                     pad_xy=pad, sobe=sobe, enter=enter_hl, vazar=True)
                 y += alt + 10
             return leg
@@ -1801,7 +1813,12 @@ class Renderizador:
                 larg = self._larg_hl(l, tam, 900)
                 alt = self._hl_bloco_texto(
                     leg, l, tam, 900, (self.w - larg) / 2, y, alt_cx,
-                    "#ffffff", [(0, 8, 22, 0.5)], sobe=sobe, enter=enter_hl)
+                    # `filter: drop-shadow`, nao `text-shadow`: o sigma e o
+                    # RAIO INTEIRO (BLUR_K), nao a metade. O padrao 0,5 do
+                    # ajudante deixava o halo em 0,71 do template — e a tinta
+                    # do estilo em 0,815, o pior das 15 headlines.
+                    "#ffffff", [(0, 8, 22, 0.5)], k_sombra=BLUR_K,
+                    sobe=sobe, enter=enter_hl)
                 pal = leg.palavras[-1]
                 # o degrade corre pela LETRA, nao pela imagem inteira: a peca
                 # tem 56px de folga em volta, e usar a altura toda achataria
@@ -1900,22 +1917,39 @@ class Renderizador:
             return leg
 
         if estilo == "sublinhado":
-            barra_h = max(6, round(tam * 0.14))
+            # 0,19 e nao 0,14: o template subiu a barra de 0,13 para 0,19 de
+            # proposito ("0.13 rendered as a hairline rule that competed with
+            # busy footage instead of anchoring the text") e o motor proprio
+            # ficou no numero antigo.
+            barra_h = max(8, round(tam * 0.19))
+            sobra = round(tam * 0.06)        # `left/right: -0.06em`
             y = top
             for l in linhas:
                 larg = self._larg_hl(l, tam, 900)
+                # A BARRA VEM PRIMEIRO: no template ela e o irmao de baixo do
+                # texto dentro do wrapper `position: relative`, entao o texto
+                # passa POR CIMA dela. Aqui a ordem em `palavras` e a ordem de
+                # pintura — a barra era a ultima, cobria os descendentes, e a
+                # linha lia como uma regua solta em vez de um marca-texto.
+                larg_b = int(larg) + 2 * sobra
+                img = Image.new("L", (larg_b, barra_h), 0)
+                ImageDraw.Draw(img).rounded_rectangle(
+                    [0, 0, larg_b - 1, barra_h - 1], radius=barra_h // 2,
+                    fill=255)
+                a_b = np.asarray(img, dtype=np.float32) / 255.0
+                # base da barra a `0.06em` do fim da caixa de linha
+                y_barra = int(y + alt_cx - round(tam * 0.06) - barra_h)
+                leg.palavras.append(Palavra(
+                    int((self.w - larg) / 2) - sobra, y_barra,
+                    np.broadcast_to(self._cor(accent), (*a_b.shape, 3)).copy(),
+                    a_b, np.zeros_like(a_b), inicio_f=0, enter=enter_hl,
+                    sobe=sobe))
                 alt = self._hl_bloco_texto(
                     leg, l, tam, 900, (self.w - larg) / 2, y, alt_cx, "#ffffff",
-                    [(0, 6, 18, 0.5)], sobe=sobe, enter=enter_hl)
-                # barra sob a linha, na cor da marca
-                img = Image.new("L", (int(larg) + 8, barra_h), 0)
-                ImageDraw.Draw(img).rounded_rectangle(
-                    [0, 0, int(larg), barra_h - 1], radius=barra_h // 2, fill=255)
-                a_b = np.asarray(img, dtype=np.float32) / 255.0
-                leg.palavras.append(Palavra(
-                    int((self.w - larg) / 2), int(y + alt_cx + barra_h * 0.2),
-                    np.broadcast_to(self._cor(accent), (*a_b.shape, 3)).copy(),
-                    a_b, np.zeros_like(a_b), inicio_f=0, enter=enter_hl, sobe=sobe))
+                    # `0 4px 16px rgba(0,0,0,0.55)` do template. Estava
+                    # `(0, 6, 18, 0.5)` — deslocamento e borrao maiores, o que
+                    # deixava o halo 43% acima do dele.
+                    [(0, 4, 16, 0.55)], sobe=sobe, enter=enter_hl)
                 y += alt + round(tam * 0.16)
             return leg
 
@@ -1935,26 +1969,40 @@ class Renderizador:
             # linha deixava a faixa 20% mais baixa que a do Remotion
             # (182px contra 230px, medido).
             bottom = _pos(hook, "paddingBottom", 140)
-            pad = (44, 26, 26)
+            # `padding: 26px 44px` e `gap: 26` do template, com os filhos
+            # [barra de 12px, texto]: a barra fica DENTRO da lapide, a 44px
+            # da borda, e o texto comeca a 44+12+26 = 82px, alinhado a
+            # ESQUERDA. Antes a barra era desenhada 30px a esquerda da
+            # lapide (do lado de fora) e o texto ia centrado.
+            pad_lado, barra, vao = 44, 12, 26
+            pad = (pad_lado, 26, 26)
+            pad_esq = pad_lado + barra + vao
             larg_max = max((self._larg_hl(l, tam, 800) for l in linhas),
                            default=0)
-            larg_b = larg_max + 2 * pad[0]
+            larg_b = larg_max + pad_esq + pad_lado
             alt_b = alt_cx * len(linhas) + pad[1] + pad[2]
             x_faixa = (self.w - larg_b) / 2 + 15
             y0 = self.h - bottom - alt_b
-            # barra de acento (12px) colada na borda esquerda da faixa
-            img = Image.new("L", (12, int(alt_b)), 0)
+            img = Image.new("L", (barra, int(alt_b)), 0)
             ImageDraw.Draw(img).rounded_rectangle(
-                [0, 0, 11, int(alt_b) - 1], radius=6, fill=255)
+                [0, 0, barra - 1, int(alt_b) - 1], radius=6, fill=255)
             a_b = np.asarray(img, dtype=np.float32) / 255.0
-            leg.palavras.append(Palavra(
-                int(x_faixa - 30), int(y0),
-                np.broadcast_to(self._cor(accent), (*a_b.shape, 3)).copy(),
-                a_b, np.zeros_like(a_b), inicio_f=0, enter=enter_hl, sobe=sobe))
             self._hl_bloco_multi(
                 leg, linhas, tam, 800, alt_cx, x_faixa, y0, "#ffffff",
-                [(0, 10, 26, 0.4)], raio=18, pad_xy=pad,
-                fundo=("#0c0d0f", 0.86), sobe=sobe, enter=enter_hl)
+                # `0 14px 40px rgba(0,0,0,0.45)` do template. Estava
+                # `(0, 10, 26, 0.4)` — deslocamento, borrao e opacidade os
+                # tres menores, o que deixava o halo em 0,622.
+                [(0, 14, 40, 0.45)], raio=18, pad_xy=pad,
+                fundo=("#0c0d0f", 0.86), sobe=sobe, enter=enter_hl,
+                pad_esq=pad_esq)
+            # A barra vem DEPOIS da lapide: a ordem em `palavras` e a ordem de
+            # pintura, e a lapide (86% opaca) cobria a barra quando ela era
+            # desenhada antes. Fora da lapide isso nao aparecia — o defeito
+            # nasceu junto com a barra entrando para dentro.
+            leg.palavras.append(Palavra(
+                int(x_faixa + pad_lado), int(y0),
+                np.broadcast_to(self._cor(accent), (*a_b.shape, 3)).copy(),
+                a_b, np.zeros_like(a_b), inicio_f=0, enter=enter_hl, sobe=sobe))
             return leg
 
         if estilo == "carimbo":
@@ -3128,8 +3176,11 @@ class Renderizador:
             # dele: a sombra de uma letra a 32% e 32% mais fraca. Lancar do
             # glifo cheio deixava a legenda 28% mais "tinta" que a do
             # template (medido: 1,280 contra 1,007 dos outros estilos).
+            # `filter: drop-shadow` — sigma e o RAIO INTEIRO (BLUR_K), nao a
+            # metade. Mesmo tropeco que deixou `vazado` e `gradiente` com
+            # metade do borrao; aqui era eu repetindo o padrao do ajudante.
             return rgb, alpha, self._sombra_de(
-                pad_m, [(0, 8, 22, 0.55 * self.VIDRO_OPACO)], k=0.5)
+                pad_m, [(0, 8, 22, 0.55 * self.VIDRO_OPACO)], k=BLUR_K)
 
         if modo == "traco":
             # o Recorte com contorno FINO: 3px em vez dos 7px dele

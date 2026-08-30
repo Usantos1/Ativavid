@@ -92,3 +92,31 @@ def test_o_prompt_da_ia_traz_a_lista():
     texto = caption_styles.lista_para_ia()
     for estilo in caption_styles.TODOS:
         assert estilo in texto, estilo
+
+
+def test_as_headlines_batem_nos_tres_motores():
+    """Mesma guarda das legendas, para o outro catálogo.
+
+    Um id que exista na tela e não no motor faz o job cair no caminho lento
+    (o gate recusa); um que exista no motor e não na tela é código morto.
+    Hoje são 15 dos dois lados — o teste é para quando alguém acrescentar o
+    16º e esquecer uma das listas.
+    """
+    import re
+
+    from app.render_proprio import Renderizador
+
+    js = (REPO / "assets" / "preview" / "app.js").read_text(encoding="utf-8")
+    i = js.index("  headlines: [")
+    bloco = js[i:js.index("  captions: [", i)]
+    na_tela = set(re.findall(r"\{id: '([a-z0-9]+)'", bloco)) - {"nenhuma"}
+    motor = set(Renderizador.HL_STYLES)
+    assert na_tela == motor, (
+        f"só na tela: {na_tela - motor} · só no motor: {motor - na_tela}")
+
+    # e a união de tipos do template conhece todos
+    tsx = (REPO / "assets" / "shortform" / "src"
+           / "Main.tsx").read_text(encoding="utf-8")
+    j = tsx.index("style?: 'outline'")
+    uniao = set(re.findall(r"'([a-z]+)'", tsx[j:tsx.index(";", j)]))
+    assert not (na_tela - uniao), f"o template não tipa: {na_tela - uniao}"

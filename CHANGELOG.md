@@ -1,5 +1,22 @@
 # Changelog
 
+## 3.86
+
+Quatro headlines saíam diferentes do desenho de referência. Medi as 15 e
+consertei as que estavam fora:
+
+- **Manchete**: a barra colorida ficava **fora** da tarja, à esquerda, e o
+  texto ia centrado. Agora ela fica dentro, como no desenho, e o texto
+  alinha à esquerda.
+- **Sublinhado**: a barra ficava abaixo da linha e por cima do texto — lia
+  como uma régua solta. Agora ela passa **atrás** das letras, como um
+  marca-texto, e tem a espessura certa.
+- **Vazado** e **Degradê na letra**: saíam com **metade** do borrão da
+  sombra.
+
+Depois: as 15 headlines dentro da faixa (0,93 a 1,10), e nenhuma das onze
+que já estavam certas se mexeu.
+
 ## 3.85
 
 - **O karaokê saía com duas legendas na tela.** Ele desenhava o estilo
