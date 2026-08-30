@@ -32,6 +32,8 @@ _RULES = {
     ),
     "humor": (
         "TIPO=humor.\n"
+        "O primeiro range deve durar entre 1,5 e 3,5 segundos, com uma frase "
+        "que caiba inteira nesse tempo -- o setup comeca depois. "
         "Preserve semanticamente o bloco da piada: setup → reação → payoff → punchline. "
         "Não remova o contexto que a punchline precisa. "
         "Punchline não é CTA. Na dúvida se a frase seguinte ainda é engraçada sem isto: PRESERVAR."
@@ -55,6 +57,10 @@ _RULES = {
         "TIPO=viral.\n"
         "O video inteiro serve ao comeco: a frase mais forte vai no primeiro "
         "range (beat=HOOK), e ela precisa fazer sentido sozinha, sem nada antes. "
+        "Esse primeiro range deve durar entre 1,5 e 3,5 SEGUNDOS: escolha uma "
+        "frase que ja CAIBA nesse tempo. Nao corte uma frase longa no meio "
+        "para caber -- se a mais forte for longa, prefira a proxima mais forte "
+        "que caiba inteira. "
         "Corte pausa, rodeio e preambulo -- 'oi gente', 'entao', 'deixa eu "
         "explicar'. Mas NAO corte o que da sentido a frase forte: promessa sem "
         "a entrega vira clickbait e o espectador sai nos primeiros segundos. "

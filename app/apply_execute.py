@@ -655,10 +655,15 @@ def _refazer_nota(edit_dir: Path, cut: Path, captions: list | None,
             str(w.get("text") or "").strip()
             for w in (captions or []) if isinstance(w, dict)
         ).strip()
-        modo = str((_read_json(edit / "job_intent.json", {}) or {}).get(
-            "editingIntent") or "dynamic")
+        pedido = _read_json(edit / "job_intent.json", {}) or {}
+        modo = str(pedido.get("editingIntent") or "dynamic")
+        # O TIPO tambem isenta a regua de abertura curta (educativo,
+        # informativo, institucional, review preservam por contrato) — o
+        # apply grava a mesma `score.json` que o render, entao ele nao
+        # pode julgar por outra regra.
         nota = score_structural(
             mode=modo,
+            tipo=pedido.get("contentType"),
             duration=float(duracao),
             ranges=ranges,
             has_hook_beat=any(str(r.get("beat") or "").upper() == "HOOK"

@@ -4912,6 +4912,7 @@ def run(
         )
         score = score_structural(
             mode=intent_mode or "dynamic",
+            tipo=(preset or {}).get("contentType"),
             duration=duration,
             ranges=edl_ranges,
             has_hook_beat=any(str(r.get("beat") or "").upper() == "HOOK" for r in edl_ranges),

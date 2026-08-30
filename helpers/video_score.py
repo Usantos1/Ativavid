@@ -22,6 +22,14 @@ def _clamp(n: float, lo: float = 35, hi: float = 98) -> int:
 # preservadores por design.
 MODOS_PRESERVADORES = ("complete", "intact", "light")
 
+# Tipos de conteudo cuja REGRA de corte manda preservar: a regua de
+# abertura curta nao se aplica a eles pelo mesmo motivo dos modos acima.
+# Medido nos 189 projetos: `informational` tem mediana de 15,3s na
+# primeira fala (11 de 13 acima de 5s) — a nota reprovava a conduta que o
+# proprio tipo manda ter ("ritmo equilibrado sem sacrificar clareza").
+TIPOS_PRESERVADORES = ("educational", "informational", "institutional",
+                       "review")
+
 
 def _seg(v: float) -> str:
     """Segundos como o usuario le: virgula decimal e a unidade junto."""
@@ -185,10 +193,15 @@ def score_structural(
     transcript_ok: bool = True,
     spoken: str = "",
     mode: str | None = None,
+    tipo: str | None = None,
 ) -> dict[str, Any]:
     ranges = list(ranges or [])
     preserva = str(mode or "").lower() in MODOS_PRESERVADORES
-    hook, hook_tip = _hook_score(ranges, preserva=preserva)
+    # O RITMO segue o modo; o GANCHO segue o modo e tambem o tipo, porque
+    # um "educativo" ou "informativo" tem contrato de preservar mesmo num
+    # modo que corta.
+    preserva_gancho = preserva or str(tipo or "").lower() in TIPOS_PRESERVADORES
+    hook, hook_tip = _hook_score(ranges, preserva=preserva_gancho)
     clarity, clarity_tip = _clarity_score(
         ranges, transcript_ok=transcript_ok, spoken=spoken,
     )

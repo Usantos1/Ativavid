@@ -1,5 +1,22 @@
 # Changelog
 
+## 4.26
+
+- **A IA agora recebe o pedido que a nota cobrava.** A ficha reclamava da
+  abertura longa em **103 dos seus 170 vídeos** ("as primeiras falas
+  prendem melhor entre 1,5 e 3,5s"), mas a regra que a IA recebia para o
+  tipo **Viral** — 118 dos seus vídeos — falava do que a frase precisa
+  *ser* e nada sobre quanto ela deve *durar*. Medindo a primeira fala nos
+  seus 189 projetos: mediana de **5,6s**, e só 23 de 144 no modo Dinâmico
+  caíam na faixa boa. Agora Viral e Humor pedem a abertura de 1,5 a 3,5s —
+  escolhendo uma frase que já caiba, nunca cortando uma frase longa pela
+  metade.
+- **E a nota parou de cobrar isso de quem não deve dar.** Educativo,
+  Informativo, Institucional e Review preservam por contrato — a regra
+  deles manda não pular passo. O Informativo tinha mediana de 15,3s de
+  abertura e levava bronca por seguir a própria regra. São 13 vídeos seus
+  que deixam de ser cobrados.
+
 ## 4.25
 
 - **A ficha do vídeo parou de culpar o ElevenLabs pela sua própria
