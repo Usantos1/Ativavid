@@ -178,20 +178,53 @@ def remaining_seconds(job: dict, est_total: float | None) -> float | None:
     return rest_hist
 
 
+def format_elapsed(seconds: float | None) -> str | None:
+    """Há quanto tempo está rodando. Verdade, não previsão."""
+    if seconds is None or seconds < 20:
+        return None
+    s = int(seconds)
+    if s < 90:
+        return "há 1 min"
+    return f"há {s // 60} min"
+
+
 def attach_eta(job: dict, history: list[dict] | None, edit_dir: Path | None = None) -> dict:
-    """Anexa etaLabel só se houver base. Não inventa cronômetro."""
+    """Anexa o TEMPO JÁ CORRIDO. Não promete quanto falta.
+
+    A previsão saiu na 4.14. Medida nos 172 vídeos do usuário, prevendo
+    cada um com os outros como histórico: erro relativo de **47% na
+    mediana**, e só 24% das previsões dentro de 25% do real. Os extremos
+    diziam "~1 min restante" num vídeo de 15 minutos e "~9 min" num de
+    1,5.
+
+    É a mesma conclusão que o apply já tinha tirado, com o mesmo número, e
+    a frase que ficou no código de lá vale aqui: dizer "cerca de 2
+    minutos" e levar 40s é pior que não dizer nada.
+
+    O tempo corrido responde à mesma pergunta de quem olha a Fila — "isso
+    travou?" — sem prometer nada.
+    """
     status = str(job.get("status") or "")
     if status not in ("processing", "queued", "importing"):
         return job
-    feat = enrich_from_edit({}, edit_dir)
-    if job.get("durationSec"):
-        feat["sourceDuration"] = job["durationSec"]
-    est_total = estimate_seconds(feat, history)
     if status == "processing":
-        rest = remaining_seconds(job, est_total)
-        label = format_eta(rest)
-    else:
-        label = format_eta(est_total)
-    if label:
-        job["etaLabel"] = label
+        rodando = _segundos_rodando(job)
+        label = format_elapsed(rodando)
+        if label:
+            job["etaLabel"] = label
     return job
+
+
+def _segundos_rodando(job: dict) -> float | None:
+    from datetime import datetime, timezone
+
+    bruto = str(job.get("startedAt") or job.get("createdAt") or "").strip()
+    if not bruto:
+        return None
+    try:
+        t = datetime.fromisoformat(bruto.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=timezone.utc)
+    return max(0.0, (datetime.now(timezone.utc) - t).total_seconds())

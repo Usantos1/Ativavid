@@ -65,6 +65,7 @@ JANELA = (120, 260)          # quadros de fala contínua no projeto de teste
 # quadro de pico em 0,992).
 CURVA = False
 SO: set[str] = set()   # `--so nome,nome` varre so esses
+GUARDAR_PARES = False  # `--guardar` mantem os `.varredura_par_*.png`
 NOWIN = ({"creationflags": subprocess.CREATE_NO_WINDOW}
          if hasattr(subprocess, "CREATE_NO_WINDOW") else {})
 
@@ -269,6 +270,13 @@ def varrer(edit: Path, grupo: str) -> int:
         # A copia de trabalho e descartavel e carrega um junction de
         # node_modules: deixar isso na pasta do projeto so confunde.
         shutil.rmtree(ov, ignore_errors=True)
+        # E os pares de imagem, que sao material de LEITURA desta rodada.
+        # Deixados para tras, viram 34 arquivos ocultos na pasta de um
+        # projeto do usuario — lixo meu na biblioteca dele. Quem quiser
+        # guardar um par copia antes de rodar de novo.
+        if not GUARDAR_PARES:
+            for f in edit.glob(".varredura_par_*.png"):
+                f.unlink(missing_ok=True)
 
     if fora:
         print("FORA DA FAIXA (olhe `.varredura_par_<nome>.png` antes de "
@@ -289,10 +297,14 @@ def main() -> int:
                     help="tinta quadro a quadro — para achar ONDE diverge")
     ap.add_argument("--so", default="",
                     help="varrer só estes desenhos (separados por vírgula)")
+    ap.add_argument("--guardar", action="store_true",
+                    help="não apagar os pares de imagem no fim")
     a = ap.parse_args()
     global CURVA, SO
     CURVA = bool(a.curva)
     SO = {x.strip() for x in str(a.so or "").split(",") if x.strip()}
+    global GUARDAR_PARES
+    GUARDAR_PARES = bool(a.guardar)
     return varrer(a.projeto, a.grupo)
 
 

@@ -1,5 +1,19 @@
 # Changelog
 
+## 4.14
+
+- **Efeito que já vem distorcido não entra mais no vídeo.** 40 dos seus
+  233 efeitos chegam com o som no teto — e a troca pegava simplesmente o
+  mais recente da categoria. Se calhasse de ser um desses, a distorção ia
+  para todos os vídeos, por cima da sua voz. Agora o app escolhe o
+  primeiro que está limpo; se nenhum estiver, fica o som dele.
+- **A Fila parou de prometer quanto falta.** O "~N min restantes" errava
+  por 47% na mediana, e só 24% das previsões ficavam perto do real — dizia
+  *"~1 min restante"* num vídeo que levou 15 minutos. No lugar entra o que
+  o programa sabe de fato: **há quanto tempo** ele está trabalhando nesse
+  vídeo. Responde à mesma pergunta ("travou?") sem inventar número.
+
+
 ## 4.13
 
 - **A Fila diz em que passo o vídeo está.** *Olhando o vídeo… Ouvindo o

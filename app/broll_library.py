@@ -308,6 +308,42 @@ def set_categoria(rel: str, categoria: str,
     }
 
 
+def _pico_dbfs(arquivo: Path) -> float | None:
+    """Pico do arquivo, em dBFS. `None` quando nao deu para medir."""
+    import re as _re
+    import subprocess as _sp
+
+    try:
+        from app.ffmpeg_tools import ffmpeg_bin
+
+        exe = ffmpeg_bin()
+    except Exception:  # noqa: BLE001
+        exe = "ffmpeg"
+    try:
+        r = _sp.run([exe, "-hide_banner", "-nostats", "-i", str(arquivo),
+                     "-af", "volumedetect", "-f", "null", "-"],
+                    capture_output=True, text=True, errors="replace",
+                    timeout=30)
+    except (OSError, _sp.SubprocessError):
+        return None
+    m = _re.findall(r"max_volume:\s*(-?\d+(?:\.\d+)?) dB", r.stderr or "")
+    return float(m[-1]) if m else None
+
+
+def _ja_estoura(arquivo: Path) -> bool:
+    """O arquivo ja vem distorcido (pico colado em 0 dBFS)?
+
+    Medido na biblioteca do usuario: os `swoosh` vao de -24,6 a -6,4 LUFS
+    e o `swoosh--002.mp3` chega ao teto (pico 0,0 dBFS, +4,9 de pico real).
+    Esse som entra em TODO video, por cima da voz — e a distorcao ja vem
+    dentro do arquivo, entao abaixar o volume nao a tira.
+
+    Nao mede? Nao acusa: recusar por falta de medida seria pior que o som.
+    """
+    pico = _pico_dbfs(arquivo)
+    return pico is not None and pico >= -0.1
+
+
 def aplicar_sfx_do_usuario(public_dir: Path,
                            projects_root: Path | None = None) -> list[str]:
     """Poe os efeitos do usuario por cima dos do app na pasta do projeto.
@@ -331,10 +367,17 @@ def aplicar_sfx_do_usuario(public_dir: Path,
                  if f.is_file() and f.suffix.lower() in AUDIO_EXTS
                  and vaga_do_efeito(f.name) == vaga),
                 key=lambda f: f.stat().st_mtime, reverse=True)
-            if not cands:
+            # O primeiro que NAO vem distorcido. O som toca em todo video,
+            # por cima da voz, e a distorcao ja vem dentro do arquivo — nao
+            # sai baixando o volume.
+            escolhido = next((f for f in cands if not _ja_estoura(f)), None)
+            if escolhido is None:
+                if cands:
+                    print(f"[sfx] {vaga}: todos os candidatos vem estourados "
+                          f"— fica o som do app", flush=True)
                 continue
-            shutil.copy2(cands[0], destino / alvo)
-            trocados.append(f"{alvo} <- {cands[0].name}")
+            shutil.copy2(escolhido, destino / alvo)
+            trocados.append(f"{alvo} <- {escolhido.name}")
     except OSError:
         return trocados
     return trocados
