@@ -1,5 +1,18 @@
 # Changelog
 
+## 4.00
+
+- **O corte não cai mais no meio de uma palavra.** Um terço das bordas de
+  trecho terminava dentro de uma palavra, e o vídeo saía com a sílaba
+  decepada. Duas vezes a palavra cortada foi *PrimeCamp* — o nome da loja,
+  na última frase do vídeo, bem onde ele mais precisa ser ouvido.
+  A culpa não era da IA: o plano dela pedia a frase inteira, com o nome
+  incluído; era o corte que usava o tempo cru. Agora toda borda se encaixa
+  na palavra — ela entra inteira quando já estava dentro, e o caco de
+  início sai inteiro. Nos seus 38 vídeos mais recentes isso devolve 272
+  palavras completas e custa 0,8s a mais de vídeo.
+
+
 ## 3.99
 
 - **Um quadro de diferença não manda mais o vídeo inteiro para o caminho

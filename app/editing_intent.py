@@ -926,6 +926,112 @@ def cover_all_words(
     return out
 
 
+
+# Palavra pela metade e o defeito mais comum do corte: 39% dos trechos
+# mantidos terminavam dentro de uma palavra (417 trechos dos projetos do
+# usuario, de 25/08 em diante), e 126 deles perdiam mais de 0,05s — o que
+# o ouvido pega. Duas vezes a palavra decepada era `PrimeCamp.`, o nome da
+# loja, na ultima frase do video.
+#
+# A culpa nao e da IA. No `IMG_1772` o plano pede `end: 83.72` e a propria
+# citacao dele e "...voce vai encontrar aqui na PrimeCamp." — a palavra vai
+# de 83,36 a 83,84. O modelo da tempo aproximado; quem corta e que precisa
+# encaixar.
+#
+# `complete` ja tinha o `cover_all_words`; `dynamic`, que e o modo de todos
+# os videos do usuario, nao tinha nada.
+_PALAVRA_LONGA_S = 1.5   # acima disso e artefato do alinhador, nao palavra
+
+# Quanto da palavra ja precisa estar dentro para ela entrar INTEIRA.
+# Meio a meio parece o obvio e erra o caso que motivou tudo:
+# `PrimeCamp.` fica 49% dentro, e no empate a loja perde o nome. Nos 38
+# projetos de 25/08 em diante: 0,50 salva 221 palavras e joga 62 fora;
+# 0,25 salva 272 e joga 12 — e os 12 sao cacos de 2% a 22%, clique e
+# nao fala. Custa +0,79s de mediana num video de um minuto e meio.
+_DENTRO_PARA_FICAR = 0.25
+
+
+def encaixar_nas_palavras(
+    ranges: list[dict],
+    *,
+    edit_dir: Path | None,
+    stem: str | None,
+) -> list[dict]:
+    """Nenhuma borda de trecho cai no meio de uma palavra.
+
+    A palavra que a borda atravessa entra INTEIRA quando um quarto dela ja
+    estava dentro, e sai INTEIRA quando era so um caco (ver
+    `_DENTRO_PARA_FICAR`). Os dois lados do trecho seguem a mesma regra. O
+    criterio e a propria palavra, entao o movimento nunca passa da duracao
+    dela — e palavra impossivelmente longa (artefato do alinhador) e
+    ignorada, senao um timestamp torto arrastaria a frase seguinte.
+
+    So mexe nos trechos da fonte de onde vieram as palavras: o relogio de
+    cada take comeca do zero, e encaixar a `Parte 2` nas palavras da
+    `Parte 1` cortaria no lugar errado — o mesmo cuidado do `_insert_range`.
+    """
+    words = _load_transcript_words(edit_dir, stem)
+    if not words or not ranges:
+        return ranges
+    words = [w for w in words if w["end"] - w["start"] <= _PALAVRA_LONGA_S]
+    if not words:
+        return ranges
+
+    def borda(t: float, *, fim: bool) -> float:
+        """Onde essa borda deveria estar, dada a palavra que ela atravessa.
+
+        `fim=True` e a borda de saida do trecho (a palavra esta a esquerda
+        dela); `fim=False` e a de entrada (a palavra esta a direita).
+        """
+        for w in words:
+            a, b = w["start"], w["end"]
+            if not (a < t < b):
+                continue
+            dentro = ((t - a) if fim else (b - t)) / (b - a)
+            if dentro >= _DENTRO_PARA_FICAR:
+                return b if fim else a      # a palavra entra inteira
+            return a if fim else b          # o caco sai inteiro
+        return t
+
+    alvo = ranges[0].get("source")
+    out: list[dict] = []
+    for rg in ranges:
+        if (rg.get("source") or alvo) != alvo:
+            out.append(rg)
+            continue
+        try:
+            a0, b0 = float(rg["start"]), float(rg["end"])
+        except (KeyError, TypeError, ValueError):
+            out.append(rg)
+            continue
+        a1, b1 = borda(a0, fim=False), borda(b0, fim=True)
+        if b1 - a1 < 0.05:
+            # Encaixar zerou o trecho (borda de entrada e de saida na mesma
+            # palavra). Ele fica como estava — sumir com fala e pior que uma
+            # borda torta.
+            out.append(rg)
+            continue
+        novo = dict(rg)
+        novo["start"], novo["end"] = round(a1, 3), round(b1, 3)
+        out.append(novo)
+
+    # Encaixar pode fazer um trecho encostar no seguinte. Isso nao duplica
+    # fala (a palavra e a mesma), mas deixa a lista fora de ordem para quem
+    # le depois — entao a sobreposicao volta para a fronteira.
+    for i in range(1, len(out)):
+        ant, at = out[i - 1], out[i]
+        if (ant.get("source") or alvo) != alvo or (at.get("source") or alvo) != alvo:
+            continue
+        try:
+            if float(at["start"]) < float(ant["end"]) <= float(at["end"]):
+                ant["end"] = at["start"]
+        except (KeyError, TypeError, ValueError):
+            continue
+    return [r for r in out
+            if (r.get("source") or alvo) != alvo
+            or float(r.get("end") or 0) - float(r.get("start") or 0) >= 0.05]
+
+
 def guard_ranges(
     ranges: list[dict],
     *,
@@ -1034,6 +1140,11 @@ def guard_ranges(
         if not _covers(out, a, b, min_overlap=0.2):
             out = _insert_range(out, a, b, "KEEP", "protected-range")
 
+    # ENCAIXAR ANTES de dividir pela pausa: a divisao cai no silencio,
+    # entao ela nao cria borda dentro de palavra — e as bordas que ela
+    # herda ja chegam encaixadas.
+    out = encaixar_nas_palavras(out, edit_dir=edit_dir,
+                                stem=source_stem)
     return tirar_pausa_morta(out, regions, mode)
 
 
