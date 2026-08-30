@@ -225,3 +225,23 @@ def test_os_dois_motores_calculam_igual():
     assert "(larg * CARD_H) / CARD_W" in bloco      # altura pela proporção
     assert "cx - larg / 2" in bloco                 # x/y são o centro
     assert "(CARD_TOP + CARD_H / 2) / 1920" in bloco  # mesmo padrão
+
+
+def test_o_tamanho_tem_alca_e_nao_so_a_roda():
+    """O usuário moveu a imagem e não conseguiu mudar o tamanho (30/08): a
+    roda do mouse é gesto invisível. Quem olha um elemento selecionado
+    procura a alça no canto."""
+    repo = Path(__file__).resolve().parent.parent
+    js = (repo / "assets" / "preview" / "app.js").read_text(encoding="utf-8")
+    assert "function alcaDeTamanho" in js
+    i = js.index("function alcaDeTamanho")
+    bloco = js[i:i + 1400]
+    # a alça não pode virar arrasto do elemento
+    assert "e.stopPropagation();" in bloco
+    # a diagonal manda, e o limite vem de quem chamou
+    assert "Math.max(minimo, Math.min(maximo" in bloco
+    # e serve aos dois: cartão e emoji
+    assert js.count("alcaDeTamanho(") == 3   # a definição + os dois usos
+    css = (repo / "assets" / "preview" / "app.css").read_text(encoding="utf-8")
+    j = css.index(".previa-alca")
+    assert "cursor: nwse-resize" in css[j:j + 400]

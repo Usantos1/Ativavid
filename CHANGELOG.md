@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.71
+
+- **Alça no canto para mudar o tamanho.** A imagem e o emoji ganharam um
+  quadradinho no canto: arraste na diagonal e eles crescem ou diminuem. Só a
+  roda do mouse não bastava — é um gesto que ninguém vê.
+- A roda continua funcionando para quem preferir.
+
 ## 3.70
 
 - **A imagem que você insere agora se move e muda de tamanho.** Arraste ela

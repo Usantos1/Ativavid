@@ -3700,3 +3700,23 @@ body.styles-wide .setup-actions .btn.primary {
   outline: 2px dashed color-mix(in srgb, var(--hl-accent, #ff7713) 60%, transparent);
   outline-offset: 4px;
 }
+
+/* Alca de tamanho, no canto do que foi posto na mao. Discreta, mas
+   SEMPRE la: a roda do mouse e gesto invisivel — o usuario moveu a imagem
+   e nao achou como redimensionar (30/08). */
+.previa-alca {
+  position: absolute;
+  right: -7px;
+  bottom: -7px;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  background: var(--hl-accent, #ff7713);
+  border: 2px solid rgba(0, 0, 0, 0.55);
+  cursor: nwse-resize;
+  pointer-events: auto;
+  touch-action: none;
+  opacity: 0.85;
+}
+.previa-alca:hover { opacity: 1; transform: scale(1.15); }
+.midia-previa-emoji .previa-alca { right: -14px; bottom: -14px; }

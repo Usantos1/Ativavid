@@ -3318,6 +3318,42 @@ const CARTAO_Y_PAD = (90 + 250) / 1920;
 /* Arrastar e redimensionar a imagem, como o emoji. Ela era um cartao fixo
  * no alto: no video do usuario (30/08) a foto tapava a cena e nao havia
  * como tirar do caminho. */
+/* A alca de canto: `aplicar(fracao)` desenha o novo tamanho e `guardar()`
+ * grava. Serve para o cartao e para o emoji — o gesto tem de ser o mesmo
+ * nos dois, senao cada elemento vira um aprendizado novo. */
+function alcaDeTamanho(alvo, box, ler, aplicar, minimo, maximo) {
+  const alca = el('div', 'previa-alca', alvo);
+  alca.title = 'Arraste para mudar o tamanho';
+  let arr = null;
+  alca.addEventListener('pointerdown', (e) => {
+    if (S.applying || e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();      // senao vira ARRASTO do elemento
+    arr = { x0: e.clientX, y0: e.clientY, base: ler(),
+            larg: box.getBoundingClientRect().width, moveu: false };
+    alca.setPointerCapture(e.pointerId);
+  });
+  alca.addEventListener('pointermove', (e) => {
+    if (!arr) return;
+    // a diagonal manda: puxar para fora cresce, para dentro encolhe
+    const d = ((e.clientX - arr.x0) + (e.clientY - arr.y0)) / 2;
+    if (!arr.moveu && Math.abs(d) < 3) return;
+    arr.moveu = true;
+    const frac = Math.max(minimo, Math.min(maximo, arr.base + (2 * d) / arr.larg));
+    aplicar(frac, false);
+  });
+  const soltar = (e) => {
+    if (!arr) return;
+    const moveu = arr.moveu;
+    arr = null;
+    try { alca.releasePointerCapture(e.pointerId); } catch { /* ja solto */ }
+    if (moveu) aplicar(ler(), true);
+  };
+  alca.addEventListener('pointerup', soltar);
+  alca.addEventListener('pointercancel', soltar);
+  return alca;
+}
+
 function cartaoArrastavel(card, c, box) {
   if (card.dataset.arrasta) return;
   card.dataset.arrasta = '1';
@@ -3366,20 +3402,28 @@ function cartaoArrastavel(card, c, box) {
   card.addEventListener('pointerup', soltar);
   card.addEventListener('pointercancel', soltar);
 
-  card.addEventListener('wheel', (e) => {
-    if (S.applying) return;
-    e.preventDefault();
-    const fator = e.deltaY < 0 ? 1.08 : 1 / 1.08;
-    const novo = Math.max(0.12, Math.min(1.0, (c.size ?? CARTAO_SIZE_PAD) * fator));
-    c.size = +novo.toFixed(4);
+  const desenhar = (frac, gravar) => {
+    c.size = +frac.toFixed(4);
     const lp = c.size * box.clientWidth;
     const ap = lp * (500 / 780);
     card.style.width = `${lp}px`;
     card.style.height = `${ap}px`;
     card.style.left = `${(c.x ?? 0.5) * box.clientWidth - lp / 2}px`;
     card.style.top = `${(c.y ?? CARTAO_Y_PAD) * box.clientHeight - ap / 2}px`;
-    refreshHeader();
-    scheduleAutosave();
+    if (gravar) {
+      refreshHeader();
+      scheduleAutosave();
+    }
+  };
+  // Alca no canto: o gesto que todo mundo procura. A roda continua valendo
+  // para quem preferir, mas ela e invisivel — o usuario mexeu na posicao e
+  // nao achou como mudar o tamanho (30/08).
+  alcaDeTamanho(card, box, () => c.size ?? CARTAO_SIZE_PAD, desenhar, 0.12, 1.0);
+  card.addEventListener('wheel', (e) => {
+    if (S.applying) return;
+    e.preventDefault();
+    const fator = e.deltaY < 0 ? 1.08 : 1 / 1.08;
+    desenhar(Math.max(0.12, Math.min(1.0, (c.size ?? CARTAO_SIZE_PAD) * fator)), true);
   }, { passive: false });
 }
 
@@ -3432,17 +3476,23 @@ function emojiArrastavel(d, c, box) {
   d.addEventListener('pointerup', soltar);
   d.addEventListener('pointercancel', soltar);
 
+  const desenharEmoji = (frac, gravar) => {
+    c.size = +frac.toFixed(4);
+    d.style.fontSize = `${c.size * box.clientWidth}px`;
+    if (gravar) {
+      refreshHeader();
+      scheduleAutosave();
+    }
+  };
+  // mesma alca do cartao: um gesto so para os dois
+  alcaDeTamanho(d, box, () => c.size ?? 0.22, desenharEmoji, 0.06, 0.7);
   // roda = tamanho. O passo e multiplicativo para o ajuste ser igual em
   // emoji pequeno e grande.
   d.addEventListener('wheel', (e) => {
     if (S.applying) return;
     e.preventDefault();
     const fator = e.deltaY < 0 ? 1.08 : 1 / 1.08;
-    const novo = Math.max(0.06, Math.min(0.7, (c.size ?? 0.22) * fator));
-    c.size = +novo.toFixed(4);
-    d.style.fontSize = `${c.size * box.clientWidth}px`;
-    refreshHeader();
-    scheduleAutosave();
+    desenharEmoji(Math.max(0.06, Math.min(0.7, (c.size ?? 0.22) * fator)), true);
   }, { passive: false });
 }
 
