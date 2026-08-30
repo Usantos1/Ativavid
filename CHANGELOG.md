@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.65
+
+- **O bloco GANCHO agora aparece na Edição** — e é lá que você estava. Na 3.58
+  eu liguei o clique, mas desenhei o bloco só no Visual: continuava sem dar
+  para trocar a manchete pela linha do tempo na tela onde você trabalha.
+- Vale também em vídeo **sem legenda**: a faixa do gancho não depende dela.
+
 ## 3.64
 
 - **O emoji se arrasta na tela.** Pegue e leve para onde quiser sobre o vídeo

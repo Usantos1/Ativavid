@@ -3958,10 +3958,16 @@ function renderChips() {
   $('trkCaptions').classList.toggle('hidden', !showCaps);
   // Na Edicao o bloco de faixas so aparece quando ha midia posta na mao —
   // sem isso a faixa nasce vazia e come altura da linha do tempo.
-  const temManual = S.insertsDraft.some((c) => c.isNew);
+  const temManual = S.insertsDraft.some((c) => c.isNew || c.kind === 'hook');
   insertTracksEl.classList.toggle('hidden', !phase2 && !temManual);
   insertTracksEl.innerHTML = '';
-  if (!showCaps) return;
+  if (!showCaps) {
+    // Sem legenda (estilo sem legenda, ou projeto ainda cru) as faixas de
+    // gancho e midia continuam valendo: sair aqui tirava o GANCHO da
+    // Edicao justamente de quem nao usa legenda.
+    desenharFaixasDeInsert(phase2);
+    return;
+  }
 
   laneCaptions.innerHTML = '';
   const edlPending = !!(S.corrections && S.corrections.dirty && S.corrections.dirty.edl);
@@ -3982,14 +3988,28 @@ function renderChips() {
     });
   }
 
+  desenharFaixasDeInsert(phase2);
+}
+
+/* As faixas do que NAO e legenda: gancho, midia posta na mao e os
+ * inserts da IA (so no Visual). Ficava dentro do `renderChips`, depois
+ * de um `return` que dispara quando o projeto nao tem legenda — e ai o
+ * GANCHO nao aparecia na Edicao de um video sem legenda. */
+function desenharFaixasDeInsert(phase2) {
   // Na Visual entram todos os inserts; na Edicao, so os que o usuario poe
   // na mao. Os da IA vem do edit-data no relogio do video FINAL, e desenha-
   // los sobre o corte em edicao os poria no lugar errado. O que e posto na
   // mao ja nasce em tempo de rascunho (`pushInsertFromRef`), que e o
   // relogio desta tela.
   const soManuais = !phase2;
+  // Na Edicao entra o que foi posto na mao E o GANCHO. A manchete comeca no
+  // segundo 0 nos dois relogios, entao ela nao sofre da ambiguidade que
+  // deixa o insert da IA fora daqui — e e clicando nela que se troca o
+  // texto (o usuario mandou print em 29/08: "ainda nao edita a headline
+  // aqui", estando na Edicao).
   const visiveis = soManuais
-    ? S.insertsDraft.map((c, i) => ({ c, i })).filter(({ c }) => c.isNew)
+    ? S.insertsDraft.map((c, i) => ({ c, i }))
+        .filter(({ c }) => c.isNew || c.kind === 'hook')
     : S.insertsDraft.map((c, i) => ({ c, i }));
   if (soManuais && !visiveis.length) return;
 

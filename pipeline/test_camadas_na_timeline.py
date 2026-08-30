@@ -29,12 +29,16 @@ def test_a_midia_pode_entrar_pela_edicao():
     assert "S.tab !== 1 && S.tab !== 2" in JS
 
 
-def test_na_edicao_so_aparece_o_que_foi_posto_na_mao():
-    """Insert da IA está no relógio do vídeo final; desenhá-lo sobre o corte
-    em edição o poria no lugar errado."""
+def test_na_edicao_nao_entra_o_insert_da_ia():
+    """Na Edição entra o que foi posto à mão E o gancho — nunca o insert que
+    a IA colocou: ele está gravado no relógio do vídeo FINAL, e desenhá-lo
+    sobre o corte em edição o poria no lugar errado.
+
+    O gancho não tem esse problema: ele começa no segundo 0 nos dois
+    relógios, e é clicando nele que se troca o texto da manchete."""
     i = JS.index("const soManuais = !phase2;")
-    bloco = JS[i:i + 420]
-    assert "c.isNew" in bloco, bloco
+    bloco = JS[i:i + 700]
+    assert "c.isNew || c.kind === 'hook'" in bloco, bloco[:400]
     assert "if (soManuais && !visiveis.length) return;" in bloco
 
 
@@ -67,3 +71,22 @@ def test_a_marca_de_arrasto_e_limpa_depois_de_usada():
     i = JS.index("O bloco GANCHO da linha do tempo")
     bloco = JS[i:i + 900]
     assert re.search(r"acabouDeArrastar = '0'", bloco), bloco
+
+
+def test_o_gancho_aparece_tambem_na_edicao():
+    """A 3.58 pôs o clique no bloco GANCHO, mas o bloco só era desenhado no
+    Visual: quem estava na Edição continuava sem editar a manchete pela
+    linha do tempo (print do usuário em 29/08, já na 3.64)."""
+    i = JS.index("const soManuais = !phase2;")
+    bloco = JS[i:i + 700]
+    assert "c.isNew || c.kind === 'hook'" in bloco, bloco[:400]
+    j = JS.index("const temManual =")
+    assert "c.kind === 'hook'" in JS[j:j + 200]
+
+
+def test_projeto_sem_legenda_tambem_mostra_o_gancho():
+    """`renderChips` saía cedo quando não havia legenda — e levava junto as
+    faixas de gancho e de mídia, que nada têm com legenda."""
+    assert "function desenharFaixasDeInsert" in JS
+    i = JS.index("if (!showCaps) {")
+    assert "desenharFaixasDeInsert(phase2);" in JS[i:i + 400]
