@@ -2973,6 +2973,20 @@ class StudioHandler(BaseHTTPRequestHandler):
                 self._json({"error": str(e)}, 400)
             return
 
+        if path == "/api/library/remover":
+            from app.broll_library import remover as remover_da_biblioteca
+            body = self._read_json() or {}
+            try:
+                self._json(remover_da_biblioteca(
+                    str(body.get("rel") or ""),
+                    projects_root=self.projects_root,
+                ))
+            except ValueError as e:
+                self._json({"error": str(e)}, 400)
+            except OSError as e:
+                self._json({"error": f"Não consegui apagar: {e}"}, 500)
+            return
+
         if path == "/api/library/categoria":
             from app.broll_library import set_categoria
             body = self._read_json() or {}

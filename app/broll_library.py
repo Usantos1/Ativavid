@@ -189,14 +189,38 @@ def list_assets(projects_root: Path | None = None) -> dict[str, Any]:
     return {
         "root": str(root),
         "items": items,
+        # As curadas MAIS as que ja existem na pasta. O seletor de cada
+        # efeito oferecia so as 5 vagas do app, e a biblioteca dele tem
+        # categoria que nao e vaga (swoosh, impacto, riser, sino): nao
+        # dava para reclassificar um arquivo para uma categoria que ele
+        # mesmo criou e que esta ali do lado.
         "categorias": {
-            "track": list(CATEGORIAS_TRILHA),
-            "image": list(CATEGORIAS_IMAGEM),
-            "clip": list(CATEGORIAS_CLIPE),
-            "sfx": list(SFX_VAGAS),
+            k: _com_as_da_pasta(v, items, k) for k, v in (
+                ("track", CATEGORIAS_TRILHA),
+                ("image", CATEGORIAS_IMAGEM),
+                ("clip", CATEGORIAS_CLIPE),
+                ("sfx", SFX_VAGAS),
+            )
         },
         "clima": dict(CLIMA_TRILHA),
     }
+
+
+def _com_as_da_pasta(curadas, items: list[dict[str, Any]], kind: str) -> list[str]:
+    """As categorias curadas primeiro, depois as que existem na pasta.
+
+    As curadas vem primeiro porque sao as que o video USA (as vagas, no
+    caso dos efeitos); as outras entram em ordem, para o usuario poder
+    reclassificar um arquivo para uma categoria que ele mesmo criou.
+    Conta arquivo do app tambem: `tictac.mp3` traz a categoria `relogio`,
+    e ela aparece nos chips de filtro — o seletor nao pode discordar da
+    fileira de chips logo acima dele.
+    """
+    fora = sorted({
+        str(i.get("categoria") or "").strip()
+        for i in items if i.get("kind") == kind
+    } - set(curadas) - {""})
+    return list(curadas) + fora
 
 
 def add_file(src: Path, *, kind: str = "image", projects_root: Path | None = None) -> dict[str, Any]:
@@ -271,6 +295,84 @@ def add_bytes(
         "path": str(dest),
         "rel": f"{folder.name}/{dest.name}",
     }
+
+
+def _dentro_da_biblioteca(rel: str, projects_root: Path | None) -> Path:
+    """O caminho absoluto de `rel`, provado que esta DENTRO da biblioteca.
+
+    Mesma checagem que o `set_categoria` fazia inline — agora as duas
+    rotas usam a mesma, porque a de apagar erra mais caro.
+    """
+    root = library_root(projects_root).resolve()
+    rel = (rel or "").replace("\\", "/").lstrip("/")
+    if not rel or ".." in rel.split("/"):
+        raise ValueError("arquivo inválido")
+    alvo = (root / rel).resolve()
+    try:
+        alvo.relative_to(root)
+    except ValueError:
+        raise ValueError("fora da biblioteca") from None
+    if not alvo.is_file():
+        raise ValueError("arquivo não encontrado")
+    return alvo
+
+
+def _para_a_lixeira(alvo: Path) -> bool:
+    """Manda o arquivo para a Lixeira do Windows. `False` se nao deu.
+
+    E a mesma operacao do Explorer (`SHFileOperationW` + `FOF_ALLOWUNDO`).
+    Sem biblioteca nova: `send2trash` nao esta instalado e nao vale
+    engordar o instalador por um botao.
+
+    O `pFrom` e uma lista terminada por DOIS nulos — com um nulo so a API
+    le alem do caminho. E o que separa "foi para a lixeira" de "sumiu".
+    """
+    import ctypes
+    from ctypes import wintypes
+
+    class _OP(ctypes.Structure):
+        _fields_ = [
+            ("hwnd", wintypes.HWND),
+            ("wFunc", wintypes.UINT),
+            ("pFrom", wintypes.LPCWSTR),
+            ("pTo", wintypes.LPCWSTR),
+            ("fFlags", ctypes.c_uint16),
+            ("fAnyOperationsAborted", wintypes.BOOL),
+            ("hNameMappings", ctypes.c_void_p),
+            ("lpszProgressTitle", wintypes.LPCWSTR),
+        ]
+
+    FO_DELETE = 3
+    FOF_ALLOWUNDO = 0x0040
+    FOF_NOCONFIRMATION = 0x0010
+    FOF_SILENT = 0x0004
+    FOF_NOERRORUI = 0x0400
+    try:
+        op = _OP(
+            None, FO_DELETE, str(alvo) + "\0\0", None,
+            FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI,
+            False, None, None)
+        r = ctypes.windll.shell32.SHFileOperationW(ctypes.byref(op))
+        return r == 0 and not alvo.exists()
+    except Exception:  # noqa: BLE001 — outro sistema, DLL ausente, etc.
+        return False
+
+
+def remover(rel: str, projects_root: Path | None = None) -> dict[str, Any]:
+    """Tira um arquivo da biblioteca — para a LIXEIRA, quando da.
+
+    "quero deletar os efeitos que eu nao gostar por ali tambem" (30/08):
+    com 233 efeitos importados de uma vez, escolher o que fica e trabalho
+    de lista. Mas e um clique numa lista, e o acervo e dele — entao o
+    destino e a lixeira do Windows, nao o vazio. Sem `send2trash`
+    disponivel, apaga mesmo: melhor que a funcao nao existir.
+    """
+    alvo = _dentro_da_biblioteca(rel, projects_root)
+    para_lixeira = _para_a_lixeira(alvo)
+    if not para_lixeira:
+        alvo.unlink()
+    return {"ok": True, "rel": rel, "lixeira": para_lixeira,
+            "nome": alvo.name}
 
 
 def set_categoria(rel: str, categoria: str,

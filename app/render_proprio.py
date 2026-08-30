@@ -617,6 +617,11 @@ class Renderizador:
         self.scratch_vol = _pos(sfx, "scratchVolume", SCRATCH_VOL)
         self.stack_vol = _pos(sfx, "stackClickVolume",
                               min(0.28, self.click_vol * 0.5))
+        # O som da legenda EMPILHADA e um tique de digitar (30ms), nao o
+        # clique cheio de 0,406s: num video de 33s sao ~42 legendas, uma a
+        # cada 0,8s. "cliques de digitando leves nao tantos whosh"
+        # (30/08). Mesmo nome de knob do template.
+        self.stack_click = str(sfx.get("stackClickFile") or "click.mp3")
         self._fontes: dict = {}
         self.marca_cap = self._resolver_marca(
             caps.get("fontFamily"), edit_data.get("brandFontFile"))
@@ -1029,7 +1034,7 @@ class Renderizador:
                 t0 = cue["startMs"] / 1000.0
                 solo = preset in ("SOLO_BIG", "SOLO_OUTLINE")
                 self.eventos_sfx.append((
-                    "caption-click.mp3", t0,
+                    "caption-click.mp3" if solo else self.stack_click, t0,
                     self.click_vol if solo else self.stack_vol))
                 if preset == "SOLO_OUTLINE":
                     self.eventos_sfx.append((

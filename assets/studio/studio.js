@@ -4534,6 +4534,34 @@ function wireForms() {
       }
     };
   }
+  const painel = $("#libraryPanel");
+  if (painel && !painel.dataset.wiredDel) {
+    painel.dataset.wiredDel = "1";
+    painel.addEventListener("click", async (e) => {
+      const btn = e.target.closest("[data-libdel]");
+      if (!btn) return;
+      e.preventDefault();
+      e.stopPropagation();   // senao o clique tambem TOCA o efeito
+      const rel = btn.dataset.libdel;
+      const nome = rel.split("/").pop();
+      const ok = await pedirConfirmacao(
+        "Apagar este arquivo?",
+        `"${nome}" vai para a Lixeira do Windows — dá para trazer de volta por lá.`,
+        "Apagar", true);
+      if (!ok) return;
+      try {
+        const r = await api("/api/library/remover", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rel }),
+        });
+        toast(r.lixeira ? "Foi para a Lixeira" : "Apagado");
+        await loadLibraryUi();
+      } catch (err) {
+        toast(err.message || "Não deu para apagar");
+      }
+    });
+  }
   const chkSfx = $("#sfxDoUsuario");
   if (chkSfx) {
     // Estado real do servidor: a caixa desmarcada de HTML mentiria para
@@ -5374,6 +5402,16 @@ function libTamanho(bytes) {
 
 /* O seletor troca a CATEGORIA renomeando o arquivo (e o que o pipeline le).
  * Item que veio do app nao tem seletor: e asset do produto, nao do usuario. */
+/* Apagar um arquivo da Biblioteca. "quero deletar os efeitos que eu nao
+ * gostar por ali tambem" (30/08) — com 233 efeitos importados de uma vez,
+ * escolher o que fica e trabalho de lista, e ate agora so dava para
+ * abrir a pasta no Explorer. Arquivo do app nao tem botao. */
+function libBotaoApagar(it) {
+  if (it.origem === "app") return "";
+  return `<button type="button" class="lib-del" data-libdel="${escapeHtml(it.rel)}"
+          title="Apagar — vai para a Lixeira" aria-label="Apagar">✕</button>`;
+}
+
 function libSeletorCategoria(it, opcoes) {
   if (it.origem === "app") return "";
   const lista = [...new Set([...(opcoes || []), it.categoria].filter(Boolean))];
@@ -5397,7 +5435,7 @@ function libGradeImagens(itens, aba) {
     return `<figure class="lib-item" title="${escapeHtml(it.name)}">
       ${midia}
       <figcaption><span class="lib-name">${escapeHtml(it.name)}</span><span class="lib-size">${libTamanho(it.bytes)}</span></figcaption>
-      <div class="lib-item-cat">${libSeletorCategoria(it, opcoes)}</div>
+      <div class="lib-item-cat">${libSeletorCategoria(it, opcoes)}${libBotaoApagar(it)}</div>
     </figure>`;
   }).join("")}</div>`;
 }
@@ -5568,11 +5606,19 @@ const VAGA_ROTULO = {
 
 function selosDoEfeito(it) {
   if (it.kind !== "sfx" || it.origem !== "usuario") return "";
-  if (it.vaga) {
+  // `vaga` diz onde ele CABERIA; `tocaNoVideo` diz se ele realmente entra
+  // — e com a troca desligada (o padrao desde 4.22) nada entra. O selo
+  // seguia so a vaga e prometia som que o render nao toca.
+  if (it.vaga && it.tocaNoVideo) {
     const onde = VAGA_ROTULO[it.vaga] || it.vaga;
     return `<span class="lib-selo lib-selo--toca" title="Este som entra no vídeo no lugar do ${escapeHtml(onde)}">toca: ${escapeHtml(onde)}</span>`;
   }
-  return `<span class="lib-selo lib-selo--guardado" title="O vídeo tem vaga para clique, risco, whoosh, pop e corte — este som não ocupa nenhuma delas">só guardado</span>`;
+  const cabe = it.vaga
+    ? `Cabe na vaga do ${escapeHtml(VAGA_ROTULO[it.vaga] || it.vaga)} — `
+      + "ligue \"Usar meus efeitos\" aqui em cima para ele entrar no vídeo"
+    : "O vídeo tem vaga para clique, risco, whoosh, pop e corte — "
+      + "este som não ocupa nenhuma delas";
+  return `<span class="lib-selo lib-selo--guardado" title="${cabe}">só guardado</span>`;
 }
 
 function ligarPlayersDaBiblioteca(raiz) {
@@ -5641,6 +5687,7 @@ function libListaAudio(itens, aba, notas, ordem) {
       <span class="lib-tempo">0:00</span>
       <span class="lib-size">${libTamanho(it.bytes)}</span>
       ${libSeletorCategoria(it, opcoes)}
+      ${libBotaoApagar(it)}
     </div>`;
   };
   if (state.libCat) return `<div class="lib-tracks">${itens.map(linha).join("")}</div>`;

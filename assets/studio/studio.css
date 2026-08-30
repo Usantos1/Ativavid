@@ -103,10 +103,15 @@ body.hub {
   flex-direction: column;
 }
 button, input, select { font: inherit; color: inherit; }
-/* Lista nativa do Windows é clara; color:inherit deixava texto branco em fundo branco. */
+/* A lista nativa segue o `color-scheme` do `:root` — escura no tema
+   escuro. Estas cores eram `#121218` sobre `#ffffff`, fixas: nasceram
+   para consertar "texto branco em fundo branco" quando a lista ainda era
+   clara, e depois GANHAVAM do `color-scheme`, deixando a lista branca no
+   tema escuro por mais duas versoes. Pelos tokens, os dois temas
+   funcionam. */
 option, optgroup {
-  color: #121218;
-  background-color: #ffffff;
+  color: var(--text);
+  background-color: var(--panel2);
 }
 button { cursor: pointer; }
 a { color: inherit; text-decoration: none; }
@@ -3770,3 +3775,23 @@ video.lib-thumb { aspect-ratio: 9 / 16; max-height: 260px; object-fit: contain;
 @media (max-width: 700px) {
   .intent-grid > .intent-card:last-child:nth-child(3n + 1) { grid-column: auto; }
 }
+
+/* Apagar da Biblioteca (4.24). Fica no fim da linha, longe do Tocar —
+   que e o botao que ele mais aperta enquanto escolhe o que fica. Discreto
+   ate o mouse chegar: e uma acao que nao se procura, se encontra. */
+.lib-del {
+  flex: none;
+  width: 26px; height: 26px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px; line-height: 1;
+}
+.lib-del:hover {
+  color: var(--bad);
+  border-color: color-mix(in srgb, var(--bad) 45%, transparent);
+  background: color-mix(in srgb, var(--bad) 12%, transparent);
+}
+.lib-item-cat { display: flex; align-items: center; gap: 6px; }

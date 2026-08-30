@@ -1,5 +1,27 @@
 # Changelog
 
+## 4.24
+
+- **A legenda agora faz um tique de digitar, não um sopro.** Um vídeo de
+  33s tem umas 42 legendas — uma a cada 0,8s — e o som que cada uma tocava
+  era o mais longo e o mais alto da pasta (0,406s, pico -0,8 dBFS). Agora é
+  um tique de **0,030s**, 4 dB mais baixo. A palavra única em destaque
+  continua com o som cheio: essa é rara e é o ponto.
+- **As listas dos seletores ficaram escuras de verdade.** Eu disse que
+  tinha resolvido na 4.21 e não tinha: as duas folhas de estilo tinham uma
+  regra pintando a lista de branco na mão, e ela ganhava do ajuste que eu
+  fiz. Agora a cor sai do tema, nos dois temas.
+- **Dá para apagar arquivos da Biblioteca.** Um ✕ em cada item; o arquivo
+  vai para a **Lixeira do Windows**, então dá para trazer de volta por lá.
+  Arquivo que vem com o app não tem o botão.
+- **O seletor de categoria mostra todas as categorias da pasta.** Antes
+  oferecia só as cinco que o vídeo usa (clique, risco, whoosh, pop, corte),
+  então não dava para mover um arquivo para uma categoria que você mesmo
+  criou — impacto, riser, sino, swoosh, transição. São 12 agora, com
+  rolagem.
+- O selo "toca no vídeo" só aparece quando a troca de efeitos está ligada.
+  Com ela desligada, ele dizia que tocava um som que o vídeo não usa.
+
 ## 4.23
 
 - **Três modos novos na importação, e a última linha deixou de ter um

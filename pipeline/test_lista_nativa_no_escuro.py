@@ -40,6 +40,24 @@ def test_o_tema_claro_troca_o_esquema_junto():
         assert "color-scheme: light" in s[i:i + 400], f.name
 
 
+def test_ninguem_pinta_a_lista_de_branco_na_mao():
+    """O `color-scheme` sozinho nao bastou.
+
+    As duas folhas tinham uma regra EXPLICITA em `option` — `#121218`
+    sobre `#ffffff` — que ganhava dele: a lista continuou branca no tema
+    escuro por duas versoes depois do conserto de 4.21, e ele reclamou
+    pela terceira vez. Cor de lista sai de token, nos dois temas.
+    """
+    import re as _re
+
+    for f in _folhas_com_root():
+        s = f.read_text(encoding="utf-8")
+        for m in _re.finditer(r"option[^{}]*\{([^}]*)\}", s):
+            bloco = m.group(1)
+            achados = _re.findall(r"#[0-9a-fA-F]{3,8}", bloco)
+            assert not achados, (f.name, bloco.strip()[:120], achados)
+
+
 def test_as_duas_folhas_estao_na_conta():
     """Guarda o proprio teste: se um dia o `:root` sair de uma delas, o
     teste passaria vazio e o print voltaria."""

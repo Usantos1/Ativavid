@@ -98,6 +98,13 @@ const SFX_ON = SFX.enabled !== false;
 const CLICK_VOL = SFX.clickVolume ?? 0.55;
 const SCRATCH_VOL = SFX.scratchVolume ?? 0.28;
 const STACK_CLICK_VOL = SFX.stackClickVolume ?? Math.min(0.28, CLICK_VOL * 0.5);
+/* O som da legenda EMPILHADA: um tique de digitar, nao o clique cheio.
+ * "cliques de digitando leves nao tantos whosh" (30/08). Um video de 33s
+ * tem ~42 legendas — uma a cada 0,8s — e o `caption-click.mp3` tem 0,406s
+ * e pico -0,8 dBFS: quase meio segundo, quase no teto, 42 vezes. O
+ * `click.mp3` tem 0,030s e -4,9 dBFS. O solo (palavra unica) continua no
+ * som cheio: e raro e e o ponto. */
+const STACK_CLICK_FILE = SFX.stackClickFile ?? 'click.mp3';
 
 type Word = {text: string; fromMs: number; toMs: number};
 type CueData = {
@@ -302,7 +309,7 @@ export const StackedCaptions: React.FC = () => {
               <Audio src={staticFile('sfx/caption-click.mp3')} volume={CLICK_VOL} />
             ) : null}
             {SFX_ON && !isSolo ? (
-              <Audio src={staticFile('sfx/caption-click.mp3')} volume={STACK_CLICK_VOL} />
+              <Audio src={staticFile(`sfx/${STACK_CLICK_FILE}`)} volume={STACK_CLICK_VOL} />
             ) : null}
             {SFX_ON && isCircled ? (
               <Sequence from={2} layout="none">

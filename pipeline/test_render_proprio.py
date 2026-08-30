@@ -139,7 +139,12 @@ def test_sfx_eventos_seguem_o_template(tmp_path):
                      frames=40, fps=30.0)
     nomes = [e[0] for e in r.eventos_sfx]
     assert nomes.count("whoosh.mp3") == 1          # headline
-    assert nomes.count("caption-click.mp3") == 2   # uma por cue
+    # Uma por cue, mas com SONS diferentes desde a 4.24: a palavra unica
+    # (SOLO) leva o clique cheio; a empilhada leva o tique de digitar de
+    # 30ms. "cliques de digitando leves nao tantos whosh" (30/08) — um
+    # video de 33s tem ~42 legendas, e o clique cheio tem 0,4s.
+    assert nomes.count("caption-click.mp3") == 1   # so o SOLO
+    assert nomes.count("click.mp3") == 1           # o empilhado
     assert nomes.count("caption-scratch.mp3") == 1  # so no Recorte
     vols = {e[0]: e[2] for e in r.eventos_sfx if e[0] == "caption-click.mp3"}
 
