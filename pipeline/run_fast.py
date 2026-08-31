@@ -2720,7 +2720,15 @@ def _attach_auto_broll(edit_data: dict, public: Path, preset: dict, transcript: 
         from auto_broll import _mode_count  # type: ignore
         # Pede MAIS candidatos do que vai usar: quem entra e quem casa com
         # um momento da fala, nao quem aparece primeiro na pasta.
-        quantos = max(1, _mode_count(mode))
+        # Teto por DURACAO. `_mode_count` conta pelo modo de b-roll e nunca
+        # olhou quanto o video dura: no teste de 30/08 sairam 2 insercoes
+        # em 9,6s — uma a cada 4,8s, que e pisca-pisca. Uma a cada 12s, no
+        # minimo uma. Em video longo isto nao segura nada (60s -> 5).
+        teto_tempo = max(1, int(duration // 12))
+        quantos = max(1, min(_mode_count(mode), teto_tempo))
+        if quantos < _mode_count(mode):
+            print(f"[broll] video de {duration:.0f}s — no maximo {quantos} "
+                  f"insert(s)", flush=True)
         local = pick_for_query(query, projects_root=raiz_projetos,
                                limit=max(8, quantos * 3))
         if local:
@@ -2789,9 +2797,17 @@ def _attach_auto_broll(edit_data: dict, public: Path, preset: dict, transcript: 
                           start + min(teto, max(1.0, slot * 0.55)))
                 if end <= start + 0.6:
                     continue
+                # HUMOR toma a tela. O cartao de 780x500 no alto serve
+                # para ILUSTRAR (um produto, uma foto de apoio); numa
+                # reacao ele vira miniatura e a piada nao acontece. Pedido
+                # de 30/08: "nao quero tipo B roll, quero em tela cheia".
+                # Os dois motores leem `w`/`h`/`x`/`y` em fracao do quadro.
+                geo = ({"w": 1.0, "h": 1.0, "x": 0.5, "y": 0.5}
+                       if humor_com_acervo else {})
                 inserts.append({"src": f"pexels/{name}", "start": round(start, 3),
                                 "end": round(end, 3), "local": True,
                                 "kind": "video" if video else "image",
+                                **geo,
                                 "noMomento": quando is not None})
             if inserts:
                 edit_data["inserts"] = inserts

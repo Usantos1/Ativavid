@@ -1,5 +1,21 @@
 # Changelog
 
+## 4.32
+
+- **A inserção de humor entra em tela cheia.** Antes ela caía no cartão de
+  780×500 no alto do vídeo — bom para ilustrar um produto, péssimo para uma
+  reação: vira miniatura e a piada não acontece. Os dois motores já sabiam
+  desenhar em tela cheia; faltava o b-roll automático pedir.
+- **No máximo uma inserção a cada 12 segundos.** A quantidade vinha só do
+  modo de b-roll e nunca olhava a duração: num teste real saíram 2 inserções
+  num vídeo de 9,6s — uma a cada 4,8s, que é pisca-pisca. Em vídeo longo o
+  teto não muda nada.
+
+Os dois consertos saíram de um render de verdade, com material seu: o
+primeiro teste entregou o cartão pequeno e as inserções amontoadas; o
+segundo, depois das correções, entregou tela cheia aos 4,3s e aos 17,2s de
+um vídeo de 34,5s.
+
 ## 4.31
 
 - **Vídeo de humor passa a usar os clipes de humor da Biblioteca.** O app já
