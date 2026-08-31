@@ -371,6 +371,57 @@ def _device_bloqueado() -> bool:
     return data is True or str(data).strip().lower() == "true"
 
 
+# De quanto em quanto tempo o cache bom ainda pergunta "fui bloqueado?".
+# O cache de licenca dura 30 min de proposito (o app consulta o gate em
+# toda rota); manter o bloqueio refem desses 30 min dava meia hora de
+# trabalho a uma maquina ja barrada no painel — foi o que ele viu em
+# 31/08. A consulta e uma linha no banco e roda no maximo a cada 5 min.
+_MIN_ENTRE_CHECAGENS_DE_BLOQUEIO = 5 * 60
+
+
+def _veredito(action: str) -> dict[str, Any]:
+    """Resposta do servidor JA com o bloqueio por maquina aplicado.
+
+    Existia em um caminho so (o principal). Os outros dois — cache de 30
+    min vencido com `blockedAt` grudado, e relogio para tras — pediam
+    `_call("status")` cru: como a `ativavid_license` respondia
+    `entitled: true` para maquina bloqueada, a primeira checagem online
+    LIMPAVA o bloqueio grudado (`_cache` apaga `blockedAt` quando o
+    veredito vem liberado). Bloqueava, e alguns minutos depois o PC
+    voltava a trabalhar sozinho.
+    """
+    remote = _call(action)
+    if remote.get("entitled") and not remote.get("offline") and _device_bloqueado():
+        remote = dict(remote)
+        remote["entitled"] = False
+        remote["mode"] = "blocked"
+        remote["error"] = "device_blocked"
+        remote["message"] = (
+            "Este computador foi bloqueado. Fale com o suporte do ATIVAVID.")
+    return remote
+
+
+def _bloqueio_com_cache_bom(blob: dict[str, Any]) -> bool:
+    """Pergunta o bloqueio mesmo servindo do cache, no maximo 1x/5min."""
+    ultima = str(blob.get("blockedCheckAt") or "")
+    if ultima:
+        try:
+            ts = datetime.fromisoformat(ultima.replace("Z", "+00:00"))
+            idade = (datetime.now(timezone.utc) - ts).total_seconds()
+            # Data no futuro (relogio mexido) conta como vencida.
+            if 0 <= idade < _MIN_ENTRE_CHECAGENS_DE_BLOQUEIO:
+                return False
+        except ValueError:
+            pass
+    bloqueado = _device_bloqueado()
+    novo = _load_blob()
+    novo["blockedCheckAt"] = _utc()
+    if bloqueado:
+        novo["blockedAt"] = _utc()
+    _save_blob(novo)
+    return bloqueado
+
+
 def _expired(valid_until: Any) -> bool:
     """True se validUntil já passou. Desconhecido/ausente não expira."""
     if not valid_until:
@@ -527,8 +578,9 @@ def entitlement(*, refresh: bool = False) -> dict[str, Any]:
     blob = _load_blob()
     if _cache_intact(blob) and (blob.get("blockedAt") or _relogio_voltou(blob)):
         # Nem o cache de 30 minutos vale: os dois casos exigem uma resposta
-        # ONLINE para voltar a liberar.
-        return _cache(_call("status"))
+        # ONLINE para voltar a liberar — e ela ja vem com o bloqueio por
+        # maquina aplicado, senao "voltar a liberar" era automatico.
+        return _cache(_veredito("status"))
     if (
         not refresh
         and isinstance(blob.get("cached"), dict)
@@ -558,6 +610,11 @@ def entitlement(*, refresh: bool = False) -> dict[str, Any]:
                     out["appVersion"] = _app_version()
                     return out
             elif fresh and cached.get("entitled") and not _expired(cached.get("validUntil")):
+                # Antes de entregar o cache bom: este PC foi bloqueado nos
+                # ultimos minutos? Sem esta pergunta, bloquear no painel so
+                # valia depois que o cache de 30 min vencesse.
+                if _bloqueio_com_cache_bom(blob):
+                    return _cache(_veredito("status"))
                 out = cached
                 out["ok"] = True
                 out["deviceId"] = device_id()
@@ -571,24 +628,15 @@ def entitlement(*, refresh: bool = False) -> dict[str, Any]:
 
     # 'trial' CRIA trial no servidor. Como ação de rotina, dava 7 dias novos a
     # quem tinha assinatura vencida; agora só no primeiro contato deste device.
-    remote = _call("trial" if not blob.get("trialAskedAt") else "status")
+    remote = _veredito("trial" if not blob.get("trialAskedAt") else "status")
     if not blob.get("trialAskedAt") and not remote.get("error"):
         blob = _load_blob()
         blob["trialAskedAt"] = _utc()
         _save_blob(blob)
     if remote.get("error") and remote.get("mode") not in ("blocked", "update_required"):
-        remote = _call("status")
-    # A maquina pode estar liberada pela licenca E bloqueada por
-    # compartilhamento — sao coisas diferentes, e so a segunda resolve o
-    # caso "a mesma chave rodando em quatro PCs". So pergunta quando o
-    # servidor liberou: quem ja esta barrado nao precisa de outra viagem.
-    if remote.get("entitled") and not remote.get("offline") and _device_bloqueado():
-        remote = dict(remote)
-        remote["entitled"] = False
-        remote["mode"] = "blocked"
-        remote["error"] = "device_blocked"
-        remote["message"] = (
-            "Este computador foi bloqueado. Fale com o suporte do ATIVAVID.")
+        remote = _veredito("status")
+    # O bloqueio por maquina ja veio aplicado por `_veredito` — em TODOS os
+    # caminhos, nao so neste.
     status = _cache(remote)
     status["ok"] = True
     status["deviceId"] = device_id()

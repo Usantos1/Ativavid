@@ -68,7 +68,9 @@ def test_o_trial_so_e_pedido_uma_vez_por_maquina():
     """'trial' CRIA trial no servidor: pedir a cada abertura renovaria os 7
     dias de quem ja venceu."""
     s = (REPO / "app" / "license.py").read_text(encoding="utf-8")
-    assert '_call("trial" if not blob.get("trialAskedAt") else "status")' in s
+    # `_veredito` e o `_call` + bloqueio por maquina (4.39): a REGRA que
+    # este teste guarda e "pedir trial uma vez so", nao o nome da funcao.
+    assert '("trial" if not blob.get("trialAskedAt") else "status")' in s
     assert 'blob["trialAskedAt"] = _utc()' in s
 
 

@@ -342,7 +342,52 @@ def block_device(device_id: str, *, block: bool = True,
             "supabase/registro_de_uso.sql → Run.")}
     if code >= 400:
         return {"ok": False, "status": code, "error": data}
-    return {"ok": True, "deviceId": did, "bloqueado": bool(block)}
+    out = {"ok": True, "deviceId": did, "bloqueado": bool(block)}
+    if block:
+        out["avisoServidor"] = _servidor_ignora_o_bloqueio(did)
+    return out
+
+
+def _servidor_ignora_o_bloqueio(device_id: str) -> str:
+    """Confere se o BANCO ja barra este PC — e nao so o app.
+
+    Em 31/08 ele bloqueou uma maquina e ela continuou trabalhando: o
+    `blocked_at` estava gravado, mas a `ativavid_license` respondia
+    `entitled: true`. Quem barrava era so o app, com uma segunda pergunta
+    que existe da 4.27 para cima. Bloqueio que so funciona no app do
+    cliente e um pedido, nao um bloqueio.
+
+    Depois de bloquear, pergunta ao banco como quem pergunta do PC do
+    cliente. Se vier liberado, devolve o recado — em vez de deixar o
+    defeito mudo outra vez.
+    """
+    # A VERSAO precisa ser uma de verdade: com "0.0.0" o servidor barra por
+    # atualizacao obrigatoria e a resposta sai `entitled: false` por outro
+    # motivo — a conferencia diria "esta tudo certo" com o bloqueio
+    # furado. (Aconteceu na primeira versao desta funcao, 31/08.)
+    try:
+        from app.update_check import current_version
+
+        versao = current_version()
+    except Exception:  # noqa: BLE001
+        versao = "99.0.0"
+    try:
+        code, data = _rest_service("POST", "rpc/ativavid_license", {
+            "p_action": "status", "p_device_id": device_id,
+            "p_key": None, "p_app_version": versao,
+        })
+    except Exception:  # noqa: BLE001
+        return ""
+    if code >= 400 or not isinstance(data, dict):
+        return ""
+    if str(data.get("mode") or "") == "update_required":
+        return ""   # o servidor respondeu sobre versao, nao sobre bloqueio
+    if data.get("entitled"):
+        return ("O computador foi marcado, mas o servidor ainda responde "
+                "\"liberado\" para ele: só o app 4.27+ vai barrar. Aplique "
+                "supabase/rpc_license.sql (SQL Editor → Run) para o "
+                "bloqueio valer para qualquer versão.")
+    return ""
 
 
 def create_auth_user(*, email: str, password: str) -> dict[str, Any]:

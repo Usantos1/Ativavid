@@ -1,5 +1,29 @@
 # Changelog
 
+## 4.39
+
+- **Bloquear um computador agora vale de verdade.** Havia dois furos, os
+  dois medidos no seu banco: o servidor respondia "liberado" para uma
+  máquina com bloqueio gravado (quem barrava era só o app, com uma segunda
+  pergunta que existe da 4.27 para cima), e o veredito guardado se soltava
+  sozinho na checagem seguinte — o PC bloqueava por instantes e voltava a
+  trabalhar.
+- **O bloqueio passou para o servidor.** Ele para antes de olhar chave,
+  conta ou trial. Vale para qualquer versão do app. *Precisa de um passo
+  seu:* Supabase → SQL Editor → cole `supabase/rpc_license.sql` → Run.
+- **E o app deixou de dar 30 minutos de folga.** O status fica guardado
+  por 30 min para não consultar a cada clique; agora, mesmo servindo do
+  cache, ele pergunta "fui bloqueado?" a cada 5 minutos.
+- **Ao bloquear, o painel confere se pegou.** Se o servidor ainda
+  responder "liberado" para aquele PC, você vê o aviso na hora, com o que
+  falta fazer — em vez de descobrir depois que a máquina continuou
+  trabalhando.
+- **A lista de máquinas parou de cortar.** A caixa mostrava uma linha e
+  meia de três; o cabeçalho vinha centralizado e sem respiro; a data
+  ocupava "30/08/2026, 21:59:13" em cada célula; e o campo de busca tinha
+  uma seta de menu que não abre — essa seta, aliás, estava em **todo**
+  campo de digitar do app.
+
 ## 4.38
 
 - **O cliente agora enxerga o código do computador dele.** Antes o id só

@@ -1411,6 +1411,22 @@ select:disabled { opacity: .55; cursor: default; }
   padding: 10px 34px 10px 12px;
 }
 
+/* Campo de TEXTO nao e caixa de selecao (4.39). A regra acima junta os
+   inputs do `.ia-form` com o `select` para dar a mesma borda e o mesmo
+   canto — e junto vinha a SETA de dropdown desenhada no fundo, mais a
+   sobra de 34px reservada para ela. Todo campo de digitar do app
+   (procurar computador, chave, id do dispositivo) parecia um menu que
+   nao abre. */
+.ia-form input[type="url"],
+.ia-form input[type="password"],
+.ia-form input[type="text"],
+.ia-form input[type="email"],
+.ia-form input[type="number"] {
+  background-image: none;
+  padding-right: 12px;
+  cursor: text;
+}
+
 /* ---- Chaves & IA (layout amplo + passo a passo) ---- */
 .keys-shell {
   display: grid;
@@ -2702,9 +2718,13 @@ select:disabled { opacity: .55; cursor: default; }
 }
 .admin-access-table.wrap {
   overflow: auto;
-  flex: 1;
+  /* `flex: 1` fazia a caixa CEDER: ela e item de uma coluna flex de
+     altura fixa (o painel da licenca), entao encolhia ate 87px com 191px
+     de conteudo — tres maquinas viravam uma linha e meia. Quem rola e a
+     pagina; a caixa so rola sozinha depois do teto. */
+  flex: 0 0 auto;
   min-height: 0;
-  max-height: none;
+  max-height: 340px;
 }
 .access-table {
   width: 100%;
@@ -3877,3 +3897,83 @@ video.lib-thumb { aspect-ratio: 9 / 16; max-height: 260px; object-fit: contain;
   overflow-wrap: anywhere;
 }
 .lic-busca-pc { margin: 8px 0 4px; }
+
+/* Lista de maquinas (4.39). A 4.38 mandou a tabela para uma classe que
+   tinha UMA regra (`tr.is-bloqueado`): saiu tabela crua — cabecalho
+   centralizado, sem respiro, id de 40 caracteres esticando a coluna e a
+   caixa cortando a ultima linha no meio. */
+.admin-tbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  table-layout: fixed;
+}
+.admin-tbl th,
+.admin-tbl td {
+  padding: 9px 10px;
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid color-mix(in srgb, var(--text) 7%, transparent);
+}
+.admin-tbl thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--panel);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--dim);
+  white-space: nowrap;
+}
+.admin-tbl tbody tr:last-child td { border-bottom: 0; }
+.admin-tbl tbody tr:hover { background: color-mix(in srgb, var(--text) 4%, transparent); }
+/* Numero e data alinham melhor com o mesmo passo de digito. */
+.admin-tbl td:nth-child(3),
+.admin-tbl td:nth-child(4),
+.admin-tbl td:nth-child(5) { font-variant-numeric: tabular-nums; }
+.admin-tbl .col-maq { width: 20%; }
+.admin-tbl .col-quem { width: 20%; }
+.admin-tbl .col-n { width: 8%; }
+.admin-tbl .col-data { width: 13%; }
+.admin-tbl .col-trial { width: 12%; }
+.admin-tbl .col-ver { width: 8%; }
+.admin-tbl .col-acao { width: 12%; text-align: right; }
+.admin-tbl td.col-acao { text-align: right; }
+/* O id inteiro nao pode mandar na largura: fica numa linha so, cortado,
+   e inteiro no `title` (e no botao Copiar da tela do cliente). */
+.admin-tbl .maq-id {
+  display: block;
+  margin-top: 2px;
+  font-size: 10.5px;
+  color: var(--dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.admin-tbl .maq-cod {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  letter-spacing: .04em;
+}
+.admin-tbl .cel-sub {
+  display: block;
+  font-size: 11px;
+  color: var(--dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* A caixa cresce com o CONTEUDO, ate um teto.
+   `flex: 1` num pai flex de altura apertada fazia o contrario: a lista
+   encolhia para 87px e mostrava uma linha e meia — tres maquinas viravam
+   "uma linha e um pedaco", que foi o que ele viu. Com `flex: 0 1 auto` a
+   caixa pede a altura das linhas que tem, e so passa a rolar depois do
+   teto. */
+/* A LISTA tambem nao pode encolher. O painel da licenca e uma coluna flex
+   de altura fixa com varias secoes dentro; as duas listas (maquinas e
+   contas) eram os itens que cediam, e cada uma ficava com uma linha e
+   meia. Quem rola e a pagina (`.ws-body`), nao a lista. */
+.lic-admin-list { flex: 0 0 auto; }
+.lic-busca-pc { max-width: 420px; }

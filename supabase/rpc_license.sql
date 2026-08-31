@@ -192,6 +192,30 @@ begin
     );
   end if;
 
+  -- COMPUTADOR BLOQUEADO: para aqui, antes de olhar chave, conta ou trial.
+  --
+  -- Ate 31/08 este veredito dizia `entitled: true` para uma maquina com
+  -- `blocked_at` preenchido, e quem barrava era o APP, com uma segunda
+  -- chamada (`ativavid_device_blocked`) que so existe da 4.27 para cima e
+  -- que falha ABERTA de proposito. Ou seja: o bloqueio dependia da boa
+  -- vontade do cliente. Um app antigo — ou qualquer um que nao fizesse a
+  -- segunda pergunta — seguia trabalhando com o PC bloqueado no painel.
+  -- Caso real: o `win-8256b455...` foi bloqueado e continuou em trial.
+  if exists (
+    select 1 from public.devices d
+    where d.device_id = trim(p_device_id) and d.blocked_at is not null
+  ) then
+    return public.ativavid_with_update(
+      json_build_object(
+        'entitled', false,
+        'mode', 'blocked',
+        'error', 'device_blocked',
+        'message', 'Este computador foi bloqueado. Fale com o suporte do ATIVAVID.'
+      ),
+      p_app_version
+    );
+  end if;
+
   if p_action in ('status', 'trial') then
     -- 1) Conta logada com account_access
     begin

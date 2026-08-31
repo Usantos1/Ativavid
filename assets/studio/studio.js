@@ -1572,10 +1572,20 @@ async function loadAberturas() {
         || String(m.host || "").toLowerCase().includes(filtro)
         || codigoDoPc(m.deviceId).toLowerCase().includes(filtro))
     : linhas;
+  // "30/08/2026, 21:59:13" em cada celula empurrava a tabela para fora da
+  // caixa. Dia, mes e hora respondem tudo que essa coluna precisa
+  // responder; o ano so aparece quando NAO e deste ano.
+  const anoAtual = new Date().getFullYear();
   const quando = (iso) => {
     if (!iso) return "—";
     const dt = new Date(iso);
-    return Number.isNaN(dt.getTime()) ? "—" : dt.toLocaleString("pt-BR");
+    if (Number.isNaN(dt.getTime())) return "—";
+    const d = dt.toLocaleDateString("pt-BR", {
+      day: "2-digit", month: "2-digit",
+      ...(dt.getFullYear() === anoAtual ? {} : { year: "2-digit" }),
+    });
+    const h = dt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    return `${d} ${h}`;
   };
   // Dia e hora curtos: a coluna e estreita e o ano nao ajuda a decidir nada.
   const dia = (iso) => {
@@ -1590,30 +1600,40 @@ async function loadAberturas() {
   const trial = (m) => {
     if (m.trialDias == null) return m.temLicenca ? "licenciado" : "—";
     if (m.trialDias <= 0) return `<span class="lic-tag-bloq">acabou</span>`;
-    return `${m.trialDias} dia${m.trialDias === 1 ? "" : "s"}<br>`
-      + `<span class="hint">desde ${dia(m.trialInicio)}</span>`;
+    return `${m.trialDias} dia${m.trialDias === 1 ? "" : "s"}`
+      + `<span class="cel-sub">desde ${dia(m.trialInicio)}</span>`;
   };
+  if (!visiveis.length) {
+    tabela.innerHTML = `<p class="hint" style="padding:14px">Nenhum computador `
+      + `com "${escapeHtml(filtro)}".</p>`;
+    return;
+  }
   tabela.innerHTML = `<table class="admin-tbl"><thead><tr>
-      <th>Máquina</th><th>Quem</th><th>Aberturas</th><th>1ª abertura</th>
-      <th>Última</th><th>Trial</th><th>Versão</th><th></th>
+      <th class="col-maq">Máquina</th><th class="col-quem">Quem</th>
+      <th class="col-n">Aberturas</th><th class="col-data">1ª abertura</th>
+      <th class="col-data">Última</th><th class="col-trial">Trial</th>
+      <th class="col-ver">Versão</th><th class="col-acao"></th>
     </tr></thead><tbody>${visiveis.map((m) => {
       const nome = escapeHtml(m.host || "—");
       const quem = escapeHtml([m.usuario, m.licenca].filter(Boolean).join(" · ") || "—");
       const acao = m.bloqueado ? "unblock" : "block";
       const rotulo = m.bloqueado ? "Desbloquear" : "Bloquear";
       const classe = m.bloqueado ? "ghost-btn ghost-btn--sm" : "ghost-btn ghost-btn--sm preset-del";
+      const id = escapeHtml(m.deviceId || "");
       return `<tr${m.bloqueado ? ' class="is-bloqueado"' : ""}>
-        <td><strong class="lic-pc-cod">${escapeHtml(codigoDoPc(m.deviceId))}</strong>
-            <br><span class="mono hint">${escapeHtml(m.deviceId || "")}</span>${
-          m.bloqueado ? ' <span class="lic-tag-bloq">bloqueado</span>' : ""}</td>
-        <td>${nome}${quem !== "—" ? `<br><span class="hint">${quem}</span>` : ""}</td>
-        <td>${m.aberturas || 0}</td>
-        <td>${quando(m.primeira)}</td>
-        <td>${quando(m.ultima)}</td>
-        <td>${trial(m)}</td>
-        <td>${escapeHtml(m.versao || "—")}</td>
-        <td><button type="button" class="${classe}" data-bloq="${acao}"
-             data-dev="${escapeHtml(m.deviceId || "")}">${rotulo}</button></td>
+        <td class="col-maq" title="${id}">
+            <strong class="maq-cod">${escapeHtml(codigoDoPc(m.deviceId))}</strong>${
+          m.bloqueado ? ' <span class="lic-tag-bloq">bloqueado</span>' : ""}
+            <span class="maq-id">${id}</span></td>
+        <td class="col-quem" title="${escapeHtml([m.host, m.usuario].filter(Boolean).join(" · "))}">${nome}${
+          quem !== "—" ? `<span class="cel-sub">${quem}</span>` : ""}</td>
+        <td class="col-n">${m.aberturas || 0}</td>
+        <td class="col-data">${quando(m.primeira)}</td>
+        <td class="col-data">${quando(m.ultima)}</td>
+        <td class="col-trial">${trial(m)}</td>
+        <td class="col-ver">${escapeHtml(m.versao || "—")}</td>
+        <td class="col-acao"><button type="button" class="${classe}" data-bloq="${acao}"
+             data-dev="${id}">${rotulo}</button></td>
       </tr>`;
     }).join("")}</tbody></table>`;
 }
@@ -1650,7 +1670,12 @@ function wireAberturas() {
           }),
         });
         if (r && r.ok === false) throw new Error(r.message || "falhou");
-        toast(bloquear ? "Computador bloqueado" : "Computador liberado");
+        // O bloqueio pode ter sido gravado e mesmo assim nao valer: se o
+        // SQL novo nao foi aplicado, o servidor segue respondendo
+        // "liberado" e so o app 4.27+ barra. Bloqueio que depende da boa
+        // vontade do cliente precisa AVISAR, nao ficar mudo.
+        if (r && r.avisoServidor) toast(r.avisoServidor, 9000);
+        else toast(bloquear ? "Computador bloqueado" : "Computador liberado");
         await loadAberturas();
       } catch (err) {
         toast(err.message || "Não deu para aplicar");
