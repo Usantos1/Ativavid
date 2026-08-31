@@ -76,8 +76,17 @@ if (-not $cfg.cacheSecret -or $cfg.cacheSecret.Length -lt 16) {
   Write-Host "Gere um: py -c ""import secrets; print(secrets.token_urlsafe(32))"""
   exit 3
 }
+# Isto ja saiu publicado: a build foi para o ar com checkoutUrl vazio e o
+# botao Assinar simplesmente nao existia — ninguem conseguia comprar, e o
+# app nao reclamava de nada. Aviso amarelo some no meio do log; aqui barra.
 if (-not $cfg.checkoutUrl) {
-  Write-Host "Aviso: checkoutUrl vazio — o botao Assinar fica escondido para o cliente." -ForegroundColor Yellow
+  Write-Host "license_config.json sem 'checkoutUrl'." -ForegroundColor Red
+  Write-Host "Sem ele o botao Assinar nao aparece e o cliente nao tem como pagar."
+  exit 3
+}
+# O mensal e opcional (da para vender so o anual), mas some calado se faltar.
+if (-not $cfg.checkoutUrlMensal) {
+  Write-Host "Aviso: checkoutUrlMensal vazio — a build sai vendendo so o plano anual." -ForegroundColor Yellow
 }
 
 $ver = Read-AppVersion

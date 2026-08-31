@@ -73,3 +73,15 @@ def test_o_link_mensal_vem_empacotado_na_build():
     assert '"checkoutUrlMensal"' in SET
     i = SET.index("_MANAGED_KEYS")
     assert "checkoutUrlMensal" in SET[i:i + 220], "senao o cliente nao recebe"
+
+
+def test_a_build_nao_sai_sem_o_link_de_pagamento():
+    """O `checkoutUrl` vazio ja saiu publicado uma vez: o botao Assinar
+    nao existia e ninguem conseguia comprar, sem erro nenhum na tela. A
+    guarda da build so avisava em amarelo, que se perde no log."""
+    ps = (REPO / "installer" / "build.ps1").read_text(encoding="utf-8")
+    i = ps.index("if (-not $cfg.checkoutUrl)")
+    ate_o_mensal = ps[i:ps.index("checkoutUrlMensal", i)]
+    assert "exit 3" in ate_o_mensal, "aviso amarelo nao barra build nenhuma"
+    depois = ps[ps.index("checkoutUrlMensal", i):]
+    assert "Aviso" in depois[:300], "o mensal e opcional, mas tem de ser dito"
