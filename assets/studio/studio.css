@@ -3992,3 +3992,11 @@ video.lib-thumb { aspect-ratio: 9 / 16; max-height: 260px; object-fit: contain;
    meia. Quem rola e a pagina (`.ws-body`), nao a lista. */
 .lic-admin-list { flex: 0 0 auto; }
 .lic-busca-pc { max-width: 420px; }
+
+/* Janela da chave de ativacao (4.44): estreita, uma coisa so. */
+.dlg-chave { width: min(420px, calc(100vw - 32px)); }
+.dlg-chave .ia-form { margin-top: 10px; }
+.dlg-chave input[type="text"] {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: .04em;
+}

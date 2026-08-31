@@ -629,14 +629,6 @@
               </div>
             </div>
 
-            <div class="lic-client-key" id="licClientKeyCard" hidden>
-              <label class="ia-form">Chave de ativação
-                <div class="lic-key-row">
-                  <input type="text" id="licenseKeyInput" placeholder="ATIV-XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false">
-                  <button type="button" class="export-btn export-btn--sm" id="btnLicenseActivateInline">Ativar</button>
-                </div>
-              </label>
-            </div>
 
             <section class="lic-admin" id="licenseAdminPanel" hidden>
               <header class="lic-admin-head">
@@ -1203,6 +1195,22 @@
     <div class="dlg-lic-adv-section">
       <h4>Log</h4>
       <pre class="admin-lic-out" id="adminLicOut">—</pre>
+    </div>
+  </dialog>
+
+  <!-- A chave de ativacao saiu da tela e virou janela (4.44): ela e para a
+       minoria que comprou fora do app, e ocupava o mesmo peso visual do
+       preco para todo mundo que esta so testando. -->
+  <dialog id="dlgChave" class="dlg dlg-chave">
+    <h3>Tenho uma chave</h3>
+    <p class="hint">Cole a chave que você recebeu por e-mail ou pelo suporte.</p>
+    <label class="ia-form">Chave de ativação
+      <input type="text" id="licenseKeyInput" placeholder="ATIV-XXXX-XXXX-XXXX"
+             autocomplete="off" spellcheck="false">
+    </label>
+    <div class="dlg-actions">
+      <button type="button" class="ghost-btn" id="btnChaveCancelar">Cancelar</button>
+      <button type="button" class="export-btn" id="btnLicenseActivateInline">Ativar</button>
     </div>
   </dialog>
 

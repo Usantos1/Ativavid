@@ -1499,12 +1499,18 @@ function syncLicenseChrome() {
   // nao existir. O "Tenho uma chave" continua, que e a outra saida.
   const btnComprar = $("#btnLicenseCheckout");
   if (btnComprar) btnComprar.hidden = !lic.checkoutUrl;
-  const clientKey = $("#licClientKeyCard");
-  if (clientKey) clientKey.hidden = !showKey;
+  void showKey;   // a chave agora mora na janela `dlgChave` (4.44)
   if (mostraCompra) {
     const title = $("#licPayTitle");
     const hint = $("#licPayHint");
-    if (title) title.textContent = lic.priceLabel || "Assinatura anual";
+    // O plano tem NOME antes do preco: "Pro anual · R$ 399 / ano". Sem
+    // nome, o card era so um numero — e nome e o que permite ter mais de
+    // um plano na mesma tela depois.
+    if (title) {
+      const nome = lic.planLabel || "Pro anual";
+      const preco = lic.priceLabel || "R$ 399 / ano";
+      title.textContent = `${nome} · ${preco}`;
+    }
     if (hint) {
       const d = lic.trialDaysLeft;
       hint.textContent = noTeste
@@ -4283,18 +4289,35 @@ function wireForms() {
       toast(e.message || "Falha ao ativar");
     }
   };
+  // "Tenho uma chave" ABRE a janela — antes ele tentava ativar o que
+  // estivesse na caixa (vazia) e devolvia "Falha ao ativar" a quem so
+  // queria ver onde digitar.
   if (btnLicAct) {
     btnLicAct.onclick = () => {
-      const card = $("#licClientKeyCard");
-      if (card && !card.hidden) {
-        $("#licenseKeyInput")?.focus();
-        return activateFromInput();
-      }
-      return activateFromInput();
+      const dlg = $("#dlgChave");
+      const campo = $("#licenseKeyInput");
+      if (campo) campo.value = "";
+      try { dlg?.showModal(); } catch { /* ignore */ }
+      setTimeout(() => campo?.focus(), 50);
     };
   }
+  const btnChaveCancelar = $("#btnChaveCancelar");
+  if (btnChaveCancelar) {
+    btnChaveCancelar.onclick = () => { const d = $("#dlgChave"); if (d?.open) d.close(); };
+  }
   const btnLicActInline = $("#btnLicenseActivateInline");
-  if (btnLicActInline) btnLicActInline.onclick = activateFromInput;
+  if (btnLicActInline) {
+    btnLicActInline.onclick = async () => {
+      await activateFromInput();
+      // Deu certo? A licenca virou ativa e a janela nao tem mais o que
+      // fazer. Deu errado? O toast ja explicou e a chave continua na tela
+      // para ele conferir o que digitou.
+      if ((state.license || {}).entitled) {
+        const d = $("#dlgChave");
+        if (d?.open) d.close();
+      }
+    };
+  }
   const btnLicAdvOpen = $("#btnLicAdvOpen");
   if (btnLicAdvOpen) {
     btnLicAdvOpen.onclick = () => {

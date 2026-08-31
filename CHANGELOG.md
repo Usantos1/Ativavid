@@ -1,5 +1,16 @@
 # Changelog
 
+## 4.44
+
+- **A chave de ativação saiu da tela e virou janela.** Ela serve para a
+  minoria que comprou fora do app e ocupava o mesmo peso do preço para
+  todo mundo. Agora abre no botão **Tenho uma chave**, com a caixa já em
+  foco, e fecha sozinha quando a chave vale.
+- De quebra: esse botão tentava ativar o que estivesse na caixa (vazia) e
+  devolvia "Falha ao ativar" para quem só queria ver onde digitar.
+- **O plano ganhou nome:** "Pro anual · R$ 399 / ano". Antes era só um
+  número — e é o nome que deixa caber mais de um plano na mesma tela.
+
 ## 4.43
 
 - **Quem está no teste agora pode assinar.** A faixa de compra só aparecia
