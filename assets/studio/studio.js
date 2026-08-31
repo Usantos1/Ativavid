@@ -1495,22 +1495,17 @@ function syncLicenseChrome() {
   }
   const pay = $("#licAccountStrip");
   if (pay) pay.hidden = !mostraCompra;
-  // Sem link configurado o botao levaria a um toast de desculpa; melhor
+  // Sem link configurado o plano levaria a um toast de desculpa; melhor
   // nao existir. O "Tenho uma chave" continua, que e a outra saida.
   const btnComprar = $("#btnLicenseCheckout");
   if (btnComprar) btnComprar.hidden = !lic.checkoutUrl;
+  const btnMensal = $("#btnLicenseMensal");
+  if (btnMensal) btnMensal.hidden = !lic.checkoutUrlMensal;
   void showKey;   // a chave agora mora na janela `dlgChave` (4.44)
   if (mostraCompra) {
     const title = $("#licPayTitle");
     const hint = $("#licPayHint");
-    // O plano tem NOME antes do preco: "Pro anual · R$ 399 / ano". Sem
-    // nome, o card era so um numero — e nome e o que permite ter mais de
-    // um plano na mesma tela depois.
-    if (title) {
-      const nome = lic.planLabel || "Pro anual";
-      const preco = lic.priceLabel || "R$ 399 / ano";
-      title.textContent = `${nome} · ${preco}`;
-    }
+    if (title) title.textContent = lic.planLabel || "ATIVAVID Pro";
     if (hint) {
       const d = lic.trialDaysLeft;
       hint.textContent = noTeste
@@ -1520,8 +1515,7 @@ function syncLicenseChrome() {
               + "perca o acesso.")
         : (lic.message || "Assine ou ative uma chave neste PC.");
     }
-    const btn = $("#btnLicenseCheckout");
-    if (btn) btn.textContent = noTeste ? "Assinar agora" : "Assinar";
+    void noTeste;   // os planos falam por si: nome, preco e observacao
   }
 }
 
@@ -4802,6 +4796,11 @@ function wireForms() {
   }
   const btnDlgPay = $("#btnLicDlgPay");
   if (btnDlgPay) btnDlgPay.onclick = () => openCheckout();
+  // O plano mensal tem link proprio (outro preco na Stripe).
+  const btnMensalPay = $("#btnLicenseMensal");
+  if (btnMensalPay) {
+    btnMensalPay.onclick = () => openCheckout(state.license?.checkoutUrlMensal);
+  }
   for (const id of ["#btnLicDlgPcCopiar", "#btnLicPcCopiar"]) {
     const b = $(id);
     if (b) b.onclick = () => { copiarCodigoDoPc().catch(() => {}); };

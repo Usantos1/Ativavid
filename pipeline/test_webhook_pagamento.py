@@ -64,7 +64,9 @@ def test_price_id_e_obrigatorio():
     js = _js()
     assert "STRIPE_PRICE_ID" in js
     trecho = js[js.index("function parseStripe"):js.index("// --- Mercado Pago")]
-    assert "!wantPrice" in trecho, "PRICE_ID virou opcional — falha aberta"
+    # Virou LISTA de precos (4.45: anual + mensal). A regra que este teste
+    # guarda continua a mesma: sem preco declarado, a funcao recusa.
+    assert "!precosAceitos.length" in trecho, "PRICE_ID virou opcional — falha aberta"
     assert "stripe_not_configured" in trecho
 
 

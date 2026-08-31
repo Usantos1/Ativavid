@@ -51,7 +51,11 @@ def test_a_janela_fecha_quando_a_chave_vale():
 
 
 def test_o_plano_tem_nome_antes_do_preco():
-    i = JS.index("const nome = lic.planLabel")
-    bloco = JS[i:i + 300]
-    assert '"Pro anual"' in bloco
-    assert "${nome} · ${preco}" in bloco
+    """4.45: com DOIS planos na tela, o nome do produto ficou no titulo
+    ("ATIVAVID Pro") e o preco foi para dentro de cada plano — cada um com
+    o seu valor. O que este teste guarda e que existe NOME, nao um numero
+    solto."""
+    i = JS.index('title.textContent = lic.planLabel')
+    assert '"ATIVAVID Pro"' in JS[i:i + 120]
+    assert 'class="lic-plano-preco">R$ 399' in HTML
+    assert 'class="lic-plano-preco">R$ 59' in HTML

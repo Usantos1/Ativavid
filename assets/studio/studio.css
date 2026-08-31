@@ -4000,3 +4000,29 @@ video.lib-thumb { aspect-ratio: 9 / 16; max-height: 260px; object-fit: contain;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   letter-spacing: .04em;
 }
+
+/* Dois planos lado a lado (4.45). Cada um e um BOTAO: o clique inteiro
+   leva ao checkout, nao so um "assinar" perdido no canto. */
+.lic-planos { display: flex; gap: 10px; flex-wrap: wrap; }
+.lic-plano {
+  display: grid;
+  gap: 2px;
+  min-width: 150px;
+  padding: 10px 14px;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel2);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+}
+.lic-plano:hover { border-color: var(--line2); }
+.lic-plano--destaque {
+  border-color: var(--accent, #e30004);
+  background: color-mix(in srgb, var(--accent, #e30004) 12%, var(--panel2));
+}
+.lic-plano-nome { font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; opacity: .8; }
+.lic-plano-preco { font-size: 20px; font-weight: 700; }
+.lic-plano-obs { font-size: 11.5px; color: var(--dim); }
+.lic-pay { flex-wrap: wrap; }

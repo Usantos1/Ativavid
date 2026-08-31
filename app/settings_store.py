@@ -21,7 +21,10 @@ SETTINGS_PATH = USER_DIR / "settings.json"
 # apagar a URL do Supabase não vire "modo aberto".
 BUNDLED_LICENSE_PATH = REPO / "license_config.json"
 # Campos que a build embutida trava contra edição do cliente.
-_MANAGED_KEYS = ("supabaseUrl", "supabaseAnonKey", "checkoutUrl")
+# `checkoutUrlMensal` entra aqui junto com o anual: sao os dois planos do
+# mesmo produto, vem empacotados na build e o cliente nao edita nenhum.
+_MANAGED_KEYS = ("supabaseUrl", "supabaseAnonKey", "checkoutUrl",
+                 "checkoutUrlMensal")
 
 DEFAULTS: dict[str, Any] = {
     "performanceProfile": "auto",
@@ -53,6 +56,7 @@ DEFAULTS: dict[str, Any] = {
     "supabaseUrl": "",
     "supabaseAnonKey": "",
     "checkoutUrl": "",  # link Stripe Checkout / Mercado Pago (R$ 399/ano)
+    "checkoutUrlMensal": "",  # o mesmo produto no plano mensal (R$ 59/mes)
     # Só no PC do admin — nunca embutir no instalador do cliente.
     "supabaseServiceRoleKey": "",
 }

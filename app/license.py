@@ -172,6 +172,7 @@ def _cfg() -> dict[str, Any]:
         "url": str(s.get("supabaseUrl") or "").strip().rstrip("/"),
         "anon": str(s.get("supabaseAnonKey") or "").strip(),
         "checkout": str(s.get("checkoutUrl") or "").strip(),
+        "mensal": str(s.get("checkoutUrlMensal") or "").strip(),
     }
 
 
@@ -783,7 +784,12 @@ def public_status() -> dict[str, Any]:
         "accountEmail": st.get("accountEmail"),
         "message": msg,
         "error": err,
-        "checkoutUrl": st.get("checkoutUrl"),
+        # Os DOIS links saem da mesma fonte (`_cfg`, que le a config
+        # empacotada). Ate a 4.44 o anual vinha carona no payload do
+        # entitlement e o mensal da config: dois caminhos para a mesma
+        # coisa e um deles podia faltar sem ninguem notar.
+        "checkoutUrl": st.get("checkoutUrl") or _cfg().get("checkout") or None,
+        "checkoutUrlMensal": _cfg().get("mensal") or None,
         "deviceId": st.get("deviceId"),
         "offline": st.get("offline"),
         "priceLabel": "R$ 399 / ano",

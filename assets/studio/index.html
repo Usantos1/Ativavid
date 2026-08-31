@@ -604,11 +604,26 @@
 
             <div class="lic-pay" id="licAccountStrip" hidden>
               <div class="lic-pay-copy">
-                <strong id="licPayTitle">Assinatura anual</strong>
+                <strong id="licPayTitle">ATIVAVID Pro</strong>
                 <span class="hint" id="licPayHint">Desbloqueie o ATIVAVID neste PC.</span>
               </div>
+              <!-- Dois planos, o anual em destaque: ele e o melhor negocio
+                   para os dois lados (paga-se em 7 meses para o cliente,
+                   dinheiro na frente para a loja). -->
+              <div class="lic-planos" id="licPlanos">
+                <button type="button" class="lic-plano lic-plano--destaque"
+                        id="btnLicenseCheckout">
+                  <span class="lic-plano-nome">Anual</span>
+                  <span class="lic-plano-preco">R$ 399</span>
+                  <span class="lic-plano-obs">R$ 33,25/mês · melhor preço</span>
+                </button>
+                <button type="button" class="lic-plano" id="btnLicenseMensal">
+                  <span class="lic-plano-nome">Mensal</span>
+                  <span class="lic-plano-preco">R$ 59</span>
+                  <span class="lic-plano-obs">por mês, cancela quando quiser</span>
+                </button>
+              </div>
               <div class="lic-pay-actions">
-                <button type="button" class="export-btn" id="btnLicenseCheckout">Assinar</button>
                 <button type="button" class="ghost-btn" id="btnLicenseActivate">Tenho uma chave</button>
               </div>
             </div>

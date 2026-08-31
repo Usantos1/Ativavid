@@ -1,5 +1,21 @@
 # Changelog
 
+## 4.45
+
+- **Dois planos na tela: Anual R$ 399 e Mensal R$ 59.** O produto virou
+  **ATIVAVID Pro** e cada plano é um botão que leva ao seu próprio
+  checkout. O anual fica em destaque, com "R$ 33,25/mês · melhor preço" —
+  ele se paga em 7 meses.
+- O mensal existe para quem não quer travar o ano; o anual continua sendo
+  o melhor negócio para os dois lados.
+- Plano sem link configurado simplesmente não aparece.
+
+Nos bastidores: a função que libera a licença passou a aceitar vários
+preços e a calcular os dias a partir do **próprio plano** — anual vale 365
+dias, mensal vale 35 (30 + folga para a renovação atrasar sem derrubar
+ninguém). Antes ela dava 365 dias para qualquer compra, o que faria o
+mensal de R$ 59 valer um ano inteiro.
+
 ## 4.44
 
 - **A chave de ativação saiu da tela e virou janela.** Ela serve para a
