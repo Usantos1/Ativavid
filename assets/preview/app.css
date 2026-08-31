@@ -3848,3 +3848,18 @@ body.styles-wide .setup-actions .btn.primary {
   letter-spacing: 0;
   font-weight: 600;
 }
+
+/* "Salvar na Biblioteca" no balao da marcacao (4.33): fica ao lado da
+   acao principal, mas em tom secundario — a marcacao continua servindo
+   primeiro para corrigir. */
+.note-guardar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 8px;
+}
+.note-guardar select {
+  font-size: 11.5px;
+  padding: 4px 6px;
+  border-radius: 8px;
+}

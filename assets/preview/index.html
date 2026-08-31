@@ -795,6 +795,18 @@
   <div class="note-actions">
     <button id="noteDelete" class="btn ghost small hidden">remover</button>
     <div class="spacer"></div>
+    <!-- A segunda saida da marcacao: em vez de mandar para a fila de
+         correcao, guarda o trecho como clipe de b-roll. -->
+    <label class="note-guardar">
+      <select id="noteCategoria" title="Categoria do clipe">
+        <option value="reacao">reação</option>
+        <option value="humor">humor</option>
+        <option value="meme">meme</option>
+        <option value="viral">viral</option>
+      </select>
+      <button id="noteBiblioteca" class="btn ghost small"
+              title="Guarda este trecho na Biblioteca para usar em outros vídeos">Salvar na Biblioteca</button>
+    </label>
     <button id="noteOk" class="btn primary small">Aplicar e enviar à fila</button>
   </div>
 </div>

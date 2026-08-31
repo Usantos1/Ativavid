@@ -764,6 +764,9 @@ class Handler(BaseHTTPRequestHandler):
                         "Esse projeto não existe mais nesta pasta — nada foi salvo. "
                         "Volte ao painel e abra o projeto de novo."}, 404)
             return
+        if route == "/api/library/trecho":
+            self._salvar_trecho()
+            return
         if route == "/api/open-folder":
             self._open_folder()
             return
@@ -909,6 +912,52 @@ class Handler(BaseHTTPRequestHandler):
         if snap_err:
             resp["snapshotError"] = snap_err
         self._json(resp)
+
+    def _salvar_trecho(self) -> None:
+        """Guarda um trecho do video na Biblioteca, como clipe de b-roll.
+
+        O tempo chega no relogio do arquivo que ele esta VENDO (a tela
+        converte com `draftToRendered`): assim o clipe e exatamente o que
+        passou na frente dele.
+        """
+        # Le o corpo COMO AS OUTRAS rotas daqui: `self._read_json()` e do
+        # handler do outro servidor, e o editor roda sob o `DesktopHandler`
+        # — que herda este arquivo e nao tem aquele metodo. O teste ao vivo
+        # devolveu "Failed to fetch" e o log, o AttributeError.
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            body = json.loads(self.rfile.read(length) or b"{}")
+        except (ValueError, json.JSONDecodeError):
+            self._json({"ok": False, "error": "JSON inválido"}, 400)
+            return
+        try:
+            from app.broll_library import salvar_trecho
+        except Exception as e:  # noqa: BLE001
+            self._json({"ok": False, "error": str(e)}, 500)
+            return
+        alvo = self.root / str(body.get("arquivo") or "cut.mp4")
+        try:
+            alvo = alvo.resolve()
+            alvo.relative_to(self.root.resolve())
+        except (OSError, ValueError):
+            self._json({"ok": False, "error": "arquivo fora do projeto"}, 400)
+            return
+        try:
+            out = salvar_trecho(
+                alvo,
+                inicio=float(body.get("inicio") or 0),
+                fim=float(body.get("fim") or 0),
+                categoria=str(body.get("categoria") or "reacao"),
+                nome=str(body.get("nome") or ""),
+                projects_root=self.root.parent.parent,
+            )
+        except ValueError as e:
+            self._json({"ok": False, "error": str(e)}, 400)
+            return
+        except (OSError, Exception) as e:  # noqa: BLE001
+            self._json({"ok": False, "error": f"não deu para recortar: {e}"}, 500)
+            return
+        self._json(out)
 
     def _open_folder(self) -> None:
         """Reveal the exported file in Explorer — same idea as any NLE's

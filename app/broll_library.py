@@ -24,6 +24,14 @@ def library_root(projects_root: Path | None = None) -> Path:
     return root
 
 
+def _sem_acento(txt: str) -> str:
+    """"reação" -> "reacao". Nome de arquivo que vira caminho no JSON."""
+    import unicodedata
+
+    return "".join(c for c in unicodedata.normalize("NFKD", str(txt or ""))
+                   if not unicodedata.combining(c))
+
+
 def _slug(name: str) -> str:
     return re.sub(r"[^\w\-]+", "-", (name or "asset").lower())[:48].strip("-") or "asset"
 
@@ -653,6 +661,64 @@ def pick_for_query(query: str, projects_root: Path | None = None, limit: int = 3
             scored.append((score, it))
     scored.sort(key=lambda x: -x[0])
     return [it for _, it in scored[:limit]] or items[:limit]
+
+
+def salvar_trecho(video: Path, *, inicio: float, fim: float, categoria: str,
+                  nome: str = "", projects_root: Path | None = None,
+                  altura: int = 1920) -> dict[str, Any]:
+    """Recorta `video` de `inicio` a `fim` e guarda na Biblioteca.
+
+    Nasceu porque a 4.31/4.32 fizeram o video de humor USAR os clipes da
+    Biblioteca — e a unica forma de por um la era recortar arquivo na mao,
+    fora do app.
+
+    Reencoda (nao copia o fluxo): corte por cópia so acerta em quadro-chave
+    e um clipe de 2s pode virar 4s ou comecar num quadro cinza. E normaliza
+    para 1080x1920 porque e o quadro que o insert desenha — clipe fora de
+    proporcao entraria esticado.
+    """
+    import subprocess
+
+    video = Path(video)
+    if not video.is_file():
+        raise ValueError("vídeo não encontrado")
+    ini = max(0.0, float(inicio))
+    dur = float(fim) - ini
+    if dur < 0.4:
+        raise ValueError("trecho curto demais (mínimo 0,4s)")
+    if dur > 30:
+        raise ValueError("trecho longo demais (máximo 30s)")
+    rot = _slug(_sem_acento(categoria)) or "reacao"
+    # SEM ACENTO no nome: este arquivo e copiado para dentro do projeto e
+    # vira caminho no `edit-data.json`, que os dois motores leem (um deles
+    # pelo `staticFile` do Remotion). "preco" e chato; "preço" num caminho
+    # e defeito esperando acontecer.
+    base = _slug(_sem_acento(nome)) or f"{rot}-{int(time.time())}"
+    destino = library_root(projects_root) / "clips" / f"{rot}--{base}.mp4"
+    n = 2
+    while destino.exists():
+        destino = destino.with_name(f"{rot}--{base}-{n}.mp4")
+        n += 1
+    try:
+        from app.ffmpeg_tools import ffmpeg_bin
+
+        exe = ffmpeg_bin()
+    except Exception:  # noqa: BLE001
+        exe = "ffmpeg"
+    larg = int(round(altura * 9 / 16))
+    r = subprocess.run(
+        [exe, "-y", "-hide_banner", "-loglevel", "error",
+         "-ss", f"{ini:.3f}", "-i", str(video), "-t", f"{dur:.3f}",
+         "-vf", (f"scale={larg}:{altura}:force_original_aspect_ratio=increase,"
+                 f"crop={larg}:{altura},format=yuv420p"),
+         "-an", "-c:v", "libx264", "-crf", "20", "-preset", "veryfast",
+         str(destino)],
+        capture_output=True, text=True, timeout=180)
+    if r.returncode != 0 or not destino.exists():
+        raise OSError((r.stderr or "")[-200:] or "ffmpeg falhou")
+    return {"ok": True, "arquivo": destino.name, "categoria": rot,
+            "segundos": round(dur, 2),
+            "bytes": destino.stat().st_size}
 
 
 def copy_into_public(src: Path, public_dir: Path) -> dict[str, Any]:

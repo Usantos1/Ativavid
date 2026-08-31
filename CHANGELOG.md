@@ -1,5 +1,21 @@
 # Changelog
 
+## 4.33
+
+- **"Salvar na Biblioteca" no editor.** Marque o começo e o fim de um
+  trecho com **M** — a mesma marcação que você já usa para apontar legenda
+  errada — e o balão que abre agora tem, além de "Aplicar e enviar à fila",
+  o botão **Salvar na Biblioteca** com a categoria (reação, humor, meme,
+  viral). O trecho é recortado do vídeo que você está vendo, no ponto que
+  você viu, já em 1080×1920.
+- É a peça que faltava: a 4.31 e a 4.32 fizeram o vídeo de humor usar os
+  clipes da Biblioteca em tela cheia, mas a única forma de pôr um clipe lá
+  era recortar arquivo na mão, fora do app. Agora o acervo nasce do que
+  você já filmou — e é material seu, sem risco nenhum.
+- Nome com acento vira nome sem acento no arquivo ("reação" → `reacao`):
+  esse arquivo é copiado para dentro do projeto e vira caminho lido pelos
+  dois motores de render.
+
 ## 4.32
 
 - **A inserção de humor entra em tela cheia.** Antes ela caía no cartão de

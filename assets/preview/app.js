@@ -3243,6 +3243,56 @@ function toggleMark() {
   openNoteEditor(note.id, true);
 }
 
+/* Guarda o trecho marcado na Biblioteca, como clipe de b-roll.
+ *
+ * A 4.31/4.32 fizeram o video de humor USAR os clipes da Biblioteca, em
+ * tela cheia — e a unica forma de por um la era recortar arquivo na mao,
+ * fora do app. Aqui o acervo nasce do que ele ja filmou: marca com M o
+ * comeco e o fim da reacao e guarda.
+ *
+ * O tempo da nota e do RASCUNHO; quem corta e o arquivo que esta tocando,
+ * entao `draftToRendered` faz a conversao — sem isso o clipe sairia
+ * deslocado por tudo que foi removido antes dele. */
+async function guardarTrechoNaBiblioteca() {
+  const n = S.notes.find((x) => x.id === S.editingNote);
+  if (!n) return;
+  const btn = $('noteBiblioteca');
+  const cat = ($('noteCategoria') || {}).value || 'reacao';
+  const ini = draftToRendered(n.start);
+  const fim = draftToRendered(n.end);
+  if (!(fim - ini > 0.4)) {
+    toast('Trecho curto demais para guardar (mínimo 0,4s)', 2600);
+    return;
+  }
+  if (btn) { btn.disabled = true; btn.textContent = 'Guardando…'; }
+  try {
+    const r = await fetch(`${BASE}/api/library/trecho`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        arquivo: 'cut.mp4', inicio: ini, fim: fim, categoria: cat,
+        // O que ESTA na caixa, nao o que ja foi salvo na nota: quem
+        // clica em "Salvar na Biblioteca" acabou de digitar o nome e
+        // nunca passou pelo "Aplicar". No teste ao vivo o arquivo saiu
+        // como `humor--asset.mp4` — o nome digitado era ignorado.
+        nome: (($('noteText') || {}).value || n.text || '').trim().slice(0, 40),
+      }),
+    });
+    const d = await r.json();
+    if (!r.ok || d.ok === false) throw new Error(d.error || 'falhou');
+    toast(`✓ ${d.arquivo} guardado na Biblioteca (${d.segundos}s)`, 4200);
+    // A nota some: ela era a marcacao, nao um pedido de correcao.
+    S.notes = S.notes.filter((x) => x.id !== n.id);
+    S.editingNote = null;
+    $('noteEditor').classList.add('hidden');
+    renderNotes();
+  } catch (e) {
+    toast(e.message || 'Não deu para guardar o trecho', 4000);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Salvar na Biblioteca'; }
+  }
+}
+
 function openNoteEditor(id, isNew) {
   const n = S.notes.find((x) => x.id === id);
   if (!n) return;
@@ -6954,6 +7004,10 @@ $('noteOk').addEventListener('click', async () => {
   // Confirmar = salvar + voltar à fila (não só rascunho local)
   await saveEditsAndReturnToQueue();
 });
+$('noteBiblioteca')?.addEventListener('click', () => {
+  guardarTrechoNaBiblioteca().catch(() => {});
+});
+
 $('noteDelete').addEventListener('click', () => {
   S.notes = S.notes.filter((x) => x.id !== S.editingNote);
   S.editingNote = null;
