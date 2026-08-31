@@ -294,6 +294,27 @@ def _pedido_nao_aplicado(job: dict, edit: Path) -> None:
         return
 
 
+# O que o caminho RAPIDO sabe desenhar (`overlayReasons` do
+# `app/render_path.py`). Um FULL cujos motivos cabem todos aqui nao foi
+# escolha do classificador: foi o motor rapido estar desligado.
+_RAZOES_DO_RAPIDO = frozenset({
+    "captions", "hook", "end_card", "inserts", "flash", "logo",
+})
+
+
+# O motor proprio comecou a desenhar em 21/08/2026 (primeiro
+# `overlayEngine: proprio` nos projetos). Antes disso, um video no caminho
+# completo nao tinha alternativa — avisar sobre o que ninguem podia mudar e
+# a licao que este arquivo ja carrega. Depois, FULL sem falha significa que
+# o desenho rapido estava DESLIGADO, e ai e noticia.
+_MOTOR_PROPRIO_DESDE = "20260821"
+
+
+def _depois_do_motor_proprio(edit: Path) -> bool:
+    nome = edit.parent.name[:8]
+    return nome.isdigit() and nome >= _MOTOR_PROPRIO_DESDE
+
+
 def _aviso_do_motor(job: dict, edit: Path) -> None:
     """Diz quando o vídeo saiu pelo caminho LENTO — e por quê.
 
@@ -323,6 +344,18 @@ def _aviso_do_motor(job: dict, edit: Path) -> None:
     if {"OVERLAY_FAILED", "FALLBACK_FULL_REMOTION"} & razoes:
         job["motorNota"] = ("o desenho rápido falhou e o vídeo foi refeito "
                             "pelo caminho completo, cerca de 3x mais lento")
+        return
+    # Caminho completo SEM falha e com motivos que o rapido atende: o
+    # caminho rapido estava DESLIGADO na maquina. Acontece quando uma
+    # pausa do canary grava `overlayRollout=off` — e ai vale para todos os
+    # videos seguintes, nao so para este. Quatro videos dele sao assim
+    # (25/08 x3, 29/08 x1). Isto e noticia; o "caminho completo puro" de
+    # antes do motor proprio existir continua fora.
+    if (str(d.get("renderPath") or "") == "FULL" and not d.get("fallbackUsed")
+            and razoes and razoes <= _RAZOES_DO_RAPIDO
+            and _depois_do_motor_proprio(edit)):
+        job["motorNota"] = ("saiu pelo caminho completo, cerca de 3x mais "
+                            "lento — o desenho rápido estava desligado")
         return
     # Motor próprio de fora SEM motivo registrado: acontece em projeto
     # anterior à versão que passou a gravar o porquê. Dizer que foi lento

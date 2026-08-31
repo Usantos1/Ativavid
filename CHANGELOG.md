@@ -1,5 +1,21 @@
 # Changelog
 
+## 4.30
+
+- **O desenho rápido podia estar desligado sem ninguém saber.** Achei nos
+  arquivos do app: o motor rápido estava **pausado** por um pico de áudio de
+  0,09 dB — o mesmo caso que a 4.29 corrigiu. Quando isso acontece, o app
+  grava "modo desligado" e **todo vídeo seguinte** sai pelo caminho completo,
+  cerca de 3x mais lento (421s contra 1383s de média nos seus 413 jobs).
+  Seis vídeos seus saíram assim. Agora o diagnóstico avisa, com o motivo e a
+  data, e o card do vídeo conta quando foi esse o caso.
+- **68 GB para liberar, avisados onde você está.** A sua pasta tem 155 GB e
+  **68 GB dá para recuperar sem perder vídeo nenhum** — 34 GB de cópias
+  repetidas (viram atalho, nada é apagado) e 34 GB de arquivos que o app
+  refaz sozinho. Isso já era medido, mas só aparecia numa dica dentro de
+  Configurações. Agora aparece em Projetos, só a partir de 20 GB, e some ao
+  liberar. "Agora não" cala por 30 dias.
+
 ## 4.29
 
 - **Pico de áudio 0,1 dB acima do alvo não refaz mais o vídeo inteiro.**

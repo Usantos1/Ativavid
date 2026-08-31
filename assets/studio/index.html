@@ -238,6 +238,15 @@
                      autocomplete="off">
             </label>
           </div>
+          <!-- Espaco recuperavel. So aparece a partir de 20 GB e some ao
+               liberar; dispensar cala por 30 dias. -->
+          <div class="proj-espaco hidden" id="projEspaco">
+            <span class="proj-espaco-txt" id="projEspacoTxt"></span>
+            <span class="proj-espaco-acoes">
+              <button type="button" class="export-btn export-btn--sm" id="btnProjEspaco">Liberar espaço</button>
+              <button type="button" class="ghost-btn ghost-btn--sm" id="btnProjEspacoNao">Agora não</button>
+            </span>
+          </div>
           <!-- A conferencia mora aqui: ela le estes projetos e refaz os
                que sairam tortos. Fica fechada ate ser pedida — sao ~11s
                lendo 187 projetos, e quem abre Projetos quase sempre quer

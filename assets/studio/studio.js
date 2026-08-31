@@ -329,6 +329,10 @@ function setView(name) {
       if (r) r.textContent = "Não deu para rodar a checagem agora.";
     });
   }
+  if (name === "projetos") {
+    wireEspacoDosProjetos();
+    avisarEspaco().catch(() => {});
+  }
   if (name === "biblioteca") loadLibraryUi().catch(() => {});
   if (name === "presets") {
     loadPresetsUi().catch(() => {});
@@ -6029,6 +6033,78 @@ function wireIdentidade() {
     const tile = e.target.closest("[data-ident]");
     if (tile) alvoNoEstilo = tile.dataset.ident;
   });
+}
+
+/* Espaco recuperavel, avisado onde os projetos estao.
+ *
+ * Medido na maquina dele em 30/08: 68,4 GB (34,4 de copias duplicadas +
+ * 34,0 de intermediarios de projetos entregues). O app ja media isso e
+ * so contava numa dica dentro de Configuracoes > Avancado — tela onde
+ * ele nao entra.
+ *
+ * Piso de 20 GB para nao virar paisagem, e "Agora nao" cala por 30 dias. */
+const ESPACO_PISO_GB = 20;
+const ESPACO_SILENCIO_DIAS = 30;
+
+async function avisarEspaco() {
+  const caixa = $("#projEspaco");
+  if (!caixa) return;
+  try {
+    const ate = Number(localStorage.getItem("ativavid-espaco-adiado") || 0);
+    if (ate && Date.now() < ate) return;
+  } catch { /* sem localStorage: avisa mesmo assim */ }
+  let m;
+  try {
+    m = await api("/api/espaco");
+  } catch {
+    return;
+  }
+  const gb = Number((m && m.totalGb) || 0);
+  if (!(gb >= ESPACO_PISO_GB)) return;
+  const txt = $("#projEspacoTxt");
+  if (txt) {
+    txt.innerHTML = `Dá para liberar <strong>${gb.toFixed(0)} GB</strong> sem `
+      + `perder vídeo nenhum — ${Number(m.duplicatasGb || 0).toFixed(0)} GB de `
+      + `cópias repetidas e ${Number(m.intermediariosGb || 0).toFixed(0)} GB de `
+      + `arquivos que o app refaz sozinho.`;
+  }
+  caixa.classList.remove("hidden");
+}
+
+function wireEspacoDosProjetos() {
+  const caixa = $("#projEspaco");
+  if (!caixa || caixa.dataset.wired) return;
+  caixa.dataset.wired = "1";
+  const btn = $("#btnProjEspaco");
+  if (btn) {
+    btn.onclick = async () => {
+      btn.disabled = true;
+      btn.textContent = "Liberando…";
+      try {
+        const r = await api("/api/espaco/liberar", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: "{}",
+        });
+        toast(`✓ ${r.totalGb || 0} GB liberados`, 7000);
+        caixa.classList.add("hidden");
+      } catch (e) {
+        toast(e.message || "Não deu para liberar espaço");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Liberar espaço";
+      }
+    };
+  }
+  const nao = $("#btnProjEspacoNao");
+  if (nao) {
+    nao.onclick = () => {
+      try {
+        localStorage.setItem("ativavid-espaco-adiado",
+          String(Date.now() + ESPACO_SILENCIO_DIAS * 86400000));
+      } catch { /* ignore */ }
+      caixa.classList.add("hidden");
+    };
+  }
 }
 
 function wirePresets() {

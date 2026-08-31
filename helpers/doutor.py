@@ -293,6 +293,54 @@ def checar_sistema() -> None:
         diz(AVISO, "Não consegui ler o hardware", str(e)[:120])
 
 
+def checar_motor_rapido() -> None:
+    """O desenho rapido esta ligado?
+
+    Ele e 3,3x mais rapido (421s contra 1383s de media nos 413 jobs
+    registrados). Uma pausa do canary grava `overlayRollout=off` e, dai em
+    diante, TODO video sai pelo caminho completo — sem nada na tela. Na
+    maquina do usuario havia uma pausa de "TRUE_PEAK -0,9" e quatro videos
+    lentos por causa dela.
+    """
+    try:
+        sys.path.insert(0, str(SKILL))
+        from app.overlay_path import overlay_rollout
+    except Exception as e:  # noqa: BLE001
+        diz(AVISO, "Nao consegui ler o modo do desenho", str(e)[:120])
+        return
+    modo = overlay_rollout()
+    pausa = {}
+    try:
+        from app.overlay_canary import load_state
+
+        st = load_state() or {}
+        if st.get("paused"):
+            pausa = {"motivo": str(st.get("pausedReason") or "sem motivo"),
+                     "quando": str(st.get("pausedAt") or "")}
+    except Exception:  # noqa: BLE001
+        pass
+
+    if modo == "default" and not pausa:
+        diz(OK, "Desenho rapido ligado", "Videos saem pelo motor proprio.")
+        return
+    if modo == "off":
+        detalhe = "Todo video sai pelo caminho completo, cerca de 3x mais lento."
+        if pausa:
+            detalhe += (f" Foi desligado por '{pausa['motivo']}'"
+                        + (f" em {pausa['quando'][:10]}" if pausa["quando"] else "")
+                        + ".")
+        diz(AVISO, "Desenho rapido DESLIGADO", detalhe,
+            "Configuracoes > Avancado > Motor de render: Automatico.")
+        return
+    if pausa:
+        diz(AVISO, "Desenho rapido pausado",
+            f"Motivo: {pausa['motivo']}"
+            + (f" ({pausa['quando'][:10]})" if pausa["quando"] else ""),
+            "Se o defeito ja foi corrigido, o modo Automatico volta a usa-lo.")
+        return
+    diz(OK, f"Desenho rapido em modo {modo}")
+
+
 def main() -> int:
     # Sem argparse (nao ha flags de verdade a parsear), mas --help tem de
     # responder como em todo helper daqui: o selftest cobra isso de todos, e
@@ -302,8 +350,8 @@ def main() -> int:
         print(__doc__ or "uso: doutor.py [--json]")
         return 0
 
-    for fn in (checar_programas, checar_sistema, checar_chaves, checar_python,
-               checar_espaco, checar_processos):
+    for fn in (checar_programas, checar_sistema, checar_motor_rapido,
+               checar_chaves, checar_python, checar_espaco, checar_processos):
         try:
             fn()
         except Exception as e:  # noqa: BLE001 — um check quebrado nao pode derrubar o diagnostico

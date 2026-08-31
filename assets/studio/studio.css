@@ -3827,3 +3827,22 @@ video.lib-thumb { aspect-ratio: 9 / 16; max-height: 260px; object-fit: contain;
   color: var(--bad);
   background: color-mix(in srgb, var(--bad) 16%, transparent);
 }
+
+/* Aviso de espaco em Projetos (4.30). Uma linha, tom de informacao — nao
+   e erro nem chamada para acao urgente. */
+.proj-espaco {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin: 0 0 14px;
+  padding: 11px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  font-size: 13px;
+  color: var(--dim);
+}
+.proj-espaco-acoes { display: inline-flex; gap: 8px; align-items: center; }
+.proj-espaco strong { color: var(--text); }
