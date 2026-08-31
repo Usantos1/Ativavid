@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -201,6 +202,26 @@ def list_devices(license_key: str | None = None, limit: int = 50) -> dict[str, A
     return {"ok": True, "devices": data if isinstance(data, list) else [], "via": "service_role"}
 
 
+def _dias_de_trial(inicio: str | None) -> int | None:
+    """Dias que ainda faltam, pela MESMA conta do servidor.
+
+    O `rpc_license.sql` usa `ceil((started_at + 7 dias - now())/86400)`; a
+    tela precisa mostrar o mesmo numero que o PC do cliente mostra, senao
+    a conferencia nao serve para nada.
+    """
+    if not inicio:
+        return None
+    try:
+        from app.license import TRIAL_DAYS_LOCAL
+
+        ini = datetime.fromisoformat(str(inicio).replace("Z", "+00:00"))
+    except (ValueError, ImportError):
+        return None
+    fim = ini + timedelta(days=TRIAL_DAYS_LOCAL)
+    faltam = (fim - datetime.now(timezone.utc)).total_seconds() / 86400.0
+    return max(0, math.ceil(faltam))
+
+
 def list_aberturas(limit: int = 300) -> dict[str, Any]:
     """As aberturas do app, agrupadas por MAQUINA.
 
@@ -226,10 +247,24 @@ def list_aberturas(limit: int = 300) -> dict[str, Any]:
     linhas = data if isinstance(data, list) else []
 
     code2, devs = _rest_service(
-        "GET", "devices?select=device_id,blocked_at,blocked_reason,license_id&limit=1000")
+        "GET", "devices?select=device_id,blocked_at,blocked_reason,license_id,"
+        "last_seen&limit=1000")
     bloq = {}
     if code2 < 400 and isinstance(devs, list):
         bloq = {str(d.get("device_id")): d for d in devs}
+
+    # O trial e por MAQUINA e comeca no PRIMEIRO CONTATO com o servidor —
+    # nao na instalacao. "Tenho um PC com vários dias de instalação e ainda
+    # mostra trial 4 dias" (31/08) so tem resposta com esta data na tela,
+    # ao lado da primeira abertura: se o trial nasceu DEPOIS da primeira
+    # abertura, alguma coisa esta errada; se nasceu junto, o PC ficou dias
+    # instalado sem ninguem abrir.
+    code3, trials = _rest_service(
+        "GET", "trials?select=device_id,started_at&limit=2000")
+    inicio_trial: dict[str, str] = {}
+    if code3 < 400 and isinstance(trials, list):
+        inicio_trial = {str(t.get("device_id")): str(t.get("started_at") or "")
+                        for t in trials}
 
     por_maquina: dict[str, dict[str, Any]] = {}
     for ln in linhas:
@@ -243,6 +278,8 @@ def list_aberturas(limit: int = 300) -> dict[str, Any]:
         })
         m["aberturas"] += 1
         quando = str(ln.get("criado_em") or "")
+        if quando and (not m.get("primeira") or quando < str(m["primeira"])):
+            m["primeira"] = quando
         if not m["ultima"] or quando > str(m["ultima"]):
             m["ultima"] = quando
             m["host"] = ln.get("host")
@@ -250,11 +287,31 @@ def list_aberturas(limit: int = 300) -> dict[str, Any]:
             m["so"] = ln.get("so")
             m["versao"] = ln.get("app_version")
             m["licenca"] = ln.get("licenca")
+    # Maquina que TEM trial mas nunca registrou abertura existe de verdade:
+    # o registro de aberturas so comecou na 4.27, entao todo PC em versao
+    # anterior ficava invisivel aqui — dos 3 trials da conta, a tela
+    # mostrava 1 maquina. Um painel que esconde justamente quem esta em
+    # trial nao serve para vigiar trial nenhum.
+    for did in set(inicio_trial) | set(bloq):
+        if did and did not in por_maquina:
+            por_maquina[did] = {
+                "deviceId": did, "aberturas": 0, "ultima": None,
+                "primeira": None, "host": None, "usuario": None,
+                "so": None, "versao": None, "licenca": None,
+                "semRegistro": True,
+            }
     for did, m in por_maquina.items():
         d = bloq.get(did) or {}
+        # `last_seen` do servidor cobre quem nao aparece no log de aberturas:
+        # sem isto a coluna "ultima" ficaria vazia justamente nesses PCs.
+        visto = str(d.get("last_seen") or "")
+        if visto and (not m.get("ultima") or visto > str(m["ultima"])):
+            m["ultima"] = visto
         m["bloqueado"] = bool(d.get("blocked_at"))
         m["motivo"] = d.get("blocked_reason")
         m["temLicenca"] = bool(d.get("license_id"))
+        m["trialInicio"] = inicio_trial.get(did) or None
+        m["trialDias"] = _dias_de_trial(m["trialInicio"])
     ordenado = sorted(por_maquina.values(),
                       key=lambda m: str(m.get("ultima") or ""), reverse=True)
     return {"ok": True, "maquinas": ordenado, "eventos": len(linhas)}

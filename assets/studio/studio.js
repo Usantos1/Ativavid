@@ -1565,8 +1565,25 @@ async function loadAberturas() {
     const dt = new Date(iso);
     return Number.isNaN(dt.getTime()) ? "—" : dt.toLocaleString("pt-BR");
   };
+  // Dia e hora curtos: a coluna e estreita e o ano nao ajuda a decidir nada.
+  const dia = (iso) => {
+    if (!iso) return "—";
+    const dt = new Date(iso);
+    return Number.isNaN(dt.getTime()) ? "—"
+      : dt.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+  };
+  // O trial comeca no PRIMEIRO CONTATO com o servidor, nao na instalacao.
+  // Ver "1a abertura" e "Trial" lado a lado e o que responde "esse PC esta
+  // instalado ha dias e ainda mostra 4 dias".
+  const trial = (m) => {
+    if (m.trialDias == null) return m.temLicenca ? "licenciado" : "—";
+    if (m.trialDias <= 0) return `<span class="lic-tag-bloq">acabou</span>`;
+    return `${m.trialDias} dia${m.trialDias === 1 ? "" : "s"}<br>`
+      + `<span class="hint">desde ${dia(m.trialInicio)}</span>`;
+  };
   tabela.innerHTML = `<table class="admin-tbl"><thead><tr>
-      <th>Máquina</th><th>Quem</th><th>Aberturas</th><th>Última</th><th>Versão</th><th></th>
+      <th>Máquina</th><th>Quem</th><th>Aberturas</th><th>1ª abertura</th>
+      <th>Última</th><th>Trial</th><th>Versão</th><th></th>
     </tr></thead><tbody>${linhas.map((m) => {
       const nome = escapeHtml(m.host || "—");
       const quem = escapeHtml([m.usuario, m.licenca].filter(Boolean).join(" · ") || "—");
@@ -1578,7 +1595,9 @@ async function loadAberturas() {
           m.bloqueado ? ' <span class="lic-tag-bloq">bloqueado</span>' : ""}</td>
         <td>${nome}${quem !== "—" ? `<br><span class="hint">${quem}</span>` : ""}</td>
         <td>${m.aberturas || 0}</td>
+        <td>${quando(m.primeira)}</td>
         <td>${quando(m.ultima)}</td>
+        <td>${trial(m)}</td>
         <td>${escapeHtml(m.versao || "—")}</td>
         <td><button type="button" class="${classe}" data-bloq="${acao}"
              data-dev="${escapeHtml(m.deviceId || "")}">${rotulo}</button></td>

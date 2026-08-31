@@ -1,5 +1,23 @@
 # Changelog
 
+## 4.37
+
+- **O painel de máquinas passa a mostrar o trial.** Duas colunas novas:
+  *1ª abertura* e *Trial* (dias que faltam e desde quando). Era a única
+  pergunta que o painel não respondia — "esse PC está instalado há dias e
+  ainda mostra 4 dias, por quê?".
+- **Máquina em trial sem registro de abertura agora aparece.** O registro
+  de aberturas só existe desde a 4.27; PC em versão anterior ficava
+  invisível. Na conta real eram 3 trials e a tela mostrava 1 máquina — um
+  painel que esconde justamente quem está em trial não vigia trial nenhum.
+- A conta dos dias é a mesma do servidor, para o número no painel bater
+  com o número que o cliente vê na tela dele.
+
+Vale saber: **o trial começa no primeiro contato com o servidor, não na
+instalação.** Um PC instalado antes e aberto depois só começa a contar
+quando abre — por isso um computador "com vários dias de instalação" pode
+estar no quarto dia de trial.
+
 ## 4.36
 
 - **A fila também para quando a licença cai.** O bloqueio cobria a hora de
