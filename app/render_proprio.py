@@ -4293,6 +4293,15 @@ def render_final_uma_passada(
     primary, flags = encoder_args()
 
     def _passada(enc: str, extra: list[str]) -> bool:
+        # `nonlocal` porque a linha "progresso = None" la embaixo (quando
+        # quem escuta quebra) tornava `progresso` LOCAL desta funcao — e a
+        # leitura, no primeiro quadro, batia em UnboundLocalError. Efeito:
+        # com barra de progresso ligada a passada unica levantava SEMPRE, e
+        # o render caia no caminho de duas etapas, que escreve um
+        # overlay.mov de ~150 MB e le de volta. Aconteceu em 3 dos 174
+        # projetos (os que passam callback, que sao os de "aplicar
+        # alteracoes") e ficava so no timing.json, calado.
+        nonlocal progresso
         ff = subprocess.Popen(
             ["ffmpeg", "-y", "-hide_banner", "-nostats", "-loglevel", "error",
              *inputs, "-filter_complex", fc,

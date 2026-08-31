@@ -243,6 +243,8 @@ def write_timing(edit_dir: Path) -> dict:
         payload["musicaFonte"] = _RENDER_META["musicaFonte"]
     if _RENDER_META.get("musicaMotivo"):
         payload["musicaMotivo"] = _RENDER_META["musicaMotivo"]
+    if _RENDER_META.get("truePeakAcima") is not None:
+        payload["truePeakAcima"] = _RENDER_META["truePeakAcima"]
     if _RENDER_META.get("nivelAjustado"):
         payload["nivelAjustado"] = _RENDER_META["nivelAjustado"]
     if _RENDER_META.get("musicaMotorRecusa"):
@@ -272,6 +274,11 @@ def write_timing(edit_dir: Path) -> dict:
     )
     return payload
 
+
+# Ate onde o pico pode passar do alvo (-1,0 dBTP) sem o video ser
+# refeito. -0,5 sai da distribuicao real: dos 174 videos medidos, 13 dos
+# 14 excessos ficaram dentro disso e nenhum retrabalho corrigiu nenhum.
+TRUE_PEAK_TOLERADO = -0.5
 
 def _canary_validate_overlay(
     final: Path, edit_data: dict, ov_result: dict | None,
@@ -318,8 +325,20 @@ def _canary_validate_overlay(
     _RENDER_META["LUFS"] = au.get("integratedLufs")
     _RENDER_META["truePeak"] = au.get("truePeakDb")
     tp = au.get("truePeakDb")
+    # Excesso PEQUENO nao vale refazer o video. Medido nos 174 videos com
+    # pico registrado: 14 ficaram acima de -1,0 e 13 deles por no maximo
+    # 0,49 dB. Seis desses refizeram tudo no Remotion (484s, 533s, 207s...
+    # so de render) e o pico FINAL continuou acima — a queda nao consertou
+    # o que a motivou. Acima de 0,5 dB de excesso (1 dos 174) a queda
+    # continua: ali nao e arredondamento de medicao.
     if tp is not None and float(tp) > -0.99:
-        return f"TRUE_PEAK {tp}>-1.0"
+        if float(tp) <= TRUE_PEAK_TOLERADO:
+            _RENDER_META["truePeakAcima"] = float(tp)
+            print(f"[audio] pico {tp} dBTP (alvo -1,0) — dentro da folga de "
+                  f"{abs(TRUE_PEAK_TOLERADO + 0.99):.2f} dB, entregue assim",
+                  flush=True)
+        else:
+            return f"TRUE_PEAK {tp}>-1.0"
     if ov_result and ov_result.get("tempCleanupDone") is False:
         return "TEMP_CLEANUP_FAILED"
     alpha = (ov_result or {}).get("alpha") or {}

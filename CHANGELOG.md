@@ -1,5 +1,21 @@
 # Changelog
 
+## 4.29
+
+- **Pico de áudio 0,1 dB acima do alvo não refaz mais o vídeo inteiro.**
+  Medindo os seus 174 vídeos: 14 ficaram acima do limite e **13 deles por no
+  máximo 0,49 dB**. Seis desses foram refeitos do zero no Chrome por causa
+  disso — 484s, 533s, 207s só de render — e o pico final continuou acima
+  mesmo depois. Agora o ajuste de áudio roda como sempre e, se sobrar um
+  excesso pequeno, o vídeo é entregue com o número registrado. Excesso
+  grande (1 dos 174) continua caindo.
+- **O caminho rápido de render voltou a funcionar quando há barra de
+  progresso.** Uma variável escrita dentro de uma função aninhada, sem
+  `nonlocal`, fazia a passada única estourar no primeiro quadro — e o vídeo
+  caía no caminho de duas etapas, que grava um arquivo de ~150 MB e o lê de
+  volta. Aparecia em 3 dos 174 projetos, só no registro técnico, sem avisar
+  ninguém. Um teste novo varre o código inteiro procurando essa mesma forma.
+
 ## 4.28
 
 - **Bloquear um computador não bloqueava nada — agora bloqueia.** Testei
