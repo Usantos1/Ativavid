@@ -279,6 +279,7 @@ class DesktopHandler(ps.Handler):
             "/api/license",
             "/api/auth",
             "/api/admin/licenses",
+            "/api/admin/aberturas",
             "/api/admin/access",
             "/api/admin/devices",
         ):

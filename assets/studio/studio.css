@@ -3813,3 +3813,17 @@ video.lib-thumb { aspect-ratio: 9 / 16; max-height: 260px; object-fit: contain;
 .lic-suporte-copy .hint { margin: 0; max-width: 46ch; }
 .lic-suporte-acoes { display: inline-flex; align-items: center; gap: 10px; }
 .lic-suporte-num { font-size: 12.5px; color: var(--dim); white-space: nowrap; }
+
+/* Registro de aberturas (4.28): a linha bloqueada precisa se distinguir
+   sem depender so do texto do botao. */
+.admin-tbl tr.is-bloqueado { opacity: .72; }
+.lic-tag-bloq {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--bad);
+  background: color-mix(in srgb, var(--bad) 16%, transparent);
+}

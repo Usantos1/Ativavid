@@ -350,6 +350,27 @@ def _call(action: str, extra: dict[str, Any] | None = None) -> dict[str, Any]:
     return _apply_update_gate(data)
 
 
+def _device_bloqueado() -> bool:
+    """Esta maquina esta na lista de bloqueio do servidor?
+
+    A `ativavid_license` do banco NAO consulta isso (medido em 30/08:
+    bloquear um device nao mudava uma virgula da resposta dela). Enquanto
+    o servidor nao checar, quem checa e o cliente — com a mesma funcao,
+    que ja existe no banco.
+
+    Falha de rede devolve False de proposito: uma consulta que nao
+    respondeu nao pode barrar cliente pagante.
+    """
+    try:
+        code, data = _http_rpc({"p_device_id": device_id()},
+                               fn="ativavid_device_blocked")
+    except Exception:  # noqa: BLE001
+        return False
+    if code >= 400:
+        return False
+    return data is True or str(data).strip().lower() == "true"
+
+
 def _expired(valid_until: Any) -> bool:
     """True se validUntil já passou. Desconhecido/ausente não expira."""
     if not valid_until:
@@ -557,6 +578,17 @@ def entitlement(*, refresh: bool = False) -> dict[str, Any]:
         _save_blob(blob)
     if remote.get("error") and remote.get("mode") not in ("blocked", "update_required"):
         remote = _call("status")
+    # A maquina pode estar liberada pela licenca E bloqueada por
+    # compartilhamento — sao coisas diferentes, e so a segunda resolve o
+    # caso "a mesma chave rodando em quatro PCs". So pergunta quando o
+    # servidor liberou: quem ja esta barrado nao precisa de outra viagem.
+    if remote.get("entitled") and not remote.get("offline") and _device_bloqueado():
+        remote = dict(remote)
+        remote["entitled"] = False
+        remote["mode"] = "blocked"
+        remote["error"] = "device_blocked"
+        remote["message"] = (
+            "Este computador foi bloqueado. Fale com o suporte do ATIVAVID.")
     status = _cache(remote)
     status["ok"] = True
     status["deviceId"] = device_id()

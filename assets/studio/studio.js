@@ -1468,6 +1468,10 @@ function syncLicenseChrome() {
     if (justOpened) {
       loadAccessList().catch(() => {});
       loadDeviceList().catch(() => {});
+      // O registro de aberturas ("onde vou ver o log?") mora no mesmo
+      // painel: e aqui que ele libera dispositivo e revoga conta.
+      loadAberturas().catch(() => {});
+      wireAberturas();
     }
   }
   const pay = $("#licAccountStrip");
@@ -1500,6 +1504,127 @@ const SUPORTE = {
  *
  * A mensagem ja leva o identificador da maquina: e a primeira coisa que
  * o suporte pergunta e o cliente nao sabe onde achar. */
+/* O registro de aberturas, agrupado por maquina.
+ *
+ * "onde vou ver o log?" (30/08). Uma linha por abertura seria ilegivel —
+ * o app abre varias vezes por dia. O que responde "esta compartilhando?"
+ * e QUANTAS maquinas existem e com que frequencia cada uma abre.
+ *
+ * Sem o SQL aplicado a tela diz isso, com a instrucao: tabela vazia
+ * pareceria defeito. */
+async function loadAberturas() {
+  const cap = $("#adminAberturasCaption");
+  const lista = $("#adminAberturasList");
+  const vazio = $("#adminAberturasEmpty");
+  const tabela = $("#adminAberturasTable");
+  if (!cap || !lista) return;
+  let d;
+  try {
+    d = await api("/api/admin/aberturas");
+  } catch {
+    return;
+  }
+  cap.hidden = false;
+  lista.hidden = false;
+  if (!d || d.ok === false) {
+    if (tabela) { tabela.hidden = true; tabela.innerHTML = ""; }
+    if (vazio) {
+      vazio.hidden = false;
+      vazio.textContent = (d && d.message)
+        || "Não deu para ler o registro agora.";
+    }
+    return;
+  }
+  const linhas = d.maquinas || [];
+  if (!linhas.length) {
+    if (tabela) { tabela.hidden = true; tabela.innerHTML = ""; }
+    if (vazio) {
+      vazio.hidden = false;
+      vazio.textContent = "Nenhuma abertura registrada ainda — o registro "
+        + "começa a chegar quando alguém abrir a versão 4.27 ou mais nova.";
+    }
+    return;
+  }
+  if (vazio) vazio.hidden = true;
+  if (!tabela) return;
+  tabela.hidden = false;
+  const quando = (iso) => {
+    if (!iso) return "—";
+    const dt = new Date(iso);
+    return Number.isNaN(dt.getTime()) ? "—" : dt.toLocaleString("pt-BR");
+  };
+  tabela.innerHTML = `<table class="admin-tbl"><thead><tr>
+      <th>Máquina</th><th>Quem</th><th>Aberturas</th><th>Última</th><th>Versão</th><th></th>
+    </tr></thead><tbody>${linhas.map((m) => {
+      const nome = escapeHtml(m.host || "—");
+      const quem = escapeHtml([m.usuario, m.licenca].filter(Boolean).join(" · ") || "—");
+      const acao = m.bloqueado ? "unblock" : "block";
+      const rotulo = m.bloqueado ? "Desbloquear" : "Bloquear";
+      const classe = m.bloqueado ? "ghost-btn ghost-btn--sm" : "ghost-btn ghost-btn--sm preset-del";
+      return `<tr${m.bloqueado ? ' class="is-bloqueado"' : ""}>
+        <td><span class="mono">${escapeHtml(m.deviceId || "")}</span>${
+          m.bloqueado ? ' <span class="lic-tag-bloq">bloqueado</span>' : ""}</td>
+        <td>${nome}${quem !== "—" ? `<br><span class="hint">${quem}</span>` : ""}</td>
+        <td>${m.aberturas || 0}</td>
+        <td>${quando(m.ultima)}</td>
+        <td>${escapeHtml(m.versao || "—")}</td>
+        <td><button type="button" class="${classe}" data-bloq="${acao}"
+             data-dev="${escapeHtml(m.deviceId || "")}">${rotulo}</button></td>
+      </tr>`;
+    }).join("")}</tbody></table>`;
+}
+
+function wireAberturas() {
+  const tabela = $("#adminAberturasTable");
+  if (tabela && !tabela.dataset.wired) {
+    tabela.dataset.wired = "1";
+    tabela.addEventListener("click", async (e) => {
+      const btn = e.target.closest("[data-bloq]");
+      if (!btn) return;
+      const dev = btn.dataset.dev || "";
+      const bloquear = btn.dataset.bloq === "block";
+      if (bloquear) {
+        const ok = await pedirConfirmacao(
+          "Bloquear este computador?",
+          `O ATIVAVID para de funcionar em ${dev}. Ficar offline ou atrasar `
+          + "o relógio não devolve o acesso. Dá para desbloquear aqui mesmo.",
+          "Bloquear", true);
+        if (!ok) return;
+      }
+      try {
+        const r = await api("/api/admin/devices", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: bloquear ? "block" : "unblock", deviceId: dev,
+            motivo: bloquear ? "compartilhamento" : "",
+          }),
+        });
+        if (r && r.ok === false) throw new Error(r.message || "falhou");
+        toast(bloquear ? "Computador bloqueado" : "Computador liberado");
+        await loadAberturas();
+      } catch (err) {
+        toast(err.message || "Não deu para aplicar");
+      }
+    });
+  }
+  const btnLocal = $("#btnAberturasLocal");
+  if (btnLocal && !btnLocal.dataset.wired) {
+    btnLocal.dataset.wired = "1";
+    btnLocal.onclick = async () => {
+      try {
+        await api("/api/open-path", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path: "~/ATIVAVID/aberturas.jsonl" }),
+        });
+      } catch (e) {
+        toast(e.message || "Não achei o registro desta máquina");
+      }
+    };
+  }
+}
+
 function renderSuporte(lic) {
   const box = $("#licSuporte");
   if (!box) return;
@@ -4357,6 +4482,7 @@ function wireForms() {
     btnAdminListAccess.onclick = async () => {
       try {
         const data = await loadAccessList();
+        loadAberturas().catch(() => {});
         adminOut(data);
         const n = (data.access || []).length;
         toast(data.ok ? `${n} acesso(s)` : (data.message || "Falha"));

@@ -842,17 +842,28 @@ class Handler(BaseHTTPRequestHandler):
         # e o texto do card final. Sem gravar aqui, trocar a marca na tela
         # mudava o editor e o video saia com a marca velha assim mesmo.
         marca = str(body.get("brandId") or "").strip()
-        if body.get("type") == "style-setup" and marca:
+        # O PRESET escolhido na linha de cima do editor (4.28). Ate entao
+        # aquela linha trocava a MARCA, conceito que saiu do app na 4.19 —
+        # quem decide cor, legenda e cartao final e o preset.
+        preset_id = str(body.get("brandPresetId") or "").strip()
+        if body.get("type") == "style-setup" and (marca or preset_id):
             try:
                 from app.editing_intent import load as _lm, save as _sm
 
                 atual = _lm(self.root) or {}
-                if str(atual.get("brandId") or "") != marca:
+                mudou = False
+                if marca and str(atual.get("brandId") or "") != marca:
                     atual["brandId"] = marca
+                    mudou = True
+                if preset_id and str(atual.get("brandPresetId") or "") != preset_id:
+                    atual["brandPresetId"] = preset_id
+                    mudou = True
+                if mudou:
                     _sm(self.root, atual)
-                    print(f"[estilo] marca do vídeo → {marca}", flush=True)
+                    print(f"[estilo] preset do vídeo → {preset_id or marca}",
+                          flush=True)
             except Exception as e:  # noqa: BLE001 - estilo salva mesmo assim
-                print(f"[estilo] marca não gravada: {e}", flush=True)
+                print(f"[estilo] preset não gravado: {e}", flush=True)
         out = self.root / name
         tmp = out.with_suffix(".tmp")
         tmp.write_text(json.dumps(body, ensure_ascii=False, indent=2), encoding="utf-8")

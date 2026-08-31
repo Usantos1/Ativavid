@@ -102,6 +102,10 @@ as $$
   );
 $$;
 
+-- O APP consulta esta funcao a cada validacao (4.28): enquanto a
+-- ativavid_license nao checar o bloqueio, quem checa e o cliente.
+grant execute on function public.ativavid_device_blocked(text) to anon, authenticated;
+
 -- ------------------------------------------------------------ admin
 -- Bloquear / desbloquear uma máquina. Só service role (o painel do admin).
 create or replace function public.ativavid_block_device(
@@ -117,6 +121,12 @@ as $$
 declare
   v_n int;
 begin
+  -- Sem esta guarda um device_id vazio criava uma linha em branco na
+  -- tabela (aconteceu ao testar em 30/08).
+  if p_device_id is null or length(trim(p_device_id)) = 0 then
+    return json_build_object('ok', false, 'error', 'device_id_required');
+  end if;
+
   insert into public.devices (device_id) values (trim(p_device_id))
   on conflict (device_id) do nothing;
 

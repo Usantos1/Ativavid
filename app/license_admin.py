@@ -201,6 +201,93 @@ def list_devices(license_key: str | None = None, limit: int = 50) -> dict[str, A
     return {"ok": True, "devices": data if isinstance(data, list) else [], "via": "service_role"}
 
 
+def list_aberturas(limit: int = 300) -> dict[str, Any]:
+    """As aberturas do app, agrupadas por MAQUINA.
+
+    Uma linha por abertura seria ilegivel (o app abre varias vezes por
+    dia); o que responde "esta sendo compartilhado?" e quantas maquinas
+    diferentes existem e com que frequencia cada uma abre.
+
+    Sem o SQL aplicado, a tabela nao existe e o PostgREST devolve 404 —
+    isso vira um recado com a instrucao, nao um erro tecnico.
+    """
+    limit = max(1, min(int(limit or 300), 1000))
+    code, data = _rest_service(
+        "GET",
+        "aberturas?select=device_id,host,os_user,so,app_version,licenca,criado_em"
+        f"&order=criado_em.desc&limit={limit}",
+    )
+    if code == 404 or (isinstance(data, dict) and "aberturas" in str(data.get("message") or "")):
+        return {"ok": False, "error": "sem_tabela", "message": (
+            "Falta aplicar o SQL: Supabase → SQL Editor → cole "
+            "supabase/registro_de_uso.sql → Run.")}
+    if code >= 400:
+        return {"ok": False, "status": code, "error": data}
+    linhas = data if isinstance(data, list) else []
+
+    code2, devs = _rest_service(
+        "GET", "devices?select=device_id,blocked_at,blocked_reason,license_id&limit=1000")
+    bloq = {}
+    if code2 < 400 and isinstance(devs, list):
+        bloq = {str(d.get("device_id")): d for d in devs}
+
+    por_maquina: dict[str, dict[str, Any]] = {}
+    for ln in linhas:
+        did = str(ln.get("device_id") or "")
+        if not did:
+            continue
+        m = por_maquina.setdefault(did, {
+            "deviceId": did, "aberturas": 0, "ultima": None,
+            "host": None, "usuario": None, "so": None, "versao": None,
+            "licenca": None,
+        })
+        m["aberturas"] += 1
+        quando = str(ln.get("criado_em") or "")
+        if not m["ultima"] or quando > str(m["ultima"]):
+            m["ultima"] = quando
+            m["host"] = ln.get("host")
+            m["usuario"] = ln.get("os_user")
+            m["so"] = ln.get("so")
+            m["versao"] = ln.get("app_version")
+            m["licenca"] = ln.get("licenca")
+    for did, m in por_maquina.items():
+        d = bloq.get(did) or {}
+        m["bloqueado"] = bool(d.get("blocked_at"))
+        m["motivo"] = d.get("blocked_reason")
+        m["temLicenca"] = bool(d.get("license_id"))
+    ordenado = sorted(por_maquina.values(),
+                      key=lambda m: str(m.get("ultima") or ""), reverse=True)
+    return {"ok": True, "maquinas": ordenado, "eventos": len(linhas)}
+
+
+def block_device(device_id: str, *, block: bool = True,
+                 reason: str = "") -> dict[str, Any]:
+    """Bloqueia (ou libera) UMA maquina.
+
+    O app 4.27+ grava o veredito: depois de bloqueada, ficar offline ou
+    atrasar o relogio nao devolve a licenca.
+    """
+    did = (device_id or "").strip()
+    if not did:
+        return {"ok": False, "error": "device_id_required"}
+    c = _cfg()
+    if not c["url"] or not c["service"]:
+        return {"ok": False, "error": "admin_not_configured",
+                "message": "Service role necessária."}
+    code, data = _rest_service("POST", "rpc/ativavid_block_device", {
+        "p_device_id": did,
+        "p_reason": (reason or "").strip() or None,
+        "p_block": bool(block),
+    })
+    if code == 404:
+        return {"ok": False, "error": "sem_funcao", "message": (
+            "Falta aplicar o SQL: Supabase → SQL Editor → cole "
+            "supabase/registro_de_uso.sql → Run.")}
+    if code >= 400:
+        return {"ok": False, "status": code, "error": data}
+    return {"ok": True, "deviceId": did, "bloqueado": bool(block)}
+
+
 def create_auth_user(*, email: str, password: str) -> dict[str, Any]:
     """Cria usuário no Supabase Auth (service role). Confirma e-mail automaticamente."""
     c = _cfg()

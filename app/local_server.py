@@ -1971,6 +1971,16 @@ class StudioHandler(BaseHTTPRequestHandler):
             key = (qs.get("licenseKey") or qs.get("key") or [None])[0]
             self._json(la.list_devices(license_key=key))
             return
+        if path == "/api/admin/aberturas":
+            from app import auth as au
+            from app import license_admin as la
+
+            if not au.require_admin().get("isAdmin"):
+                self._json({"ok": False, "error": "forbidden"}, 403)
+                return
+            self._json(la.list_aberturas())
+            return
+
         if path == "/api/doutor":
             self._json(run_doutor())
             return
@@ -2557,6 +2567,14 @@ class StudioHandler(BaseHTTPRequestHandler):
             body = self._read_json() or {}
             action = str(body.get("action") or "release").strip().lower()
             did = str(body.get("deviceId") or body.get("device_id") or "")
+            # "release" libera a VAGA da licenca; "block" impede a maquina
+            # de rodar, que e outra coisa — e a que resolve compartilhamento.
+            if action in ("block", "unblock"):
+                self._json(la.block_device(
+                    did, block=(action == "block"),
+                    reason=str(body.get("motivo") or body.get("reason") or ""),
+                ))
+                return
             if action == "release":
                 self._json(la.release_device(did))
                 return

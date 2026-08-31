@@ -1,5 +1,24 @@
 # Changelog
 
+## 4.28
+
+- **Bloquear um computador não bloqueava nada — agora bloqueia.** Testei
+  contra o servidor de verdade: marcar uma máquina como bloqueada não mudava
+  **uma vírgula** na resposta da licença. A função existia no banco e
+  ninguém a consultava, nem para uma máquina com licença válida. Agora o app
+  pergunta a cada validação. Medido de ponta a ponta: licença boa + máquina
+  bloqueada = sem acesso, o veredito fica gravado, ficar offline não devolve,
+  e desbloquear volta na hora.
+- **O registro de aberturas ganhou tela.** Em Licença, no seu painel de
+  admin: uma linha por **máquina** com quantas vezes abriu, a última vez,
+  quem, a versão — e o botão **Bloquear**. O link "registro deste PC" abre o
+  arquivo local da máquina em que você está.
+- **A tela do vídeo mostra o PRESET, não mais a marca.** "Marca deste vídeo"
+  virou "Preset deste vídeo" e lista os presets de verdade; trocar ali aplica
+  o estilo e o cartão final e o vídeo sai assim ao refazer. O menu lateral do
+  editor também perdeu o item "Marca", que tinha ficado para trás desde a
+  4.19.
+
 ## 4.27
 
 - **Bloquear um computador agora funciona mesmo sem internet.** Testando o

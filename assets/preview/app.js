@@ -2798,7 +2798,7 @@ async function applyState(data) {
   refreshHeader();
   loadPostCaption(); // picks up a caption written between polls
   renderSaiuPanel();
-  carregarMarcaDoVideo().catch(() => {});
+  carregarPresetDoVideo().catch(() => {});
   loadBrandPresets({ applyActive: !!(HOUSE_STYLE || HUB_EMBED) });
 }
 
@@ -4279,6 +4279,9 @@ $('setupGo').addEventListener('click', async () => {
     // lido a cada render — sem isto, trocar a marca mudava o editor e o
     // video saia com a marca antiga assim mesmo.
     brandId: (S.presetUsed && S.presetUsed.brandId) || null,
+    // O PRESET escolhido na linha de cima do editor. Sem ele o editor
+    // mudava e o render continuava no preset antigo.
+    brandPresetId: (S.presetUsed && S.presetUsed.brandPresetId) || null,
     // MODO DE EDICAO: e ele que decide se a IA planeja o corte. Sem este
     // campo um projeto criado em "Edicao leve" ficava preso no modo para
     // sempre — trocar o estilo e refazer nunca mudava a minutagem.
@@ -8152,67 +8155,67 @@ function currentStyleSnapshot() {
   };
 }
 
-/* MARCA DO VIDEO. Ela decide as cores e o texto do card final, e a tela
- * nao dizia qual era: em 29/08 um video saiu com o verde e o "Segue
- * @Ativacrm" porque a marca ativa no MOMENTO DA IMPORTACAO era outra — e
- * so dava para descobrir depois de renderizar. Aqui ela aparece e pode ser
- * trocada sem reimportar: o estilo da marca escolhida entra no editor e o
- * `brandId` vai junto no "Salvar e refazer". */
-async function carregarMarcaDoVideo() {
-  const caixa = document.getElementById('marcaDoVideo');
-  const sel = document.getElementById('marcaSelect');
-  const dica = document.getElementById('marcaDica');
+/* PRESET DO VIDEO. Ele decide as cores, a legenda e o texto do cartao
+ * final, e a tela nao dizia qual era: em 29/08 um video saiu com o verde e
+ * o "Segue @Ativacrm" porque a identidade ativa NO MOMENTO DA IMPORTACAO
+ * era outra — e so dava para descobrir depois de renderizar.
+ *
+ * Ate a 4.28 esta linha listava MARCAS, conceito que saiu do app na 4.19
+ * ("nao aparece os presets reais ali, no lugar de marca, que a gente nao
+ * usa mais"). A mecanica e a mesma; a unidade e que mudou. */
+async function carregarPresetDoVideo() {
+  const caixa = document.getElementById('presetDoVideo');
+  const sel = document.getElementById('presetVideoSelect');
+  const dica = document.getElementById('presetVideoDica');
   if (!caixa || !sel || HOUSE_STYLE || HUB_EMBED) return;
-  let marcas = [];
+  let pack = {};
   try {
-    const r = await fetch('/api/brands');
-    if (!r.ok) throw new Error('sem marcas');
-    marcas = (await r.json()).brands || [];
+    const r = await fetch('/api/brand-presets');
+    if (!r.ok) throw new Error('sem presets');
+    pack = await r.json();
   } catch {
-    caixa.hidden = true;        // preview solto (skill): nao ha marcas
+    caixa.hidden = true;        // preview solto (skill): nao ha presets
     return;
   }
-  if (!marcas.length) { caixa.hidden = true; return; }
+  const presets = pack.presets || [];
+  if (!presets.length) { caixa.hidden = true; return; }
   const atual = String(
-    (S.presetUsed && S.presetUsed.brandId)
-    || (S.state && S.state.style && S.state.style.brandId) || ''
+    (S.presetUsed && (S.presetUsed.brandPresetId || S.presetUsed.presetId))
+    || pack.activeId || ''
   ).trim();
-  S.marcas = marcas;
-  sel.innerHTML = marcas.map((m) =>
-    `<option value="${m.id}"${m.id === atual ? ' selected' : ''}>${m.name || m.id}</option>`
+  S.presetsDoVideo = presets;
+  S.presetBrandId = pack.brandId || '';
+  sel.innerHTML = presets.map((p) =>
+    `<option value="${p.id}"${p.id === atual ? ' selected' : ''}>${p.name || p.id}</option>`
   ).join('');
-  if (atual && !marcas.some((m) => m.id === atual)) {
-    sel.insertAdjacentHTML('afterbegin',
-      `<option value="${atual}" selected>${atual}</option>`);
-  }
   caixa.hidden = false;
-  S.marcaOriginal = sel.value;
+  S.presetOriginal = sel.value;
   if (dica) dica.textContent = '';
-  sel.onchange = () => trocarMarcaDoVideo(sel.value);
+  sel.onchange = () => trocarPresetDoVideo(sel.value);
 }
 
-function trocarMarcaDoVideo(id) {
-  const m = (S.marcas || []).find((x) => x.id === id);
-  const dica = document.getElementById('marcaDica');
-  if (!m) return;
-  // O estilo da marca entra no editor; o card final e o formato vem junto,
-  // senao o video trocaria de cor e continuaria com o CTA antigo.
-  if (m.style) applyPresetToUi({ style: m.style });
-  if (m.endCardCopy) {
-    S.endCardCopy = { ...m.endCardCopy };
+function trocarPresetDoVideo(id) {
+  const p = (S.presetsDoVideo || []).find((x) => x.id === id);
+  const dica = document.getElementById('presetVideoDica');
+  if (!p) return;
+  // O estilo do preset entra no editor. `endCardCopy` faz parte do
+  // retrato (STYLE_KEYS), senao o video trocaria de cor e continuaria com
+  // o CTA antigo — que foi exatamente o caso de 29/08.
+  applyPresetToUi(p);
+  const cta = (p.style || {}).endCardCopy;
+  if (cta && typeof cta === 'object') {
+    S.endCardCopy = { ...cta };
     const l1 = document.getElementById('ecLine1');
     const l2 = document.getElementById('ecLine2');
     if (l1) l1.value = S.endCardCopy.line1 || '';
     if (l2) l2.value = S.endCardCopy.line2 || '';
   }
-  if (S.presetUsed) {
-    S.presetUsed.brandId = m.id;
-    S.presetUsed.brandName = m.name || m.id;
-  } else {
-    S.presetUsed = { brandId: m.id, brandName: m.name || m.id };
-  }
+  S.presetUsed = { ...(S.presetUsed || {}) };
+  S.presetUsed.brandPresetId = p.id;
+  S.presetUsed.presetName = p.name || p.id;
+  if (S.presetBrandId) S.presetUsed.brandId = S.presetBrandId;
   if (dica) {
-    dica.textContent = (id === S.marcaOriginal)
+    dica.textContent = (id === S.presetOriginal)
       ? ''
       : 'aplique em "Salvar e refazer a Fase 2" para o vídeo sair assim';
   }

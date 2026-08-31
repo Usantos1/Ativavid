@@ -64,10 +64,6 @@
         <span class="sb-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14.5 4.5c2.2 2.2 2.2 5.8 0 8l-1.1 1.1a2.2 2.2 0 0 1-3.1 0L7.2 10.5a2.2 2.2 0 0 1 0-3.1L12.5 2"/><path d="M5 19c2.5-1 4.2-2.8 5-5"/><circle cx="17.5" cy="17.5" r="1.6"/></svg></span>
         <span class="sb-txt">Estilos</span>
       </button>
-      <button type="button" class="sb-item" data-hub-view="marca" data-tip="Marca">
-        <span class="sb-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.2"/><path d="M12 3.8a8.2 8.2 0 0 1 0 16.4z" fill="currentColor" stroke="none"/></svg></span>
-        <span class="sb-txt">Marca</span>
-      </button>
       <button type="button" class="sb-item" data-hub-view="biblioteca" data-tip="Biblioteca">
         <span class="sb-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.2" y="6.5" width="14" height="11" rx="2"/><path d="M6.6 17.5l3.6-4 2.6 2.6 2-2 2.4 3.4"/><path d="M20.8 8.6v8.2a2.6 2.6 0 0 1-2.6 2.6H7.4"/></svg></span>
         <span class="sb-txt">Biblioteca</span>
@@ -195,10 +191,12 @@
     <div class="setup-inner">
       <div class="setup-head">
         <h2>Como os vídeos da marca devem parecer</h2>
-        <div class="marca-do-video" id="marcaDoVideo" hidden>
-          <span class="marca-lab">Marca deste vídeo</span>
-          <select id="marcaSelect" title="Trocar a marca deste vídeo"></select>
-          <span class="marca-dica" id="marcaDica"></span>
+        <!-- Era "Marca deste video" ate a 4.28. A marca saiu do app na
+             4.19; quem decide cor, legenda e cartao final e o preset. -->
+        <div class="marca-do-video" id="presetDoVideo" hidden>
+          <span class="marca-lab">Preset deste vídeo</span>
+          <select id="presetVideoSelect" title="Trocar o preset deste vídeo"></select>
+          <span class="marca-dica" id="presetVideoDica"></span>
         </div>
         <div class="preset-bar" id="presetBar">
           <label class="auto-field">Preset
