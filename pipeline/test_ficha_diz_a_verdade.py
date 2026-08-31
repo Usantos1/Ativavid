@@ -32,7 +32,10 @@ def _nota(tmp_path: Path, timing: dict) -> str:
     (edit / "timing.json").write_text(json.dumps(timing), encoding="utf-8")
     job: dict = {}
     _aviso_de_trilha(job, edit)
-    return job.get("trilhaNota", "")
+    # A linha da ficha e so o NOME desde a 4.34; o motivo vive no detalhe
+    # (o `title`, que aparece ao passar o mouse). O que se cobra aqui e o
+    # conteudo, entao os dois entram.
+    return f"{job.get('trilhaNota', '')} {job.get('trilhaDetalhe', '')}".strip()
 
 
 def test_motor_local_por_ESCOLHA_nao_acusa_o_elevenlabs(tmp_path):

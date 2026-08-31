@@ -4662,6 +4662,17 @@ def run(
                 _RENDER_META["musicaFonte"] = "motor: MusicGen local"
                 _RENDER_META["musicaMotivo"] = str(
                     _music_via.get("motivo") or "reserva")
+            elif reuso:
+                # Reaproveitada do render anterior: nao foi composta agora e
+                # nao gastou credito — dizer "ElevenLabs" aqui seria mentira
+                # sobre o custo desta geracao.
+                _RENDER_META["musicaFonte"] = "reuso: render anterior"
+            else:
+                # O caminho que DEU CERTO tambem precisa se identificar: a
+                # ficha so sabia dizer a trilha quando algo tinha desviado
+                # do normal, entao a nuvem — o caso comum — aparecia como
+                # linha nenhuma. Ele pediu a linha em todo video (31/08).
+                _RENDER_META["musicaFonte"] = "nuvem: ElevenLabs Music"
         else:
             # Antecipada falhou (rede/planned<3s) — chamada síncrona antiga.
             _mproc = _helper(
@@ -4715,6 +4726,11 @@ def run(
                         " · plano B: deixe MP3s em "
                         "ATIVAVID/Biblioteca/Trilhas")
         if trilha.exists():
+            # Sobrou o caminho sincrono: a antecipada falhou e a chamada
+            # direta ao ElevenLabs salvou a trilha, sem passar por nenhum
+            # dos ramos acima.
+            if not _RENDER_META.get("musicaFonte"):
+                _RENDER_META["musicaFonte"] = "nuvem: ElevenLabs Music"
             try:
                 trilha.with_suffix(".vibe.txt").write_text(
                     music_vibe.strip(), encoding="utf-8")
@@ -4723,8 +4739,13 @@ def run(
             # Trilha NOVA (nao reaproveitada e nao vinda da biblioteca) vai
             # para o acervo com a etiqueta do clima deste video.
             _fonte_atual = str(_RENDER_META.get("musicaFonte") or "")
-            if not reuso and not (_fonte_atual
-                                  and not _fonte_atual.startswith("motor:")):
+            # O que NAO se arquiva e a trilha que ja veio da biblioteca (o
+            # nome dela e um arquivo de la). "motor:" e "nuvem:" sao trilhas
+            # novas e vao para o acervo — checar so o "motor:" pararia de
+            # arquivar tudo que a nuvem compoe assim que ela se identifica.
+            _veio_da_biblioteca = bool(_fonte_atual) and not (
+                _fonte_atual.startswith(("motor:", "nuvem:", "reuso:")))
+            if not reuso and not _veio_da_biblioteca:
                 try:
                     from app.content_type import normalize_content_type
                     _ct_arq = "longform" if is_longform else (

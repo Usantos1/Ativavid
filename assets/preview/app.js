@@ -4838,13 +4838,38 @@ video.addEventListener('loadedmetadata', () => {
 });
 
 // ---------- needle / playback sync ----------
+/* Leitura de layout do quadro, feita UMA vez no comeco do rafLoop.
+ *
+ * Ler `panel.scrollLeft` DEPOIS de mexer em qualquer `style` obriga o
+ * navegador a refazer o layout da timeline inteira ali, no meio do quadro.
+ * Medido nesta pagina (42 chips de legenda, 962 nos): escrever `left`
+ * custa 0,001 ms; escrever e ENTAO ler, 1,51 ms. A funcao inteira custava
+ * 3,97 ms — 60x por segundo enquanto o video toca, so para mover uma
+ * linha de 2px. Um quarto da thread principal, em todo video.
+ *
+ * Foi o que ele viu: "mesmo sem video na fila nosso player da umas
+ * travadas e atrasadas, e no player externo nao trava". */
+let quadroEsq = null;
+let ultimoNeedleX = null;
+
 function positionNeedle() {
   const tDraft = renderedToDraft(video.currentTime || 0);
   const x = LABEL_W + tDraft * S.pps;
-  needle.style.left = `${x}px`;
-  needle.style.visibility = x < panel.scrollLeft + LABEL_W ? 'hidden' : '';
-  $('timeNow').textContent = fmt(tDraft);
-  $('timeTotal').textContent = fmt(draftTotal() || S.videoDuration);
+  const esq = quadroEsq != null ? quadroEsq : panel.scrollLeft;
+  if (x !== ultimoNeedleX) {
+    ultimoNeedleX = x;
+    needle.style.left = `${x}px`;
+  }
+  // Escrever o MESMO valor de novo tambem suja o layout: so escreve o que
+  // mudou.
+  const oculta = x < esq + LABEL_W ? 'hidden' : '';
+  if (needle.style.visibility !== oculta) needle.style.visibility = oculta;
+  const agora = $('timeNow');
+  const txt = fmt(tDraft);
+  if (agora.textContent !== txt) agora.textContent = txt;
+  const total = $('timeTotal');
+  const txtTotal = fmt(draftTotal() || S.videoDuration);
+  if (total.textContent !== txtTotal) total.textContent = txtTotal;
 }
 /* ---------- WYSIWYG caption layer over the player ----------
  * The expensive loop this kills: render (~2 min on a short reel, more on a
@@ -5340,6 +5365,13 @@ function rafLoop() {
   // overlays em dia com seeks; 60Hz só quando algo se move de verdade.
   const rafActive = (!video.paused && !video.ended) || capAnims.length;
   if (!rafActive && (rafTick % 6)) { requestAnimationFrame(rafLoop); return; }
+  // UMA leitura de layout por quadro, AQUI: o layout ainda esta limpo (o
+  // navegador acabou de desenhar) e ninguem pagou nada por ela. Quem
+  // precisa da rolagem mais abaixo usa este valor em vez de perguntar de
+  // novo depois de ja ter escrito estilo — que e o que forcava o
+  // recalculo. Ver o comentario em positionNeedle.
+  quadroEsq = panel.scrollLeft;
+  const larguraPainel = panel.clientWidth;
   updateCapOverlay();
   updateHlOverlay();
   highlightCurrentCaption(currentCaptionIndex());
@@ -5356,9 +5388,10 @@ function rafLoop() {
   if (!drag && !video.paused && !video.ended) {
     // keep needle visible
     const x = LABEL_W + renderedToDraft(video.currentTime) * S.pps;
-    const right = panel.scrollLeft + panel.clientWidth;
-    if (x > right - 80) panel.scrollLeft = x - panel.clientWidth * 0.25;
+    const right = quadroEsq + larguraPainel;
+    if (x > right - 80) panel.scrollLeft = x - larguraPainel * 0.25;
   }
+  quadroEsq = null;   // fora do quadro, quem precisar le por conta propria
   requestAnimationFrame(rafLoop);
 }
 
@@ -7035,7 +7068,19 @@ $('btnFit').addEventListener('click', () => { fitZoom(); renderAll(); });
 if ($('btnZoomOut')) $('btnZoomOut').addEventListener('click', () => bumpZoom(1 / 1.4));
 $('btnZoom100').addEventListener('click', () => setZoom100());
 $('btnZoomIn').addEventListener('click', () => bumpZoom(1.4));
-panel.addEventListener('scroll', () => requestAnimationFrame(() => { drawRuler(); drawWave(); positionNeedle(); }));
+/* Rolar redesenha a onda e a regua — e `drawWave` custa 7,8 ms medidos.
+ * Uma rolagem so dispara varios eventos `scroll`, e cada um agendava o seu
+ * proprio quadro: o mesmo desenho refeito 3-4 vezes seguidas. Um agendado
+ * por vez basta; o ultimo estado e o que vale. */
+let redesenhoPendente = false;
+panel.addEventListener('scroll', () => {
+  if (redesenhoPendente) return;
+  redesenhoPendente = true;
+  requestAnimationFrame(() => {
+    redesenhoPendente = false;
+    drawRuler(); drawWave(); positionNeedle();
+  });
+});
 // renderSetup too: the caption demos bake their scale from the box width, so a
 // resize (or the short-pane media query kicking in) has to rebuild them
 window.addEventListener('resize', () => { fitZoom(); renderAll(); renderSetup(); });

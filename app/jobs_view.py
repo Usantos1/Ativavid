@@ -99,6 +99,20 @@ _CLIMA_LABEL = {
 }
 
 
+# Backend do plano de corte -> nome que ele reconhece. Os "sem IA" existem
+# de propósito (edição leve, corte manual, junção de takes) e dizer isso na
+# ficha é a resposta curta para "por que o título não veio da IA".
+_IA_LABEL = {
+    "gemini-web": "Gemini",
+    "chatgpt-web": "ChatGPT",
+    "preview_edits": "suas marcações (sem IA)",
+    "manual_edl": "seu corte manual (sem IA)",
+    "sem_cortes": "sem corte (sem IA)",
+    "heuristic_light": "edição leve (sem IA)",
+    "multi_take_concat": "junção de takes (sem IA)",
+}
+
+
 def _aviso_de_trilha(job: dict, edit: Path) -> None:
     """"Sem trilha" no card. Video pedia musica de IA, a geracao falhou e ate
     25/08 nada avisava (caso real: creditos do ElevenLabs esgotados — o
@@ -109,10 +123,21 @@ def _aviso_de_trilha(job: dict, edit: Path) -> None:
         return
     skip = str(t.get("musicaSkip") or "").strip()
     if skip:
-        job["trilhaNota"] = f"Sem trilha sonora: {skip[:110]}"
+        # A ficha diz o NOME do que foi usado; o porquê fica no
+        # `...Detalhe`, que a tela mostra ao passar o mouse. Pedido dele
+        # em 31/08: "não precisa este monte de justificativa, apenas qual
+        # IA e trilha usada" — a linha tinha virado um parágrafo.
+        job["trilhaNota"] = "Sem trilha"
+        job["trilhaDetalhe"] = skip[:200]
     fonte = str(t.get("musicaFonte") or "").strip()
     if fonte and not skip:
-        if fonte.startswith("motor:"):
+        if fonte.startswith("nuvem:"):
+            job["trilhaNota"] = "ElevenLabs Music"
+        elif fonte.startswith("reuso:"):
+            job["trilhaNota"] = "Reaproveitada"
+            job["trilhaDetalhe"] = ("a trilha do render anterior servia neste "
+                                    "corte — não gastou créditos")
+        elif fonte.startswith("motor:"):
             # Dois caminhos levam ao motor local e eles NAO sao a mesma
             # noticia: no modo "IA local" (Configuracoes) ele compoe
             # primeiro, de proposito, e a nuvem nem e chamada. A ficha
@@ -121,15 +146,12 @@ def _aviso_de_trilha(job: dict, edit: Path) -> None:
             # esta em "local". Sem o motivo gravado (render antigo), o
             # texto fica neutro em vez de acusar.
             motivo = str(t.get("musicaMotivo") or "").strip()
+            job["trilhaNota"] = "IA local (MusicGen)"
             if motivo == "escolha":
-                job["trilhaNota"] = (
-                    "Trilha composta pela IA local (MusicGen) — é o motor "
-                    "escolhido em Configurações, sem gastar créditos")
+                job["trilhaDetalhe"] = ("é o motor escolhido em Configurações, "
+                                        "sem gastar créditos")
             elif motivo == "reserva":
-                job["trilhaNota"] = ("Trilha composta pela IA local (MusicGen) "
-                                     "— o ElevenLabs não respondeu")
-            else:
-                job["trilhaNota"] = "Trilha composta pela IA local (MusicGen)"
+                job["trilhaDetalhe"] = "o ElevenLabs não respondeu"
         else:
             # O NOME DO ARQUIVO nao serve de recado: "anuncio--20260822-
             # 193504_a001_08221324_cf96c4.mp3" nao diz nada ao usuario, nao
@@ -139,9 +161,9 @@ def _aviso_de_trilha(job: dict, edit: Path) -> None:
             # POR QUE veio da biblioteca importa: "a IA falhou" mandava
             # procurar defeito onde so havia fila (outro video compondo).
             motivo = str(t.get("musicaMotorRecusa") or "").strip()
-            job["trilhaNota"] = (
-                f"Trilha da sua biblioteca{f' ({clima})' if clima else ''} — "
-                + (motivo or "a IA de música não compôs nesta geração"))
+            job["trilhaNota"] = f"Sua biblioteca{f' ({clima})' if clima else ''}"
+            job["trilhaDetalhe"] = (
+                motivo or "a IA de música não compôs nesta geração")
     ec = str(t.get("endCardSkip") or "").strip()
     if ec:
         job["cardFinalNota"] = f"Card final desligado: {ec[:110]}"
@@ -398,18 +420,24 @@ def _aviso_de_ia(job: dict, edit: Path) -> None:
         # cairam e o plano veio do Groq. Em 24/08 isso aconteceu as 23h e o
         # usuario so saberia abrindo o painel de IA — o card agora conta na
         # hora, como nota (nao e erro).
-        if str(llm.get("backend") or "") == "groq":
+        backend = str(llm.get("backend") or "")
+        if backend == "groq":
             # O conselho segue o MOTIVO: "recapture" só vale quando as
             # sessões caíram; resposta ilegível com sessão viva não tem o
             # que recapturar (caso real 26/08 — a nota mandou recapturar
             # com o Gemini saudável e confundiu o usuário).
+            job["iaNota"] = "Groq (plano B)"
             if str(llm.get("groqVia") or "") == "parse":
-                job["iaNota"] = ("Plano B (Groq): a IA principal respondeu "
-                                 "ilegível nesta geração. O vídeo saiu com "
-                                 "IA normalmente.")
+                job["iaDetalhe"] = ("a IA principal respondeu ilegível nesta "
+                                    "geração. O vídeo saiu com IA normalmente.")
             else:
-                job["iaNota"] = ("Plano B (Groq): as sessões web caíram. "
-                                 "Recapture em Chaves & IA.")
+                job["iaDetalhe"] = ("as sessões web caíram. Recapture em "
+                                    "Chaves & IA.")
+        elif backend in _IA_LABEL:
+            # A ficha respondia "qual IA?" só quando algo dava errado. Ele
+            # pediu a linha em todo vídeo (31/08) — é o nome, uma palavra,
+            # não uma justificativa.
+            job["iaNota"] = _IA_LABEL[backend]
         return
     # O CONSELHO tem de seguir a causa. A primeira versao mandava "reconecte
     # em Chaves & IA" em todo caso — e nos projetos reais 65 dos 67 avisos

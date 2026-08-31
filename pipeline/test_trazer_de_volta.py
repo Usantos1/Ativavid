@@ -134,11 +134,15 @@ def test_plano_b_groq_vira_nota_no_card(tmp_path):
     assert "Groq" in str(job.get("iaNota") or "")
     assert not job.get("iaAviso"), "plano B com sucesso nao e aviso de erro"
 
+    # Desde a 4.34 a sessao boa TAMBEM aparece — ele pediu a linha em todo
+    # video ("apenas qual IA e trilha usada"). O que ela nao pode virar e
+    # aviso de erro: e o nome da IA, so isso.
     (tmp_path / "result.json").write_text(json.dumps(
         {"llm": {"ok": True, "backend": "gemini-web"}}), encoding="utf-8")
     job2 = {"status": "done"}
     _aviso_de_ia(job2, tmp_path)
-    assert not job2.get("iaNota") and not job2.get("iaAviso")
+    assert job2.get("iaNota") == "Gemini"
+    assert not job2.get("iaAviso") and not job2.get("iaDetalhe")
 
 
 def test_receita_do_relogio_e_fps_tpad_trim():

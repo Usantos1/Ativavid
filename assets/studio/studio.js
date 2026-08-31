@@ -605,8 +605,11 @@ function fichaHtml(j) {
   // O que o corte tirou, em uma linha ("32s silêncio · 9s repetição") — a
   // resposta da pergunta que o usuario fez a cada video de 24-25/08.
   if (j.corteResumo) linhas.push(["Saiu", j.corteResumo]);
-  // Nota (nao erro): o plano veio do Groq porque as sessoes web cairam.
-  if (j.iaNota) linhas.push(["IA", j.iaNota]);
+  // Qual IA fez o plano do corte. A linha diz o NOME e nada mais — o
+  // porque (plano B, sessao caida) fica no `title`, que aparece ao passar
+  // o mouse. Ele pediu assim em 31/08: a ficha tinha virado um paragrafo
+  // de justificativa por video.
+  if (j.iaNota) linhas.push(["IA", j.iaNota, j.iaDetalhe]);
   if (j.corteQualidade) linhas.push(["Revisar no corte", j.corteQualidade]);
   // Por que ESTE video demorou o triplo. O motivo ficava so no
   // `timing.json`; aparece em menos de um quinto dos videos.
@@ -619,7 +622,7 @@ function fichaHtml(j) {
   if (j.corteNota) linhas.push(["Corte", j.corteNota]);
   if (j.fonteNota) linhas.push(["Fonte", j.fonteNota]);
   if (j.midiaNota) linhas.push(["Mídia", j.midiaNota]);
-  if (j.trilhaNota) linhas.push(["Trilha", j.trilhaNota]);
+  if (j.trilhaNota) linhas.push(["Trilha", j.trilhaNota, j.trilhaDetalhe]);
   if (j.cardFinalNota) linhas.push(["Marca", j.cardFinalNota]);
   // A nota do corte (gancho, clareza, ritmo, CTA) e a dica mais util dela.
   // Ate aqui as duas so existiam no painel do preview — o card, que e onde
@@ -640,10 +643,13 @@ function fichaHtml(j) {
   if (!linhas.length) return "";
   // title com o valor inteiro: a ficha e apertada e um texto longo pode
   // quebrar em varias linhas — passar o mouse mostra tudo de uma vez.
-  return `<dl class="pc-ficha">${linhas.map(([k, v]) =>
-    `<div><dt>${escapeHtml(k)}</dt><dd${String(v).length > 40
-      ? ` title="${escapeHtml(v)}"` : ""}>${escapeHtml(v)}</dd></div>`)
-    .join("")}</dl>`;
+  return `<dl class="pc-ficha">${linhas.map(([k, v, detalhe]) => {
+    // O `title` mostra o que nao coube: o detalhe, quando a linha tem um,
+    // ou o proprio valor quando ele e longo demais para a coluna.
+    const dica = detalhe ? `${v} — ${detalhe}` : (String(v).length > 40 ? v : "");
+    return `<div><dt>${escapeHtml(k)}</dt><dd${dica
+      ? ` title="${escapeHtml(dica)}"` : ""}>${escapeHtml(v)}</dd></div>`;
+  }).join("")}</dl>`;
 }
 
 /** "21/08 08:22 → 08:33". So repete a data quando o dia virou. */
@@ -670,10 +676,12 @@ function cardSig(j, opts) {
     j.modoLabel || "",
     j.corteResumo || "",
     j.iaNota || "",
+    j.iaDetalhe || "",
     j.publicadoLink || "",
     j.publicando ? "pub" : "",
     j.publicacaoErro || "",
     j.trilhaNota || "",
+    j.trilhaDetalhe || "",
     (j.score && (j.score.tips || [])[0]) || "",
     j.corteQualidade || "",
     j.motorNota || "",

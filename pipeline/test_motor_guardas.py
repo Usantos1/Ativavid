@@ -164,7 +164,7 @@ def test_o_motivo_da_recusa_chega_ao_card(tmp_path):
     }), encoding="utf-8")
     job = {}
     _aviso_de_trilha(job, tmp_path)
-    assert "outro vídeo ocupou o motor" in job["trilhaNota"], job["trilhaNota"]
+    assert "outro vídeo ocupou o motor" in job["trilhaDetalhe"], job
 
 
 def test_sem_motivo_gravado_a_nota_nao_acusa_falha(tmp_path):
@@ -174,8 +174,8 @@ def test_sem_motivo_gravado_a_nota_nao_acusa_falha(tmp_path):
         json.dumps({"musicaFonte": "viral--x.mp3"}), encoding="utf-8")
     job = {}
     _aviso_de_trilha(job, tmp_path)
-    assert "não compôs" in job["trilhaNota"]
-    assert "falhou" not in job["trilhaNota"]
+    assert "não compôs" in job["trilhaDetalhe"]
+    assert "falhou" not in job["trilhaNota"] + job["trilhaDetalhe"]
 
 
 def test_a_espera_na_fila_cabe_no_prazo_do_render():

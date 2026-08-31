@@ -1,5 +1,31 @@
 # Changelog
 
+## 4.34
+
+- **A ficha do vídeo diz o nome, não o parágrafo.** As linhas "IA" e
+  "Trilha" tinham virado justificativa ("Plano B (Groq): a IA principal
+  respondeu ilegível nesta geração. O vídeo saiu com IA normalmente.").
+  Agora a linha diz **Groq (plano B)**, **Gemini**, **IA local
+  (MusicGen)**, **ElevenLabs Music**, **Sua biblioteca (viral)** — e o
+  porquê aparece ao passar o mouse, sem sumir.
+- **As duas linhas aparecem em todo vídeo pronto.** Antes só existiam
+  quando algo desviava do normal: o caminho que dava certo não se
+  identificava, então "qual IA fez este?" só tinha resposta quando dava
+  errado. Trilha reaproveitada do render anterior agora também se
+  identifica — ela não gastou crédito nenhum.
+- **O player do editor faz menos trabalho por quadro.** Mover a agulha
+  obrigava o navegador a refazer o layout da timeline inteira a cada
+  quadro: medido na página carregada, escrever a posição custa 0,001 ms,
+  mas escrever e então ler a rolagem custa 1,51 ms — 60 vezes por segundo,
+  o tempo todo. Agora a leitura é uma só, no começo do quadro, e cada
+  valor só é escrito quando muda. Rolar a timeline também redesenha a onda
+  uma vez por quadro em vez de três ou quatro (7,8 ms cada).
+
+Sobre a travada no player: o servidor entrega o vídeo em 2,3 ms por pedaço
+de 256 KB, então o arquivo e a entrega estão fora de suspeita — era
+trabalho a mais na tela. Se ainda travar depois desta versão, me diga em
+qual aba (Edição ou Visual): são vídeos diferentes tocando.
+
 ## 4.33
 
 - **"Salvar na Biblioteca" no editor.** Marque o começo e o fim de um

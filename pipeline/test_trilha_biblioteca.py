@@ -118,7 +118,7 @@ def test_o_card_conta_que_a_trilha_veio_da_biblioteca(tmp_path):
         encoding="utf-8")
     job = {}
     _aviso_de_trilha(job, tmp_path)
-    assert job["trilhaNota"].startswith("Sem trilha sonora")
+    assert job["trilhaNota"].startswith("Sem trilha")
 
 
 # ---------- escolha por clima (3.02) ----------
@@ -416,9 +416,14 @@ def test_reaproveitada_e_a_da_biblioteca_nao_voltam_para_o_acervo():
     s = (RAIZ / "pipeline" / "run_fast.py").read_text(encoding="utf-8")
     i = s.find("_fonte_atual = str(_RENDER_META.get")
     assert i > 0
-    trecho = s[i:i + 900]
+    # Ate o FIM do bloco, nao "os proximos 900 caracteres": uma linha de
+    # comentario a mais empurrava a chamada para fora da janela e o teste
+    # reprovava codigo correto.
+    trecho = s[i:s.index('edit_data["soundtrack"]["enabled"] = True', i)]
     assert "if not reuso" in trecho, "trilha reaproveitada nao pode arquivar"
-    assert 'startswith("motor:")' in trecho, \
+    # A guarda passou a listar os prefixos das trilhas NOVAS (4.34, quando a
+    # nuvem ganhou nome); o que ela protege continua sendo o mesmo.
+    assert "_veio_da_biblioteca" in trecho and '"motor:"' in trecho, \
         "trilha vinda da biblioteca nao pode voltar para a biblioteca"
     assert "_arquivar_trilha(" in trecho
 

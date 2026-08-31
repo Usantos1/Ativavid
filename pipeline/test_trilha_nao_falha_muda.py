@@ -33,7 +33,7 @@ def test_card_avisa_sem_trilha(tmp_path):
     job = {}
     _aviso_de_trilha(job, tmp_path)
     assert "Sem trilha" in job["trilhaNota"]
-    assert "ElevenLabs" in job["trilhaNota"]
+    assert "ElevenLabs" in job["trilhaDetalhe"]
 
     (tmp_path / "timing.json").write_text(json.dumps({}), encoding="utf-8")
     job2 = {}
@@ -55,13 +55,14 @@ def test_nota_groq_distingue_parse_de_sessao(tmp_path):
         encoding="utf-8")
     job = {"status": "done"}
     _aviso_de_ia(job, tmp_path)
-    assert "ilegível" in job["iaNota"] and "Recapture" not in job["iaNota"]
+    assert "ilegível" in job["iaDetalhe"]
+    assert "Recapture" not in job["iaNota"] + job["iaDetalhe"]
 
     (tmp_path / "result.json").write_text(json.dumps(
         {"llm": {"ok": True, "backend": "groq"}}), encoding="utf-8")
     job2 = {"status": "done"}
     _aviso_de_ia(job2, tmp_path)
-    assert "Recapture" in job2["iaNota"]
+    assert "Recapture" in job2["iaDetalhe"]
 
 
 def test_meta_do_plano_carrega_o_motivo_do_groq():
