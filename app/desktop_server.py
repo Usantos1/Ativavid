@@ -378,6 +378,8 @@ class DesktopHandler(ps.Handler):
         # Everything else → real preview editor (timeline, agulha, estilo…)
         return ps.Handler.do_GET(self)
 
+    _CORPO_MAX_AO_RECUSAR = 2 * 1024 * 1024 * 1024   # 2 GB
+
     def _drenar_corpo(self) -> None:
         """Le e joga fora o corpo antes de recusar.
 
@@ -393,7 +395,15 @@ class DesktopHandler(ps.Handler):
             n = int(self.headers.get("Content-Length") or 0)
         except (TypeError, ValueError):
             n = 0
-        restante = min(n, 8 * 1024 * 1024)
+        # O teto era 8 MB e um video importado tem 50, 150, 200 MB: o
+        # servidor lia 8 MB, respondia e deixava o RESTO no socket. E
+        # exatamente a sujeira que esta funcao existe para evitar — com
+        # conexao reaproveitada, a requisicao seguinte e lida a partir do
+        # lixo. (Testei se era isso que virava "falha no upload" no PC
+        # bloqueado dele: NAO era — com o teto antigo o 403 chegou
+        # inteiro no meu teste de 60 MB. Fica pela higiene, sem a
+        # promessa.)
+        restante = min(n, self._CORPO_MAX_AO_RECUSAR)
         while restante > 0:
             pedaco = self.rfile.read(min(65536, restante))
             if not pedaco:

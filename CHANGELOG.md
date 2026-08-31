@@ -1,5 +1,19 @@
 # Changelog
 
+## 4.40
+
+- **Importar num computador bloqueado agora diz "licença", não "falha no
+  upload".** O bloqueio funcionava — o rodapé já mostrava "Licença
+  bloqueada" —, mas a tentativa de importar virava um card vermelho com
+  "falha no upload" e um botão "Tentar novamente" que nunca ia dar certo.
+- A recusa por licença chegava à tela de várias formas (403 com corpo, 403
+  sem corpo, resposta vazia, conexão caindo no meio do envio) e só a
+  primeira era tratada. Agora, quando a importação falha, o app pergunta o
+  motivo antes de pintar o card: se for licença, abre a janela de ativação
+  com o texto do servidor e o código do computador.
+- Erro de rede também parou de se chamar "falha no upload": quando o app
+  já sabe que a licença não vale, o recado é esse.
+
 ## 4.39
 
 - **Bloquear um computador agora vale de verdade.** Havia dois furos, os

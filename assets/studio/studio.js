@@ -2550,7 +2550,18 @@ function postFormProgress(url, formData, { onProgress, tmpId } = {}) {
     };
     xhr.onerror = () => {
       if (tmpId) delete state.uploads[tmpId];
-      reject(new Error("falha no upload"));
+      // "falha no upload" e o que ele viu no PC bloqueado (31/08): a
+      // conexao caiu no meio do envio e o motivo verdadeiro — licenca —
+      // estava no corpo do 403 que nunca chegou. Quando o app JA sabe
+      // que a licenca nao vale, o recado e esse, nao "upload".
+      const L = state.license || {};
+      if (L.configured && L.entitled === false) {
+        reject(Object.assign(
+          new Error(L.message || "Licença bloqueada — ative para continuar"),
+          { licenca: L }));
+        return;
+      }
+      reject(new Error("a conexão caiu no meio do envio"));
     };
     xhr.onabort = () => {
       if (tmpId) delete state.uploads[tmpId];
@@ -2679,6 +2690,22 @@ async function uploadFiles(fileList, intent) {
         removeLocalJob(local.id);
         renderJobs();
         continue;
+      }
+      // POR QUE falhou? Uma importacao recusada por licenca podia chegar
+      // aqui de varias formas (403 sem corpo, conexao caindo no meio,
+      // resposta vazia) e todas viravam o mesmo card vermelho com "falha
+      // no upload" — que foi o que ele viu no PC bloqueado (31/08), sem
+      // uma palavra sobre licenca. Perguntar custa um GET pequeno e so
+      // acontece quando algo ja deu errado.
+      const lic = err.licenca || await api("/api/license").catch(() => null);
+      if (lic && lic.configured && lic.entitled === false) {
+        renderLicense(lic);
+        if (lic.mode === "update_required" || lic.update?.force) openUpdateDialog(lic);
+        else openLicenseDialog(lic);
+        removeLocalJob(local.id);
+        renderJobs();
+        toast(lic.message || "Licença bloqueada — ative para continuar", 7000);
+        return;
       }
       const job = state.jobs.find((j) => j.id === local.id);
       if (job) {
