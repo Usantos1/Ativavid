@@ -50,8 +50,14 @@ def test_os_dois_planos_estao_na_tela():
 
 
 def test_cada_plano_abre_o_SEU_link():
-    i = JS.index('const btnMensalPay = $("#btnLicenseMensal")')
-    assert "openCheckout(state.license?.checkoutUrlMensal)" in JS[i:i + 300]
+    """4.46: os mesmos dois planos passaram a existir tambem na janela do
+    bloqueio, e a ligacao dos cliques virou uma lista com os dois lugares
+    — antes o anual era ligado num canto e o mensal em outro."""
+    i = JS.index('for (const id of ["#btnLicenseMensal", "#btnLicDlgMensal"]')
+    # o botao carrega o proprio endereco (4.46); o estado e a rede de baixo
+    assert "b.dataset.url || state.license?.checkoutUrlMensal" in JS[i:i + 260]
+    j = JS.index('for (const id of ["#btnLicenseCheckout", "#btnLicDlgAnual"]')
+    assert "openCheckout(b.dataset.url" in JS[j:j + 220]
 
 
 def test_plano_sem_link_nao_aparece():
@@ -85,3 +91,13 @@ def test_a_build_nao_sai_sem_o_link_de_pagamento():
     assert "exit 3" in ate_o_mensal, "aviso amarelo nao barra build nenhuma"
     depois = ps[ps.index("checkoutUrlMensal", i):]
     assert "Aviso" in depois[:300], "o mensal e opcional, mas tem de ser dito"
+
+
+def test_o_script_da_build_tem_BOM():
+    """Sem BOM, o PowerShell 5.1 le o arquivo como ANSI: cada travessao
+    vira uma aspa curva, que ele aceita como delimitador de string. O
+    arquivo funcionava por SORTE — as aspas quebradas se cancelavam. Bastou
+    acrescentar duas linhas com aspas para a build parar de compilar com
+    "cadeia de caracteres nao tem o terminador" numa linha intocada."""
+    b = (REPO / "installer" / "build.ps1").read_bytes()
+    assert b.startswith(b"\xef\xbb\xbf"), "build.ps1 sem BOM volta a quebrar com acento"

@@ -1,5 +1,31 @@
 # Changelog
 
+## 4.46
+
+- **No PC bloqueado, a janela agora mostra os dois planos** — anual e
+  mensal, lado a lado, cada um abrindo o seu checkout. Antes ela mostrava
+  um preço só, e o mensal (que existe desde a 4.45) nem aparecia.
+- **Assinar virou o botão em destaque.** O vermelho da janela era do
+  "Ativar", que servia a quem tinha chave; agora é o plano anual. As duas
+  saídas discretas ficaram: entrar na minha conta e agora não.
+- **A chave de ativação saiu do app.** Quem já pagou entra com **e-mail e
+  senha**: toda compra cria a conta sozinha. Liberar na mão continua no
+  painel de licença, por conta.
+
+- **Sem "Agora não".** Nessa janela o app já está bloqueado: o caminho de
+  volta ao trabalho é assinar, ou entrar na conta de quem já assinou.
+- **Corrigido: clicar no plano dizia "Assinatura indisponível agora"** com
+  o link configurado. O estado da licença só era gravado depois de
+  desenhar o painel de Licença — que ainda não existe na tela quando o
+  bloqueio aparece —, então a janela mostrava os planos com o dado novo e o
+  clique procurava o link no dado velho, vazio.
+- **Diagnóstico não alarma mais com pausa antiga do canário.** Ele dizia
+  "Desenho rápido pausado" no modo Automático, onde essa pausa não segura
+  nada; a anotação continua visível, sem alarme.
+
+Chave já ativada num computador continua valendo — o que acabou foi o
+lugar de digitar uma nova.
+
 ## 4.45
 
 - **Dois planos na tela: Anual R$ 399 e Mensal R$ 59.** O produto virou

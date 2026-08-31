@@ -352,8 +352,20 @@ def checar_motor_rapido() -> None:
     except Exception:  # noqa: BLE001
         pass
 
-    if modo == "default" and not pausa:
-        diz(OK, "Desenho rapido ligado", "Videos saem pelo motor proprio.")
+    # A pausa e o freio do modo CANARIO: `canary_allows_attempt` so a
+    # consulta quando `overlayRollout == "canary"`. Em `default` ela nao
+    # segura nada, e mesmo assim o diagnostico dizia "Desenho rapido
+    # pausado" — mandando procurar defeito onde nao havia. Na maquina dele
+    # o aviso aparecia com uma pausa sem data (anterior a folga de pico) e
+    # os videos daquele mesmo dia saindo pelo motor proprio.
+    if modo == "default":
+        detalhe = "Videos saem pelo motor proprio."
+        if pausa:
+            detalhe += (" Ha uma pausa anotada"
+                        + (f" de {pausa['quando'][:10]}" if pausa["quando"]
+                           else " sem data (antiga)")
+                        + f", '{pausa['motivo']}', que so valeria no modo canario.")
+        diz(OK, "Desenho rapido ligado", detalhe)
         return
     if modo == "off":
         detalhe = "Todo video sai pelo caminho completo, cerca de 3x mais lento."

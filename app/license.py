@@ -792,7 +792,6 @@ def public_status() -> dict[str, Any]:
         "checkoutUrlMensal": _cfg().get("mensal") or None,
         "deviceId": st.get("deviceId"),
         "offline": st.get("offline"),
-        "priceLabel": "R$ 399 / ano",
         "appVersion": st.get("appVersion") or _app_version(),
         "update": upd,
     }

@@ -79,7 +79,7 @@ def test_copiar_manda_o_ID_INTEIRO_e_nao_o_codigo_curto():
 
 def test_a_janela_do_bloqueio_preenche_o_codigo_ao_abrir():
     i = JS.index("function openLicenseDialog(")
-    bloco = JS[i:JS.index("\nasync function activateLicenseKey", i)]
+    bloco = JS[i:JS.index("\nfunction openCheckout(", i)]
     assert bloco.index("mostrarCodigoDoPc(L)") < bloco.index("dlg.showModal()")
 
 

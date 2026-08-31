@@ -24,8 +24,9 @@ DOUTOR = (REPO / "helpers" / "doutor.py").read_text(encoding="utf-8")
 def test_o_botao_de_assinar_depende_do_link():
     """Se esta regra mudar, o teste abaixo perde o sentido."""
     i = JS.index("function openLicenseDialog(")
-    bloco = JS[i:JS.index("\nasync function activateLicenseKey", i)]
-    assert "pay.hidden = !L.checkoutUrl" in bloco
+    bloco = JS[i:JS.index("\nfunction openCheckout(", i)]
+    assert "anual.hidden = !L.checkoutUrl" in bloco
+    assert "mensal.hidden = !L.checkoutUrlMensal" in bloco
 
 
 def test_o_doutor_avisa_quando_nao_ha_como_pagar():

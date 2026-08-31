@@ -125,5 +125,9 @@ def test_a_mensagem_ja_leva_a_maquina():
 
 
 def test_renderLicense_chama_o_suporte():
+    """A janela de 200 caracteres media comentario, nao codigo: um comentario
+    novo no comeco da funcao derrubou este teste sem nada ter quebrado. O que
+    importa e que a chamada aconteca ANTES do `return` que sai cedo."""
     i = JS.index("function renderLicense(lic) {")
-    assert "renderSuporte(lic);" in JS[i:i + 200]
+    corpo = JS[i:JS.index("if (!hint) return;", i)]
+    assert "renderSuporte(lic);" in corpo

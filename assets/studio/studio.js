@@ -1478,7 +1478,6 @@ function syncLicenseChrome() {
   // desenho.
   const noTeste = lic.mode === "trial";
   const mostraCompra = needsPay || (!isAdmin && lic.configured && noTeste);
-  const showKey = !isAdmin && (needsPay || lic.mode === "trial" || lic.mode === "blocked" || (!lic.entitled && lic.configured));
 
   const panel = $("#licenseAdminPanel");
   if (panel) {
@@ -1496,12 +1495,11 @@ function syncLicenseChrome() {
   const pay = $("#licAccountStrip");
   if (pay) pay.hidden = !mostraCompra;
   // Sem link configurado o plano levaria a um toast de desculpa; melhor
-  // nao existir. O "Tenho uma chave" continua, que e a outra saida.
+  // nao existir. Quem ja pagou entra pela conta.
   const btnComprar = $("#btnLicenseCheckout");
   if (btnComprar) btnComprar.hidden = !lic.checkoutUrl;
   const btnMensal = $("#btnLicenseMensal");
   if (btnMensal) btnMensal.hidden = !lic.checkoutUrlMensal;
-  void showKey;   // a chave agora mora na janela `dlgChave` (4.44)
   if (mostraCompra) {
     const title = $("#licPayTitle");
     const hint = $("#licPayHint");
@@ -1789,6 +1787,12 @@ function renderSuporte(lic) {
 }
 
 function renderLicense(lic) {
+  // O ESTADO entra primeiro, antes de qualquer desenho. O `return` logo
+  // abaixo (quando o painel de Licenca ainda nao existe na tela) deixava
+  // `state.license` velho: a janela do bloqueio mostrava os planos, porque
+  // ela usa o payload recem-chegado, e o clique ia buscar o link no estado
+  // vazio — "Assinatura indisponivel agora" com o link configurado.
+  state.license = lic;
   renderSuporte(lic);
   mostrarCodigoDoPc(lic);
   const hint = $("#licenseHint");
@@ -1847,7 +1851,6 @@ function renderLicense(lic) {
   if (deviceInput && lic.deviceId && !deviceInput.value) {
     deviceInput.placeholder = lic.deviceId;
   }
-  state.license = lic;
   if (state.auth) applyAccountChrome(state.auth);
   else {
     renderWorkspaceCard();
@@ -2047,11 +2050,19 @@ function openLicenseDialog(lic) {
     return;
   }
   $("#licDlgTitle").textContent = L.mode === "blocked" ? "Ative o ATIVAVID" : "Licença";
-  $("#licDlgHint").textContent = L.message || "Entre com a conta liberada, assine o plano anual ou cole a chave.";
-  $("#licDlgPrice").textContent = L.priceLabel || "R$ 399 / ano";
-  // Sem checkout configurado, "Assinar agora" so levava a um toast de erro.
-  const pay = $("#btnLicDlgPay");
-  if (pay) pay.hidden = !L.checkoutUrl;
+  $("#licDlgHint").textContent = L.message || "Entre com a conta liberada ou escolha um plano.";
+  // Plano sem link configurado so levaria a um toast de desculpa; melhor
+  // nao existir. Os dois somem juntos? Entao a janela vira so o login.
+  const anual = $("#btnLicDlgAnual");
+  if (anual) {
+    anual.hidden = !L.checkoutUrl;
+    anual.dataset.url = L.checkoutUrl || "";
+  }
+  const mensal = $("#btnLicDlgMensal");
+  if (mensal) {
+    mensal.hidden = !L.checkoutUrlMensal;
+    mensal.dataset.url = L.checkoutUrlMensal || "";
+  }
   // Ja logado nao precisa da saida de login.
   const login = $("#btnLicDlgLogin");
   if (login) login.hidden = !!state.auth?.loggedIn;
@@ -2061,29 +2072,13 @@ function openLicenseDialog(lic) {
   if (!dlg.open) dlg.showModal();
 }
 
-async function activateLicenseKey(key) {
-  const res = await fetch("/api/license/activate", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ key }),
-  });
-  const data = await res.json();
-  if (!res.ok || (!data.entitled && !data.activated)) {
-    throw new Error(data.message || data.error || "Chave inválida");
-  }
-  renderLicense(data);
-  const dlg = $("#dlgLicense");
-  if (dlg?.open) dlg.close();
-  if (!data.entitled && data.activated) {
-    // Chave aceita, mas a build está abaixo da versão mínima.
-    toast(data.message || "Chave ativada neste PC. Atualize o ATIVAVID para usar.");
-    openUpdateDialog(data);
-    return data;
-  }
-  toast("Licença ativada");
-  return data;
-}
-
+/* A ativacao por CHAVE saiu do app na 4.46, a pedido dele: toda compra
+ * cria a conta sozinha pelo webhook da Stripe, e liberar na mao e por
+ * conta (Licenca -> Contas, `/api/admin/access`). Sobrava um caminho
+ * paralelo, com campo proprio, para a minoria — e ele era o botao
+ * vermelho da janela de bloqueio, na frente de "assinar".
+ * A rota `/api/license/activate` continua no servidor: chave antiga
+ * ja ativada segue valendo, so nao ha mais onde digitar uma nova. */
 function openCheckout(url) {
   const u = url || state.license?.checkoutUrl;
   if (!u) {
@@ -4275,43 +4270,6 @@ function wireForms() {
       toast("Pasta salva — reinicie o app para aplicar");
     };
   }
-  const btnLicAct = $("#btnLicenseActivate");
-  const activateFromInput = async () => {
-    try {
-      await activateLicenseKey(($("#licenseKeyInput")?.value || "").trim());
-    } catch (e) {
-      toast(e.message || "Falha ao ativar");
-    }
-  };
-  // "Tenho uma chave" ABRE a janela — antes ele tentava ativar o que
-  // estivesse na caixa (vazia) e devolvia "Falha ao ativar" a quem so
-  // queria ver onde digitar.
-  if (btnLicAct) {
-    btnLicAct.onclick = () => {
-      const dlg = $("#dlgChave");
-      const campo = $("#licenseKeyInput");
-      if (campo) campo.value = "";
-      try { dlg?.showModal(); } catch { /* ignore */ }
-      setTimeout(() => campo?.focus(), 50);
-    };
-  }
-  const btnChaveCancelar = $("#btnChaveCancelar");
-  if (btnChaveCancelar) {
-    btnChaveCancelar.onclick = () => { const d = $("#dlgChave"); if (d?.open) d.close(); };
-  }
-  const btnLicActInline = $("#btnLicenseActivateInline");
-  if (btnLicActInline) {
-    btnLicActInline.onclick = async () => {
-      await activateFromInput();
-      // Deu certo? A licenca virou ativa e a janela nao tem mais o que
-      // fazer. Deu errado? O toast ja explicou e a chave continua na tela
-      // para ele conferir o que digitou.
-      if ((state.license || {}).entitled) {
-        const d = $("#dlgChave");
-        if (d?.open) d.close();
-      }
-    };
-  }
   const btnLicAdvOpen = $("#btnLicAdvOpen");
   if (btnLicAdvOpen) {
     btnLicAdvOpen.onclick = () => {
@@ -4333,10 +4291,6 @@ function wireForms() {
       const dlg = $("#dlgLicAdv");
       try { dlg?.close(); } catch { /* ignore */ }
     };
-  }
-  const btnLicPay = $("#btnLicenseCheckout");
-  if (btnLicPay) {
-    btnLicPay.onclick = () => openCheckout();
   }
   const btnLicRef = $("#btnLicenseRefresh");
   if (btnLicRef) {
@@ -4729,7 +4683,6 @@ function wireForms() {
         adminOut(data);
         if (data.ok && data.licenseKey) {
           toast("Licença criada: " + data.licenseKey);
-          if ($("#licenseKeyInput")) $("#licenseKeyInput").value = data.licenseKey;
         } else {
           toast(data.message || data.error?.message || "Falha ao criar");
         }
@@ -4774,16 +4727,6 @@ function wireForms() {
       }
     };
   }
-  const btnDlgAct = $("#btnLicDlgActivate");
-  if (btnDlgAct) {
-    btnDlgAct.onclick = async () => {
-      try {
-        await activateLicenseKey(($("#licDlgKey")?.value || "").trim());
-      } catch (e) {
-        toast(e.message || "Falha ao ativar");
-      }
-    };
-  }
   // Quem foi liberado por CONTA (o caminho recomendado) nao tem chave nenhuma
   // para digitar: sem esta saida ele ficava preso olhando o campo de chave.
   const btnDlgLogin = $("#btnLicDlgLogin");
@@ -4794,23 +4737,21 @@ function wireForms() {
       openLoginDialog("login");
     };
   }
-  const btnDlgPay = $("#btnLicDlgPay");
-  if (btnDlgPay) btnDlgPay.onclick = () => openCheckout();
-  // O plano mensal tem link proprio (outro preco na Stripe).
-  const btnMensalPay = $("#btnLicenseMensal");
-  if (btnMensalPay) {
-    btnMensalPay.onclick = () => openCheckout(state.license?.checkoutUrlMensal);
+  // Cada plano abre o SEU link (precos diferentes na Stripe), tanto no
+  // painel de Licenca quanto na janela do bloqueio.
+  for (const id of ["#btnLicenseCheckout", "#btnLicDlgAnual"]) {
+    const b = $(id);
+    if (b) b.onclick = () => openCheckout(b.dataset.url || undefined);
+  }
+  for (const id of ["#btnLicenseMensal", "#btnLicDlgMensal"]) {
+    const b = $(id);
+    if (b) {
+      b.onclick = () => openCheckout(b.dataset.url || state.license?.checkoutUrlMensal);
+    }
   }
   for (const id of ["#btnLicDlgPcCopiar", "#btnLicPcCopiar"]) {
     const b = $(id);
     if (b) b.onclick = () => { copiarCodigoDoPc().catch(() => {}); };
-  }
-  const btnDlgLater = $("#btnLicDlgLater");
-  if (btnDlgLater) {
-    btnDlgLater.onclick = () => {
-      const dlg = $("#dlgLicense");
-      if (dlg?.open) dlg.close();
-    };
   }
 
   // "Atualizar agora": o servidor baixa o exe e o executa — o instalador

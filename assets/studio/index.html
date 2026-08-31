@@ -623,9 +623,6 @@
                   <span class="lic-plano-obs">por mês, cancela quando quiser</span>
                 </button>
               </div>
-              <div class="lic-pay-actions">
-                <button type="button" class="ghost-btn" id="btnLicenseActivate">Tenho uma chave</button>
-              </div>
             </div>
 
             <!-- So para quem tem licenca ativa: `mode === "licensed"` em
@@ -1213,26 +1210,25 @@
     </div>
   </dialog>
 
-  <!-- A chave de ativacao saiu da tela e virou janela (4.44): ela e para a
-       minoria que comprou fora do app, e ocupava o mesmo peso visual do
-       preco para todo mundo que esta so testando. -->
-  <dialog id="dlgChave" class="dlg dlg-chave">
-    <h3>Tenho uma chave</h3>
-    <p class="hint">Cole a chave que você recebeu por e-mail ou pelo suporte.</p>
-    <label class="ia-form">Chave de ativação
-      <input type="text" id="licenseKeyInput" placeholder="ATIV-XXXX-XXXX-XXXX"
-             autocomplete="off" spellcheck="false">
-    </label>
-    <div class="dlg-actions">
-      <button type="button" class="ghost-btn" id="btnChaveCancelar">Cancelar</button>
-      <button type="button" class="export-btn" id="btnLicenseActivateInline">Ativar</button>
-    </div>
-  </dialog>
-
   <dialog id="dlgLicense" class="dlg dlg-license">
     <h3 id="licDlgTitle">Ative o ATIVAVID</h3>
-    <p class="hint" id="licDlgHint">Seu trial de 7 dias acabou. Assine o plano anual ou cole a chave.</p>
-    <p class="hint" id="licDlgPrice">R$ 399 / ano</p>
+    <p class="hint" id="licDlgHint">Seu teste acabou. Escolha um plano para continuar.</p>
+    <!-- Os dois planos SAO os botoes principais desta janela (4.46). Ate a
+         4.45 o botao vermelho aqui era "Ativar" (chave) — a saida da
+         minoria ganhando o maior destaque logo na tela onde a pessoa
+         acabou de esbarrar no bloqueio e precisa saber como assinar. -->
+    <div class="lic-planos" id="licDlgPlanos">
+      <button type="button" class="lic-plano lic-plano--destaque" id="btnLicDlgAnual">
+        <span class="lic-plano-nome">Assinar · Anual</span>
+        <span class="lic-plano-preco">R$ 399</span>
+        <span class="lic-plano-obs">R$ 33,25/mês · melhor preço</span>
+      </button>
+      <button type="button" class="lic-plano" id="btnLicDlgMensal">
+        <span class="lic-plano-nome">Assinar · Mensal</span>
+        <span class="lic-plano-preco">R$ 59</span>
+        <span class="lic-plano-obs">por mês, cancela quando quiser</span>
+      </button>
+    </div>
     <!-- O codigo deste PC. Ate a 4.37 o cliente nao via isto em lugar
          nenhum: o id so aparecia no dialogo de admin e no botao de suporte
          de quem JA paga — justamente quem nao precisa pedir nada. -->
@@ -1243,14 +1239,14 @@
               title="Copia o código completo para mandar no suporte">Copiar</button>
       <span class="hint mono lic-pc-full" id="licDlgPcFull"></span>
     </div>
-    <label class="ia-form">Chave
-      <input type="text" id="licDlgKey" placeholder="ATIV-XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false">
-    </label>
+    <!-- Quem ja pagou entra pela CONTA (e-mail e senha). A chave de
+         ativacao saiu do app na 4.46: agora toda compra cria a conta
+         sozinha pelo webhook, e liberar na mao e por conta, no painel. -->
+    <!-- Sem "Agora nao": nesta janela o app ja esta bloqueado, e o unico
+         caminho para voltar a trabalhar e assinar (ou entrar na conta de
+         quem ja assinou). Um botao de sair so adiava a conversa. -->
     <div class="dlg-actions">
-      <button type="button" class="export-btn" id="btnLicDlgActivate">Ativar</button>
       <button type="button" class="ghost-btn" id="btnLicDlgLogin">Entrar na minha conta</button>
-      <button type="button" class="ghost-btn" id="btnLicDlgPay">Assinar agora</button>
-      <button type="button" class="ghost-btn" id="btnLicDlgLater">Agora não</button>
     </div>
   </dialog>
 

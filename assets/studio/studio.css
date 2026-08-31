@@ -2285,11 +2285,6 @@ select:disabled { opacity: .55; cursor: default; }
   font-weight: 700;
 }
 .lic-pay-copy .hint { margin: 0; }
-.lic-pay-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
 .lic-client-key {
   padding: 14px 16px;
   border-radius: 10px;
@@ -2581,16 +2576,11 @@ select:disabled { opacity: .55; cursor: default; }
   white-space: nowrap;
 }
 
-.dlg-license { max-width: 420px; }
+.dlg-license { max-width: 460px; }
 .dlg-update { max-width: 420px; }
 .dlg-update #updDlgMeta {
   margin-top: 4px;
   opacity: 0.85;
-}
-.dlg-license #licDlgPrice {
-  font-weight: 800;
-  color: var(--accent2);
-  font-size: 15px;
 }
 .dlg-login {
   max-width: 420px;
@@ -3994,13 +3984,6 @@ video.lib-thumb { aspect-ratio: 9 / 16; max-height: 260px; object-fit: contain;
 .lic-busca-pc { max-width: 420px; }
 
 /* Janela da chave de ativacao (4.44): estreita, uma coisa so. */
-.dlg-chave { width: min(420px, calc(100vw - 32px)); }
-.dlg-chave .ia-form { margin-top: 10px; }
-.dlg-chave input[type="text"] {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  letter-spacing: .04em;
-}
-
 /* Dois planos lado a lado (4.45). Cada um e um BOTAO: o clique inteiro
    leva ao checkout, nao so um "assinar" perdido no canto. */
 .lic-planos { display: flex; gap: 10px; flex-wrap: wrap; }
@@ -4026,3 +4009,19 @@ video.lib-thumb { aspect-ratio: 9 / 16; max-height: 260px; object-fit: contain;
 .lic-plano-preco { font-size: 20px; font-weight: 700; }
 .lic-plano-obs { font-size: 11.5px; color: var(--dim); }
 .lic-pay { flex-wrap: wrap; }
+
+/* Na janela do bloqueio, assinar E a acao principal: o plano anual veste o
+   vermelho que ate a 4.45 era do botao "Ativar" (a chave). No painel de
+   Licenca o destaque continua discreto — la a pessoa nao esbarrou em nada,
+   so foi olhar. */
+.dlg-license .lic-plano--destaque {
+  background: var(--accent, #e30004);
+  border-color: var(--accent, #e30004);
+  color: #fff;
+}
+.dlg-license .lic-plano--destaque .lic-plano-nome,
+.dlg-license .lic-plano--destaque .lic-plano-obs {
+  color: #fff;
+  opacity: .92;
+}
+.dlg-license .lic-plano--destaque:hover { filter: brightness(1.08); }

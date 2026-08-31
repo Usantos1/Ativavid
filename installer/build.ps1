@@ -1,4 +1,4 @@
-# Compila o instalador .exe (Inno Setup 6).
+﻿# Compila o instalador .exe (Inno Setup 6).
 # Saida: installer/dist/Instalar ATIVAVID <versao>.exe
 # Se o Inno nao estiver instalado, tenta winget install.
 
@@ -77,7 +77,7 @@ if (-not $cfg.cacheSecret -or $cfg.cacheSecret.Length -lt 16) {
   exit 3
 }
 # Isto ja saiu publicado: a build foi para o ar com checkoutUrl vazio e o
-# botao Assinar simplesmente nao existia — ninguem conseguia comprar, e o
+# botao Assinar simplesmente nao existia, ninguem conseguia comprar e o
 # app nao reclamava de nada. Aviso amarelo some no meio do log; aqui barra.
 if (-not $cfg.checkoutUrl) {
   Write-Host "license_config.json sem 'checkoutUrl'." -ForegroundColor Red
@@ -86,7 +86,7 @@ if (-not $cfg.checkoutUrl) {
 }
 # O mensal e opcional (da para vender so o anual), mas some calado se faltar.
 if (-not $cfg.checkoutUrlMensal) {
-  Write-Host "Aviso: checkoutUrlMensal vazio — a build sai vendendo so o plano anual." -ForegroundColor Yellow
+  Write-Host "Aviso: checkoutUrlMensal vazio: a build sai vendendo so o plano anual." -ForegroundColor Yellow
 }
 
 $ver = Read-AppVersion
