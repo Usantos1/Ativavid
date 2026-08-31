@@ -12,6 +12,9 @@
 //
 // STRIPE_PRICE_ID é obrigatório de propósito: sem ele, QUALQUER checkout da
 // mesma conta Stripe (um produto de R$ 9,90) liberaria o ATIVAVID.
+// Aceita VÁRIOS ids separados por vírgula — anual e mensal são o mesmo
+// produto e liberam a mesma licença. Renovação mensal cai em
+// `invoice.payment_succeeded`, que estende os dias a cada mês.
 //
 // Requer a função grant_account_access (supabase/rpc_license.sql).
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
@@ -59,7 +62,28 @@ type Sale = {
   email: string | null;
   /** paid = libera; refunded = revoga; ignore = evento que não nos interessa */
   outcome: "paid" | "refunded" | "ignore";
+  /** Dias que ESTA compra vale. Sai do proprio plano (ver `diasDoPreco`);
+   *  sem isto o mensal de R$ 59 liberava 365 dias, igual ao anual. */
+  dias?: number;
 };
+
+/** Quantos dias uma compra deste preco vale.
+ *
+ * Sai do PROPRIO plano (`price.recurring`), nao de um segredo separado:
+ * assim, plano novo criado na Stripe ja entra certo sem mexer aqui. Mensal
+ * ganha 5 dias de folga porque a renovacao pode demorar a cair (cartao
+ * recusado e nova tentativa) e ninguem pode ficar sem acesso por isso.
+ */
+function diasDoPreco(price?: Stripe.Price | null): number {
+  const r = price?.recurring;
+  if (!r) return ACCESS_DAYS;
+  const n = Math.max(1, r.interval_count || 1);
+  if (r.interval === "year") return 365 * n;
+  if (r.interval === "month") return 30 * n + 5;
+  if (r.interval === "week") return 7 * n + 2;
+  if (r.interval === "day") return n + 1;
+  return ACCESS_DAYS;
+}
 
 const ignorar = (provider: Sale["provider"], ref: string): Sale => ({
   provider,
@@ -73,8 +97,13 @@ const ignorar = (provider: Sale["provider"], ref: string): Sale => ({
 async function parseStripe(req: Request, raw: string): Promise<Sale | Response> {
   const secret = Deno.env.get("STRIPE_SECRET_KEY");
   const whSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
+  // LISTA de precos, separados por virgula: o mesmo produto tem o plano
+  // anual (R$ 399) e o mensal (R$ 59), e os dois vendem a mesma licenca.
   const wantPrice = Deno.env.get("STRIPE_PRICE_ID");
-  if (!secret || !whSecret || !wantPrice) {
+  const precosAceitos = (wantPrice || "")
+    .split(",").map((x) => x.trim()).filter(Boolean);
+  const precoServe = (id?: string | null) => !!id && precosAceitos.includes(id);
+  if (!secret || !whSecret || !precosAceitos.length) {
     console.error("stripe sem secrets (precisa de SECRET_KEY, WEBHOOK_SECRET e PRICE_ID)");
     return json({ error: "stripe_not_configured" }, 500);
   }
@@ -106,27 +135,28 @@ async function parseStripe(req: Request, raw: string): Promise<Sale | Response> 
     const s = evt.data.object as Stripe.Checkout.Session;
     if (s.payment_status !== "paid") return ignorar("stripe", String(s.id));
     const items = await stripe.checkout.sessions.listLineItems(s.id, { limit: 100 });
-    if (!items.data.some((li) => li.price?.id === wantPrice)) {
-      return ignorar("stripe", String(s.id));
-    }
+    const item = items.data.find((li) => precoServe(li.price?.id));
+    if (!item) return ignorar("stripe", String(s.id));
     return {
       provider: "stripe",
       providerRef: String(s.id),
       email: s.customer_details?.email || s.customer_email || null,
       outcome: "paid",
+      dias: diasDoPreco(item.price),
     };
   }
 
   // Renovação de assinatura recorrente (não chega em pagamento avulso).
   if (evt.type === "invoice.payment_succeeded") {
     const inv = evt.data.object as Stripe.Invoice;
-    const temPreco = (inv.lines?.data || []).some((li) => li.price?.id === wantPrice);
-    if (!temPreco || !inv.id) return ignorar("stripe", String(inv.id || evt.id));
+    const linha = (inv.lines?.data || []).find((li) => precoServe(li.price?.id));
+    if (!linha || !inv.id) return ignorar("stripe", String(inv.id || evt.id));
     return {
       provider: "stripe",
       providerRef: String(inv.id),
       email: inv.customer_email || null,
       outcome: "paid",
+      dias: diasDoPreco(linha.price),
     };
   }
 
@@ -253,7 +283,8 @@ async function parseMercadoPago(
 
 async function grant(sale: Sale) {
   const sb = db();
-  const validUntil = new Date(Date.now() + ACCESS_DAYS * 86400000).toISOString();
+  const dias = sale.dias && sale.dias > 0 ? sale.dias : ACCESS_DAYS;
+  const validUntil = new Date(Date.now() + dias * 86400000).toISOString();
 
   // 1) Registro da venda. O unique (provider, provider_ref) torna a reentrega
   //    do mesmo evento inofensiva — e é o que detecta a reentrega.
@@ -282,7 +313,7 @@ async function grant(sale: Sale) {
   if (sale.email) {
     const { error } = await sb.rpc("grant_account_access", {
       p_email: sale.email,
-      p_days: ACCESS_DAYS,
+      p_days: dias,
       p_notes: `${sale.provider}:${sale.providerRef}`,
     });
     if (error) throw error;
