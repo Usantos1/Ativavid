@@ -1,5 +1,20 @@
 # Changelog
 
+## 4.42
+
+- **O card "Suporte Prime Camp" some de quem não tem licença ativa.** Ele
+  estava aparecendo em computador no trial. O código marcava para esconder;
+  quem desfazia era o CSS: o `hidden` do navegador perde para qualquer
+  regra de autor com `display`, e o card tem `display:flex`.
+- Era defeito de família, não caso isolado — já havia três remendos
+  individuais no arquivo pelo mesmo motivo. Agora uma regra só (`[hidden]`
+  manda, sempre) vale para o app inteiro e para o editor, então componente
+  novo já nasce escondendo quando pedem para esconder.
+
+Conferido nos dois estados: em trial o bloco fica com altura zero; com
+licença ativa ele volta, com o número e o link do WhatsApp levando o código
+da máquina junto.
+
 ## 4.41
 
 - **Botão "Assinar agora" passa a existir de verdade.** O checkout da Prime

@@ -115,6 +115,21 @@ option, optgroup {
 }
 button { cursor: pointer; }
 a { color: inherit; text-decoration: none; }
+/* O atributo `hidden` MANDA, sempre (4.42).
+ *
+ * `[hidden]` do navegador e so `display:none` na folha do agente; qualquer
+ * regra de autor com `display` ganha dela. Entao todo componente que
+ * declara `display:flex` (ou grid) continuava VISIVEL com `hidden` ligado,
+ * e o JS que "escondia" nao escondia nada.
+ *
+ * Foi assim que o card "Suporte Prime Camp" apareceu num PC em TRIAL —
+ * ele e para quem tem licenca ativa, e o `renderSuporte` marcava
+ * `hidden` corretamente. O codigo ja tinha tres remendos individuais
+ * (`.lic-admin[hidden]`, `.lic-admin-sub[hidden]`, `.dlg-lic-adv-section
+ * [hidden]`): sinal de que o defeito volta em cada componente novo. Uma
+ * regra so resolve a familia inteira. */
+[hidden] { display: none !important; }
+
 .hidden { display: none !important; }
 
 /* —— Titlebar CapCut: X colado no canto; linha some em fade à esquerda —— */

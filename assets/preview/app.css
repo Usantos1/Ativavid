@@ -3863,3 +3863,7 @@ body.styles-wide .setup-actions .btn.primary {
   padding: 4px 6px;
   border-radius: 8px;
 }
+
+/* Mesma armadilha do studio.css (4.42): `[hidden]` do navegador perde
+   para qualquer `display` de autor. Aqui tambem o atributo manda. */
+[hidden] { display: none !important; }
