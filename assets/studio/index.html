@@ -593,7 +593,13 @@
                 <button type="button" class="ghost-btn" id="btnOpenLogin" hidden>Entrar</button>
                 <button type="button" class="ghost-btn" id="btnAuthLogout" hidden>Sair</button>
               </div>
-              <p class="mono" id="licenseDevice" hidden></p>
+              <div class="lic-pc" id="licenseDevice" hidden>
+                <span class="lic-pc-rot">Código deste computador</span>
+                <strong class="lic-pc-cod" id="licPcCod">—</strong>
+                <button type="button" class="ghost-btn ghost-btn--sm" id="btnLicPcCopiar"
+                        title="Copia o código completo">Copiar</button>
+                <span class="hint mono lic-pc-full" id="licPcFull"></span>
+              </div>
             </div>
 
             <div class="lic-pay" id="licAccountStrip" hidden>
@@ -657,6 +663,12 @@
                 <button type="button" class="lic-adv-link" id="btnAberturasLocal"
                         title="Abre o registro desta máquina">registro deste PC</button>
               </p>
+              <label class="ia-form lic-busca-pc" id="adminAberturasBuscaBox" hidden>
+                Procurar computador
+                <input type="text" id="adminAberturasBusca" autocomplete="off"
+                       spellcheck="false"
+                       placeholder="cole o código que o cliente mandou (ex.: 8256B455)">
+              </label>
               <div class="lic-admin-list" id="adminAberturasList" hidden>
                 <div class="admin-access-empty hint" id="adminAberturasEmpty" hidden></div>
                 <div class="admin-access-table wrap" id="adminAberturasTable" hidden></div>
@@ -1198,6 +1210,16 @@
     <h3 id="licDlgTitle">Ative o ATIVAVID</h3>
     <p class="hint" id="licDlgHint">Seu trial de 7 dias acabou. Assine o plano anual ou cole a chave.</p>
     <p class="hint" id="licDlgPrice">R$ 399 / ano</p>
+    <!-- O codigo deste PC. Ate a 4.37 o cliente nao via isto em lugar
+         nenhum: o id so aparecia no dialogo de admin e no botao de suporte
+         de quem JA paga — justamente quem nao precisa pedir nada. -->
+    <div class="lic-pc" id="licDlgPcBox">
+      <span class="lic-pc-rot">Código deste computador</span>
+      <strong class="lic-pc-cod" id="licDlgPcCod">—</strong>
+      <button type="button" class="ghost-btn ghost-btn--sm" id="btnLicDlgPcCopiar"
+              title="Copia o código completo para mandar no suporte">Copiar</button>
+      <span class="hint mono lic-pc-full" id="licDlgPcFull"></span>
+    </div>
     <label class="ia-form">Chave
       <input type="text" id="licDlgKey" placeholder="ATIV-XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false">
     </label>

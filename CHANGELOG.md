@@ -1,5 +1,19 @@
 # Changelog
 
+## 4.38
+
+- **O cliente agora enxerga o código do computador dele.** Antes o id só
+  existia em dois lugares: o painel de admin (que é seu) e o botão de
+  suporte — que só aparece para quem já paga, ou seja, justamente quem não
+  precisa pedir nada. Quem estava em trial ou bloqueado não tinha como
+  dizer qual máquina era a dele.
+- Aparece como **código curto** (`8256B455`), do tamanho de ditar no
+  telefone, com um botão **Copiar** que manda o id completo — que é o que
+  o painel precisa para bloquear ou liberar. Fica na tela de Licença e na
+  janela que abre quando alguém esbarra no bloqueio.
+- **Do seu lado:** a lista de máquinas mostra o mesmo código curto e ganhou
+  uma busca — o cliente dita `8256B455`, você cola e acha o PC.
+
 ## 4.37
 
 - **O painel de máquinas passa a mostrar o trial.** Duas colunas novas:

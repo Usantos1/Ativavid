@@ -3846,3 +3846,34 @@ video.lib-thumb { aspect-ratio: 9 / 16; max-height: 260px; object-fit: contain;
 }
 .proj-espaco-acoes { display: inline-flex; gap: 8px; align-items: center; }
 .proj-espaco strong { color: var(--text); }
+
+/* Codigo do computador (4.38): o cliente precisa ler e ditar isto, entao o
+   codigo curto e o que tem tamanho; o id inteiro fica de apoio, e o botao
+   Copiar manda o inteiro. */
+.lic-pc {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-2, transparent);
+}
+.lic-pc-rot {
+  font-size: 12px;
+  opacity: .75;
+}
+.lic-pc-cod {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 17px;
+  letter-spacing: .06em;
+}
+.lic-pc-full {
+  flex-basis: 100%;
+  font-size: 11px;
+  opacity: .6;
+  overflow-wrap: anywhere;
+}
+.lic-busca-pc { margin: 8px 0 4px; }

@@ -1560,6 +1560,18 @@ async function loadAberturas() {
   if (vazio) vazio.hidden = true;
   if (!tabela) return;
   tabela.hidden = false;
+  // O cliente dita o codigo curto; aqui ele encontra a maquina. Sem isto,
+  // achar um PC no meio da lista e trabalho de conferir hexadecimal na
+  // tela.
+  const busca = $("#adminAberturasBusca");
+  const caixaBusca = $("#adminAberturasBuscaBox");
+  if (caixaBusca) caixaBusca.hidden = linhas.length < 2;
+  const filtro = String((busca && busca.value) || "").trim().toLowerCase();
+  const visiveis = filtro
+    ? linhas.filter((m) => String(m.deviceId || "").toLowerCase().includes(filtro)
+        || String(m.host || "").toLowerCase().includes(filtro)
+        || codigoDoPc(m.deviceId).toLowerCase().includes(filtro))
+    : linhas;
   const quando = (iso) => {
     if (!iso) return "—";
     const dt = new Date(iso);
@@ -1584,14 +1596,15 @@ async function loadAberturas() {
   tabela.innerHTML = `<table class="admin-tbl"><thead><tr>
       <th>Máquina</th><th>Quem</th><th>Aberturas</th><th>1ª abertura</th>
       <th>Última</th><th>Trial</th><th>Versão</th><th></th>
-    </tr></thead><tbody>${linhas.map((m) => {
+    </tr></thead><tbody>${visiveis.map((m) => {
       const nome = escapeHtml(m.host || "—");
       const quem = escapeHtml([m.usuario, m.licenca].filter(Boolean).join(" · ") || "—");
       const acao = m.bloqueado ? "unblock" : "block";
       const rotulo = m.bloqueado ? "Desbloquear" : "Bloquear";
       const classe = m.bloqueado ? "ghost-btn ghost-btn--sm" : "ghost-btn ghost-btn--sm preset-del";
       return `<tr${m.bloqueado ? ' class="is-bloqueado"' : ""}>
-        <td><span class="mono">${escapeHtml(m.deviceId || "")}</span>${
+        <td><strong class="lic-pc-cod">${escapeHtml(codigoDoPc(m.deviceId))}</strong>
+            <br><span class="mono hint">${escapeHtml(m.deviceId || "")}</span>${
           m.bloqueado ? ' <span class="lic-tag-bloq">bloqueado</span>' : ""}</td>
         <td>${nome}${quem !== "—" ? `<br><span class="hint">${quem}</span>` : ""}</td>
         <td>${m.aberturas || 0}</td>
@@ -1606,6 +1619,11 @@ async function loadAberturas() {
 }
 
 function wireAberturas() {
+  const busca = $("#adminAberturasBusca");
+  if (busca && !busca.dataset.wired) {
+    busca.dataset.wired = "1";
+    busca.addEventListener("input", () => { loadAberturas().catch(() => {}); });
+  }
   const tabela = $("#adminAberturasTable");
   if (tabela && !tabela.dataset.wired) {
     tabela.dataset.wired = "1";
@@ -1656,6 +1674,53 @@ function wireAberturas() {
   }
 }
 
+/* O codigo curto do PC — o que da para ditar no telefone.
+ *
+ * O id inteiro e `win-8256b455-cd50-4270-b5b2-43...`: ninguem le isso em
+ * voz alta sem errar. O primeiro bloco depois do `win-` ja separa as
+ * maquinas dele com folga, e o botao Copiar manda o id COMPLETO, que e o
+ * que o painel precisa para bloquear ou liberar. */
+function codigoDoPc(id) {
+  const cru = String(id || "").trim();
+  if (!cru) return "";
+  const semPrefixo = cru.replace(/^(win|av)-/i, "");
+  const bloco = semPrefixo.split("-")[0] || semPrefixo;
+  return bloco.slice(0, 8).toUpperCase();
+}
+
+/* Escreve o codigo do PC nos dois lugares onde o cliente pode estar: a
+ * tela da licenca e a janela que abre quando ele esbarra no bloqueio.
+ * Ate a 4.37 nao existia NENHUM: o id so aparecia no dialogo de admin e
+ * no botao de suporte de quem ja paga — justamente quem nao precisa
+ * pedir nada. */
+function mostrarCodigoDoPc(lic) {
+  const id = String((lic && lic.deviceId)
+    || (state.license && state.license.deviceId) || "");
+  const cod = codigoDoPc(id);
+  const pares = [["#licenseDevice", "#licPcCod", "#licPcFull"],
+                 ["#licDlgPcBox", "#licDlgPcCod", "#licDlgPcFull"]];
+  for (const [caixa, elCod, elFull] of pares) {
+    const box = $(caixa);
+    if (!box) continue;
+    box.hidden = !cod;
+    const c = $(elCod);
+    if (c) c.textContent = cod || "—";
+    const f = $(elFull);
+    if (f) f.textContent = id;
+  }
+}
+
+async function copiarCodigoDoPc() {
+  const id = String((state.license && state.license.deviceId) || "");
+  if (!id) return;
+  try {
+    await navigator.clipboard.writeText(id);
+    toast("Código do computador copiado — cole na mensagem do suporte");
+  } catch {
+    toast("Não consegui copiar. O código está na tela, abaixo do botão.");
+  }
+}
+
 function renderSuporte(lic) {
   const box = $("#licSuporte");
   if (!box) return;
@@ -1681,8 +1746,9 @@ function renderSuporte(lic) {
 
 function renderLicense(lic) {
   renderSuporte(lic);
+  mostrarCodigoDoPc(lic);
   const hint = $("#licenseHint");
-  const device = $("#licenseDevice");
+  const device = null;   // o codigo do PC agora mora em mostrarCodigoDoPc
   const badge = $("#licenseBadge");
   const card = $("#licenseStatusCard");
   if (!hint) return;
@@ -1727,10 +1793,7 @@ function renderLicense(lic) {
   hint.textContent = title;
   if (badge) badge.textContent = badgeText;
   if (card) card.dataset.tone = tone;
-  if (device) {
-    device.hidden = true;
-    device.textContent = "";
-  }
+  void device;
   const advDev = $("#licAdvDeviceHint");
   if (advDev && lic.deviceId) {
     advDev.hidden = false;
@@ -1948,6 +2011,9 @@ function openLicenseDialog(lic) {
   // Ja logado nao precisa da saida de login.
   const login = $("#btnLicDlgLogin");
   if (login) login.hidden = !!state.auth?.loggedIn;
+  // O codigo do PC ENTRA aqui: e esta janela que abre quando ele esbarra
+  // no bloqueio, e e nesse instante que ele precisa dizer quem e.
+  mostrarCodigoDoPc(L);
   if (!dlg.open) dlg.showModal();
 }
 
@@ -4642,6 +4708,10 @@ function wireForms() {
   }
   const btnDlgPay = $("#btnLicDlgPay");
   if (btnDlgPay) btnDlgPay.onclick = () => openCheckout();
+  for (const id of ["#btnLicDlgPcCopiar", "#btnLicPcCopiar"]) {
+    const b = $(id);
+    if (b) b.onclick = () => { copiarCodigoDoPc().catch(() => {}); };
+  }
   const btnDlgLater = $("#btnLicDlgLater");
   if (btnDlgLater) {
     btnDlgLater.onclick = () => {
