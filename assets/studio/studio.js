@@ -1471,6 +1471,13 @@ function syncLicenseChrome() {
   const isAdmin = !!(logged && auth.isAdmin);
   const entitled = !!lic.entitled || ["licensed", "account", "trial", "open"].includes(lic.mode);
   const needsPay = !isAdmin && lic.configured && !lic.entitled && lic.mode !== "open";
+  // QUEM ESTA NO TESTE TAMBEM PODE COMPRAR. Ate a 4.42 a faixa de compra
+  // dependia de `!entitled`, e no trial ele ESTA entitled: quem se
+  // convenceu no segundo dia nao tinha botao nenhum: precisava esperar o
+  // teste vencer e ser barrado para poder pagar. Venda perdida por
+  // desenho.
+  const noTeste = lic.mode === "trial";
+  const mostraCompra = needsPay || (!isAdmin && lic.configured && noTeste);
   const showKey = !isAdmin && (needsPay || lic.mode === "trial" || lic.mode === "blocked" || (!lic.entitled && lic.configured));
 
   const panel = $("#licenseAdminPanel");
@@ -1487,16 +1494,28 @@ function syncLicenseChrome() {
     }
   }
   const pay = $("#licAccountStrip");
-  if (pay) pay.hidden = !needsPay;
+  if (pay) pay.hidden = !mostraCompra;
+  // Sem link configurado o botao levaria a um toast de desculpa; melhor
+  // nao existir. O "Tenho uma chave" continua, que e a outra saida.
+  const btnComprar = $("#btnLicenseCheckout");
+  if (btnComprar) btnComprar.hidden = !lic.checkoutUrl;
   const clientKey = $("#licClientKeyCard");
   if (clientKey) clientKey.hidden = !showKey;
-  if (needsPay) {
+  if (mostraCompra) {
     const title = $("#licPayTitle");
     const hint = $("#licPayHint");
     if (title) title.textContent = lic.priceLabel || "Assinatura anual";
     if (hint) {
-      hint.textContent = lic.message || "Assine ou ative uma chave neste PC.";
+      const d = lic.trialDaysLeft;
+      hint.textContent = noTeste
+        ? (d === 1
+            ? "Seu teste acaba amanhã. Assine agora e não perca o acesso."
+            : `Seu teste acaba em ${d ?? "poucos"} dias. Assine agora e não `
+              + "perca o acesso.")
+        : (lic.message || "Assine ou ative uma chave neste PC.");
     }
+    const btn = $("#btnLicenseCheckout");
+    if (btn) btn.textContent = noTeste ? "Assinar agora" : "Assinar";
   }
 }
 

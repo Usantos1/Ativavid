@@ -1,5 +1,18 @@
 # Changelog
 
+## 4.43
+
+- **Quem está no teste agora pode assinar.** A faixa de compra só aparecia
+  para quem *não* tinha acesso — e no trial a pessoa tem. Resultado: quem
+  se convencia no segundo dia não tinha botão nenhum, precisava esperar o
+  teste vencer e ser barrado para conseguir pagar.
+- Agora ela aparece durante o teste com o prazo no recado — "Seu teste
+  acaba em 3 dias. Assine agora e não perca o acesso." — e os dois
+  caminhos: **Assinar agora** e **Tenho uma chave**.
+- O botão de assinar só existe se houver link de pagamento configurado
+  (botão que leva a uma desculpa é pior que botão nenhum), e continua
+  escondido para quem já tem licença ativa e para o administrador.
+
 ## 4.42
 
 - **O card "Suporte Prime Camp" some de quem não tem licença ativa.** Ele
