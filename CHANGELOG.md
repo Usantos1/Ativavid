@@ -1,5 +1,22 @@
 # Changelog
 
+## 4.36
+
+- **A fila também para quando a licença cai.** O bloqueio cobria a hora de
+  *criar* o vídeo, e o Worker não olhava licença nenhuma: quem enfileirasse
+  30 vídeos no último dia do trial — ou tivesse a fila cheia na hora em que
+  o computador fosse bloqueado — continuava produzindo, porque a fila é
+  retomada sozinha na abertura seguinte.
+- O vídeo **espera na fila** em vez de virar erro ("Sem licença — o vídeo
+  espera aqui"): licença renovada, ele sai sozinho. Quem só ficou uns
+  minutos sem responder já está coberto pela janela de 72 h sem internet.
+- Um defeito no gate **libera** a fila, nunca trava: erro na verificação
+  não pode parar o trabalho de quem pagou.
+
+Testado por HTTP, com o veredito do servidor trocado pelo que o banco
+devolve em cada caso — trial válido, trial vencido, sem internet e
+computador bloqueado.
+
 ## 4.35
 
 - **A aba Visual passa a tocar uma cópia leve, como a Edição já fazia.**

@@ -1184,6 +1184,21 @@ def _guardar_log_do_job(edit_dir: Path, saida: str, erro: str) -> None:
         pass
 
 
+def _licenca_libera_a_fila() -> bool:
+    """A mesma regra da rota que enfileira (`/api/jobs`).
+
+    Em dev (sem `license_config.json`) o entitlement ja devolve liberado,
+    entao isto nao atrapalha a skill nem os testes. Erro aqui LIBERA: um
+    defeito meu no gate nao pode travar a fila de quem pagou.
+    """
+    try:
+        from app import license as lic
+
+        return lic.gate("/api/jobs") is None
+    except Exception:  # noqa: BLE001
+        return True
+
+
 class Worker:
     def __init__(self, store: JobStore):
         self.store = store
@@ -1247,6 +1262,16 @@ class Worker:
             )
             t.start()
             self._threads.append(t)
+
+    def _tentar_de_novo_com_licenca(self, job_id: str) -> None:
+        """Volta a olhar este job daqui a pouco, sem girar em falso.
+
+        Um `continue` seco devolveria o job a fila na hora e a thread
+        rodaria o loop milhares de vezes por segundo com a maquina parada.
+        """
+        t = threading.Timer(60.0, self.enqueue, args=(job_id,))
+        t.daemon = True
+        t.start()
 
     def enqueue(self, job_id: str) -> None:
         """Poe na fila. Se o job ainda esta em voo, agenda para quando sair.
@@ -1349,6 +1374,21 @@ class Worker:
                 with self._proc_lock:
                     if job_id in self._busy:
                         continue
+                # A fila tambem e producao de video. O gate cobre a rota que
+                # ENFILEIRA, mas quem ja tinha 30 videos na fila continuava
+                # produzindo depois do trial vencer ou do computador ser
+                # bloqueado — bastava enfileirar no ultimo dia e deixar
+                # rodando. O video espera na fila (nao vira erro): quando a
+                # licenca voltar, ele sai sozinho.
+                if not _licenca_libera_a_fila():
+                    self.store.update(
+                        job_id,
+                        status="queued",
+                        message="Sem licença — o vídeo espera aqui",
+                        reason="license_required",
+                    )
+                    self._tentar_de_novo_com_licenca(job_id)
+                    continue
                 from app.job_slots import acquire as acquire_slot
                 from app.job_slots import release as release_slot
 
