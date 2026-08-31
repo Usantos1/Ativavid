@@ -275,7 +275,7 @@ def esquentar_painel(roots) -> None:
                 for edit in sorted(proot.glob("*/edit")):
                     for mp4 in edit.glob("*.mp4"):
                         if mp4.name in ("cut.mp4", "base.mp4",
-                                        "cut_proxy.mp4"):
+                                        "cut_proxy.mp4", "final_proxy.mp4"):
                             continue
                         probe_duration_cached(mp4)
         except Exception:  # noqa: BLE001 — conforto, nunca derruba o app
@@ -607,6 +607,72 @@ class Handler(BaseHTTPRequestHandler):
             return None
         return px
 
+    def _proxy_final_util(self) -> Path | None:
+        """O `final_proxy.mp4`, enquanto ele for do video entregue de agora.
+
+        Mesma doenca do proxy do corte: refazer a Fase 2 troca o arquivo
+        entregue, e servir a copia velha faria a aba Visual mostrar um
+        video que ja nao existe — pior que lento. Velho e o mesmo que nao
+        existir; quem pergunta ja sabe cair no arquivo cheio.
+        """
+        px = self.root / "final_proxy.mp4"
+        # Com o state.json na mao a escolha e o nome DECLARADO; sem ele a
+        # busca cai no "mp4 mais novo", que numa pasta com sobra de apply
+        # (`cut.apply.tmp.mp4`) pode apontar para um arquivo de trabalho —
+        # e a copia ficaria eternamente "atrasada", refazendo sem parar.
+        estado: dict = {}
+        try:
+            estado = json.loads(
+                (self.root / "state.json").read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError, ValueError):
+            estado = {}
+        try:
+            rel = self._resolve_final_video(estado if isinstance(estado, dict) else {})
+        except Exception:  # noqa: BLE001
+            rel = None
+        final = self._safe(self.root, rel) if rel else None
+        if final is None or not final.is_file():
+            return None
+        if not px.is_file():
+            self._refazer_proxy_final(final)
+            return None
+        try:
+            if px.stat().st_mtime < final.stat().st_mtime:
+                self._refazer_proxy_final(final)
+                return None
+        except OSError:
+            return None
+        return px
+
+    def _refazer_proxy_final(self, final: Path) -> None:
+        """Manda fazer a copia leve do final, uma vez por projeto.
+
+        Os 186 projetos que ja existem nao tem essa copia: ela nasce aqui,
+        na primeira vez que ele abre a aba Visual. Enquanto nao fica pronta
+        o editor toca o arquivo cheio, como antes.
+        """
+        chave = str(self.root) + "|final"
+        with _PROXY_LOCK:
+            if chave in _PROXY_REFAZENDO:
+                return
+            _PROXY_REFAZENDO.add(chave)
+
+        def _solta() -> None:
+            with _PROXY_LOCK:
+                _PROXY_REFAZENDO.discard(chave)
+
+        try:
+            from make_proxy import proxy_do_final  # type: ignore
+
+            t = proxy_do_final(final, self.root)
+        except Exception:  # noqa: BLE001 — copia e conforto, nunca o produto
+            t = None
+        if t is None:
+            _solta()
+            return
+        threading.Thread(target=lambda: (t.join(), _solta()),
+                         daemon=True, name="proxy-final-solta").start()
+
     def _current_video(self) -> Path | None:
         state_p = self.root / "state.json"
         rel = "cut.mp4"
@@ -670,6 +736,10 @@ class Handler(BaseHTTPRequestHandler):
             if alvo is not None and alvo.name == "cut_proxy.mp4" and not self._proxy_util():
                 self._sem_corpo(404)
                 return
+            if (alvo is not None and alvo.name == "final_proxy.mp4"
+                    and not self._proxy_final_util()):
+                self._sem_corpo(404)
+                return
         elif path.startswith("/assets/studio/"):
             alvo = self._safe(STUDIO_DIR, path[len("/assets/studio/"):])
         elif path.startswith("/assets/"):
@@ -722,6 +792,10 @@ class Handler(BaseHTTPRequestHandler):
             # o editor tocar um video que nao e o corte de agora.
             if p is not None and p.name == "cut_proxy.mp4" and not self._proxy_util():
                 self._json({"error": "proxy desatualizado"}, 404)
+                return
+            if (p is not None and p.name == "final_proxy.mp4"
+                    and not self._proxy_final_util()):
+                self._json({"error": "proxy do final desatualizado"}, 404)
                 return
             self._send_file(p) if p else self._json({"error": "bad path"}, 400)
         elif path == "/gen/waveform.json":
@@ -1536,7 +1610,9 @@ class Handler(BaseHTTPRequestHandler):
             p = self._safe(base, rel)
             if p and p.exists():
                 return rel
-        skip = {"cut.mp4", "base.mp4", "cut_proxy.mp4"}
+        # `final_proxy.mp4` nasce DEPOIS do entregue e seria o mp4 mais
+        # novo da pasta: sem pular, a copia leve viraria "o video".
+        skip = {"cut.mp4", "base.mp4", "cut_proxy.mp4", "final_proxy.mp4"}
         search = [base]
         if base.name.lower() == "edit":
             search.append(base.parent)

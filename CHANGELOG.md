@@ -1,5 +1,28 @@
 # Changelog
 
+## 4.35
+
+- **A aba Visual passa a tocar uma cópia leve, como a Edição já fazia.**
+  Ela tocava o arquivo entregue inteiro. Medido no seu vídeo de 1:30
+  (1080×1920, 159 MB): decodificar em uma thread leva 50,1 s para 90,2 s
+  de vídeo — 1,8× o tempo real, quase sem folga, e é isso que trava. A
+  cópia leve leva 2,6 s (35×) e tem 10,6 MB. O quadro do player tem uns
+  500 px de largura: os 1080 nunca apareceram na tela.
+- A cópia leva o **som** (a da Edição é muda de propósito, porque a
+  timeline tem a onda) — na Visual você está conferindo trilha, efeito e
+  voz.
+- Ela nasce sozinha na primeira vez que você abre a Visual de cada
+  projeto, em segundo plano: nos 186 projetos que já existem, a primeira
+  abertura ainda toca o arquivo cheio e troca sozinha quando a cópia fica
+  pronta. Se a cópia falhar, o vídeo cheio volta sem você fazer nada.
+- Cuidado que a mudança exigiu: a cópia nasce depois do entregue e vira o
+  `.mp4` mais novo da pasta. Todo lugar que escolhe o vídeo entregue por
+  data agora a ignora — sem isso, o app passaria a tratar a cópia como o
+  produto (no card, no "Abrir pasta", no pacote de publicação).
+
+O que já estava descartado por medição: o servidor entrega o vídeo em
+2,3 ms por pedaço de 256 KB, então nem o arquivo nem a entrega travavam.
+
 ## 4.34
 
 - **A ficha do vídeo diz o nome, não o parágrafo.** As linhas "IA" e

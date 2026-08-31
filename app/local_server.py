@@ -203,7 +203,8 @@ def resolve_delivery_mp4(edit: Path) -> Path | None:
     Depois da 1.70 o arquivo leva o nome da headline ("Transformando celular.mp4"),
     não necessariamente final.mp4.
     """
-    skip = {"cut.mp4", "base.mp4", "cut_proxy.mp4"}
+    # `final_proxy.mp4` e a copia leve da aba Visual, nao a entrega.
+    skip = {"cut.mp4", "base.mp4", "cut_proxy.mp4", "final_proxy.mp4"}
     state_p = edit / "state.json"
     if state_p.exists():
         try:
@@ -499,7 +500,8 @@ def _utc() -> str:
 
 _IMPORT_VIDEO_EXT = {".mp4", ".mov", ".m4v", ".mkv", ".webm", ".avi", ".3gp", ".mts", ".m2ts"}
 _IMPORT_SKIP_DIRS = {"edit", "node_modules", ".git", "__pycache__", "remotion"}
-_IMPORT_SKIP_FILES = {"cut.mp4", "final.mp4", "base.mp4", "cut_proxy.mp4"}
+_IMPORT_SKIP_FILES = {"cut.mp4", "final.mp4", "base.mp4", "cut_proxy.mp4",
+                      "final_proxy.mp4"}
 
 
 def _is_import_video(path: Path) -> bool:

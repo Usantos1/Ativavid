@@ -2809,6 +2809,12 @@ function updateVideoSrc() {
   let rel = wantFinal ? S.state.finalVideo : (S.state.video || 'cut.mp4');
   // proxy leve no corte (Fase 1) quando existir — scrub mais fluido
   if (S.tab !== 2 && S.hasProxy && !S.proxyFailed && rel === 'cut.mp4') rel = 'cut_proxy.mp4';
+  // ...e no VIDEO PRONTO (aba Visual), que ate a 4.34 tocava o arquivo
+  // entregue inteiro. Medido no video dele de 1:30: 159 MB, e decodificar
+  // em uma thread leva 50,1 s para 90,2 s de video — 1,8x o tempo real,
+  // sem folga nenhuma. A copia de 540 leva 5,4 s (16,7x) e tem 7,2 MB. O
+  // quadro do player tem ~500 px de largura: os 1080 nao aparecem.
+  if (wantFinal && S.hasFinalProxy && !S.finalProxyFailed) rel = 'final_proxy.mp4';
   const vsrc = `${mediaHref(rel)}?v=${(S.mtimes && (S.mtimes.finalVideo || S.mtimes.video)) || Date.now()}`;
   if (video.dataset.src === vsrc) return;
   const t = wantFinal ? 0 : video.currentTime;
@@ -2850,6 +2856,15 @@ function wireProxyFallback() {
   let rebuilding = false;
   video.addEventListener('error', () => {
     const rel = video.dataset.rel || '';
+    if (rel.includes('final_proxy')) {
+      // A copia do final pode estar sendo escrita agora (ela nasce na
+      // primeira abertura da aba). Cair no arquivo cheio e o certo: ele
+      // ve o video, so mais pesado.
+      S.finalProxyFailed = true;
+      S.hasFinalProxy = false;
+      updateVideoSrc();
+      return;
+    }
     if (rel.includes('cut_proxy')) {
       S.proxyFailed = true;
       S.hasProxy = false;
@@ -7107,6 +7122,13 @@ function goToTab(tab) {
   if (location.pathname !== path || (HUB_EMBED && location.search.indexOf('embed=1') < 0)) {
     history.pushState(null, '', path + search);
   }
+  // Ao ENTRAR na Visual pergunta de novo pela copia leve: na primeira
+  // abertura ela ainda nao existe (o servidor manda fazer ao ser
+  // perguntado), e sem perguntar de novo o editor tocaria o arquivo cheio
+  // pelo resto da sessao mesmo com a copia ja pronta.
+  if (S.tab === 2 && !S.hasFinalProxy && !S.finalProxyFailed) {
+    esperarCopiaDoFinal();
+  }
   updateVideoSrc(); // Fase 2 plays the Phase-2 render when available
   renderAll();
   renderSetup();
@@ -7495,12 +7517,38 @@ function refreshSafeZone() {
   if (btn) btn.classList.toggle('on', on);
 }
 
+/* Na PRIMEIRA vez que ele abre a Visual de um projeto a copia leve ainda
+ * nao existe: o servidor comeca a fazer quando e perguntado e leva de 10 a
+ * 30 s. Sem voltar a perguntar, a sessao inteira tocaria o arquivo cheio
+ * mesmo com a copia pronta ha um minuto. Quatro perguntas, 15 s entre
+ * elas, e para — nem enxurrada, nem uma pergunta so. */
+let esperaDaCopia = null;
+function esperarCopiaDoFinal(tentativas = 4) {
+  if (esperaDaCopia) return;
+  const passo = async () => {
+    esperaDaCopia = null;
+    if (S.tab !== 2 || S.hasFinalProxy || S.finalProxyFailed) return;
+    await detectProxy().catch(() => {});
+    if (S.hasFinalProxy) { updateVideoSrc(); return; }
+    if (--tentativas > 0) esperaDaCopia = setTimeout(passo, 15000);
+  };
+  esperaDaCopia = setTimeout(passo, 1500);
+}
+
 async function detectProxy() {
   try {
     const r = await fetch(`${BASE}/media/cut_proxy.mp4`, { method: 'HEAD' });
     S.hasProxy = r.ok;
     if (r.ok) S.proxyFailed = false;
   } catch { S.hasProxy = false; }
+  // A copia do video pronto responde 404 enquanto nao existe (e o servidor
+  // manda fazer ao ser perguntado). Perguntar de novo ao trocar de aba e o
+  // que faz a copia entrar em uso assim que fica pronta, sem recarregar.
+  try {
+    const r = await fetch(`${BASE}/media/final_proxy.mp4`, { method: 'HEAD' });
+    S.hasFinalProxy = r.ok;
+    if (r.ok) S.finalProxyFailed = false;
+  } catch { S.hasFinalProxy = false; }
 }
 
 const AI_UNDO = [];

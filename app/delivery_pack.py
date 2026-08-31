@@ -12,7 +12,7 @@ _WIN_RESERVED = {
     *(f"COM{i}" for i in range(1, 10)),
     *(f"LPT{i}" for i in range(1, 10)),
 }
-_SKIP_MP4 = {"cut.mp4", "base.mp4", "cut_proxy.mp4"}
+_SKIP_MP4 = {"cut.mp4", "base.mp4", "cut_proxy.mp4", "final_proxy.mp4"}
 PACK_PARENT = "publicar"
 
 

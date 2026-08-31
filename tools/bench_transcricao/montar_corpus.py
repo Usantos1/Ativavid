@@ -39,7 +39,8 @@ if str(RAIZ_REPO) not in sys.path:
     sys.path.insert(0, str(RAIZ_REPO))
 
 # Derivados do pipeline. A fonte fica na raiz do projeto; `edit\` é saída.
-DERIVADOS = {"cut.mp4", "base.mp4", "cut_proxy.mp4", "final.mp4"}
+DERIVADOS = {"cut.mp4", "base.mp4", "cut_proxy.mp4", "final_proxy.mp4",
+             "final.mp4"}
 # O ATIVAVID grava um preparado ao lado da fonte, com o nome dela mais
 # `.prep.mp4` (`IMG_4007.MOV.prep.mp4`). É derivado: entra no corpus como se
 # fosse fonte, duplica o vídeo e mede o mesmo material duas vezes.
