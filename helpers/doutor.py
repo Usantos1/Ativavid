@@ -293,6 +293,38 @@ def checar_sistema() -> None:
         diz(AVISO, "Não consegui ler o hardware", str(e)[:120])
 
 
+def checar_caminho_de_pagamento() -> None:
+    """Quem esbarrar no bloqueio tem como pagar?
+
+    O botao "Assinar agora" do app so aparece quando existe `checkoutUrl`
+    — e ele vive no `license_config.json`, o arquivo que vai dentro de
+    CADA instalacao. Em 31/08 esse campo estava vazio na build: o cliente
+    com trial vencido via a janela da licenca sem uma forma de comprar, e
+    nada na tela dizia isso a ele nem a mim.
+    """
+    try:
+        sys.path.insert(0, str(SKILL))
+        from app import settings_store as ss
+
+        url = str(ss.load_settings().get("checkoutUrl") or "").strip()
+        empacotado = str(
+            (ss.bundled_license_config() or {}).get("checkoutUrl") or "").strip()
+    except Exception as e:  # noqa: BLE001
+        diz(AVISO, "Nao consegui ler o caminho de pagamento", str(e)[:120])
+        return
+    if not url:
+        diz(AVISO, "Sem link de pagamento",
+            "Quem estiver com o trial vencido nao ve botao de comprar. "
+            "Configure o checkoutUrl.")
+        return
+    if not empacotado:
+        diz(AVISO, "Link de pagamento so nesta maquina",
+            "O `license_config.json` da build esta sem checkoutUrl: os "
+            "clientes que instalarem nao verao o botao de comprar.")
+        return
+    diz(OK, "Caminho de pagamento no lugar", url[:48] + ("..." if len(url) > 48 else ""))
+
+
 def checar_motor_rapido() -> None:
     """O desenho rapido esta ligado?
 
@@ -351,6 +383,7 @@ def main() -> int:
         return 0
 
     for fn in (checar_programas, checar_sistema, checar_motor_rapido,
+               checar_caminho_de_pagamento,
                checar_chaves, checar_python, checar_espaco, checar_processos):
         try:
             fn()

@@ -1,5 +1,16 @@
 # Changelog
 
+## 4.41
+
+- **Botão "Assinar agora" passa a existir de verdade.** O checkout da Prime
+  Camp foi criado na Stripe (ATIVAVID — Licença anual, R$ 399/ano, com
+  renovação) e o link entrou na configuração que vai dentro de cada
+  instalação. Até aqui o campo estava vazio: quem chegava no fim do trial
+  via a janela da licença **sem forma de comprar** — e nada avisava.
+- **O diagnóstico (Sistema) passou a checar isso.** Ele avisa se não houver
+  link de pagamento, e também no caso mais traiçoeiro: link configurado só
+  na máquina do dono e vazio na build que os clientes instalam.
+
 ## 4.40
 
 - **Importar num computador bloqueado agora diz "licença", não "falha no
