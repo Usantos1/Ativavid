@@ -1,5 +1,19 @@
 # Changelog
 
+## 4.31
+
+- **Vídeo de humor passa a usar os clipes de humor da Biblioteca.** O app já
+  tinha tudo menos a ligação: a Biblioteca aceita vídeo e tem as categorias
+  **humor, meme, reação e viral**; o pipeline sabe encaixar um clipe num
+  momento da fala; e o tipo "Humor" já manda preservar setup → punchline. Só
+  que, com o layout Limpo (o seu em 114 de 114 vídeos), as inserções ficavam
+  desligadas por padrão e ninguém olhava o tipo — com a Biblioteca cheia de
+  clipes de humor, nenhum entrava.
+- Agora: tipo **Humor** + clipe guardado nessas categorias = inserções
+  ligadas, e a escolha é pela categoria (a palavra "reação" não aparece na
+  fala, e é justamente o que entra). Sem clipe guardado nada muda — o app
+  não inventa b-roll onde não há material.
+
 ## 4.30
 
 - **O desenho rápido podia estar desligado sem ninguém saber.** Achei nos

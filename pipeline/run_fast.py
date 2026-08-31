@@ -2669,10 +2669,32 @@ def _attach_auto_broll(edit_data: dict, public: Path, preset: dict, transcript: 
         print("[broll] desligado no estilo", flush=True)
         return edit_data
     explicit = mode not in ("quando_necessario", "", "auto")
+    # A raiz sobe daqui: `public` e <Projetos>/<projeto>/edit/remotion/public.
+    # (Precisa vir ANTES da saida por layout limpo — e ela que diz se ha
+    # clipe de humor guardado.)
+    raiz_projetos = public.parents[3] if len(public.parents) > 3 else None
+    # HUMOR com acervo proprio pede insercao. O app tinha as categorias
+    # (`humor`, `meme`, `reacao`, `viral`), sabia colar clipe num momento
+    # da fala e o tipo `humor` ja manda preservar setup -> punchline — mas
+    # o layout `limpa` (o dele em 114 de 114 videos) desligava tudo sem
+    # olhar o tipo. Sem clipe guardado nada muda: nao se inventa b-roll
+    # onde nao ha material.
+    humor_com_acervo = False
     if edit_style in _QUADRO_CHEIO and not explicit:
+        try:
+            from app.broll_library import clipes_de_humor
+            from app.content_type import normalize_content_type
+
+            if normalize_content_type(preset.get("contentType")) == "humor":
+                humor_com_acervo = bool(clipes_de_humor(raiz_projetos))
+        except Exception as e:  # noqa: BLE001 — b-roll nunca derruba render
+            print(f"[broll] nao consegui ler os clipes de humor: {e}", flush=True)
+    if edit_style in _QUADRO_CHEIO and not explicit and not humor_com_acervo:
         edit_data["inserts"] = []
         print("[broll] estilo limpa + b-roll no padrão — sem inserts automáticos", flush=True)
         return edit_data
+    if humor_com_acervo:
+        print("[broll] humor + clipes na Biblioteca — inserts ligados", flush=True)
     if edit_style in _QUADRO_CHEIO:
         print(f"[broll] estilo limpa, mas b-roll={mode} pedido — inserts ligados", flush=True)
     # 1) biblioteca local
@@ -2682,6 +2704,12 @@ def _attach_auto_broll(edit_data: dict, public: Path, preset: dict, transcript: 
 
         kws = keywords_from_text(transcript, limit=3)
         query = " ".join(kws) if kws else "produto"
+        # Num video de humor o que casa e a CATEGORIA, nao a palavra da
+        # fala: "reacao" nao aparece no texto, e e justamente o que entra.
+        if humor_com_acervo:
+            from app.broll_library import CATEGORIAS_HUMOR
+
+            query = " ".join(CATEGORIAS_HUMOR)
         # A biblioteca REAL vem da raiz dos projetos, nunca do Path.home():
         # os Projetos do usuario sao um junction C:\...\ATIVAVID\Projetos ->
         # E:\ATIVAVID\Projetos, e no C: sobrou uma pasta Biblioteca VAZIA.
@@ -2689,7 +2717,6 @@ def _attach_auto_broll(edit_data: dict, public: Path, preset: dict, transcript: 
         # todos no E: e nunca eram achados (mesmo defeito que a 3.03
         # consertou na trilha; aqui tinha ficado).
         # public = <Projetos>/<projeto>/edit/remotion/public
-        raiz_projetos = public.parents[3] if len(public.parents) > 3 else None
         from auto_broll import _mode_count  # type: ignore
         # Pede MAIS candidatos do que vai usar: quem entra e quem casa com
         # um momento da fala, nao quem aparece primeiro na pasta.

@@ -615,6 +615,27 @@ def aplicar_sfx_do_usuario(public_dir: Path,
     return trocados
 
 
+# As categorias de clipe que servem a um video de HUMOR. `viral` entra
+# porque e onde ele arquiva o que quer reusar; `cta`, `abertura` e
+# `produto` nao — sao outra funcao dentro do video.
+CATEGORIAS_HUMOR = ("humor", "meme", "reacao", "viral")
+
+
+def clipes_de_humor(projects_root: Path | None = None) -> list[dict[str, Any]]:
+    """Os clipes guardados que servem a um video de humor.
+
+    So VIDEO (`kind == "clip"`): uma foto no meio de uma piada nao e
+    reacao, e o pedido era "takes e partes engracadas".
+    """
+    try:
+        itens = list_assets(projects_root)["items"]
+    except Exception:  # noqa: BLE001 — sem biblioteca, sem insercao
+        return []
+    return [i for i in itens
+            if i.get("kind") == "clip"
+            and str(i.get("categoria") or "").lower() in CATEGORIAS_HUMOR]
+
+
 def pick_for_query(query: str, projects_root: Path | None = None, limit: int = 3) -> list[dict[str, Any]]:
     """Heurística simples: nome do arquivo contém palavra da query."""
     q = (query or "").lower()
