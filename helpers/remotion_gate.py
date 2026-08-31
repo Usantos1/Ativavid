@@ -86,10 +86,22 @@ def avg_keyframe_gap_sec(video: Path) -> float | None:
 def ensure_seekable_for_remotion(src: Path, dest: Path, fps: float = 30.0) -> None:
     """Copy cut into remotion/public, re-encoding if GOPs are too sparse for OffthreadVideo."""
     dest.parent.mkdir(parents=True, exist_ok=True)
+    # A validacao do canario (canary_run) economiza a copia de 160 MB
+    # ligando public/cut.mp4 ao cut.mp4 por HARDLINK. Num "Tentar novamente"
+    # o dest entao E o src: copy2 por cima do proprio inode da
+    # "[WinError 32] arquivo em uso" (o video dele do Fusca morreu assim), e
+    # o reencode escreveria por cima do arquivo que esta lendo.
+    try:
+        mesmo_arquivo = dest.exists() and os.path.samefile(src, dest)
+    except OSError:
+        mesmo_arquivo = False
     gap = avg_keyframe_gap_sec(src)
     if gap is not None and gap <= 1.5:
-        shutil.copy2(src, dest)
+        if not mesmo_arquivo:
+            shutil.copy2(src, dest)
         return
+    if mesmo_arquivo:
+        dest.unlink()
     g = max(12, int(round(fps)))
     print(
         f"  remotion: cut com keyframes esparsos"

@@ -1,5 +1,17 @@
 # Changelog
 
+## 4.47
+
+- **Corrigido: "Tentar novamente" morria com "[WinError 32] O arquivo já
+  está sendo usado por outro processo"** — sem processo nenhum segurando
+  nada. A validação do canário economiza a cópia de ~160 MB ligando o
+  corte à pasta do Remotion por hardlink; no retry, a cópia tentava
+  escrever o arquivo por cima dele mesmo, e no Windows isso dá exatamente
+  esse erro. Foi o que derrubou o vídeo "Carregador veicular serve no
+  Fusca?".
+- De quebra, o caminho de reencode nesse mesmo cenário escreveria por cima
+  do arquivo que está lendo; o link agora é quebrado antes.
+
 ## 4.46
 
 - **No PC bloqueado, a janela agora mostra os dois planos** — anual e
