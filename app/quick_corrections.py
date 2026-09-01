@@ -150,8 +150,13 @@ def _ensure_revert_snapshot(edit_dir: Path, data: dict[str, Any]) -> dict[str, A
             description="Antes das correções rápidas",
         )
         data["revertVersionId"] = item.get("id")
-    except Exception:
-        pass
+    except Exception as e:  # noqa: BLE001
+        # Sem o snapshot, "Reverter correções" nao tem para onde voltar — e
+        # ate aqui a falha era invisivel: a UI dizia "revertido" com os
+        # arquivos intactos. O erro fica registrado E o revert responde
+        # que nao ha versao (ver revert_corrections).
+        print(f"[warn] snapshot pre-correcao falhou: {type(e).__name__}: {e}",
+              flush=True)
     return data
 
 
@@ -656,6 +661,8 @@ def discard(edit_dir: Path) -> dict[str, Any]:
     data = load(edit_dir)
     vid = data.get("revertVersionId")
     restored = None
+    tem_o_que_reverter = any(data.get("dirty", {}).values()) if isinstance(
+        data.get("dirty"), dict) else bool(data.get("dirty"))
     if vid:
         try:
             from app.project_versions import restore
@@ -663,6 +670,13 @@ def discard(edit_dir: Path) -> dict[str, Any]:
             restored = restore(Path(edit_dir), str(vid))
         except Exception as e:
             return {"ok": False, "error": str(e)}
+    elif tem_o_que_reverter:
+        # Havia correcao marcada e NENHUM snapshot (a criacao dele falhou la
+        # atras). Responder ok aqui era mentira: a UI dizia "revertido" com
+        # os arquivos exatamente como estavam.
+        return {"ok": False,
+                "error": "Não há versão guardada para reverter — as "
+                         "correções feitas ficam como estão."}
     save(edit_dir, empty_corrections())
     return {"ok": True, "restored": restored, "corrections": empty_corrections()}
 

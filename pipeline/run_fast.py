@@ -231,7 +231,8 @@ def write_timing(edit_dir: Path) -> dict:
     # desliga sozinho quando encontra recurso de template que nao suporta, e ate
     # aqui isso so aparecia num print do pipeline -- que nao e guardado.
     for campo in ("overlayEngine", "overlayEngineSkip",
-                  "overlayUmaPassadaFalhou"):
+                  "overlayUmaPassadaFalhou", "legendaCobertura",
+                  "legendaIA"):
         if _RENDER_META.get(campo):
             payload[campo] = _RENDER_META[campo]
     # Trilha pedida e nao entregue: ate 25/08 o video saia SEM musica em
@@ -1285,7 +1286,7 @@ def transcript_text(edit_dir: Path, stem: str) -> str:
     p = edit_dir / "transcripts" / f"{stem}.json"
     if not p.exists():
         return ""
-    data = json.loads(p.read_text(encoding="utf-8"))
+    data = json.loads(p.read_text(encoding="utf-8-sig"))
     return (data.get("text") or "").strip()
 
 
@@ -1400,7 +1401,7 @@ def promote_final_headline(
     state_p = edit_dir / "state.json"
     if state_p.exists():
         try:
-            prev_name = str(json.loads(state_p.read_text(encoding="utf-8")).get("finalVideo") or "")
+            prev_name = str(json.loads(state_p.read_text(encoding="utf-8-sig")).get("finalVideo") or "")
         except (OSError, json.JSONDecodeError, TypeError):
             prev_name = ""
     try:
@@ -1447,7 +1448,11 @@ def _jpeg_is_dark(jpg: Path) -> bool:
         from PIL import Image
 
         im = Image.open(jpg).convert("L").resize((24, 24))
-        return (sum(im.getdata()) / 576.0) < 16
+        # ImageStat em vez de getdata(): o getdata esta deprecado e imprime
+        # um DeprecationWarning em TODO job (e quebra de vez no Pillow 14).
+        from PIL import ImageStat
+
+        return ImageStat.Stat(im).mean[0] < 16
     except Exception:
         pass
     try:
@@ -1754,7 +1759,7 @@ def _legenda_from_edl(edit_dir: Path, spoken: str, preset: dict) -> str:
     """Post caption from structure (hook/headline/quotes) — not a raw ASR dump."""
     edl: dict = {}
     try:
-        edl = json.loads((edit_dir / "edl.json").read_text(encoding="utf-8"))
+        edl = json.loads((edit_dir / "edl.json").read_text(encoding="utf-8-sig"))
     except (OSError, json.JSONDecodeError):
         pass
     llm = edl.get("llm") or {}
@@ -1764,7 +1769,7 @@ def _legenda_from_edl(edit_dir: Path, spoken: str, preset: dict) -> str:
     # Prefer on-screen hook from edit-data when present
     try:
         ed = json.loads(
-            (edit_dir / "remotion" / "public" / "edit-data.json").read_text(encoding="utf-8")
+            (edit_dir / "remotion" / "public" / "edit-data.json").read_text(encoding="utf-8-sig")
         )
         h = ed.get("hook") or {}
         if h.get("enabled", True):
@@ -1934,6 +1939,14 @@ def _llm_polish_legenda(draft: str, *, spoken: str, preset: dict) -> str | None:
         )
     except Exception as e:  # noqa: BLE001
         print(f"[warn] legenda LLM: {e}", flush=True)
+        # Sessao expirada no meio de um LOTE degrada video a video, calado:
+        # em 31/08 dois jobs seguidos sairam com legenda de template e o
+        # unico rastro era este [warn]. A ficha do card passa a dizer.
+        if "expirar" in str(e).lower() or "sessão" in str(e).lower() \
+                or "sessao" in str(e).lower():
+            _RENDER_META["legendaIA"] = (
+                "a legenda do post saiu do modelo pronto: a sessão do "
+                "Gemini/ChatGPT expirou — recapture na tela IA")
         return None
     text = (text or "").strip()
     if text.startswith("```"):
@@ -1983,7 +1996,7 @@ def write_legenda(edit_dir: Path, spoken: str, preset: dict) -> Path:
 def write_segments_json(edit_dir: Path, fps: float) -> None:
     clips = edit_dir / "clips_graded"
     segs = sorted(clips.glob("seg_*_v.mp4")) or sorted(clips.glob("seg_*.mp4"))
-    edl = json.loads((edit_dir / "edl.json").read_text(encoding="utf-8"))
+    edl = json.loads((edit_dir / "edl.json").read_text(encoding="utf-8-sig"))
     nranges = len(edl["ranges"])
     if len(segs) != nranges:
         raise RuntimeError(f"{len(segs)} segments for {nranges} ranges — clips_graded dirty")
@@ -2401,7 +2414,7 @@ def build_edit_data(cut: Path, preset: dict, hook: list[str], duration: float, f
     headline = preset.get("headline") or "outline"
     captions = preset.get("captions") or "karaoke"
     copy = preset.get("endCardCopy") or {}
-    n_segs = max(1, len(json.loads((cut.parent / "edl.json").read_text(encoding="utf-8"))["ranges"]))
+    n_segs = max(1, len(json.loads((cut.parent / "edl.json").read_text(encoding="utf-8-sig"))["ranges"]))
     cam = compute_camera(preset, n_segs)
     zooms = cam["zooms"]
 
@@ -2491,7 +2504,7 @@ def build_edit_data(cut: Path, preset: dict, hook: list[str], duration: float, f
     }
     if elems.get("flashCut"):
         # flash at each junction after the first
-        segs = json.loads((cut.parent / "remotion" / "public" / "segments.json").read_text(encoding="utf-8"))
+        segs = json.loads((cut.parent / "remotion" / "public" / "segments.json").read_text(encoding="utf-8-sig"))
         transitions = []
         for s in segs.get("segments", [])[1:]:
             transitions.append({"at": s["start"], "type": "flash", "frames": 2})
@@ -4359,7 +4372,7 @@ def run(
 
         def _caps_data() -> list:
             try:
-                return json.loads(caps_path.read_text(encoding="utf-8")) if caps_path.exists() else []
+                return json.loads(caps_path.read_text(encoding="utf-8-sig")) if caps_path.exists() else []
             except Exception:
                 return []
 
@@ -4426,6 +4439,14 @@ def run(
                     f"(última palavra {last:.1f}s / cut {duration:.1f}s)",
                     flush=True,
                 )
+                # Caso real (31/08): video de 24,2s ENTREGUE com a ultima
+                # legenda em 12,4s — 51% mudo de legenda — e o unico rastro
+                # era o [warn] acima, que nao e guardado. Abaixo de 80% a
+                # ficha do card passa a dizer, com os numeros.
+                if duration > 1 and last < 0.8 * duration:
+                    _RENDER_META["legendaCobertura"] = (
+                        f"as legendas cobrem só até {last:.0f}s de "
+                        f"{duration:.0f}s — confira no editor")
 
         try:
             from app.caption_fixes import apply_caption_fixes, load_stored_fixes
@@ -4494,7 +4515,7 @@ def run(
     set_stage(edit_dir, "preview", "Preparando preview…", 70)
     if not is_longform:
         write_segments_json(edit_dir, fps)
-    edl_ranges = json.loads((edit_dir / "edl.json").read_text(encoding="utf-8")).get("ranges") or []
+    edl_ranges = json.loads((edit_dir / "edl.json").read_text(encoding="utf-8-sig")).get("ranges") or []
     if is_longform:
         edit_data = build_longform_edit_data(cut_path, preset, duration, fps, edl_ranges)
         tmp = {"inserts": [], "hook": {"endSec": 3}, "endCard": {"lastSec": 2.5}}
@@ -4987,7 +5008,7 @@ def run(
         sys.path.insert(0, str(HELPERS))
         from video_score import score_structural  # type: ignore
 
-        edl_ranges = json.loads((edit_dir / "edl.json").read_text(encoding="utf-8")).get("ranges") or []
+        edl_ranges = json.loads((edit_dir / "edl.json").read_text(encoding="utf-8-sig")).get("ranges") or []
         silences = list((vdata or {}).get("silences") or [])
         low_levels = sum(
             1 for row in ((vdata or {}).get("range_levels") or [])

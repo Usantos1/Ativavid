@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 from pathlib import Path
@@ -162,12 +163,19 @@ def ensure_delivery_pack(
             state = json.loads(state_p.read_text(encoding="utf-8-sig"))
             if isinstance(state, dict):
                 state["deliveryPack"] = f"../{PACK_PARENT}/{stem}"
-                state_p.write_text(
+                # Atomico E com registro: um state.json truncado apaga fase,
+                # finalVideo e deliveryPack de uma vez; e a falha engolida
+                # aqui fazia a pasta publicar/ DUPLICAR no proximo rename
+                # (1,19 GB da outra vez) sem uma linha de log.
+                tmp = state_p.with_name(state_p.name + ".tmp")
+                tmp.write_text(
                     json.dumps(state, ensure_ascii=False, indent=2) + "\n",
                     encoding="utf-8",
                 )
-        except (OSError, json.JSONDecodeError, TypeError):
-            pass
+                os.replace(tmp, state_p)
+        except (OSError, json.JSONDecodeError, TypeError) as e:
+            print(f"[warn] deliveryPack nao gravou em state.json: {e}",
+                  flush=True)
     return dest
 
 

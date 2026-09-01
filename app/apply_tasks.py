@@ -544,6 +544,28 @@ def sweep_stale_applies(projects_root: Path, *, boot: bool = False) -> list[str]
     marked: list[str] = []
     with _index_lock:
         tasks = _load_index(root)
+        # Tarefa TERMINADA ha mais de 30 dias e fossil: uma "interrupted" de
+        # 18/08 ficou no indice para sempre, aparecendo em toda auditoria
+        # como se fosse pendencia. Encerradas antigas saem; running nunca.
+        velhas = []
+        for key, task in tasks.items():
+            fim = str(task.get("finishedAt") or "")
+            if fim and str(task.get("status") or "") != STATUS_RUNNING:
+                # `_utc()` daqui grava hora LOCAL sem fuso — compara-se com
+                # o relogio local, tolerando lixo no campo.
+                from datetime import datetime
+
+                try:
+                    idade = (datetime.now()
+                             - datetime.fromisoformat(fim[:19])).days
+                except ValueError:
+                    continue
+                if idade > 30:
+                    velhas.append(key)
+        if velhas:
+            for key in velhas:
+                tasks.pop(key, None)
+            _save_index(root, tasks)
         for key, task in list(tasks.items()):
             if not is_stale(task, boot=boot):
                 continue

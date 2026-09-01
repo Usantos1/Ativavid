@@ -622,6 +622,7 @@ function fichaHtml(j) {
   if (j.corteNota) linhas.push(["Corte", j.corteNota]);
   if (j.fonteNota) linhas.push(["Fonte", j.fonteNota]);
   if (j.midiaNota) linhas.push(["Mídia", j.midiaNota]);
+  if (j.legendaNota) linhas.push(["Legenda", j.legendaNota]);
   if (j.trilhaNota) linhas.push(["Trilha", j.trilhaNota, j.trilhaDetalhe]);
   if (j.cardFinalNota) linhas.push(["Marca", j.cardFinalNota]);
   // A nota do corte (gancho, clareza, ritmo, CTA) e a dica mais util dela.

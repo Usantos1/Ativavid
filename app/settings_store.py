@@ -5,6 +5,7 @@ Grava em %USERPROFILE%/ATIVAVID/settings.json (Program Files é só leitura).
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -135,7 +136,13 @@ def save_settings(patch: dict[str, Any]) -> dict[str, Any]:
     if srv:
         on_disk["supabaseServiceRoleKey"] = secret_store.protect(srv)
     try:
-        SETTINGS_PATH.write_text(json.dumps(on_disk, indent=2, ensure_ascii=False), encoding="utf-8")
+        # Escrita atomica: write_text direto trunca antes de escrever, e um
+        # processo morto nesse meio deixa settings.json VAZIO — na abertura
+        # seguinte load_settings devolve defaults e o projectsRoot do
+        # usuario "some" em silencio (a fila junto).
+        tmp = SETTINGS_PATH.with_name(SETTINGS_PATH.name + ".tmp")
+        tmp.write_text(json.dumps(on_disk, indent=2, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, SETTINGS_PATH)
     except OSError as e:
         raise OSError(
             f"Não foi possível gravar settings em {SETTINGS_PATH}: {e}"

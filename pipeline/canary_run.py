@@ -347,7 +347,16 @@ def _maybe_bake_zoom(edit_dir: Path, row: dict) -> None:
     flatten_remotion_camera(ed)
     ed_path.write_text(json.dumps(ed, indent=2, ensure_ascii=False), encoding="utf-8")
     pub_cut = edit_dir / "remotion" / "public" / "cut.mp4"
-    shutil.copy2(edit_dir / "cut.mp4", pub_cut)
+    cut = edit_dir / "cut.mp4"
+    # O proprio harness cria pub_cut como HARDLINK do cut (linha ~309);
+    # depois do recut in-place os dois nomes ainda sao o MESMO inode e o
+    # copy2 levanta SameFileError, derrubando o job do canario.
+    try:
+        mesmo = pub_cut.exists() and os.path.samefile(cut, pub_cut)
+    except OSError:
+        mesmo = False
+    if not mesmo:
+        shutil.copy2(cut, pub_cut)
 
 
 def _fallback_full(edit_dir: Path, remotion: Path, edit_data: dict) -> None:

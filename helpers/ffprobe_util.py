@@ -31,7 +31,14 @@ NOWIN = {"creationflags": subprocess.CREATE_NO_WINDOW} if hasattr(subprocess, "C
 
 
 def _default_runner(argv: Sequence[str]) -> str:
-    r = subprocess.run(list(argv), capture_output=True, text=True, **NOWIN)
+    # timeout: fonte num placeholder de nuvem (OneDrive) ou disco falhando
+    # pendurava o worker para sempre, sem log. 60s cobre qualquer probe sao.
+    try:
+        r = subprocess.run(list(argv), capture_output=True, text=True,
+                           timeout=60, **NOWIN)
+    except subprocess.TimeoutExpired:
+        print(f"[warn] ffprobe travou (60s): {argv[-1]}", flush=True)
+        return ""
     return r.stdout or ""
 
 

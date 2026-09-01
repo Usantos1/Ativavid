@@ -351,6 +351,17 @@ def load_sessions() -> dict:
         data = json.loads(path.read_text(encoding="utf-8-sig"))
     except (json.JSONDecodeError, OSError):
         return {"providers": {}}
+    # Arquivo cifrado (DPAPI): os cookies dao a sessao INTEIRA do Gemini/
+    # ChatGPT/Claude de quem os ler — mesmo tratamento do service role.
+    # Texto plano e legado e continua valendo (nunca invalidar o legado);
+    # ele vira cifrado na proxima captura.
+    if isinstance(data, dict) and data.get("dpapi"):
+        from app import secret_store
+
+        try:
+            data = json.loads(secret_store.unprotect(str(data["dpapi"])))
+        except (json.JSONDecodeError, TypeError, ValueError):
+            return {"providers": {}}
     # Migra sessão antiga (Program Files / repo) para a pasta do usuário
     if path == _LEGACY_SESSIONS and isinstance(data, dict) and data.get("providers"):
         try:
@@ -391,8 +402,17 @@ def save_session_capture(provider_id: str, cookies: list[dict], meta: dict | Non
         "meta": meta or {},
     }
     USER_DIR.mkdir(parents=True, exist_ok=True)
+    from app import secret_store
+
+    # Em repouso, cifrado (DPAPI) — quando a maquina suporta. `protect`
+    # devolve o texto original quando nao da para cifrar, e ai o arquivo
+    # sai plano como antes (fora do Windows / DPAPI indisponivel).
+    plano = json.dumps(data, indent=2, ensure_ascii=False)
+    blob = secret_store.protect(plano)
+    corpo = (json.dumps({"v": 1, "dpapi": blob}, indent=2)
+             if secret_store.is_protected(blob) else plano)
     tmp = SESSIONS_PATH.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    tmp.write_text(corpo, encoding="utf-8")
     tmp.replace(SESSIONS_PATH)
     return {
         "ok": True,

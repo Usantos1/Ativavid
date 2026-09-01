@@ -76,6 +76,11 @@ MOTIVOS_DO_APPLY: tuple[tuple[str, str], ...] = (
     ("timestamp fora da duração",
      "Uma legenda aponta para um instante que não existe mais no corte. "
      "Use “Salvar e refazer a Fase 2” para recriá-las."),
+    # PermissionError do Windows quando o video esta aberto em outro
+    # programa — a mensagem generica escondia um conserto de 2 segundos.
+    ("winerror 32",
+     "O vídeo está aberto em outro programa (player ou pasta com "
+     "pré-visualização). Feche-o e clique em Aplicar de novo."),
 )
 
 
@@ -555,8 +560,9 @@ def _promote_file(src: Path, dest: Path) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     if dest.resolve() == src.resolve():
         return
-    if dest.exists():
-        dest.unlink()
+    # os.replace ja substitui atomicamente; o unlink previo que havia aqui
+    # criava uma janela sem arquivo nenhum e, com o video aberto no player,
+    # dava WinError 32 depois do render inteiro pronto.
     src.replace(dest)
 
 
@@ -875,6 +881,12 @@ def _temp_install(swaps: list[tuple[Path, Path]]):
                     bak.unlink()
                 shutil.copy2(live, bak)
                 backups.append((live, bak))
+                # O "Liberar espaço" liga public/cut.mp4 ao edit/cut.mp4 por
+                # HARDLINK quando os bytes coincidem. copy2 por cima do live
+                # TRUNCA o inode compartilhado: a fonte da verdade viraria o
+                # temporário ainda nao validado — para sempre, calado, mesmo
+                # com o restore abaixo (que troca a ENTRADA, nao o inode).
+                live.unlink()
             shutil.copy2(new, live)
         yield
     finally:
@@ -884,8 +896,10 @@ def _temp_install(swaps: list[tuple[Path, Path]]):
                     if live.exists():
                         live.unlink()
                     bak.replace(live)
-            except OSError:
-                pass
+            except OSError as e:
+                # Restore falhou = o temporario ficou instalado como live.
+                # Sem esta linha ninguem sabia.
+                print(f"APPLY_RESTORE_FALHOU {live.name}: {e}", flush=True)
 
 
 def default_hooks(edit_dir: Path) -> ApplyHooks:

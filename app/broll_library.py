@@ -12,6 +12,19 @@ REPO = Path(__file__).resolve().parent.parent
 
 
 def library_root(projects_root: Path | None = None) -> Path:
+    if not projects_root:
+        # A biblioteca REAL vive ao lado da pasta de projetos (E:). Cair no
+        # Path.home() criava uma Biblioteca fantasma no C: — vazia, mas
+        # convincente: ela ja escondeu a trilha (3.03) e o b-roll (29/08) de
+        # quem leu a errada. Sem argumento, resolve pelo projectsRoot salvo.
+        try:
+            from app.settings_store import load_settings
+
+            salvo = str(load_settings().get("projectsRoot") or "").strip()
+            if salvo:
+                projects_root = Path(salvo)
+        except Exception:  # noqa: BLE001
+            pass
     if projects_root:
         root = Path(projects_root).expanduser().resolve().parent / "Biblioteca"
     else:

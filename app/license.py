@@ -51,7 +51,7 @@ def _load_blob() -> dict[str, Any]:
     return {}
 
 
-def _cache_key() -> bytes:
+def _cache_key() -> bytes | None:
     """Segredo de assinatura do cache.
 
     Vem do license_config.json da build (não versionado), então cada build tem
@@ -59,7 +59,14 @@ def _cache_key() -> bytes:
     cache não protege nada mesmo.
     """
     cfg = ss.bundled_raw()
-    seed = str(cfg.get("cacheSecret") or "") or str(cfg.get("supabaseAnonKey") or "")
+    seed = str(cfg.get("cacheSecret") or "")
+    if not seed and not ss.is_dev_install():
+        # Sem cacheSecret numa build de cliente, o fallback antigo era a
+        # anon key — que e PUBLICA e vai embutida no proprio cliente, entao
+        # a assinatura virava forjavel por qualquer um. O build.ps1 barra
+        # build sem cacheSecret, mas quem burlasse o script ganhava um
+        # cache "assinado" de mentira. None = nenhuma cache e confiada.
+        return None
     return ("ativavid-cache-v1|" + (seed or "dev")).encode("utf-8")
 
 
@@ -81,7 +88,10 @@ def _sign_cache(blob: dict[str, Any]) -> str | None:
         if blob.get(extra):
             payload[extra] = blob[extra]
     msg = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-    return hmac.new(_cache_key(), msg.encode("utf-8"), hashlib.sha256).hexdigest()
+    chave = _cache_key()
+    if chave is None:
+        return None  # build sem cacheSecret: nenhum cache e assinado nem aceito
+    return hmac.new(chave, msg.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
 def _cache_intact(blob: dict[str, Any]) -> bool:
@@ -689,7 +699,12 @@ _GATE_FREE_EXACT = frozenset({
     "/api/espaco/liberar",
     "/api/cache",
     "/api/llm-gateway",
-    "/v1/chat/completions",
+    # /v1/chat/completions NAO entra: e um endpoint OpenAI-compativel
+    # completo — livre, um PC bloqueado viraria proxy de LLM gratis (a
+    # sessao Gemini/ChatGPT capturada respondendo para qualquer cliente
+    # apontado ao localhost). O pipeline nao passa por aqui: ele chama
+    # llm_gateway como modulo. So o botao "Testar" da tela IA usa a rota,
+    # e quem esta bloqueado nao tem por que testar IA.
     "/api/jobs/open-folder",
     "/api/jobs/open-final",
     # Mesma familia: so ABRE um arquivo que ja existe. E quando alguem esta
@@ -713,7 +728,10 @@ _GATE_FREE_PREFIX = (
     "/api/admin/",
     "/api/update/",
     "/api/llm-proxy",
-    "/api/library/",
+    # /api/library/ saiu da lista: as LEITURAS sao GET (o gate so roda no
+    # POST), e as escritas — add, upload, use, remover, categoria — sao
+    # mutacao de projeto/biblioteca que nao deve rodar sem licenca. `use`
+    # em particular copia bytes arbitrarios para dentro do projeto.
     "/api/doutor",
 )
 

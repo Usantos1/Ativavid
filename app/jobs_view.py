@@ -174,6 +174,15 @@ def _aviso_de_trilha(job: dict, edit: Path) -> None:
         job["midiaNota"] = (
             f"{len(perdida)} mídia(s) que você inseriu não estavam na pasta do "
             f"projeto e ficaram de fora: {', '.join(str(x)[:28] for x in perdida[:3])}")
+    # Video entregue com legenda cobrindo so parte da fala (caso real de
+    # 31/08: 12s legendados num video de 24s) — o aviso vinha num [warn]
+    # que nao e guardado; agora o render grava e o card mostra.
+    cob = str(t.get("legendaCobertura") or "").strip()
+    ia = str(t.get("legendaIA") or "").strip()
+    if cob:
+        job["legendaNota"] = cob
+    elif ia:
+        job["legendaNota"] = ia
     ft = t.get("fonteSemAcento") or {}
     if isinstance(ft, dict) and ft.get("faltam"):
         # Sai no VIDEO, na frente do cliente dele: a fonte desenha o simbolo

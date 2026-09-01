@@ -75,7 +75,13 @@ def save_state(state: dict[str, Any]) -> dict[str, Any]:
     out.update(state)
     out["canaryLimit"] = _positive_int(out.get("canaryLimit"))
     out["canaryAttempt"] = int(out.get("canaryAttempt") or 0)
-    STATE_PATH.write_text(json.dumps(out, indent=2, ensure_ascii=False), encoding="utf-8")
+    # Atomico: write_text direto trunca antes de escrever; um leitor nesse
+    # instante ve JSON pela metade, load_state devolve _EMPTY e o proximo
+    # save_state APAGA um `paused: true` legitimo — o canario pausado por
+    # defeito real voltava sozinho.
+    _tmp = STATE_PATH.with_name(STATE_PATH.name + ".tmp")
+    _tmp.write_text(json.dumps(out, indent=2, ensure_ascii=False), encoding="utf-8")
+    os.replace(_tmp, STATE_PATH)
     try:
         from app.settings_store import save_settings
 
@@ -97,6 +103,32 @@ def _set_rollout(value: str) -> None:
         print(f"[warn] overlayRollout={value} não gravou: {e}", flush=True)
 
 
+
+@contextmanager
+def _trava_do_estado(timeout_s: float = 5.0):
+    """Serializa load->muda->save entre processos (parallelJobs=2).
+
+    Sem isto, o worker A le o estado ANTES de o B pausar e o save do A
+    apaga a pausa — a mesma perda que a escrita truncada causava, por
+    outra porta. Falha ABERTA com aviso: nunca derruba job por causa de
+    trava de telemetria.
+    """
+    USER_DIR.mkdir(parents=True, exist_ok=True)
+    path = STATE_PATH.with_name(STATE_PATH.name + ".lock")
+    fim = time.monotonic() + timeout_s
+    fh = None
+    while fh is None and time.monotonic() < fim:
+        fh = _tentar_pegar(path)
+        if fh is None:
+            time.sleep(0.05)
+    if fh is None:
+        print("[warn] trava do canary-state ocupada — seguindo sem", flush=True)
+    try:
+        yield
+    finally:
+        if fh is not None:
+            release_overlay_slot(fh)
+
 def canary_allows_attempt() -> bool:
     """True só se canary ativo, não pausado, e attempt < canaryLimit."""
     from app.overlay_path import overlay_rollout
@@ -104,6 +136,19 @@ def canary_allows_attempt() -> bool:
     if overlay_rollout() != "canary":
         return False
     st = load_state()
+    if st.get("paused") and not st.get("pausedAt"):
+        # Pausa fossil: anterior ao codigo que grava a data. Na maquina do
+        # usuario havia um "TRUE_PEAK -0.9" de agosto que hoje nem pausaria
+        # (cabe na folga) — e qualquer volta ao modo canario nasceria
+        # bloqueada por ele. Sem data = de outra era = limpa, com registro.
+        with _trava_do_estado():
+            st = load_state()
+            if st.get("paused") and not st.get("pausedAt"):
+                print(f"CANARY_PAUSA_FOSSIL_LIMPA {st.get('pausedReason')}",
+                      flush=True)
+                st["paused"] = False
+                st["pausedReason"] = None
+                save_state(st)
     if st.get("paused"):
         return False
     limit = canary_limit(st)
@@ -128,9 +173,10 @@ def begin_overlay_attempt() -> int:
 
     if overlay_rollout() != "canary":
         return 0
-    st = load_state()
-    st["canaryAttempt"] = int(st.get("canaryAttempt") or 0) + 1
-    save_state(st)
+    with _trava_do_estado():
+        st = load_state()
+        st["canaryAttempt"] = int(st.get("canaryAttempt") or 0) + 1
+        save_state(st)
     n = st["canaryAttempt"]
     limit = canary_limit(st)
     print(f"CANARY_ATTEMPT {n}/{limit}", flush=True)
@@ -150,13 +196,15 @@ def pause_canary(reason: str) -> None:
         return
     from datetime import datetime
 
-    st = load_state()
-    st["paused"] = True
-    st["pausedReason"] = str(reason or "unknown")
-    # QUANDO. Sem a data, uma pausa antiga por um defeito ja consertado fica
-    # indistinguivel de uma pausa de agora — e o estado sobrevive a versoes.
-    st["pausedAt"] = datetime.now().astimezone().isoformat(timespec="seconds")
-    save_state(st)
+    with _trava_do_estado():
+        st = load_state()
+        st["paused"] = True
+        st["pausedReason"] = str(reason or "unknown")
+        # QUANDO. Sem a data, uma pausa antiga por um defeito ja consertado
+        # fica indistinguivel de uma pausa de agora — e o estado sobrevive a
+        # versoes.
+        st["pausedAt"] = datetime.now().astimezone().isoformat(timespec="seconds")
+        save_state(st)
     _set_rollout("off")
     print(f"CANARY_PAUSED {st['pausedReason']}", flush=True)
 
@@ -184,12 +232,13 @@ def record_canary_job(job: dict[str, Any]) -> None:
     """
     from datetime import datetime
 
-    st = load_state()
-    jobs = list(st.get("jobs") or [])
-    jobs.append(dict(job, at=datetime.now().astimezone().isoformat(
-        timespec="seconds")))
-    st["jobs"] = jobs
-    save_state(st)
+    with _trava_do_estado():
+        st = load_state()
+        jobs = list(st.get("jobs") or [])
+        jobs.append(dict(job, at=datetime.now().astimezone().isoformat(
+            timespec="seconds")))
+        st["jobs"] = jobs
+        save_state(st)
 
 
 # Quanto esperar pela vaga antes de desistir e ir pelo caminho lento.

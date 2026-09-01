@@ -459,7 +459,7 @@ def probe_duration(video: Path) -> float:
     r = _run(
         ["ffprobe", "-v", "error", "-show_entries", "format=duration",
          "-of", "default=noprint_wrappers=1:nokey=1", str(video)],
-        capture_output=True, text=True,
+        capture_output=True, text=True, timeout=60,
     )
     return float((r.stdout or "").strip() or 0.0)
 
@@ -497,7 +497,7 @@ def _color_tags(video: Path) -> dict[str, str]:
             ["ffprobe", "-v", "error", "-select_streams", "v:0",
              "-show_entries", "stream=color_transfer,color_primaries,color_space,color_range",
              "-of", "default=noprint_wrappers=1", str(video)],
-            capture_output=True, text=True, check=True,
+            capture_output=True, text=True, timeout=60, check=True,
         )
     except subprocess.CalledProcessError as e:
         # Sem as tags, `is_hdr_source` diz False e o TONEMAP e pulado: fonte
@@ -568,7 +568,7 @@ def is_portrait_source(video: Path) -> bool:
             ["ffprobe", "-v", "error", "-select_streams", "v:0",
              "-show_entries", "stream=width,height",
              "-of", "csv=p=0", str(video)],
-            capture_output=True, text=True, check=True,
+            capture_output=True, text=True, timeout=60, check=True,
         )
         # first_record: com stream group o ffprobe repete o bloco e o
         # split(",") cru pegava valor colado do segundo. Caia no except
@@ -584,7 +584,7 @@ def is_portrait_source(video: Path) -> bool:
             ["ffprobe", "-v", "error", "-select_streams", "v:0",
              "-show_entries", "stream_side_data=rotation",
              "-of", "default=noprint_wrappers=1:nokey=1", str(video)],
-            capture_output=True, text=True,
+            capture_output=True, text=True, timeout=60,
         )
         vals = [v for v in r.stdout.split() if v.lstrip("-").isdigit()]
         if vals:
@@ -611,7 +611,7 @@ def source_fps(video: Path) -> float:
             ["ffprobe", "-v", "error", "-select_streams", "v:0",
              "-show_entries", "stream=r_frame_rate",
              "-of", "default=noprint_wrappers=1:nokey=1", str(video)],
-            capture_output=True, text=True, check=True,
+            capture_output=True, text=True, timeout=60, check=True,
         )
         return parse_rate(first_record(out.stdout), default=0.0)
     except Exception:
