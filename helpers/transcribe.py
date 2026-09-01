@@ -797,14 +797,30 @@ def _variante_compativel(gravada: str | None) -> bool:
     return tem == rev.sufixo_desejado()
 
 
-def transcript_cache_hit(out_path: Path, video: Path) -> bool:
+def transcript_cache_hit(out_path: Path, video: Path,
+                         backend: str = "") -> bool:
     """Reusa transcrição só se o arquivo fonte tem o mesmo tamanho e mtime.
 
     E, desde a revisão textual, só se o transcript gravado passou pelo mesmo
     processo que está pedido agora — ver `_variante_compativel`.
+
+    `backend`: o que está sendo PEDIDO agora. A troca tem direção: pedido
+    pago (elevenlabs) com transcript LOCAL gravado e miss — o usuario esta
+    pagando pela qualidade e reusar o local seria "degradar calado" (as
+    palavras do proprio cache entre projetos). O inverso (pedido local com
+    transcript pago gravado) continua hit: um transcript do Scribe custou
+    dinheiro e nao se joga fora. Caso real: o C066 saiu com legenda
+    alucinada do Whisper e o refazer com o app ja em ElevenLabs reusava o
+    transcript ruim — foi preciso apagar arquivo na mao.
     """
     if not out_path.exists():
         return False
+    if str(backend or "").strip().lower() == "elevenlabs":
+        marca = marca_da_assinatura(out_path.parent, Path(video).stem)
+        if marca is not None and marca.startswith("local-"):
+            print(f"  transcript local gravado, pedido elevenlabs — "
+                  f"retranscrevendo {Path(video).stem}", flush=True)
+            return False
     sig_path = signature_path(out_path.parent, Path(video).stem)
     wanted = source_signature(video)
     have = ""
@@ -1220,7 +1236,7 @@ def transcribe_one(
     transcripts_dir.mkdir(parents=True, exist_ok=True)
     out_path = transcripts_dir / f"{video.stem}.json"
 
-    if transcript_cache_hit(out_path, video):
+    if transcript_cache_hit(out_path, video, backend):
         if verbose:
             print(f"cached: {out_path.name}")
         return out_path

@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.55
+
+- **Trocar o motor de transcrição para o ElevenLabs agora vale também
+  para vídeo já importado.** Um refazer reusava o transcript local antigo
+  (foi o que manteve a legenda alucinada do vídeo do "defeito
+  sobrenatural" mesmo depois da troca). A regra tem direção: pedido pago
+  com transcript local gravado re-transcreve; pedido local com transcript
+  pago gravado mantém — o que custou dinheiro não se joga fora.
+
 ## 4.54
 
 - **Legenda "toda errada e remontada" no refazer: era alucinação do

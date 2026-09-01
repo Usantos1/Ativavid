@@ -278,3 +278,34 @@ def test_caps_only_esta_nos_tres_lugares():
     for comp in ("SimpleCaptions", "ScatterCaptions", "ImpactCaptions", "Main"):
         tsx = (REPO / "assets" / "shortform" / "src" / f"{comp}.tsx").read_text(encoding="utf-8")
         assert "capTransform()" in tsx or "hookTransform()" in tsx, comp
+
+
+def test_troca_de_motor_tem_direcao(tmp_path, monkeypatch):
+    """Caso real C066: app trocado para ElevenLabs, refazer reusava o
+    transcript LOCAL alucinado (srcsig nao olhava o motor). Pedido pago +
+    gravado local = re-transcreve; pedido local + gravado pago = mantem
+    (transcript do Scribe custou dinheiro)."""
+    import transcribe as tr
+
+    # neutraliza a variante da REVISAO (regra propria, ja testada em
+    # test_motivo_da_transcricao) para medir so a direcao da troca de motor
+    monkeypatch.setattr(tr, "_revisao", lambda: None)
+    video = tmp_path / "fonte.mp4"
+    video.write_bytes(b"x" * 500)
+    tdir = tmp_path / "transcripts"
+    tdir.mkdir()
+    out = tdir / "fonte.json"
+    out.write_text('{"words": []}', encoding="utf-8")
+
+    tr.write_source_signature(tdir, video, marca="local-medium")
+    assert tr.transcript_cache_hit(out, video, "elevenlabs") is False
+    assert tr.transcript_cache_hit(out, video, "local") is True
+
+    tr.write_source_signature(tdir, video, marca="elevenlabs-scribe_v1")
+    assert tr.transcript_cache_hit(out, video, "elevenlabs") is True
+    assert tr.transcript_cache_hit(out, video, "local") is True
+
+    # assinatura LEGADA (sem marca): nunca invalida — retranscrever a base
+    # inteira do usuario para talvez nao corrigir nada
+    tr.write_source_signature(tdir, video)
+    assert tr.transcript_cache_hit(out, video, "elevenlabs") is True
