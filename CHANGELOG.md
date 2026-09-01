@@ -1,5 +1,17 @@
 # Changelog
 
+## 4.56
+
+- **Palavra que o corte removeu não pisca mais no meio da legenda.** Quando
+  o corte tirava um trecho, a palavra que ficava quase toda dentro dele
+  ainda aparecia na legenda como um flash de milissegundos — e podia cair
+  no meio da fala seguinte (num vídeo real, um "né?" de 8ms entrou dentro
+  de "Prime Camp" e a tela mostrou "Prime né? Camp"). Agora a palavra só
+  entra na legenda se uma parte de verdade dela ficou no áudio. Medido nos
+  seus projetos: 55 de 202 vídeos tinham palavras-fantasma dessas (de 1 a
+  6 por vídeo). Clique em "Salvar e refazer a Fase 2" no vídeo afetado
+  depois de atualizar.
+
 ## 4.55
 
 - **Trocar o motor de transcrição para o ElevenLabs agora vale também

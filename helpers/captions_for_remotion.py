@@ -304,6 +304,17 @@ def build_captions_with_provenance(edl: dict, edit_dir: Path, *, quiet: bool = F
                 if dono.get((src, k_w), i) != i:
                     continue      # esta palavra e de outro trecho
                 w = words[k_w]
+                ws = float(w["start"])
+                we = float(w.get("end") or ws)
+                # Palavra que o corte removeu quase inteira nao vira legenda.
+                # Sem isto sobra uma lasca de milissegundos que o espectador
+                # nao ouve — e, com J-cut (o audio do trecho seguinte comeca
+                # antes), ela ainda cai DENTRO da fala seguinte: um "ne?" de
+                # 8ms rendeu "Prime ne? Camp" na tela. O dono ja e o trecho de
+                # MAIOR sobreposicao, entao descartar aqui descarta de vez.
+                audivel = min(we, b) - max(ws, a)
+                if audivel < 0.06 and audivel < 0.25 * max(we - ws, 1e-9):
+                    continue
                 rel_t = max(0.0, float(w["start"]) - a)
                 rel_e = max(rel_t + 0.04, float(w.get("end") or w["start"]) - a)
                 t = min(out_dur, rel_t) + out_a
