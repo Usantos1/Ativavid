@@ -184,6 +184,7 @@
                 <button type="button" class="export-btn" id="btnPick">Escolher vídeos</button>
                 <button type="button" class="ghost-btn" id="btnPickFolder">Escolher pasta</button>
                 <button type="button" class="ghost-btn" id="btnPickPodcast" title="Um vídeo longo vira vários Reels">Clipes de podcast</button>
+                <button type="button" class="ghost-btn" id="btnMultiplicador" title="Variações de gancho, corpo e CTA viram todas as combinações — teste de criativo pronto">Multiplicador de criativos</button>
               </div>
             </div>
           </div>
@@ -989,6 +990,48 @@
       <button type="button" class="ghost-btn" id="btnImportTrio"
               title="Importa o mesmo vídeo cinco vezes — Dinâmico, Vídeo completo, Sem cortes, Reels/Shorts e Viral — para comparar lado a lado">Gerar 5 versões</button>
       <button type="button" class="export-btn" id="btnImportGo">Editar com IA</button>
+    </div>
+  </dialog>
+
+  <dialog id="dlgMulti" class="dlg dlg-import">
+    <h3>Multiplicador de criativos</h3>
+    <p class="hint">Grave variações de cada parte. O ATIVAVID monta <strong>todas as combinações</strong> na ordem gancho → corpo → CTA e coloca cada uma na fila como um vídeo próprio (ex.: 3 × 3 × 3 = 27 criativos para testar no tráfego pago).</p>
+    <div class="multi-grid">
+      <div class="multi-box" data-papel="gancho">
+        <h4>Ganchos</h4>
+        <p class="muted">a abertura, os 2-3 primeiros segundos</p>
+        <div class="multi-lista"></div>
+        <button type="button" class="ghost-btn multi-add">Escolher vídeos</button>
+      </div>
+      <div class="multi-box" data-papel="corpo">
+        <h4>Corpos</h4>
+        <p class="muted">o miolo: a oferta, a demonstração</p>
+        <div class="multi-lista"></div>
+        <button type="button" class="ghost-btn multi-add">Escolher vídeos</button>
+      </div>
+      <div class="multi-box" data-papel="cta">
+        <h4>CTAs</h4>
+        <p class="muted">o fechamento: o convite para agir</p>
+        <div class="multi-lista"></div>
+        <button type="button" class="ghost-btn multi-add">Escolher vídeos</button>
+      </div>
+    </div>
+    <p class="hint" id="multiConta">Arraste vídeos para as caixas ou use Escolher vídeos.</p>
+    <div class="import-block">
+      <label class="import-field">Tipo de conteúdo
+        <select id="multiContentType">
+          <option value="ad" selected>Anúncio (AIDA)</option>
+          <option value="sales">Venda</option>
+          <option value="viral">Viral</option>
+          <option value="educational">Educativo</option>
+          <option value="humor">Humor</option>
+          <option value="informational">Informativo</option>
+        </select>
+      </label>
+    </div>
+    <div class="dlg-actions">
+      <button type="button" class="ghost-btn" id="btnMultiCancel">Cancelar</button>
+      <button type="button" class="export-btn" id="btnMultiGo" disabled>Criar combinações</button>
     </div>
   </dialog>
 

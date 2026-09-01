@@ -3690,6 +3690,111 @@ class StudioHandler(BaseHTTPRequestHandler):
             self._json({"ok": True, "jobs": created, "merged": bool(merge and len(created) == 1)})
             return
 
+        if path == "/api/multiplicador":
+            # Multiplicador de criativos: N ganchos x N corpos x N CTAs viram
+            # um job multi-take por combinação (ver app/multiplicador.py).
+            from app import license as lic
+            from app import multiplicador as mult
+
+            st = lic.entitlement()
+            if not st.get("entitled"):
+                self._json({"error": lic.deny_reason(st), "license": lic.public_status()}, 403)
+                return
+            ctype = self.headers.get("Content-Type", "")
+            arquivos: dict[str, list[tuple[str, Path, bool]]] = {p: [] for p in mult.PAPEIS}
+            intent: dict | None = None
+            temp: Path | None = None
+            if "multipart/form-data" in ctype:
+                from app import multipart_stream as mp
+
+                n = int(self.headers.get("Content-Length") or 0)
+                temp = self.projects_root / ".ativavid" / "upload" / uuid.uuid4().hex[:12]
+                try:
+                    enviados, campos = mp.parse(self.rfile, ctype, n, temp)
+                except mp.MultipartError as e:
+                    # Upload recusado deixa rastro (mesma regra do import
+                    # normal, 3.42): sem isto o motivo morre num print.
+                    self._erro_import = str(e)
+                    self._registrar_import("multiplicador", [], f"recusado: {e}")
+                    shutil.rmtree(temp, ignore_errors=True)
+                    self._json({"error": str(e)}, 422)
+                    return
+                try:
+                    papeis = json.loads(campos.get("papeis") or "{}")
+                    intent = json.loads(campos["intent"]) if campos.get("intent") else None
+                except json.JSONDecodeError:
+                    papeis, intent = {}, None
+                # Cada item da caixa é `{"arquivo": nome}` (veio no upload) ou
+                # `{"caminho": path}` (escolhido pelo app — o arquivo já está
+                # no disco). `enviados` chega na ordem do envio, com o nome
+                # original; nome repetido consome a próxima ocorrência livre.
+                restantes = list(enviados)
+                for papel in mult.PAPEIS:
+                    for item in papeis.get(papel) or []:
+                        if isinstance(item, str):
+                            item = {"arquivo": item}
+                        cam = (item or {}).get("caminho")
+                        if cam:
+                            src = Path(str(cam))
+                            if src.is_file() and _is_import_video(src):
+                                arquivos[papel].append((src.name, src, False))
+                            continue
+                        nome = str((item or {}).get("arquivo") or "")
+                        for i, (n_arq, caminho) in enumerate(restantes):
+                            if n_arq == nome:
+                                arquivos[papel].append((nome, Path(caminho), True))
+                                restantes.pop(i)
+                                break
+            else:
+                body = self._read_json() or {}
+                intent = body.get("intent") if isinstance(body.get("intent"), dict) else None
+                chaves = {"gancho": "ganchos", "corpo": "corpos", "cta": "ctas"}
+                for papel in mult.PAPEIS:
+                    for raw in body.get(chaves[papel]) or []:
+                        src = Path(str(raw))
+                        if src.is_file() and _is_import_video(src):
+                            arquivos[papel].append((src.name, src, False))
+            try:
+                mae, fontes = mult.preparar_pasta_mae(self.projects_root, arquivos)
+                combos = mult.materializar_combos(
+                    self.projects_root, fontes, intent=intent)
+            except mult.MultiplicadorInvalido as e:
+                self._json({"error": str(e)}, 422)
+                return
+            finally:
+                if temp is not None:
+                    shutil.rmtree(temp, ignore_errors=True)
+            # Outro branch desta função faz `import threading` local, o que
+            # torna o nome local à função INTEIRA — sem este import o uso
+            # abaixo dá UnboundLocalError (visto no laboratório).
+            import threading
+
+            created = _utc()
+            for ch in combos:
+                job = {
+                    "id": ch["id"],
+                    "name": ch["name"],
+                    "title": ch["name"],
+                    "titleLocked": True,
+                    "source": ch["source"],
+                    "sources": ch["sources"],
+                    "editDir": ch["editDir"],
+                    "projectDir": ch["projectDir"],
+                    "status": "queued",
+                    "message": "Na fila · combinação",
+                    "phase": 0,
+                    "createdAt": created,
+                    "updatedAt": created,
+                }
+                self.store.upsert(job)
+                self.worker.enqueue(ch["id"])
+                threading.Thread(target=ensure_job_thumb, args=(job,),
+                                 daemon=True, name=f"thumb-{ch['id']}").start()
+            self._json({"ok": True, "total": len(combos),
+                        "jobs": [c["id"] for c in combos],
+                        "fontes": str(mae)})
+            return
+
         self._json({"error": "unknown route"}, 404)
 
     def _find_job_by_folder(self, folder: str) -> dict | None:

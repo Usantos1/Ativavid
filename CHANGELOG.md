@@ -1,5 +1,17 @@
 # Changelog
 
+## 4.57
+
+- **Multiplicador de criativos.** Novo botão na tela inicial: você solta as
+  variações de gancho, corpo e CTA em três caixas e o ATIVAVID monta
+  **todas as combinações** na ordem gancho → corpo → CTA — 3 × 3 × 3 = 27
+  vídeos entram na fila de uma vez, cada um como um projeto próprio com o
+  nome da combinação (G1 · C2 · CTA3). Os arquivos ficam guardados uma vez
+  só (as combinações usam link, sem duplicar espaço) e a transcrição de
+  cada take é aproveitada entre as combinações. É o fluxo de teste de
+  criativo para tráfego pago: sobe tudo no gerenciador e deixa o algoritmo
+  achar o vencedor. Teto de 48 combinações por lote.
+
 ## 4.56
 
 - **Palavra que o corte removeu não pisca mais no meio da legenda.** Quando

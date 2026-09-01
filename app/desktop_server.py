@@ -525,6 +525,7 @@ class DesktopHandler(ps.Handler):
             "/api/jobs/open-log",
             "/api/jobs/append-cta",
             "/api/jobs/delete",
+            "/api/multiplicador",
         ):
             return self._studio_post()
 

@@ -2417,6 +2417,154 @@ function apiNativa() {
   return (api && typeof api.escolher_pasta === "function") ? api : null;
 }
 
+/** Multiplicador de criativos: variações de gancho, corpo e CTA viram TODAS
+ *  as combinações na fila (3×3×3 = 27). Dentro do app os arquivos entram por
+ *  CAMINHO (escolher_videos, sem upload); arrastar entrega File e sobe por
+ *  multipart — o servidor aceita os dois misturados no mesmo lote. */
+const MULTI_PAPEIS = ["gancho", "corpo", "cta"];
+const MULTI_TETO = 48;
+
+function wireMultiplicador() {
+  const dlg = $("#dlgMulti");
+  const btn = $("#btnMultiplicador");
+  if (!dlg || !btn) return;
+  const itens = { gancho: [], corpo: [], cta: [] };
+  const inputM = document.createElement("input");
+  inputM.type = "file";
+  inputM.accept = "video/*,.mov,.mp4,.m4v,.mkv,.webm";
+  inputM.multiple = true;
+  let papelAtivo = "gancho";
+  let enviando = false;
+
+  const render = () => {
+    let total = 1;
+    for (const papel of MULTI_PAPEIS) {
+      const lista = dlg.querySelector(`.multi-box[data-papel="${papel}"] .multi-lista`);
+      lista.innerHTML = "";
+      itens[papel].forEach((it, i) => {
+        const chip = document.createElement("div");
+        chip.className = "multi-chip";
+        const nome = document.createElement("span");
+        nome.className = "nome";
+        nome.textContent = it.name;
+        nome.title = it.path || it.name;
+        const tirar = document.createElement("button");
+        tirar.type = "button";
+        tirar.className = "tirar";
+        tirar.textContent = "×";
+        tirar.title = "Tirar este vídeo";
+        tirar.onclick = () => { itens[papel].splice(i, 1); render(); };
+        chip.append(nome, tirar);
+        lista.appendChild(chip);
+      });
+      total *= itens[papel].length;
+    }
+    const completo = MULTI_PAPEIS.every((p) => itens[p].length > 0);
+    const conta = $("#multiConta");
+    if (conta) {
+      if (!completo) {
+        conta.textContent = "Arraste vídeos para as caixas ou use Escolher vídeos — precisa de pelo menos 1 em cada.";
+      } else if (total > MULTI_TETO) {
+        conta.textContent = `${itens.gancho.length} × ${itens.corpo.length} × ${itens.cta.length} = ${total} combinações — passou do teto de ${MULTI_TETO}, tire alguma variação.`;
+      } else {
+        const min = Math.max(3, Math.round(total * 2.5));
+        conta.textContent = `${itens.gancho.length} gancho(s) × ${itens.corpo.length} corpo(s) × ${itens.cta.length} CTA(s) = ${total} vídeo${total > 1 ? "s" : ""} na fila (~${min} min de processamento).`;
+      }
+    }
+    const go = $("#btnMultiGo");
+    if (go) go.disabled = enviando || !completo || total > MULTI_TETO;
+  };
+
+  const addFiles = (papel, fileList) => {
+    filterImportVideos(fileList).forEach((f) => itens[papel].push({ name: f.name, file: f }));
+    render();
+  };
+
+  dlg.querySelectorAll(".multi-box").forEach((box) => {
+    const papel = box.dataset.papel;
+    box.querySelector(".multi-add").onclick = async () => {
+      const nat = apiNativa();
+      if (nat && typeof nat.escolher_videos === "function") {
+        const paths = (await nat.escolher_videos()) || [];
+        for (const p of paths) {
+          const name = String(p).split(/[\\/]/).pop();
+          if (!itens[papel].some((it) => it.path === p)) itens[papel].push({ name, path: p });
+        }
+        render();
+      } else {
+        papelAtivo = papel;
+        inputM.click();
+      }
+    };
+    box.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      box.classList.add("drag-over");
+    });
+    box.addEventListener("dragleave", () => box.classList.remove("drag-over"));
+    box.addEventListener("drop", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      box.classList.remove("drag-over");
+      if (e.dataTransfer) addFiles(papel, [...(e.dataTransfer.files || [])]);
+    });
+  });
+  inputM.addEventListener("change", () => {
+    addFiles(papelAtivo, inputM.files);
+    inputM.value = "";
+  });
+
+  btn.onclick = () => {
+    MULTI_PAPEIS.forEach((p) => { itens[p] = []; });
+    enviando = false;
+    render();
+    dlg.showModal();
+  };
+  const btnCancel = $("#btnMultiCancel");
+  if (btnCancel) btnCancel.onclick = () => dlg.close();
+
+  const btnGo = $("#btnMultiGo");
+  if (btnGo) btnGo.onclick = async () => {
+    if (enviando) return;
+    enviando = true;
+    render();
+    const intent = {
+      editingIntent: "complete",
+      preserveHook: true,
+      preserveCTA: true,
+      preserveCompleteSentences: true,
+      preserveContext: true,
+      contentType: $("#multiContentType")?.value || "ad",
+      brandId: state.brandActive?.id || null,
+    };
+    const fd = new FormData();
+    const papeis = {};
+    for (const papel of MULTI_PAPEIS) {
+      papeis[papel] = itens[papel].map((it) => {
+        if (it.path) return { caminho: it.path };
+        fd.append("file", it.file, it.name);
+        return { arquivo: it.name };
+      });
+    }
+    fd.append("papeis", JSON.stringify(papeis));
+    fd.append("intent", JSON.stringify(intent));
+    btnGo.textContent = "Criando…";
+    try {
+      const r = await api("/api/multiplicador", { method: "POST", body: fd });
+      dlg.close();
+      toast(`✓ ${r.total} combinações na fila — gancho → corpo → CTA`, 5000);
+      setView("fila");
+      await refreshJobs();
+    } catch (err) {
+      toast(err.message || "Falha ao criar as combinações", 5000);
+    } finally {
+      enviando = false;
+      btnGo.textContent = "Criar combinações";
+      render();
+    }
+  };
+}
+
 /** Importa por CAMINHO: nada de bytes subindo por HTTP.
  *
  *  O app e desktop e os arquivos ja estao no disco — a tela subia 1,5 GB para
@@ -2825,11 +2973,15 @@ function wireDrop() {
       input.click();
     };
   }
+  wireMultiplicador();
   // Arrastar arquivo para QUALQUER lugar da janela abre a importação — o
   // overlay dá o alvo gigante; sem ele o usuário tinha que acertar o card.
   const anywhere = overlayArraste;
   if (anywhere) {
     window.addEventListener("dragenter", (e) => {
+      // Com o Multiplicador aberto, as caixas dele são o alvo do arrasto —
+      // o overlay "Solte para importar" cobriria as caixas e roubaria o drop.
+      if ($("#dlgMulti")?.open) return;
       const types = (e.dataTransfer && e.dataTransfer.types) || [];
       if (![...types].includes("Files")) return;
       dragDepth += 1;
@@ -2843,6 +2995,9 @@ function wireDrop() {
     window.addEventListener("drop", (e) => {
       e.preventDefault();
       fecharArraste();
+      // Drop numa caixa do Multiplicador é tratado lá (stopPropagation);
+      // drop fora das caixas com o diálogo aberto não vira importação.
+      if ($("#dlgMulti")?.open) return;
       if (!e.dataTransfer) return;
       collectDroppedFiles(e.dataTransfer)
         .then((files) => { if (files && files.length) openImportDialog(files); })
