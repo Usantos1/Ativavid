@@ -197,3 +197,31 @@ def test_larg_hl_mede_com_a_fonte_que_desenha(tmp_path, monkeypatch):
     # TEM de mudar quando os glifos passam a sair nela
     assert com_reserva != normal
     assert com_reserva > 0
+
+
+def test_headline_tambem_normaliza_a_altura(tmp_path):
+    """Titulo curto bate no teto de px — e o teto rende alturas diferentes
+    por fonte. O fator vale nos DOIS motores (_hl_linhas e fitHeadline)."""
+    from app.render_proprio import Renderizador
+
+    def _tam(fam):
+        public = tmp_path / f"pub-{fam or 'nada'}"
+        (public / "sfx").mkdir(parents=True, exist_ok=True)
+        ed = {"width": 1080, "height": 1920, "fps": 30, "durationSec": 4,
+              "hook": {"enabled": False, "fontFamily": fam},
+              "captions": {"enabled": False}, "endCard": {"enabled": False},
+              "soundtrack": {"enabled": False}, "transitions": [],
+              "inserts": [], "behind": [],
+              "camera": {"enabled": False, "zooms": [1]}}
+        r = Renderizador(public, ed, frames=60, fps=30)
+        _, tam = r._hl_linhas("Oi", (900, 900), 100, 900.0)
+        return tam
+
+    assert _tam("anton") == round(_tam("poppins") * 0.83)
+
+    tsx = (REPO / "assets" / "shortform" / "src" / "Main.tsx").read_text(encoding="utf-8")
+    i = tsx.index("function fitHeadline")
+    assert "hookSizeFactor()" in tsx[i:i + 700], "o template ficou sem o fator"
+    ts = (REPO / "assets" / "shortform" / "src" / "fonts.ts").read_text(encoding="utf-8")
+    assert "ALTURA_FATOR: Record<string, number> = {anton: 0.83}" in ts, \
+        "as duas tabelas tem de dizer o MESMO numero"

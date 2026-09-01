@@ -1583,6 +1583,17 @@ class Renderizador:
 
         tam = int(safe_w / mais_larga(100) * 100)
         tam = max(HL_MIN, min(cap, int(safe_w / mais_larga(tam) * tam)))
+        # Altura normalizada tambem na HEADLINE: titulo curto bate no teto
+        # (cap) e o teto em px rende alturas diferentes por fonte — Anton
+        # 21% mais alta. Mesmo fator da legenda, espelhado no fitHeadline
+        # do template (fonts.ts hookSizeFactor).
+        # getattr: o harness de paridade do preview monta o Renderizador nu
+        # (__new__), sem edit-data — ai o fator fica em 1,0, que e o certo.
+        ed = getattr(self, "ed", None) or {}
+        fam = str((ed.get("hook") or {}).get("fontFamily") or "").lower()
+        fator = {"anton": 0.83}.get(fam, 1.0)
+        if fator != 1.0:
+            tam = max(HL_MIN, round(tam * fator))
         return linhas, tam
 
     def _hl_bloco_texto(self, leg, texto, tam, peso, x0, y_topo, alt_cx,

@@ -42,7 +42,7 @@ const {fontFamily} = loadFont('normal', {weights: ['400', '600', '900']});
 // Fonte da marca (edit-data → captions/hook.fontFamily). CAP_FF veste o
 // karaokê; HL_FF veste todas as headlines. Elementos gráficos (contador,
 // end card) e o stacked mantêm a tipografia assinada do template.
-import {capFamily, capWeight, hookFamily, hookWeight} from './fonts';
+import {capFamily, capWeight, hookFamily, hookSizeFactor, hookWeight} from './fonts';
 const CAP_FF = capFamily(fontFamily);
 const HL_FF = hookFamily(fontFamily);
 
@@ -826,7 +826,10 @@ function fitHeadline(lines: [string, string], s: HlStyle): number {
     Math.max(hlWidth(lines[0], size, s.weights[0]), hlWidth(lines[1], size, s.weights[1]));
   let size = Math.floor((s.safeW / Math.max(1, widest(100))) * 100);
   size = clamp(Math.floor((s.safeW / Math.max(1, widest(size))) * size), HL_MIN, s.cap);
-  return size;
+  // Altura normalizada por fonte (Anton 0,83) — mesmo fator do motor
+  // proprio (_hl_linhas) e das legendas: titulo curto que bate no teto
+  // nao pode mudar de altura so por trocar a fonte.
+  return Math.max(HL_MIN, Math.round(size * hookSizeFactor()));
 }
 
 const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {

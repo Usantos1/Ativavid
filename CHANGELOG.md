@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.53
+
+- **A altura normalizada chegou também à headline.** Título curto bate no
+  teto de tamanho, e o teto em pixels rendia alturas diferentes por fonte
+  (Anton 21% mais alta). O mesmo fator das legendas agora vale no título,
+  nos dois motores.
+
 ## 4.52
 
 - **O mesmo fallback de fonte nos três lugares.** Quando a fonte da marca

@@ -88,6 +88,16 @@ function load(id: string): Resolved | null {
 export const CAPTION_FONT: Resolved | null = load(CAP_ID);
 export const HOOK_FONT: Resolved | null = load(HOOK_ID);
 
+// Altura normalizada — espelho de _FATOR_ALTURA_CATALOGO no pipeline e do
+// fator em _hl_linhas no motor próprio: no mesmo px a Anton tem caixa alta
+// 21% maior, e um título curto (que bate no teto de px) saía mais alto só
+// por causa da fonte escolhida.
+const ALTURA_FATOR: Record<string, number> = {anton: 0.83};
+
+export function hookSizeFactor(): number {
+  return ALTURA_FATOR[HOOK_ID] ?? 1;
+}
+
 /** Família efetiva: a da marca quando escolhida, senão a do estilo. */
 export function capFamily(styleDefault: string): string {
   return CAPTION_FONT ? CAPTION_FONT.family : styleDefault;
