@@ -1,14 +1,5 @@
 # Changelog
 
-## 4.48
-
-- **Emoji não entra mais na headline.** A fonte do vídeo não tem esses
-  glifos: "Foi Traído 2 Vezes 🐂🐂" saiu com duas caixas na tela. Agora o
-  emoji é removido em todo caminho por onde a headline passa — o plano da
-  IA, as opções do seletor, a edição manual, as ações de IA e a
-  restauração de versão — e o prompt da IA passou a pedir título sem
-  emoji. A legenda do post continua aceitando emoji, que lá funciona.
-
 ## 4.47
 
 - **Corrigido: "Tentar novamente" morria com "[WinError 32] O arquivo já

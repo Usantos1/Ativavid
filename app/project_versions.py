@@ -171,17 +171,14 @@ def restore(edit_dir: Path, version_id: str) -> dict:
                     ed = loaded
             except (OSError, json.JSONDecodeError):
                 ed = {}
-        from app.caption_fixes import sem_emoji
-
         hook = dict(ed.get("hook") or {}) if isinstance(ed.get("hook"), dict) else {}
-        # versao antiga pode carregar emoji de antes da regra — limpa ao voltar
         if isinstance(headline, dict):
             if headline.get("lines") is not None:
-                hook["lines"] = [sem_emoji(x) for x in (headline["lines"] or [])]
+                hook["lines"] = headline["lines"]
             if headline.get("enabled") is not None:
                 hook["enabled"] = headline["enabled"]
         elif isinstance(headline, list):
-            hook["lines"] = [sem_emoji(x) for x in headline]
+            hook["lines"] = headline
         ed["hook"] = hook
         ed_path.parent.mkdir(parents=True, exist_ok=True)
         ed_path.write_text(json.dumps(ed, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

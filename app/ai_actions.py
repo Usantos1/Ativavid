@@ -215,12 +215,9 @@ def apply_actions_to_edits(
     for a in actions:
         act = a["action"]
         if act == "set_headline":
-            from app.caption_fixes import sem_emoji
-
             style["headlineText"] = a.get("text") or style.get("headlineText")
             hook = dict(edit_data.get("hook") or {})
-            # texto de TELA: emoji vira caixa (fonte de marca sem o glifo)
-            text = sem_emoji(a.get("text") or "")
+            text = (a.get("text") or "").strip()
             if text:
                 words = text.split()
                 mid = max(1, len(words) // 2)
@@ -229,9 +226,7 @@ def apply_actions_to_edits(
                 edit_data["hook"] = hook
             applied.append(a)
         elif act == "regenerate_hook":
-            from app.caption_fixes import sem_emoji
-
-            text = sem_emoji(a.get("text") or a.get("reason") or "")
+            text = (a.get("text") or a.get("reason") or "").strip()
             hook = dict(edit_data.get("hook") or {})
             if text:
                 parts = [p.strip() for p in re.split(r"[\n|/]+", text) if p.strip()]

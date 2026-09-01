@@ -633,27 +633,3 @@ def load_stored_fixes(edit_dir: Path) -> list[dict]:
     # destino vazio — era o segundo jeito de a legenda apagada voltar.
     return [x for x in data if isinstance(x, dict) and x.get("from")
             and (x.get("to") or x.get("delete"))]
-
-
-# Emoji e pictogramas fora do texto de TELA. As fontes de marca (Sora,
-# Integral, a que o usuario instalar) nao tem esses glifos: a headline
-# "Foi Traído 2 Vezes" saiu com duas caixas no video dele (31/08). Os
-# dois motores desenham o que esta em hook.lines — limpar o DADO cobre
-# os dois; limpar so um desenhista deixaria o outro divergir.
-# Nao entra no texto do post (legenda.txt): la emoji funciona e e bem-vindo.
-_EMOJI_RE = re.compile(
-    "["
-    "\U0001F000-\U0001FAFF"   # emoji, simbolos, bandeiras
-    "☀-➿"           # miscelanea + dingbats (☀✂✅…)
-    "⬀-⯿"           # setas/estrelas (⭐…)
-    "‍︎️⃣"  # emendas e seletores de variacao
-    "]+"
-)
-
-
-def sem_emoji(text: str) -> str:
-    """Tira emoji e recolhe os espacos que sobram no lugar."""
-    limpo = _EMOJI_RE.sub("", str(text or ""))
-    limpo = re.sub(r"[ \t]{2,}", " ", limpo)
-    # "confere ✅!" nao pode virar "confere !"
-    return re.sub(r" ([!?.,;:])", r"\1", limpo).strip()
