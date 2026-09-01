@@ -1,5 +1,20 @@
 # Changelog
 
+## 4.49
+
+- **Emoji na headline agora sai desenhado de verdade** — colorido, como
+  nas legendas. "Foi Traído 2 Vezes 🐂🐂" saía com duas caixinhas porque a
+  headline usava o caminho de texto sem emoji do motor próprio; agora ela,
+  o bloco de várias linhas e o cartão final usam o mesmo desenho de emoji
+  que as legendas já tinham. A largura da moldura também passou a medir o
+  emoji na fonte certa.
+- A 4.48 foi desfeita: a regra certa é desenhar o emoji, não apagá-lo.
+
+## 4.48
+
+- Removia o emoji da headline em todos os caminhos (saía como caixinha).
+  **Desfeita na 4.49**, que ensina o motor a desenhá-lo.
+
 ## 4.47
 
 - **Corrigido: "Tentar novamente" morria com "[WinError 32] O arquivo já

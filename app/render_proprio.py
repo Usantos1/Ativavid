@@ -1460,6 +1460,21 @@ class Renderizador:
 
     def _larg_hl(self, texto: str, tam: int, peso: int = 900) -> float:
         f = self._hl_fonte(peso, tam)
+        if tem_emoji(texto):
+            # A fonte de marca nao tem o glifo: getlength mediria a caixa de
+            # .notdef por code point (FE0F e ZWJ inclusive) e a moldura sairia
+            # larga demais. Mede cada trecho na fonte que vai desenha-lo.
+            fe = self._fonte_emoji(max(8, int(round(f.size))))
+            larg = 0.0
+            for trecho, eh in fatiar_emoji(texto):
+                if eh and fe is not None:
+                    base = "".join(c for c in trecho if ord(c) not in EMOJI_CONT)
+                    larg += fe.getlength(base or trecho)
+                elif eh:
+                    continue   # sem Segoe: o desenho tambem descarta o emoji
+                else:
+                    larg += f.getlength(trecho)
+            return larg
         return f.getlength(texto) - 1.0 * max(0, len(texto) - 1)
 
     def _hl_linhas(self, texto: str, pesos, cap: int, safe_w: float):
@@ -1495,7 +1510,9 @@ class Renderizador:
         so QUAL dessas pinturas entra."""
         f = self._hl_fonte(peso, tam)
         asc, desc = f.getmetrics()
-        m = self._mascara(f, texto, -1.0)
+        # `_mascara_cor` para o emoji sair COLORIDO, como nas legendas — a
+        # headline "Foi Traído 2 Vezes" dele saiu com duas caixas (31/08).
+        m, cor_e = self._mascara_cor(f, texto, -1.0)
         h_m, w_m = m.shape
         pad_x, pad_t, pad_b = pad_xy
         folga = 56
@@ -1578,6 +1595,10 @@ class Renderizador:
         else:
             rgb = rgb * (1 - t_a[..., None]) + self._cor(cor) * t_a[..., None]
             alpha = np.maximum(alpha, t_a)
+            # O emoji nao aceita a tinta do texto: os pixels coloridos entram
+            # por cima, na mesma posicao da mascara. No `vazar` ele fica so
+            # silhueta furada — igual ao knockout do Chrome.
+            self._pintar_emoji(rgb, cor_e, tx, ty)
         if base_sombra is None:
             base_sombra = t_a
         sombra = self._sombra_de(base_sombra, especs, k=k_sombra) if especs \
@@ -1622,7 +1643,9 @@ class Renderizador:
         """
         f = self._hl_fonte(peso, tam)
         asc, desc = f.getmetrics()
-        mascaras = [self._mascara(f, l, -1.0) for l in linhas]
+        # (mascara, camada de cor do emoji) por linha — ver _hl_bloco_texto
+        pares = [self._mascara_cor(f, l, -1.0) for l in linhas]
+        mascaras = [m for m, _ in pares]
         pad_x, pad_t, pad_b = pad_xy
         larg_txt = max((m.shape[1] for m in mascaras), default=1)
         larg_b = int(larg_txt + (pad_x if pad_esq is None else pad_esq) + pad_x)
@@ -1660,7 +1683,8 @@ class Renderizador:
 
         t_a = np.zeros((A, L), dtype=np.float32)
         y = folga + pad_t
-        for m in mascaras:
+        posicoes = []
+        for m, _ in pares:
             h_m, w_m = m.shape
             tx = (folga + pad_esq if pad_esq is not None
                   else folga + pad_x + int((larg_txt - w_m) / 2))
@@ -1668,9 +1692,12 @@ class Renderizador:
             hh, ww = min(h_m, A - ty), min(w_m, L - tx)
             t_a[ty:ty + hh, tx:tx + ww] = np.maximum(
                 t_a[ty:ty + hh, tx:tx + ww], m[:hh, :ww])
+            posicoes.append((tx, ty))
             y += alt_cx
         rgb = rgb * (1 - t_a[..., None]) + self._cor(cor) * t_a[..., None]
         alpha = np.maximum(alpha, t_a)
+        for (tx, ty), (_, cor_e) in zip(posicoes, pares):
+            self._pintar_emoji(rgb, cor_e, tx, ty)
         base = t_a if base is None else np.maximum(base, t_a)
         sombra = (self._sombra_de(base, especs, k=0.5) if especs
                   else np.zeros_like(alpha))
@@ -2136,9 +2163,10 @@ class Renderizador:
         for i, t in enumerate(linhas):
             # 900 na primeira, 600 nas demais — `EndCardInner` em Main.tsx
             f = self.fonte(4 if i == 0 else 7, int(tam * escala[i]), marca=None)
-            mascaras.append((self._mascara(f, t, -1.0), i))
+            m, cor_e = self._mascara_cor(f, t, -1.0)
+            mascaras.append((m, i, cor_e))
         gap = round(tam * 0.34)
-        total = sum(m.shape[0] for m, _ in mascaras) + gap * max(0, len(mascaras) - 1)
+        total = sum(m.shape[0] for m, _, _ in mascaras) + gap * max(0, len(mascaras) - 1)
         if logo_arr is not None:
             total += logo_arr.shape[0] + gap
         y = (self.h - total) / 2.0
@@ -2149,7 +2177,7 @@ class Renderizador:
                 logo_arr[..., :3].copy(), a_l, np.zeros_like(a_l),
                 inicio_f=0, enter=fade, sobe=26.0))
             y += logo_arr.shape[0] + gap
-        for m, i in mascaras:
+        for m, i, cor_e in mascaras:
             h_m, w_m = m.shape
             folga = 32
             pad_m = np.zeros((h_m + 2 * folga, w_m + 2 * folga), dtype=np.float32)
@@ -2161,6 +2189,7 @@ class Renderizador:
             sombra[4:, :] = b[:-4, :] * 0.6
             cor = self._cor(accent) if i == 0 else np.array([255.0] * 3, dtype=np.float32)
             rgb = np.broadcast_to(cor, (*pad_m.shape, 3)).copy()
+            self._pintar_emoji(rgb, cor_e, folga)
             leg.palavras.append(Palavra(
                 int((self.w - w_m) / 2) - folga, int(y) - folga, rgb, pad_m,
                 sombra, inicio_f=0, enter=fade, sobe=26.0))
