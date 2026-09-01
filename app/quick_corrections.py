@@ -180,11 +180,14 @@ def mark_dirty(edit_dir: Path, *keys: str) -> dict[str, Any]:
 
 
 def as_headline_lines(text_or_lines: Any) -> list[str]:
+    from app.caption_fixes import sem_emoji
+
     if isinstance(text_or_lines, list):
-        lines = [str(x).strip() for x in text_or_lines]
+        # sem_emoji: fonte de marca nao tem o glifo — emoji vira caixa na tela
+        lines = [sem_emoji(x) for x in text_or_lines]
     else:
         raw = str(text_or_lines or "").replace("\r\n", "\n").replace("\r", "\n")
-        lines = [ln.strip() for ln in raw.split("\n")]
+        lines = [sem_emoji(ln) for ln in raw.split("\n")]
     return [ln for ln in lines if ln]
 
 

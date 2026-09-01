@@ -1616,8 +1616,10 @@ def headline_preservada(edit_dir: Path, llm_meta: dict) -> dict:
     Grava ANTES de reler — se fosse ao contrário, um plano novo seria
     sobrescrito pelo antigo e a headline nunca mais mudaria.
     """
+    from app.caption_fixes import sem_emoji
+
     caminho = edit_dir / "headline_ia.json"
-    nova = str((llm_meta or {}).get("headline") or "").strip()
+    nova = sem_emoji((llm_meta or {}).get("headline") or "")
     if nova:
         try:
             caminho.write_text(json.dumps(
@@ -1627,8 +1629,8 @@ def headline_preservada(edit_dir: Path, llm_meta: dict) -> dict:
             pass
         return llm_meta
     try:
-        guardada = str(json.loads(
-            caminho.read_text(encoding="utf-8-sig")).get("headline") or "").strip()
+        guardada = sem_emoji(json.loads(
+            caminho.read_text(encoding="utf-8-sig")).get("headline") or "")
     except (OSError, json.JSONDecodeError, AttributeError):
         return llm_meta
     if not guardada:
@@ -2410,8 +2412,10 @@ def build_edit_data(cut: Path, preset: dict, hook: list[str], duration: float, f
     edit_style_norm = str(preset.get("edit") or "limpa").lower().strip()
     accent = preset.get("accent") or "#ff5200"
 
-    # Prefer AI-generated headline text when present
-    ai_hl = (preset.get("aiHeadline") or "").strip()
+    # Prefer AI-generated headline text when present.
+    # sem_emoji: fonte de marca nao tem esses glifos — viram caixas na tela.
+    from app.caption_fixes import sem_emoji
+    ai_hl = sem_emoji(preset.get("aiHeadline") or "")
     if ai_hl and hook_enabled:
         words = ai_hl.split()
         mid = max(1, len(words) // 2)
@@ -4551,7 +4555,8 @@ def run(
         try:
             opts = []
             for cand in [llm_meta.get("headline"), *(llm_meta.get("headlineAlts") or [])]:
-                t = apply_replacements_to_text(str(cand or "").strip(), _text_fixes)
+                from app.caption_fixes import sem_emoji as _sem_emoji
+                t = _sem_emoji(apply_replacements_to_text(str(cand or "").strip(), _text_fixes))
                 if t and t not in opts:
                     opts.append(t[:80])
             if opts:
