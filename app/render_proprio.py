@@ -1551,6 +1551,15 @@ class Renderizador:
                 else:
                     larg += f.getlength(trecho)
             return larg
+        if any(self._glifo_falta(f, c) for c in set(texto) if not c.isspace()):
+            # Mesmo principio do emoji: o glifo que falta sera desenhado
+            # pela RESERVA — medir o avanco dele na fonte da marca (caixa
+            # de .notdef) descasaria a moldura da tinta.
+            fr = self._fonte_reserva(int(round(f.size)), None)
+            larg = sum(
+                (fr if (not c.isspace() and self._glifo_falta(f, c)) else f)
+                .getlength(c) for c in texto)
+            return larg - 1.0 * max(0, len(texto) - 1)
         return f.getlength(texto) - 1.0 * max(0, len(texto) - 1)
 
     def _hl_linhas(self, texto: str, pesos, cap: int, safe_w: float):

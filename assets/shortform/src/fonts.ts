@@ -50,7 +50,12 @@ function loadBrandFile(): Resolved | null {
       })
       .catch(() => continueRender(handle));
   }
-  return {family};
+  // A PILHA termina em Poppins de propósito: fonte incompleta (a Integral
+  // DEMO do usuário não tem NENHUM acento) caía na fonte do sistema aqui,
+  // enquanto o motor próprio cobre glifo faltando com a Poppins — os dois
+  // fallbacks precisam ser a MESMA fonte para os motores não divergirem.
+  const reserva = loadPoppins('normal', {weights: ['400', '600', '800', '900']}).fontFamily;
+  return {family: `${family}, ${reserva}`};
 }
 
 function load(id: string): Resolved | null {

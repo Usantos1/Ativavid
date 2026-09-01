@@ -2768,6 +2768,7 @@ async function applyState(data) {
       try {
         S.editData = await (await fetch(`${mediaHref(S.state.editData)}?v=${Date.now()}`)).json();
         buildInsertsDraft();
+        garantirFonteDaMarca();
       } catch (e) { /* absent yet */ }
     }
   }
@@ -3022,6 +3023,20 @@ function stripAutoInsertsIfLimpa() {
     changed = true;
   }
   return changed;
+}
+
+let fonteDaMarcaOk = '';
+function garantirFonteDaMarca() {
+  // A fonte PRÓPRIA do usuário (id "arquivo") existia só no render: o
+  // preview mostrava a legenda na fonte do template e a final saía em
+  // outra. Registra a mesma BrandLocal que o fonts.ts usa, a partir do
+  // arquivo que o pipeline copiou para remotion/public/fonts/.
+  const rel = S.editData && S.editData.brandFontFile;
+  if (!rel || fonteDaMarcaOk === rel || typeof FontFace === 'undefined') return;
+  fonteDaMarcaOk = rel;
+  const url = mediaHref(`remotion/public/${rel}`);
+  const face = new FontFace('BrandLocal', `url(${url})`);
+  face.load().then((f) => document.fonts.add(f)).catch(() => {});
 }
 
 function buildInsertsDraft() {
@@ -4926,12 +4941,15 @@ function updateCapOverlay() {
   const ink = V.ink === 'slab' ? inkOn(S.style.captionAccent || '#111214')
             : V.ink === 'accent' ? (S.style.captionAccent || '#f4f1e9')
             : '#fff';
-  // fonte da marca — mesmo catálogo do render (fonts.ts)
+  // fonte da marca — mesmo catálogo do render (fonts.ts). `arquivo` usa a
+  // FontFace registrada por garantirFonteDaMarca(), com Poppins de reserva
+  // (o MESMO fallback dos dois motores para glifo que falta).
   const FONT_CSS = {
     poppins: "'Poppins',sans-serif", inter: "'Inter',sans-serif",
     montserrat: "'Montserrat',sans-serif", playfair: "'Playfair Display',serif",
     lora: "'Lora',serif", anton: "'Anton',sans-serif",
     bebas: "'Bebas Neue',sans-serif", archivo: "'Archivo Black',sans-serif",
+    arquivo: "'BrandLocal','Poppins',sans-serif",
   };
   // posição/tamanho do preset — mesmo mapa do render (_apply_caption_geometry)
   const capPos = S.style.captionPosition || 'baixo';

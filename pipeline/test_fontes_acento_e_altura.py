@@ -160,3 +160,40 @@ def test_o_aviso_diz_a_verdade_nova():
     assert "essas letras saem na fonte" in jv
     rf = (REPO / "pipeline" / "run_fast.py").read_text(encoding="utf-8")
     assert "fallback por glifo" in rf
+
+
+def test_os_dois_fallbacks_sao_a_mesma_fonte():
+    """O template caia na fonte do SISTEMA (BrandLocal sozinho na pilha)
+    enquanto o motor cobre com Poppins — o mesmo video sairia com
+    fallbacks diferentes conforme o motor. A pilha agora termina em
+    Poppins nos tres lugares: fonts.ts, motor (_fonte_reserva) e preview."""
+    ts = (REPO / "assets" / "shortform" / "src" / "fonts.ts").read_text(encoding="utf-8")
+    i = ts.index("function loadBrandFile")
+    bloco = ts[i:i + 1600]
+    assert "family}, ${reserva}" in bloco, "pilha do template sem a reserva"
+    js = (REPO / "assets" / "preview" / "app.js").read_text(encoding="utf-8")
+    assert "arquivo: \"'BrandLocal','Poppins',sans-serif\"" in js
+    assert "function garantirFonteDaMarca" in js
+    assert "new FontFace('BrandLocal'" in js
+
+
+def test_larg_hl_mede_com_a_fonte_que_desenha(tmp_path, monkeypatch):
+    """Moldura da headline: com glifo faltando, medir o avanco na fonte da
+    marca (caixa de .notdef) descasa a moldura da tinta."""
+    r = _r(tmp_path)
+    from PIL import ImageFont
+
+    f = ImageFont.truetype(str(FONTES / "Poppins-Regular.ttf"), 100)
+    monkeypatch.setattr(r, "_hl_fonte", lambda peso, tam: f)
+    normal = r._larg_hl("AÇÃO", 100)
+    original = r._glifo_falta
+
+    def _falta(fonte, ch):
+        return ch in "ÇÃ" or original(fonte, ch)
+
+    monkeypatch.setattr(r, "_glifo_falta", _falta)
+    com_reserva = r._larg_hl("AÇÃO", 100)
+    # a reserva (Poppins-ExtraBold) e mais larga que a Regular: a conta
+    # TEM de mudar quando os glifos passam a sair nela
+    assert com_reserva != normal
+    assert com_reserva > 0

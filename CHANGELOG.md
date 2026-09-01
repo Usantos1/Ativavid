@@ -1,5 +1,19 @@
 # Changelog
 
+## 4.52
+
+- **O mesmo fallback de fonte nos três lugares.** Quando a fonte da marca
+  não tem uma letra, o vídeo do Remotion caía na fonte do sistema
+  enquanto o motor rápido caía na Poppins — o mesmo projeto podia sair
+  diferente conforme o motor. A pilha agora termina em Poppins no
+  template, no motor e no preview.
+- **O preview do editor mostra a SUA fonte.** Com fonte própria
+  ("arquivo", ex.: Integral), o preview exibia a legenda na fonte do
+  template e o vídeo final saía na sua — agora ele carrega a mesma fonte
+  do render.
+- A moldura da headline passou a medir a largura com a fonte que
+  realmente desenha cada letra (caixa justa mesmo com letra na reserva).
+
 ## 4.51
 
 - **Acento e ç saem certos em QUALQUER fonte.** Fonte que não tem o glifo
