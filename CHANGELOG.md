@@ -1,5 +1,20 @@
 # Changelog
 
+## 4.54
+
+- **Legenda "toda errada e remontada" no refazer: era alucinação do
+  Whisper.** Caso real de 31/08: um vídeo de esquete saiu com 132 palavras
+  no transcript, 121 delas duplicatas exatas ("ei," repetido 107 vezes, 9
+  no mesmo instante). Agora o funil da legenda descarta duplicata exata e
+  corta rajada da mesma palavra (a partir da 3ª em sequência de
+  metralhadora); fala pausada de verdade ("ei... ei... ei") sobrevive.
+  Clique em "Salvar e refazer a Fase 2" uma vez depois de atualizar.
+- **Letras do mesmo tamanho com fonte só-maiúsculas.** A Integral desenha
+  tudo em capital; a letra que falta nela descia para a reserva em
+  minúscula e saía um ç pequeno no meio de "PROMOÇÃO". Fonte
+  só-maiúsculas agora sobe o texto para caixa alta nos dois motores e no
+  preview — toda letra do mesmo tamanho.
+
 ## 4.53
 
 - **A altura normalizada chegou também à headline.** Título curto bate no

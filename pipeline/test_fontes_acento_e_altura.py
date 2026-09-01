@@ -225,3 +225,56 @@ def test_headline_tambem_normaliza_a_altura(tmp_path):
     ts = (REPO / "assets" / "shortform" / "src" / "fonts.ts").read_text(encoding="utf-8")
     assert "ALTURA_FATOR: Record<string, number> = {anton: 0.83}" in ts, \
         "as duas tabelas tem de dizer o MESMO numero"
+
+
+def test_alucinacao_do_whisper_e_filtrada():
+    """Caso real C066 (31/08): 132 palavras, 121 duplicatas exatas, "ei,"
+    107 vezes — a legenda saia "toda errada e remontada" a cada refazer.
+    Duplicata exata cai; a mesma palavra em metralhadora para na 3a."""
+    import captions_for_remotion as cfr
+
+    raw = {"words": (
+        [{"type": "word", "text": "Oi", "start": 1.0, "end": 1.3}]
+        + [{"type": "word", "text": "ei,", "start": 2.0, "end": 2.04}] * 5
+        + [{"type": "word", "text": "ei,", "start": round(2.0 + i * 0.05, 2),
+            "end": round(2.04 + i * 0.05, 2)} for i in range(1, 30)]
+        + [{"type": "word", "text": "tchau", "start": 9.0, "end": 9.4}]
+    )}
+    ws = cfr._word_items(raw)
+    textos = [str(w["text"]).strip(",").strip() for w in ws]
+    assert textos[0] == "Oi" and textos[-1] == "tchau"
+    assert textos.count("ei") <= 3, textos
+    # repeticao LENTA (fala real: "nao, nao, nao" pausado) sobrevive
+    raw2 = {"words": [
+        {"type": "word", "text": "não,", "start": 1.0 + i * 0.6,
+         "end": 1.3 + i * 0.6} for i in range(6)]}
+    assert len(cfr._word_items(raw2)) == 6
+
+
+def test_fonte_so_caixa_alta_sobe_a_reserva(tmp_path, monkeypatch):
+    """"PROMOçãO" — ç minusculo da reserva no meio das capitais da
+    Integral: letras de tamanhos diferentes na mesma palavra (reclamacao
+    dele, 01/09). Fonte so-maiusculas => reserva desenha Ç."""
+    r = _r(tmp_path)
+    from PIL import ImageFont
+
+    poppins = ImageFont.truetype(str(FONTES / "Poppins-Black.ttf"), 60)
+    assert r._so_caixa_alta(poppins) is False
+    assert r._char_para_reserva(poppins, "ç") == "ç"
+    monkeypatch.setattr(r, "_so_caixa_alta", lambda f: True)
+    assert r._char_para_reserva(poppins, "ç") == "Ç"
+    assert r._char_para_reserva(poppins, "A") == "A"
+
+
+def test_caps_only_esta_nos_tres_lugares():
+    rf = (REPO / "pipeline" / "run_fast.py").read_text(encoding="utf-8")
+    assert 'ed["brandFontCapsOnly"] = True' in rf
+    ts = (REPO / "assets" / "shortform" / "src" / "fonts.ts").read_text(encoding="utf-8")
+    assert "capTransform" in ts and "hookTransform" in ts
+    assert "brandFontCapsOnly" in ts
+    js = (REPO / "assets" / "preview" / "app.js").read_text(encoding="utf-8")
+    assert "brandFontCapsOnly" in js
+    # e os componentes de legenda aplicam o transform
+    for comp in ("SimpleCaptions", "ScatterCaptions", "ImpactCaptions", "Main"):
+        tsx = (REPO / "assets" / "shortform" / "src" / f"{comp}.tsx").read_text(encoding="utf-8")
+        assert "capTransform()" in tsx or "hookTransform()" in tsx, comp

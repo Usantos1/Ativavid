@@ -98,6 +98,20 @@ export function hookSizeFactor(): number {
   return ALTURA_FATOR[HOOK_ID] ?? 1;
 }
 
+// Fonte SO-MAIUSCULAS ("arquivo", detectada pelo pipeline): o texto sobe
+// para caixa alta ANTES da selecao de glifo — assim o glifo que falta cai
+// na reserva ja em maiuscula (Ç, nao ç) e toda letra sai do mesmo
+// tamanho. Espelho de _char_para_reserva no motor proprio.
+const BRAND_CAPS_ONLY = Boolean((ED as any)?.brandFontCapsOnly);
+
+export function capTransform(): 'uppercase' | undefined {
+  return BRAND_CAPS_ONLY && CAP_ID.startsWith('arquivo') ? 'uppercase' : undefined;
+}
+
+export function hookTransform(): 'uppercase' | undefined {
+  return BRAND_CAPS_ONLY && HOOK_ID.startsWith('arquivo') ? 'uppercase' : undefined;
+}
+
 /** Família efetiva: a da marca quando escolhida, senão a do estilo. */
 export function capFamily(styleDefault: string): string {
   return CAPTION_FONT ? CAPTION_FONT.family : styleDefault;

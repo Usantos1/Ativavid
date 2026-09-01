@@ -749,6 +749,33 @@ class Renderizador:
                 np.array_equal(_tinta(ch), notdef))
         return self._glifos_faltando[chave]
 
+    def _so_caixa_alta(self, f: ImageFont.FreeTypeFont) -> bool:
+        """True para fonte SO-MAIUSCULAS (o glifo de 'a' E o de 'A').
+
+        A Integral do usuario e assim: tudo que ela desenha e capital. O
+        glifo que falta nela nao pode descer para a reserva em minuscula —
+        sairia um ç pequeno no meio de capitais ("PROMOçãO"), letras de
+        tamanhos diferentes na mesma palavra (reclamacao dele, 01/09).
+        """
+        chave = (getattr(f, "path", id(f)), "__caixa_alta__")
+        if chave not in self._glifos_faltando:
+            probe = ImageFont.truetype(f.path, 48) if hasattr(f, "path") else f
+
+            def _tinta(c):
+                img = Image.new("L", (64, 64), 0)
+                ImageDraw.Draw(img).text((4, 4), c, font=probe, fill=255)
+                return np.asarray(img)
+
+            self._glifos_faltando[chave] = bool(
+                np.array_equal(_tinta("a"), _tinta("A"))
+                and np.array_equal(_tinta("g"), _tinta("G")))
+        return self._glifos_faltando[chave]
+
+    def _char_para_reserva(self, f: ImageFont.FreeTypeFont, ch: str) -> str:
+        """O char como a RESERVA deve desenha-lo: fonte so-caixa-alta sobe
+        a minuscula (ç -> Ç), para toda letra sair do mesmo tamanho."""
+        return ch.upper() if ch.islower() and self._so_caixa_alta(f) else ch
+
     def _fonte_reserva(self, tam: int, peso: int | None) -> ImageFont.FreeTypeFont:
         """A fonte que cobre glifo faltando — Poppins, no peso mais proximo.
 
@@ -785,15 +812,18 @@ class Renderizador:
         asc_r, _ = fr.getmetrics()
         partes = [(ch, self._glifo_falta(f, ch) and not ch.isspace())
                   for ch in texto]
-        larg = sum((fr if falta else f).getlength(ch) for ch, falta in partes)
+        larg = sum(
+            fr.getlength(self._char_para_reserva(f, ch)) if falta
+            else f.getlength(ch) for ch, falta in partes)
         larg = int(larg + ls * len(texto)) + 8
         img = Image.new("L", (max(1, larg), asc + desc + 8), 0)
         d = ImageDraw.Draw(img)
         x = 0.0
         for ch, falta in partes:
             if falta:
-                d.text((x, asc - asc_r), ch, font=fr, fill=255)
-                x += fr.getlength(ch) + ls
+                cr = self._char_para_reserva(f, ch)
+                d.text((x, asc - asc_r), cr, font=fr, fill=255)
+                x += fr.getlength(cr) + ls
             else:
                 d.text((x, 0), ch, font=f, fill=255)
                 x += f.getlength(ch) + ls
@@ -859,7 +889,8 @@ class Renderizador:
                     # glifo que a fonte da marca nao tem sai na reserva,
                     # como no _mascara (e como o Chrome com a pilha CSS)
                     fr = self._fonte_reserva(int(round(f.size)), None)
-                    d.text((px, asc - fr.getmetrics()[0]), ch, font=fr,
+                    d.text((px, asc - fr.getmetrics()[0]),
+                           self._char_para_reserva(f, ch), font=fr,
                            fill=255)
                 else:
                     d.text((px, 0), ch, font=f, fill=255)
@@ -1557,8 +1588,9 @@ class Renderizador:
             # de .notdef) descasaria a moldura da tinta.
             fr = self._fonte_reserva(int(round(f.size)), None)
             larg = sum(
-                (fr if (not c.isspace() and self._glifo_falta(f, c)) else f)
-                .getlength(c) for c in texto)
+                fr.getlength(self._char_para_reserva(f, c))
+                if (not c.isspace() and self._glifo_falta(f, c))
+                else f.getlength(c) for c in texto)
             return larg - 1.0 * max(0, len(texto) - 1)
         return f.getlength(texto) - 1.0 * max(0, len(texto) - 1)
 

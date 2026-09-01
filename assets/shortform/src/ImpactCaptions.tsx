@@ -24,7 +24,7 @@ import {loadFont} from '@remotion/google-fonts/Poppins';
 import {measureText} from '@remotion/layout-utils';
 import captions from '../public/captions.json';
 import editData from '../public/edit-data.json';
-import {capFamily, capWeight} from './fonts';
+import {capFamily, capTransform, capWeight} from './fonts';
 
 const {fontFamily: _poppins} = loadFont('normal', {weights: ['800', '900']});
 const fontFamily = capFamily(_poppins);
@@ -59,6 +59,7 @@ const widthOf = (words: Word[]) =>
   measureText({
     text: words.map((w) => clean(w.text)).join(' '),
     fontFamily,
+          textTransform: capTransform(),
     fontSize: SIZE,
     fontWeight: W900,
   }).width;
@@ -121,6 +122,7 @@ export const ImpactCaptions: React.FC = () => {
           gap: Math.round(SIZE * 0.22),
           alignItems: 'center',
           fontFamily,
+          textTransform: capTransform(),
           fontWeight: W900,
           fontSize: SIZE,
           lineHeight: 1.08,

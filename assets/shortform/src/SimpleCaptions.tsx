@@ -22,7 +22,7 @@ import {loadFont as loadInter} from '@remotion/google-fonts/Inter';
 import {measureText} from '@remotion/layout-utils';
 import captions from '../public/captions.json';
 import editData from '../public/edit-data.json';
-import {capFamily, capWeight} from './fonts';
+import {capFamily, capTransform, capWeight} from './fonts';
 
 const POPPINS = loadPoppins('normal', {weights: ['600']}).fontFamily;
 const BASKERVILLE = loadBaskerville('normal', {weights: ['700']}).fontFamily;
@@ -223,6 +223,7 @@ const widthOf = (words: Word[], V: Variant) =>
         : clean(w.text)))
       .join(' '),
     fontFamily: V.family,
+    textTransform: capTransform(),
     fontSize: V.size,
     fontWeight: V.weight,
     letterSpacing: `${V.tracking}px`,
@@ -322,6 +323,7 @@ export const SimpleCaptions: React.FC<{variant: string}> = ({variant}) => {
               key={i}
               style={{
                 fontFamily: V.family,
+    textTransform: capTransform(),
                 fontWeight: V.weight,
                 fontSize: V.size,
                 letterSpacing: V.tracking,
@@ -351,6 +353,7 @@ export const SimpleCaptions: React.FC<{variant: string}> = ({variant}) => {
     };
     const tipo = {
       fontFamily: V.family,
+    textTransform: capTransform(),
       fontWeight: V.weight,
       fontSize: V.size,
       letterSpacing: V.tracking,
@@ -531,6 +534,7 @@ export const SimpleCaptions: React.FC<{variant: string}> = ({variant}) => {
           style={{
             textAlign: 'center',
             fontFamily: V.family,
+    textTransform: capTransform(),
             fontWeight: V.weight,
             fontSize: V.size,
             letterSpacing: V.tracking,
@@ -554,6 +558,7 @@ export const SimpleCaptions: React.FC<{variant: string}> = ({variant}) => {
         style={{
           textAlign: 'center',
           fontFamily: V.family,
+    textTransform: capTransform(),
           fontWeight: V.weight,
           fontSize: V.size,
           letterSpacing: V.tracking,

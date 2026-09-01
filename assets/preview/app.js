@@ -4977,6 +4977,10 @@ function updateCapOverlay() {
   box.innerHTML = '';
   const line = el('div', 'cap-overlay-line' + (V.ink === 'slab' ? ' slab' : ''), box);
   line.style.fontFamily = (style !== 'stacked' && FONT_CSS[S.style.captionFont]) || V.family;
+  // fonte so-maiusculas (Integral): mesmo uppercase dos dois motores
+  line.style.textTransform =
+    (style !== 'stacked' && S.style.captionFont === 'arquivo'
+     && S.editData && S.editData.brandFontCapsOnly) ? 'uppercase' : '';
   line.style.fontWeight = String(V.weight);
   line.style.fontSize = `${V.size * capScale * s}px`;
   line.style.color = ink;

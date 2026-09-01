@@ -29,7 +29,7 @@ import captions from '../public/captions.json';
 import editData from '../public/edit-data.json';
 
 const {fontFamily: _lora} = loadFont('normal', {weights: ['400', '600']});
-import {capFamily, capWeight} from './fonts';
+import {capFamily, capTransform, capWeight} from './fonts';
 const fontFamily = capFamily(_lora);
 loadFont('italic', {weights: ['400', '600']});
 
@@ -183,6 +183,7 @@ const CueView: React.FC<{cue: Cue; endFrame: number}> = ({cue, endFrame}) => {
           flexDirection: 'column',
           alignItems: 'center',
           fontFamily,
+                    textTransform: capTransform(),
         }}
       >
         {cue.lines.map((ln, li) => (

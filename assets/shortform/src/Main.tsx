@@ -42,7 +42,7 @@ const {fontFamily} = loadFont('normal', {weights: ['400', '600', '900']});
 // Fonte da marca (edit-data → captions/hook.fontFamily). CAP_FF veste o
 // karaokê; HL_FF veste todas as headlines. Elementos gráficos (contador,
 // end card) e o stacked mantêm a tipografia assinada do template.
-import {capFamily, capWeight, hookFamily, hookSizeFactor, hookWeight} from './fonts';
+import {capFamily, capTransform, capWeight, hookFamily, hookSizeFactor, hookTransform, hookWeight} from './fonts';
 const CAP_FF = capFamily(fontFamily);
 const HL_FF = hookFamily(fontFamily);
 
@@ -401,6 +401,7 @@ const Karaoke: React.FC = () => {
         const {width} = measureText({
           text: lineText,
           fontFamily: CAP_FF,
+          textTransform: capTransform(),
           fontSize: C.fontSize,
           fontWeight: capWeight(900),
           letterSpacing: '-1px',
@@ -413,6 +414,7 @@ const Karaoke: React.FC = () => {
               <div
                 style={{
                   fontFamily: CAP_FF,
+          textTransform: capTransform(),
                   fontWeight: capWeight(900),
                   fontSize: C.fontSize,
                   color: C.accent ?? 'white',
@@ -485,6 +487,7 @@ const BubbleOne: React.FC<{text: string; hora: string; size: number; maxW: numbe
         padding: `${Math.round(size * 0.42)}px ${Math.round(size * 0.55)}px ${Math.round(size * 0.3)}px`,
         color: '#fff',
         fontFamily: CAP_FF,
+          textTransform: capTransform(),
         fontWeight: capWeight(500),
         fontSize: size,
         lineHeight: 1.3,
@@ -795,7 +798,8 @@ const HL_STYLES: Record<string, HlStyle> = {
 
 const hlWidth = (text: string, size: number, weight: number) =>
   text
-    ? measureText({text, fontFamily: HL_FF, fontSize: size, fontWeight: hookWeight(weight), letterSpacing: '-1px'}).width
+    ? measureText({text, fontFamily: HL_FF,
+    textTransform: hookTransform(), fontSize: size, fontWeight: hookWeight(weight), letterSpacing: '-1px'}).width
     : 0;
 
 // Balance by MEASURED width, not word count: "É assim que vai" and "ficar a sua
@@ -890,6 +894,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
     scale: String(popScale.toFixed(3)),
     textAlign: 'center',
     fontFamily: HL_FF,
+    textTransform: hookTransform(),
     lineHeight: lh,
     letterSpacing: -1,
     // the two-line promise is structural: if a fit is ever off, this overflows
@@ -949,6 +954,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
               top,
               textAlign: 'center',
               fontFamily: HL_FF,
+    textTransform: hookTransform(),
               lineHeight: lh,
               letterSpacing: -1,
               whiteSpace: 'nowrap',
@@ -1007,7 +1013,8 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
               flex: '0 0 auto',
             }}
           />
-          <div style={{fontFamily: HL_FF, fontWeight: hookWeight(700), fontSize: sz, color: '#fff', letterSpacing: -0.5, whiteSpace: 'nowrap', lineHeight: 1.1}}>
+          <div style={{fontFamily: HL_FF,
+    textTransform: hookTransform(), fontWeight: hookWeight(700), fontSize: sz, color: '#fff', letterSpacing: -0.5, whiteSpace: 'nowrap', lineHeight: 1.1}}>
             {one}
           </div>
         </div>
@@ -1038,7 +1045,8 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
           }}
         >
           <div style={{width: 12, borderRadius: 6, background: H.accent ?? '#ff5200', flex: '0 0 auto'}} />
-          <div style={{fontFamily: HL_FF, fontWeight: hookWeight(800), fontSize: size, color: '#fff', lineHeight: lh, letterSpacing: -1, textAlign: 'left', whiteSpace: 'nowrap'}}>
+          <div style={{fontFamily: HL_FF,
+    textTransform: hookTransform(), fontWeight: hookWeight(800), fontSize: size, color: '#fff', lineHeight: lh, letterSpacing: -1, textAlign: 'left', whiteSpace: 'nowrap'}}>
             {lines.filter(Boolean).map((l, i) => (<div key={i}>{l}</div>))}
           </div>
         </div>
@@ -1269,7 +1277,8 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
               {H.sign ? <Img src={staticFile(H.sign)} style={{width: 128, filter: 'drop-shadow(0 8px 20px rgba(0,0,0,0.45))'}} /> : null}
             </div>
           ) : null}
-          <div style={{background: '#232326', borderRadius: 24, padding: '28px 46px', textAlign: 'center', fontFamily: HL_FF, fontWeight: hookWeight(900), fontSize: size, color: '#fff', lineHeight: lh, letterSpacing: -1, textShadow: '0 4px 20px rgba(0,0,0,0.55)', boxShadow: '0 18px 50px rgba(0,0,0,0.45)'}}>
+          <div style={{background: '#232326', borderRadius: 24, padding: '28px 46px', textAlign: 'center', fontFamily: HL_FF,
+    textTransform: hookTransform(), fontWeight: hookWeight(900), fontSize: size, color: '#fff', lineHeight: lh, letterSpacing: -1, textShadow: '0 4px 20px rgba(0,0,0,0.55)', boxShadow: '0 18px 50px rgba(0,0,0,0.45)'}}>
             {lines.filter(Boolean).map((l, i) => (<div key={i}>{l}</div>))}
           </div>
         </div>

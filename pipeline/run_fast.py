@@ -3425,6 +3425,28 @@ def _attach_brand_font_file(ed: dict, public) -> None:
     shutil.copy2(src, dest)
     ed["brandFontFile"] = f"fonts/{dest.name}"
     print(f"[fonte] {src.name} → {dest.name} (fonte da marca)", flush=True)
+    # Fonte SO-MAIUSCULAS (glifo de 'a' = glifo de 'A', como a Integral):
+    # o template precisa saber para subir o texto — sem isso o glifo que
+    # falta desce para a reserva em minuscula e sai um ç pequeno no meio
+    # de capitais, letras de tamanhos diferentes na mesma palavra.
+    try:
+        from PIL import Image as _I
+        from PIL import ImageDraw as _D
+        from PIL import ImageFont as _F
+
+        _probe = _F.truetype(str(src), 48)
+
+        def _tinta_de(c):
+            im = _I.new("L", (64, 64), 0)
+            _D.Draw(im).text((4, 4), c, font=_probe, fill=255)
+            return im.tobytes()
+
+        if _tinta_de("a") == _tinta_de("A") and _tinta_de("g") == _tinta_de("G"):
+            ed["brandFontCapsOnly"] = True
+            print("[fonte] so-maiusculas: o texto sobe para caixa alta "
+                  "(reserva inclusa)", flush=True)
+    except Exception:  # noqa: BLE001
+        pass
     faltam = _acentos_que_faltam(src)
     if faltam:
         _RENDER_META["fonteSemAcento"] = {"arquivo": src.name, "faltam": faltam}

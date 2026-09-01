@@ -22,7 +22,12 @@ import _utf8  # noqa: F401  — UTF-8 no stdout antes de qualquer print
 
 import argparse
 import json
+import re
 from pathlib import Path
+
+
+def _norm_token(t) -> str:
+    return re.sub(r"[\W_]+", "", str(t or "").casefold())
 
 
 def _word_items(raw: dict) -> list[dict]:
@@ -30,6 +35,45 @@ def _word_items(raw: dict) -> list[dict]:
         dict(w) for w in (raw.get("words") or [])
         if w.get("type") == "word" and w.get("start") is not None
     ]
+    # LOOP DE ALUCINACAO do Whisper (caso real, projeto C066 de 31/08: 132
+    # palavras, 121 duplicatas EXATAS, "ei," repetido 107 vezes — 9 delas no
+    # mesmo instante). O usuario clicou em refazer varias vezes e a legenda
+    # saia "toda errada e remontada": o lixo estava no transcript, e nada
+    # filtrava. Duas regras, ANTES do clamp (que espalharia as duplicatas
+    # por 1ms e as tornaria "diferentes"):
+    # 1. duplicata exata (start, end, texto) cai;
+    # 2. a MESMA palavra repetida em metralhadora (gap < 0,25s) para na
+    #    terceira — gente repete "ei, ei, ei"; so o loop repete 100x.
+    vistos: set = set()
+    dedup: list[dict] = []
+    for w in out:
+        k = (w.get("start"), w.get("end"), str(w.get("text") or "").strip())
+        if k in vistos:
+            continue
+        vistos.add(k)
+        dedup.append(w)
+    filtrado: list[dict] = []
+    seguidos = 0
+    tok_ant = ""
+    start_ant = -10.0
+    for w in dedup:
+        tok = _norm_token(w.get("text"))
+        gap = float(w["start"]) - start_ant
+        if tok and tok == tok_ant and gap < 0.25:
+            # o intervalo e ate a ocorrencia ANTERIOR (mantida ou nao):
+            # medir ate a ultima MANTIDA deixava passar 1 a cada 0,25s e a
+            # rajada continuava pingando na tela.
+            seguidos += 1
+        else:
+            seguidos = 0
+        tok_ant, start_ant = tok, float(w["start"])
+        if seguidos >= 3:
+            continue
+        filtrado.append(w)
+    if len(filtrado) < len(out):
+        print(f"[legenda] alucinacao filtrada: {len(out) - len(filtrado)} "
+              f"palavra(s) repetida(s)/duplicada(s) fora", flush=True)
+    out = filtrado
     # Os transcripts JA GRAVADOS tem palavra voltando no tempo (133 de 178 nos
     # projetos do usuario) e quem consome ordena por start — a legenda saia
     # com palavras trocadas. A ordem do array e a da fala; o clamp so garante
