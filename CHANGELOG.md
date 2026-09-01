@@ -1,5 +1,21 @@
 # Changelog
 
+## 4.51
+
+- **Acento e ç saem certos em QUALQUER fonte.** Fonte que não tem o glifo
+  (fontes de demonstração como a Integral DEMO não têm nenhum acento)
+  ganhava o carimbo da fonte no meio da palavra; agora a letra que falta
+  sai na fonte padrão, alinhada — exatamente o que o Chrome já fazia no
+  outro motor. A ficha do card avisa quando isso acontece.
+- **Toda fonte com a mesma altura.** No mesmo tamanho, a Anton saía 21%
+  maior que as outras — trocar de fonte mudava o tamanho visível da
+  legenda. Cada fonte agora tem um fator de altura, aplicado no dado (os
+  dois motores e o preview leem o mesmo número); fonte própria do usuário
+  é medida na hora.
+- Medição completa do catálogo (13 fontes × acentos × alturas) virou
+  teste: fonte nova sem acento ou fora da altura quebra a suíte antes de
+  chegar a um cliente.
+
 ## 4.50
 
 A maior auditoria do projeto até aqui: seis varreduras paralelas (dados da

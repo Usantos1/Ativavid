@@ -3322,6 +3322,78 @@ from app.fontes import ACENTOS_PT as _ACENTOS_PT  # noqa: E402
 from app.fontes import acentos_que_faltam as _acentos_que_faltam  # noqa: E402
 
 
+ALTURA_H_POPPINS = 71     # tinta do "H" da Poppins-Black a 100px (medido)
+
+# Fator de altura por fonte do catalogo: cap-height medida a 100px contra a
+# Poppins do template. Dentro de +-4% fica 1,0 (nao vale o rearranjo);
+# a Anton e a fora-da-curva — 86px de H, 21% mais alta que todo o resto.
+_FATOR_ALTURA_CATALOGO = {"anton": 0.83}
+
+
+def _fator_de_altura(family: str, public) -> float:
+    """Quanto reduzir/ampliar o tamanho pedido para TODA fonte sair com a
+    MESMA altura de caixa alta (pedido do usuario, 01/09: trocar de fonte
+    nao pode mudar o tamanho visivel da legenda).
+
+    Vive no DADO (edit-data), entao os dois motores e o preview leem o
+    mesmo numero — mexer so num desenhista os faria divergir.
+    """
+    fid = (family or "").strip().lower()
+    if not fid:
+        return 1.0
+    if not fid.startswith("arquivo"):
+        return _FATOR_ALTURA_CATALOGO.get(fid, 1.0)
+    # fonte do usuario: mede o H dela na hora
+    from pathlib import Path as _P
+
+    cam = None
+    try:
+        from app.fontes import escolher as _escolher
+
+        cam = _escolher(fid)
+    except Exception:  # noqa: BLE001
+        cam = None
+    if cam is None:
+        return 1.0
+    try:
+        import numpy as _np
+        from PIL import Image as _Img
+        from PIL import ImageDraw as _Draw
+        from PIL import ImageFont as _Fnt
+
+        f = _Fnt.truetype(str(cam), 100)
+        img = _Img.new("L", (140, 190), 0)
+        _Draw.Draw(img).text((10, 30), "H", font=f, fill=255)
+        arr = _np.asarray(img)
+        linhas = _np.where(arr.max(axis=1) > 8)[0]
+        if len(linhas) < 2:
+            return 1.0
+        h = int(linhas[-1] - linhas[0] + 1)
+        fator = ALTURA_H_POPPINS / max(1, h)
+        if abs(1.0 - fator) <= 0.04:
+            return 1.0
+        return max(0.7, min(1.25, round(fator, 3)))
+    except Exception:  # noqa: BLE001
+        return 1.0
+
+
+def _normalizar_altura_da_fonte(ed: dict, public) -> None:
+    """Aplica o fator nos knobs de tamanho dos estilos que VESTEM a fonte
+    da marca (karaoke/bolha: fontSize; scatter: scatterFontSize; estaticos
+    e impacto: sizeScale). O stacked fica de fora de proposito — ele mantem
+    a tipografia do template, entao o fator o encolheria sem motivo."""
+    cap = ed.get("captions") or {}
+    fator = _fator_de_altura(str(cap.get("fontFamily") or ""), public)
+    if fator == 1.0:
+        return
+    cap["fontSize"] = round(float(cap.get("fontSize") or 76) * fator)
+    cap["scatterFontSize"] = round(float(cap.get("scatterFontSize") or 72) * fator)
+    cap["sizeScale"] = round(float(cap.get("sizeScale") or 1.0) * fator, 3)
+    ed["captions"] = cap
+    print(f"[fonte] altura normalizada: fator {fator} "
+          f"({cap.get('fontFamily')})", flush=True)
+
+
 def _attach_brand_font_file(ed: dict, public) -> None:
     """Fonte própria da marca (id "arquivo"): copia o .ttf/.otf de
     ~/ATIVAVID/Fontes para public/fonts/ e aponta ed["brandFontFile"].
@@ -3356,9 +3428,10 @@ def _attach_brand_font_file(ed: dict, public) -> None:
     faltam = _acentos_que_faltam(src)
     if faltam:
         _RENDER_META["fonteSemAcento"] = {"arquivo": src.name, "faltam": faltam}
-        print(f"[fonte] ATENCAO: {src.name} nao tem {faltam} — nessas letras "
-              f"a fonte desenha o simbolo dela (fonte de demonstracao costuma "
-              f"carimbar 'DEMO')", flush=True)
+        print(f"[fonte] ATENCAO: {src.name} nao tem {faltam} — essas letras "
+              f"saem na fonte padrao (fallback por glifo, como o Chrome); "
+              f"para tudo na fonte da marca, use a versao completa dela",
+              flush=True)
 
 
 # Tempero por video. O vibe fixo por tipo dava sempre a MESMA "banda":
@@ -4657,6 +4730,7 @@ def run(
         flush=True,
     )
     _attach_brand_font_file(edit_data, public)
+    _normalizar_altura_da_fonte(edit_data, public)
     midia_do_editor(edit_dir, public, edit_data)
     (public / "edit-data.json").write_text(
         json.dumps(edit_data, indent=2, ensure_ascii=False), encoding="utf-8"

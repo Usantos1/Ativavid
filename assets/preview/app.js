@@ -4936,7 +4936,12 @@ function updateCapOverlay() {
   // posição/tamanho do preset — mesmo mapa do render (_apply_caption_geometry)
   const capPos = S.style.captionPosition || 'baixo';
   const posBottom = capPos === 'centro' ? 900 : capPos === 'alto' ? 1330 : V.bottom;
-  const capScale = { p: 0.85, m: 1, g: 1.18 }[S.style.captionSize] || 1;
+  // fator de altura por fonte — espelho de _FATOR_ALTURA_CATALOGO no
+  // render: a Anton tem caixa alta 21% maior que as outras no mesmo px, e
+  // sem isto o preview mostrava uma legenda maior do que a que sai no video.
+  const FONT_ALTURA = { anton: 0.83 };
+  const fatorFonte = (style !== 'stacked' && FONT_ALTURA[S.style.captionFont]) || 1;
+  const capScale = ({ p: 0.85, m: 1, g: 1.18 }[S.style.captionSize] || 1) * fatorFonte;
 
   box.classList.remove('hidden');
   // Sem ancora livre (familia `simples`) fica o mapa discreto de sempre; com

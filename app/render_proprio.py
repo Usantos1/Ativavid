@@ -626,6 +626,7 @@ class Renderizador:
         # (30/08). Mesmo nome de knob do template.
         self.stack_click = str(sfx.get("stackClickFile") or "click.mp3")
         self._fontes: dict = {}
+        self._glifos_faltando: dict = {}
         self.marca_cap = self._resolver_marca(
             caps.get("fontFamily"), edit_data.get("brandFontFile"))
         self.marca_hook = self._resolver_marca(
@@ -728,16 +729,74 @@ class Renderizador:
         n = max(1, len(texto.strip()))
         return int(avail // (n * fator)) if n * base * fator > avail else base
 
+    def _glifo_falta(self, f: ImageFont.FreeTypeFont, ch: str) -> bool:
+        """True quando a fonte nao tem o glifo (desenharia .notdef/DEMO).
+
+        Sem fontTools no venv, compara a mascara do char com a de um code
+        point garantidamente sem glifo — igual = faltando. Cacheado por
+        (arquivo, char): a pergunta se repete a cada palavra.
+        """
+        chave = (getattr(f, "path", id(f)), ch)
+        if chave not in self._glifos_faltando:
+            probe = ImageFont.truetype(f.path, 48) if hasattr(f, "path") else f
+            def _tinta(c: str) -> np.ndarray:
+                img = Image.new("L", (64, 64), 0)
+                ImageDraw.Draw(img).text((4, 4), c, font=probe, fill=255)
+                return np.asarray(img)
+
+            notdef = _tinta("\N{TAG LATIN SMALL LETTER A}")
+            self._glifos_faltando[chave] = bool(
+                np.array_equal(_tinta(ch), notdef))
+        return self._glifos_faltando[chave]
+
+    def _fonte_reserva(self, tam: int, peso: int | None) -> ImageFont.FreeTypeFont:
+        """A fonte que cobre glifo faltando — Poppins, no peso mais proximo.
+
+        E o que o Chrome faz: a pilha de familias do template termina em
+        Poppins, e um "ção" numa fonte DEMO sem acento sai na fonte
+        vizinha, nao como carimbo. O motor desenhava o carimbo (a Integral
+        DEMO do usuario nao tem NENHUM acento nem ç — medido em 01/09).
+        """
+        peso = peso or 700
+        idx = 4 if peso >= 800 else (3 if peso >= 700 else (7 if peso >= 500 else 1))
+        arq = str(FONTES / FONT_FILE[idx][0])
+        chave = ("__reserva__", arq, tam)
+        if chave not in self._fontes:
+            self._fontes[chave] = ImageFont.truetype(arq, tam)
+        return self._fontes[chave]
+
     def _mascara(self, f: ImageFont.FreeTypeFont, texto: str,
                  ls: float = LETTER_SPACING) -> np.ndarray:
-        larg = int(f.getlength(texto) + ls * len(texto)) + 8
         asc, desc = f.getmetrics()
+        # Glifo que falta na fonte da marca sai na reserva (como o Chrome);
+        # o avanco passa a ser acumulado por char, com a fonte que DESENHA.
+        tem_falta = any(self._glifo_falta(f, c) for c in set(texto)
+                        if not c.isspace())
+        if not tem_falta:
+            larg = int(f.getlength(texto) + ls * len(texto)) + 8
+            img = Image.new("L", (max(1, larg), asc + desc + 8), 0)
+            d = ImageDraw.Draw(img)
+            x = 0.0
+            for i, ch in enumerate(texto):
+                d.text((x, 0), ch, font=f, fill=255)
+                x = f.getlength(texto[: i + 1]) + ls * (i + 1)
+            return np.asarray(img, dtype=np.float32) / 255.0
+        fr = self._fonte_reserva(int(round(f.size)), None)
+        asc_r, _ = fr.getmetrics()
+        partes = [(ch, self._glifo_falta(f, ch) and not ch.isspace())
+                  for ch in texto]
+        larg = sum((fr if falta else f).getlength(ch) for ch, falta in partes)
+        larg = int(larg + ls * len(texto)) + 8
         img = Image.new("L", (max(1, larg), asc + desc + 8), 0)
         d = ImageDraw.Draw(img)
         x = 0.0
-        for i, ch in enumerate(texto):
-            d.text((x, 0), ch, font=f, fill=255)
-            x = f.getlength(texto[: i + 1]) + ls * (i + 1)
+        for ch, falta in partes:
+            if falta:
+                d.text((x, asc - asc_r), ch, font=fr, fill=255)
+                x += fr.getlength(ch) + ls
+            else:
+                d.text((x, 0), ch, font=f, fill=255)
+                x += f.getlength(ch) + ls
         return np.asarray(img, dtype=np.float32) / 255.0
 
     def _fonte_emoji(self, tam: int):
@@ -795,8 +854,15 @@ class Renderizador:
                 x += _av(trecho, True)
                 continue
             for i, ch in enumerate(trecho):
-                d.text((x + f.getlength(trecho[:i]) + ls * i, 0), ch,
-                       font=f, fill=255)
+                px = x + f.getlength(trecho[:i]) + ls * i
+                if not ch.isspace() and self._glifo_falta(f, ch):
+                    # glifo que a fonte da marca nao tem sai na reserva,
+                    # como no _mascara (e como o Chrome com a pilha CSS)
+                    fr = self._fonte_reserva(int(round(f.size)), None)
+                    d.text((px, asc - fr.getmetrics()[0]), ch, font=fr,
+                           fill=255)
+                else:
+                    d.text((px, 0), ch, font=f, fill=255)
             x += _av(trecho, False)
         m = np.asarray(img, dtype=np.float32) / 255.0
         c = np.asarray(cor, dtype=np.float32)

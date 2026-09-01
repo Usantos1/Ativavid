@@ -185,12 +185,13 @@ def _aviso_de_trilha(job: dict, edit: Path) -> None:
         job["legendaNota"] = ia
     ft = t.get("fonteSemAcento") or {}
     if isinstance(ft, dict) and ft.get("faltam"):
-        # Sai no VIDEO, na frente do cliente dele: a fonte desenha o simbolo
-        # dela onde deveria ter acento. Fonte de demonstracao carimba "DEMO".
+        # Desde 01/09 os dois motores cobrem o glifo que falta com a fonte
+        # padrao (como o Chrome faz) — o video nao sai mais com o carimbo
+        # da DEMO, mas essas letras ficam NUMA FONTE DIFERENTE do resto.
         job["fonteNota"] = (
             f"A fonte {str(ft.get('arquivo') or '')[:40]} não tem "
-            f"{str(ft.get('faltam'))[:14]} — nessas letras o vídeo sai com o "
-            "símbolo da fonte. Use a versão completa (comprada) ou outra fonte.")
+            f"{str(ft.get('faltam'))[:14]} — essas letras saem na fonte "
+            "padrão. Para tudo na sua fonte, use a versão completa dela.")
     fora = t.get("trechosForaDaFonte") or []
     if isinstance(fora, list) and fora:
         # Sem esta nota o defeito e MUDO: o video sai pronto, com pedaco
