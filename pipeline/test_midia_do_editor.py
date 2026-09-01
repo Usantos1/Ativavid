@@ -281,7 +281,8 @@ def test_oito_alcas_e_o_lado_oposto_parado():
     js = (Path(__file__).resolve().parent.parent / "assets" / "preview"
           / "app.js").read_text(encoding="utf-8")
     i = js.index("const ALCAS = [")
-    assert js[i:i + 120].count("'") == 16       # oito alças
+    arr = js[i:js.index("]", i)]               # ate o fim do ARRAY
+    assert arr.count("'") == 16, "oito alças (2 aspas cada)"
     k = js.index("function alcasDoCartao")
     bloco = js[k:k + 2200]
     for borda in ("l = Math.min", "r = Math.max", "t = Math.min", "b = Math.max"):

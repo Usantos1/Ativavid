@@ -1,5 +1,56 @@
 # Changelog
 
+## 4.50
+
+A maior auditoria do projeto até aqui: seis varreduras paralelas (dados da
+máquina, exceções e arquivos, licença e cobrança, front-end, paridade dos
+dois motores, suíte de testes) e todos os achados executados.
+
+**Consertos que protegem os seus vídeos**
+
+- O "Liberar espaço" liga arquivos por hardlink para economizar disco; um
+  Aplicar alterações depois disso podia **corromper o corte do projeto em
+  silêncio**. Fechado — e o retry do canário e a promoção do final também
+  saíram da mesma armadilha.
+- Vídeo aberto no player durante o Aplicar agora dá a mensagem certa
+  ("feche o vídeo e tente de novo") em vez de falha genérica.
+- Configurações e estado do canário gravam de forma atômica: um
+  desligamento no meio da gravação não apaga mais a sua pasta de projetos
+  da configuração nem solta uma pausa legítima do canário.
+- "Reverter correções" agora avisa quando não há versão guardada — antes
+  dizia "revertido" sem ter revertido nada.
+- Legenda cobrindo só parte do vídeo (caso real: 12s legendados num vídeo
+  de 24s) e sessão de IA expirada no meio do lote agora aparecem na FICHA
+  do card — antes eram avisos de log que ninguém vê.
+- Fonte num caminho de nuvem (OneDrive) não pendura mais a fila para
+  sempre: as sondas de vídeo ganharam limite de tempo.
+
+**Os dois motores desenham igual (varredura completa contra o Remotion)**
+
+- Emoji e efeito sonoro postos à mão **sumiam** no caminho de reserva do
+  render — as duas camadas foram portadas.
+- A entrada da headline escolhida no preset (pop / deslizar) agora
+  acontece também no motor rápido.
+- Pílula ganhou a bolinha colorida; carimbo ganhou a batida de entrada, o
+  fundo translúcido e as sombras certas; cartão final desenha todas as
+  linhas; scatter, impacto, bolha e contador alinhados ao template.
+- Varredura de 30 desenhos contra o Remotion: todos na faixa saudável.
+
+**Licença e segurança**
+
+- PC bloqueado não serve mais de "proxy de IA" de graça nem escreve na
+  Biblioteca sem licença.
+- Cookies de sessão (Gemini/ChatGPT) agora são cifrados no disco, como já
+  eram as chaves.
+
+**Tela**
+
+- O pill de status do card parou de vazar CAIXA ALTA para os chips da
+  timeline do editor; o toast do editor parou de sair híbrido.
+- Exportar/Importar preset voltaram a aparecer na tela Estilos do hub.
+- O resumo do Sistema (Perfil/Cache) finalmente aparece; a pastilha de
+  versão do editor passou a responder ao clique; Esc fecha o painel de IA.
+
 ## 4.49
 
 - **Emoji na headline agora sai desenhado de verdade** — colorido, como

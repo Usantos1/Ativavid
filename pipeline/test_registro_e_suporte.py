@@ -17,6 +17,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
+from pipeline.ancoras import bloco_da_funcao  # noqa: E402
 
 from app import registro_de_uso as reg  # noqa: E402
 
@@ -128,6 +129,5 @@ def test_renderLicense_chama_o_suporte():
     """A janela de 200 caracteres media comentario, nao codigo: um comentario
     novo no comeco da funcao derrubou este teste sem nada ter quebrado. O que
     importa e que a chamada aconteca ANTES do `return` que sai cedo."""
-    i = JS.index("function renderLicense(lic) {")
-    corpo = JS[i:JS.index("if (!hint) return;", i)]
-    assert "renderSuporte(lic);" in corpo
+    corpo = bloco_da_funcao(JS, "renderLicense")
+    assert corpo.index("renderSuporte(lic);") < corpo.index("if (!hint) return;")

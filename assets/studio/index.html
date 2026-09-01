@@ -699,7 +699,10 @@
                 <p class="hint" id="sysStatusLine">Tudo funcionando corretamente</p>
                 <p class="hint hidden" id="sysMachineHint">Detectando…</p>
               </div>
-              <div class="sys-metrics hidden" id="sysMetrics" aria-label="Resumo" hidden>
+              <!-- Estava com trava dupla (hidden + .hidden) que nenhum JS
+                   soltava — o codigo alimentava Perfil/Cache/Leve/Proxy num
+                   bloco invisivel desde sempre. Auditoria de 31/08. -->
+              <div class="sys-metrics" id="sysMetrics" aria-label="Resumo">
                 <div class="sys-metric"><span class="sys-m-lab">Perfil</span><strong id="sysMetricProfile">—</strong></div>
                 <div class="sys-metric"><span class="sys-m-lab">Cache</span><strong id="sysMetricCache">—</strong></div>
                 <div class="sys-metric hidden" id="sysMetricJobsWrap"><span class="sys-m-lab">Leve</span><strong id="sysMetricJobs">—</strong></div>

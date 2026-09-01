@@ -82,6 +82,10 @@
 
 :root[data-theme="light"] {
   color-scheme: light;
+  /* Sem esta linha, o claro do editor herdava o --teal CLARO do hub
+     (#0f766e, studio.css) por especificidade — o teal dos checkboxes
+     mudava de cor conforme o tema, por acidente de cascata. */
+  --teal: #09b5b7;
   --bg0: #eef0f4;
   --bg1: #fbfbfa;
   --glass: rgba(20, 22, 30, 0.04);
@@ -2905,9 +2909,12 @@ body.hub-embed .setup-inner {
   padding: 12px clamp(12px, 1.6vw, 22px) 140px;
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
-html.hub-embed .setup-head,
-body.hub-embed .setup-head {
-  /* Hub já tem título "Estilos" no appbar */
+/* Hub já tem título "Estilos" no appbar — mas esconder o .setup-head
+   INTEIRO levava junto o #presetBar (Exportar/Importar preset), que não
+   existe em nenhum outro lugar do hub. Mesmo golpe do defeito histórico
+   desta regra: só o h2 sai. */
+html.hub-embed .setup-head h2,
+body.hub-embed .setup-head h2 {
   display: none;
 }
 html.hub-embed .setup-group,

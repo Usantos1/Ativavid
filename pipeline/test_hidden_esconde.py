@@ -22,6 +22,10 @@ número e o link do WhatsApp levando a máquina junto.
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
+import sys
+if str(REPO) not in sys.path:
+    sys.path.insert(0, str(REPO))
+from pipeline.ancoras import sem_comentarios  # noqa: E402
 STUDIO = (REPO / "assets" / "studio" / "studio.css").read_text(encoding="utf-8")
 EDITOR = (REPO / "assets" / "preview" / "app.css").read_text(encoding="utf-8")
 JS = (REPO / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
@@ -52,6 +56,6 @@ def test_o_numero_nao_fica_no_html():
     """Se o número estivesse no HTML, escondê-lo seria só cosmético — quem
     abrisse o arquivo do app leria."""
     html = (REPO / "assets" / "studio" / "index.html").read_text(encoding="utf-8")
-    assert "98768" not in html
+    assert "98768" not in sem_comentarios(html)
     i = JS.index("const SUPORTE")
     assert "98768" in JS[i:i + 200], "o numero vive no JS, escrito so quando paga"

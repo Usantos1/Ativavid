@@ -1246,15 +1246,18 @@ body.view-estilo-on .ws-head {
   line-height: 1.35;
   font-variant-numeric: tabular-nums;
 }
-.chip {
+/* O editor carrega as duas folhas e tem `.chip` proprio (timeline):
+   estas regras escopadas em .pc-top param de vazar caixa alta e
+   letter-spacing para os chips de legenda de la. */
+.pc-top .chip {
   flex: 0 0 auto;
   font-size: 10px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase;
   padding: 4px 8px; border-radius: 999px; background: color-mix(in srgb, var(--text) 8%, transparent); color: var(--dim);
 }
-.chip.done { background: rgba(45, 212, 168, 0.14); color: var(--ok); }
-.chip.processing, .chip.queued, .chip.importing, .chip.updating { background: rgba(0, 229, 212, 0.12); color: var(--teal); }
-.chip.needs_review { background: rgba(245, 185, 66, 0.16); color: var(--warn); }
-.chip.error { background: rgba(255, 90, 106, 0.15); color: var(--bad); }
+.pc-top .chip.done { background: rgba(45, 212, 168, 0.14); color: var(--ok); }
+.pc-top .chip.processing, .pc-top .chip.queued, .pc-top .chip.importing, .pc-top .chip.updating { background: rgba(0, 229, 212, 0.12); color: var(--teal); }
+.pc-top .chip.needs_review { background: rgba(245, 185, 66, 0.16); color: var(--warn); }
+.pc-top .chip.error { background: rgba(255, 90, 106, 0.15); color: var(--bad); }
 .pc-msg {
   font-size: 12px;
   color: var(--dim);
@@ -1866,7 +1869,7 @@ select:disabled { opacity: .55; cursor: default; }
   font-size: 15px;
   word-break: break-word;
 }
-.toast {
+body.hub .toast {
   position: fixed; top: 52px; left: 50%; transform: translateX(-50%);
   display: flex; align-items: flex-start; gap: 10px;
   background: var(--panel); border: 1px solid var(--line);
@@ -1876,20 +1879,20 @@ select:disabled { opacity: .55; cursor: default; }
   box-shadow: 0 14px 38px color-mix(in srgb, var(--text) 24%, transparent);
   white-space: pre-line; text-align: left; line-height: 1.4;
 }
-.toast-ico {
+body.hub .toast-ico {
   flex: none; width: 18px; height: 18px; border-radius: 50%;
   background: var(--accent); color: #fff; margin-top: 1px;
   font-size: 12px; font-weight: 700; line-height: 18px; text-align: center;
 }
-.toast-ico::after { content: "i"; }
-.toast-msg { flex: 1; min-width: 0; }
-.toast.toast-in { animation: toast-descer .22s ease-out; }
+body.hub .toast-ico::after { content: "i"; }
+body.hub .toast-msg { flex: 1; min-width: 0; }
+body.hub .toast.toast-in { animation: toast-descer .22s ease-out; }
 @keyframes toast-descer {
   from { opacity: 0; transform: translate(-50%, -12px); }
   to { opacity: 1; transform: translate(-50%, 0); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .toast.toast-in { animation: none; }
+  body.hub .toast.toast-in { animation: none; }
 }
 .pc-progress {
   height: 4px;

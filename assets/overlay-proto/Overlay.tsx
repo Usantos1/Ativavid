@@ -10,7 +10,7 @@ import {ScatterCaptions} from './ScatterCaptions';
 import {SimpleCaptions, SIMPLE_VARIANTS} from './SimpleCaptions';
 import {ImpactCaptions} from './ImpactCaptions';
 import {ListCounter} from './ListCounter';
-import {BubbleCaptions, EndCard, HookIntro, Inserts, Karaoke, LayoutScrim} from './Main';
+import {BubbleCaptions, EmojisManuais, EndCard, HookIntro, Inserts, Karaoke, LayoutScrim, SfxManual} from './Main';
 import editData from '../public/edit-data.json';
 
 const D = editData as {
@@ -24,6 +24,12 @@ export const Overlay: React.FC = () => {
     <AbsoluteFill style={{backgroundColor: 'transparent'}}>
       <LayoutScrim />
       <Inserts />
+      {/* Emoji e efeito sonoro postos A MAO no editor. O Main os
+          monta; esquecer aqui fazia o fallback ENTREGAR o video sem
+          eles, calado — a mesma familia do bug da bolha-que-virava-
+          karaoke (dispatcher proprio divergindo do Main). */}
+      <SfxManual />
+      <EmojisManuais />
       <CustomGraphics />
       <ListCounter />
       {D.hook?.enabled ? <HookIntro /> : null}

@@ -59,7 +59,7 @@ def test_o_nome_do_botao_e_a_ultima_coisa_a_sair():
     assert "function ajustarBarraNumaLinha" in JS
     assert "ResizeObserver" in JS
     i = JS.index("NIVEIS_DA_BARRA = [")
-    escada = JS[i:i + 120]
+    escada = JS[i:JS.index("]", i)]   # ate o fim do ARRAY, nao 120 chars
     assert escada.index("sem-regua") < escada.index("apertada") <         escada.index("sem-zoom") < escada.index("so-icone"), escada
     # o rótulo só some no último degrau
     assert ".transport.so-icone .cover-btn > span:not([id])" in CSS

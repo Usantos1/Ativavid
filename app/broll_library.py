@@ -17,13 +17,17 @@ def library_root(projects_root: Path | None = None) -> Path:
         # Path.home() criava uma Biblioteca fantasma no C: — vazia, mas
         # convincente: ela ja escondeu a trilha (3.03) e o b-roll (29/08) de
         # quem leu a errada. Sem argumento, resolve pelo projectsRoot salvo.
+        #
+        # Lido por Path.home() DE PROPOSITO (nao pelo settings_store): os
+        # testes falsificam a home para nunca tocar a pasta real do usuario,
+        # e o settings_store fixa o caminho verdadeiro na importacao.
         try:
-            from app.settings_store import load_settings
-
-            salvo = str(load_settings().get("projectsRoot") or "").strip()
+            cfg = json.loads((Path.home() / "ATIVAVID" / "settings.json")
+                             .read_text(encoding="utf-8-sig"))
+            salvo = str(cfg.get("projectsRoot") or "").strip()
             if salvo:
                 projects_root = Path(salvo)
-        except Exception:  # noqa: BLE001
+        except (OSError, json.JSONDecodeError, TypeError):
             pass
     if projects_root:
         root = Path(projects_root).expanduser().resolve().parent / "Biblioteca"

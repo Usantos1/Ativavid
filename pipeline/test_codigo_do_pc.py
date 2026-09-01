@@ -21,6 +21,10 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parent.parent
+import sys
+if str(REPO) not in sys.path:
+    sys.path.insert(0, str(REPO))
+from pipeline.ancoras import bloco_da_funcao  # noqa: E402
 JS = (REPO / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
 HTML = (REPO / "assets" / "studio" / "index.html").read_text(encoding="utf-8")
 
@@ -78,8 +82,7 @@ def test_copiar_manda_o_ID_INTEIRO_e_nao_o_codigo_curto():
 
 
 def test_a_janela_do_bloqueio_preenche_o_codigo_ao_abrir():
-    i = JS.index("function openLicenseDialog(")
-    bloco = JS[i:JS.index("\nfunction openCheckout(", i)]
+    bloco = bloco_da_funcao(JS, "openLicenseDialog")
     assert bloco.index("mostrarCodigoDoPc(L)") < bloco.index("dlg.showModal()")
 
 

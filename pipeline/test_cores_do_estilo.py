@@ -20,6 +20,10 @@ import re
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
+import sys
+if str(REPO) not in sys.path:
+    sys.path.insert(0, str(REPO))
+from pipeline.ancoras import sem_comentarios  # noqa: E402
 HTML = (REPO / "assets" / "preview" / "index.html").read_text(encoding="utf-8")
 CSS = (REPO / "assets" / "preview" / "app.css").read_text(encoding="utf-8")
 
@@ -55,8 +59,8 @@ def test_a_grade_poe_quatro_lado_a_lado():
 def test_nao_sobrou_a_coluna_antiga():
     """`.setup-col` empilhava dois cartões por coluna — era ela que fazia a
     fileira de quatro virar duas de dois (e, no hub, quatro de um)."""
-    assert "setup-col" not in HTML
-    assert "setup-col" not in CSS
+    assert "setup-col" not in sem_comentarios(HTML)
+    assert "setup-col" not in sem_comentarios(CSS)
 
 
 def test_o_traco_da_enfase_ficou_com_a_legenda():

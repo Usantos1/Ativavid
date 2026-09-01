@@ -1948,10 +1948,6 @@ function refreshHeader() {
         : list.map((x) => x[0].toUpperCase() + x.slice(1)).join(' · ');
     }
   }
-  const hint = $('applyHint');
-  if (hint) {
-    hint.classList.add('hidden');
-  }
   if (save) {
     save.classList.remove('hidden');
     save.disabled = session === 0 && n === 0;
@@ -5724,6 +5720,13 @@ laneVideo.addEventListener('dblclick', (e) => {
 
 // keyboard
 document.addEventListener('keydown', (e) => {
+  // Esc fecha o painel de IA ANTES da guarda de digitacao: o foco vive no
+  // #aiPrompt, e `isTypingContext()` engolia o Esc — era o unico overlay
+  // que nao fechava pelo teclado (ajuda, imagens, nota e legenda fecham).
+  if (e.key === 'Escape' && !$('aiPanel')?.classList.contains('hidden')) {
+    closeAiPanel();
+    return;
+  }
   if (isTypingContext()) return;
   if (e.key === 'm' || e.key === 'M') {
     e.preventDefault();
@@ -6499,10 +6502,6 @@ async function pickImage(query, r) {
 
 // header — pasta do projeto, vídeo final, foco e menu •••
 const openFolderBtn = $('btnOpenFolder');
-const openFolderIcon = $('openFolderIcon');
-if (openFolderIcon && typeof ICON !== 'undefined' && ICON.folder) {
-  openFolderIcon.innerHTML = ICON.folder;
-}
 if (openFolderBtn) {
   openFolderBtn.addEventListener('click', async () => {
     try {

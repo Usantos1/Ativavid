@@ -390,8 +390,8 @@ def motivo_nao_suportado(edit_data: dict[str, Any], public: Path) -> str | None:
     # engano faz o motor desenhar um estilo que ele nao sabe e o video sai
     # errado; dizer "nao suportado" por engano so custa tempo.
     if caps.get("enabled", True):
-        if estilo == "karaoke":
-            if not karaoke_aprovado():
+        if estilo in ("karaoke", "bolha"):
+            if estilo == "karaoke" and not karaoke_aprovado():
                 return "karaoke desligado por ATIVAVID_KARAOKE_PROPRIO=0"
             if caps.get("windows") or []:
                 # As janelas movem a legenda NO MEIO da linha e o template
@@ -473,6 +473,9 @@ class Palavra:
     # a sua `janela`; sem este campo a janela forcaria opacidade 1,0 e a
     # palavra apareceria de uma vez, sem o fade.
     opac: float = 1.0
+    # Deslocamento HORIZONTAL da entrada (px), aplicado como o `sobe`:
+    # anda com (1-opacidade). E o `deslizar` da headline (vem de -56px).
+    desliza: float = 0.0
     # Curva de entrada. So o `StackedCaptions.tsx` usa a bezier
     # (`Easing.bezier(0.16, 1, 0.3, 1)`, linha 77); a headline, o cartao
     # final, o scatter e o impacto usam `Easing.out(Easing.cubic)`, que e o
@@ -948,7 +951,8 @@ class Renderizador:
             cam.palavras.append(Palavra(
                 x0, y0, rgb, alpha,
                 self._sombra_de(alpha, [(0, 8, 22, 0.45)], k=BLUR_K),
-                inicio_f=0, enter=6, sobe=0.0))
+                # enter=0: no template o emoji manual aparece INSTANTANEO
+                inicio_f=0, enter=0, sobe=0.0))
             self.camadas.append(cam)
 
     def _montar_tudo(self) -> None:
@@ -1446,7 +1450,13 @@ class Renderizador:
     }
     HL_MAIUSCULA = ("card", "manchete", "carimbo", "faixa", "vazado")
     # peso -> arquivo Poppins
-    HL_FONTE = {400: 1, 500: 1, 600: 3, 700: 3, 800: 3, 900: 4}
+    # O Main.tsx so carrega Poppins 400/600/900. MEDIDO na varredura de
+    # 31/08 (tinta contra o Remotion, projeto real): com 800->Black(900) os
+    # estilos de 800 ficam em 0,997-1,03 — o mapa antigo (ExtraBold) saia
+    # mais magro que o Chrome. Ja o 700 da pilula mediu MELHOR no SemiBold
+    # (1,065) que no Black (1,103): o Chrome nao esta dando 900 ao 700
+    # aqui, apesar da regra de casamento do CSS. Pixels > teoria.
+    HL_FONTE = {400: 1, 500: 1, 600: 7, 700: 7, 800: 4, 900: 4}
 
     def _hl_fonte(self, peso: int, tam: int) -> ImageFont.FreeTypeFont:
         if self.marca_hook:
@@ -1723,6 +1733,78 @@ class Renderizador:
             inicio_f=0, enter=enter, sobe=sobe))
 
     def _montar_headline(self, hook: dict) -> Camada:
+        """Desenha a headline e aplica a ENTRADA escolhida no preset.
+
+        `pop` e `deslizar` existiam so no Remotion: pelo caminho rapido a
+        escolha do usuario virava um fade parado, sem recusa e sem aviso.
+        carimbo e pergunta tem entradas proprias e ignoram (como no Main).
+        """
+        leg = self._montar_headline_bruta(hook)
+        anim = str(hook.get("animation") or "padrao")
+        estilo = str(hook.get("style") or "outline")
+        if estilo not in ("carimbo", "pergunta"):
+            if anim == "deslizar":
+                # vem da esquerda (-56px), sem subir — Main.tsx `slideX`
+                for pal in leg.palavras:
+                    pal.desliza, pal.sobe = -56.0, 0.0
+            elif anim == "pop":
+                self._pop_na_camada(leg)
+        return leg
+
+    def _pop_na_camada(self, leg: Camada) -> None:
+        """Escala 0.68→1 com overshoot (Easing.back(2)) — Main.tsx popScale."""
+        def _curva(t: float) -> tuple[float, float]:
+            u = t - 1.0
+            esc = 0.68 + 0.32 * (1.0 + 3.0 * u ** 3 + 2.0 * u ** 2)
+            op = 1.0 - (1.0 - min(1.0, t * 9 / 8.0)) ** 3
+            return esc, op
+
+        self._entrada_em_escala(leg, 9, _curva)
+
+    def _slam_na_camada(self, leg: Camada) -> None:
+        """`carimbo`: bate de 1,9x para 1x em 7 quadros (out-cubic), com a
+        opacidade na mesma curva — Main.tsx `1.9 - 0.9 * slam`."""
+        def _curva(t: float) -> tuple[float, float]:
+            e = 1.0 - (1.0 - t) ** 3
+            return 1.9 - 0.9 * e, e
+
+        self._entrada_em_escala(leg, 7, _curva)
+
+    def _entrada_em_escala(self, leg: Camada, n: int, curva) -> None:
+        """Reamostra a camada pronta por estagio, como o Chrome faz com
+        `transform: scale` (ele tambem nao redesenha o texto). Um estagio
+        por quadro; o ultimo fica ate o fim. `curva(t) -> (escala, opac)`."""
+        def _redim_l(arr, nw, nh):
+            im = Image.fromarray((np.clip(arr, 0, 1) * 255).astype(np.uint8), "L")
+            return np.asarray(im.resize((nw, nh), Image.BILINEAR),
+                              dtype=np.float32) / 255.0
+
+        originais = list(leg.palavras)
+        leg.palavras = []
+        for pal in originais:
+            h, w = pal.alpha.shape
+            cx, cy = pal.x0 + w / 2.0, pal.y0 + h / 2.0
+            for est in range(n + 1):
+                # t = est/n, comecando em ZERO: no template o quadro 0 da
+                # entrada e invisivel (interpolate parte de 0). Comecar em
+                # 1/n punha o carimbo 40% opaco em 1,5x ja no quadro 0.
+                t = min(1.0, est / n)
+                esc, op = curva(t)
+                nw = max(1, int(round(w * esc)))
+                nh = max(1, int(round(h * esc)))
+                rgb = np.asarray(
+                    Image.fromarray(np.clip(pal.rgb, 0, 255).astype(np.uint8),
+                                    "RGB").resize((nw, nh), Image.BILINEAR),
+                    dtype=np.float32)
+                leg.palavras.append(Palavra(
+                    int(round(cx - nw / 2)), int(round(cy - nh / 2)), rgb,
+                    _redim_l(pal.alpha, nw, nh), _redim_l(pal.sombra, nw, nh),
+                    inicio_f=pal.inicio_f, enter=pal.enter,
+                    janela=((float(est), float(est + 1)) if est < n
+                            else (float(n), 1e9)),
+                    opac=op, sobe=0.0))
+
+    def _montar_headline_bruta(self, hook: dict) -> Camada:
         """Os 9 estilos de headline. O layout (duas linhas, ajuste de tamanho,
         entrada e saida) e comum; cada estilo escolhe a PINTURA."""
         estilo = hook.get("style") or "outline"
@@ -1778,8 +1860,7 @@ class Renderizador:
                     op = 1.0 - (q + 1) / 6
                     self._hl_bloco_texto(
                         leg, l, tam, 800, (self.w - larg) / 2, y, alt_cx,
-                        "#ffffff", [(0, 6, 14, 0.45)], k_sombra=BLUR_K,
-                        sobe=0.0)
+                        "#ffffff", [(0, 6, 18, 0.55)], sobe=0.0)
                     p = leg.palavras[-1]
                     p.alpha[:] *= op
                     p.sombra[:] *= op
@@ -1787,7 +1868,7 @@ class Renderizador:
                 # o corpo estavel da pergunta: do inicio ate o comeco do fade
                 self._hl_bloco_texto(
                     leg, l, tam, 800, (self.w - larg) / 2, y, alt_cx,
-                    "#ffffff", [(0, 6, 14, 0.45)], k_sombra=BLUR_K, sobe=sobe, enter=enter_hl)
+                    "#ffffff", [(0, 6, 18, 0.55)], sobe=sobe, enter=enter_hl)
                 leg.palavras[-1].janela = (0, at - 6)
                 y += alt_cx
 
@@ -1981,7 +2062,7 @@ class Renderizador:
             return leg
 
         if estilo == "sombra":
-            off = max(3, round(tam * 0.06))
+            off = max(4, round(tam * 0.07))   # `off = max(4, size*0.07)` do template
             y = top
             for l in linhas:
                 larg = self._larg_hl(l, tam, 900)
@@ -2039,11 +2120,30 @@ class Renderizador:
         if estilo == "pilula":
             uma = " ".join(linhas)
             larg = self._larg_hl(uma, tam, 700)
-            pad = (round(tam * 0.6), round(tam * 0.3), round(tam * 0.3))
-            self._hl_bloco_texto(
-                leg, uma, tam, 700, (self.w - (larg + 2 * pad[0])) / 2, top,
-                alt_cx, "#ffffff", [(0, 10, 30, 0.35)],
-                fundo=("#111214", 0.78), raio=999, pad_xy=pad, sobe=sobe, enter=enter_hl)
+            # [bolinha 0.3, vao 0.35, texto] dentro da capsula — Main.tsx
+            # 998-1006. A pilula fica na tela o video INTEIRO; sem a bolinha
+            # era a divergencia mais visivel em tempo de tela do catalogo.
+            bola = round(tam * 0.3)
+            vao = round(tam * 0.35)
+            pad_lado = round(tam * 0.6)
+            pad = (pad_lado, round(tam * 0.3), round(tam * 0.3))
+            pad_esq = pad_lado + bola + vao
+            larg_b = larg + pad_esq + pad_lado
+            x0 = (self.w - larg_b) / 2
+            self._hl_bloco_multi(
+                leg, [uma], tam, 700, alt_cx, x0, top, "#ffffff",
+                [(0, 10, 30, 0.35)], fundo=("#111214", 0.78), raio=999,
+                pad_xy=pad, sobe=sobe, enter=enter_hl, pad_esq=pad_esq)
+            img = Image.new("L", (bola, bola), 0)
+            ImageDraw.Draw(img).ellipse([0, 0, bola - 1, bola - 1], fill=255)
+            a_bola = np.asarray(img, dtype=np.float32) / 255.0
+            alt_b = alt_cx + pad[1] + pad[2]
+            leg.palavras.append(Palavra(
+                int(x0 + pad_lado), int(top + (alt_b - bola) / 2),
+                np.broadcast_to(self._cor(hook.get("accent") or "#ff5200"),
+                                (*a_bola.shape, 3)).copy(),
+                a_bola, np.zeros_like(a_bola), inicio_f=0, enter=enter_hl,
+                sobe=sobe))
             return leg
 
         if estilo == "manchete":
@@ -2064,7 +2164,7 @@ class Renderizador:
                            default=0)
             larg_b = larg_max + pad_esq + pad_lado
             alt_b = alt_cx * len(linhas) + pad[1] + pad[2]
-            x_faixa = (self.w - larg_b) / 2 + 15
+            x_faixa = (self.w - larg_b) / 2
             y0 = self.h - bottom - alt_b
             img = Image.new("L", (barra, int(alt_b)), 0)
             ImageDraw.Draw(img).rounded_rectangle(
@@ -2092,14 +2192,20 @@ class Renderizador:
             # a moldura envolve o BLOCO INTEIRO (as duas linhas): o carimbo e
             # uma peca so, girada -6 graus de uma vez.
             bw = max(6, round(tam * 0.09))
-            pad = (round(tam * 0.35), round(tam * 0.2), round(tam * 0.2))
+            # padding 0.18em/0.4em, fundo rgba(10,10,12,0.25) e text-shadow
+            # `0 4px 14px .45` do template — os quatro estavam divergentes.
+            pad = (round(tam * 0.4), round(tam * 0.18), round(tam * 0.18))
             larg_max = max((self._larg_hl(l, tam, 900) for l in linhas),
                            default=0)
             self._hl_bloco_multi(
                 leg, linhas, tam, 900, alt_cx,
                 (self.w - (larg_max + 2 * pad[0])) / 2, top,
-                accent, [(0, 12, 30, 0.4)], raio=18, pad_xy=pad,
+                accent, [(0, 4, 14, 0.45)], raio=18, pad_xy=pad,
+                fundo=("#0a0a0c", 0.25),
                 borda=(accent, bw), rot=-6.0, sobe=0.0)
+            # o slam e a entrada PROPRIA do carimbo (por isso ele ignora
+            # pop/deslizar no wrapper): 1,9x -> 1x em 7 quadros.
+            self._slam_na_camada(leg)
             return leg
 
         # outline (padrao): branco com contorno preto grosso.
@@ -2127,7 +2233,8 @@ class Renderizador:
         dur = int(round(float(ec.get("lastSec") or 2.5) * self.fps))
         ini = self.frames - dur
         accent = ec.get("accent") or hook_accent or "#ff5200"
-        linhas = [l for l in (ec.get("lines") or []) if l][:2]
+        # TODAS as linhas, como o EndCardInner — o [:2] comia a 3a calado.
+        linhas = [l for l in (ec.get("lines") or []) if l]
         fade = min(round(0.35 * self.fps), max(1, dur // 2))
         leg = Camada(ini, self.frames + 10)
         leg.dur_f = dur + 20
@@ -2151,10 +2258,14 @@ class Renderizador:
 
         base = round(self.w * 0.058)
         safe_w = self.w * 0.70
-        escala = [1.0, 0.62]
+        # `scaleOf = i === 0 ? 1 : 0.62` (EndCardInner) — vale para TODAS as
+        # linhas; a lista fixa de 2 estourava com a terceira.
+        def escala(i: int) -> float:
+            return 1.0 if i == 0 else 0.62
+
         ajuste = 1.0
         for i, t in enumerate(linhas):
-            f = self.fonte(4 if i == 0 else 7, int(base * escala[i]), marca=None)
+            f = self.fonte(4 if i == 0 else 7, int(base * escala(i)), marca=None)
             wl = f.getlength(t) - 1.0 * max(0, len(t) - 1)
             if wl > safe_w:
                 ajuste = min(ajuste, safe_w / wl)
@@ -2162,7 +2273,7 @@ class Renderizador:
         mascaras = []
         for i, t in enumerate(linhas):
             # 900 na primeira, 600 nas demais — `EndCardInner` em Main.tsx
-            f = self.fonte(4 if i == 0 else 7, int(tam * escala[i]), marca=None)
+            f = self.fonte(4 if i == 0 else 7, int(tam * escala(i)), marca=None)
             m, cor_e = self._mascara_cor(f, t, -1.0)
             mascaras.append((m, i, cor_e))
         gap = round(tam * 0.34)
@@ -2245,7 +2356,7 @@ class Renderizador:
         bottom = _pos(caps_cfg, "paddingBottom", 430)
         cor_caixa = caps_cfg.get("emphasisAccent") or "#ffd400"
         cor_tinta = self._tinta_na_caixa(cor_caixa)
-        f = self.fonte(4, tam)
+        f = self.fonte(4, tam, 900)   # capWeight(900) — marca variavel inclusa
 
         raw = json.loads((self.public / "captions.json")
                          .read_text(encoding="utf-8-sig"))
@@ -2324,7 +2435,7 @@ class Renderizador:
                                 [32, 32, 32 + ew, 32 + eh],
                                 radius=max(2, int(raio * esc)), fill=255)
                             a_caixa = np.asarray(img, dtype=np.float32) / 255.0
-                            fe = self.fonte(4, max(8, int(tam * esc)))
+                            fe = self.fonte(4, max(8, int(tam * esc)), 900)  # capWeight(900)
                             m, cor_emj = self._mascara_cor(fe, texto, 0.0)
                             t_a = np.zeros_like(a_caixa)
                             tx = 32 + int(pad * esc)
@@ -2509,7 +2620,10 @@ class Renderizador:
                     eh_hi = i == hi_idx
                     tam_i = round(BASE * HI_SCALE) if eh_hi else BASE
                     peso = 600 if eh_hi else 400
-                    italico = eh_hi and self._hash_det(li * 7 + i) > 0.65
+                    # `hash(li*7 + wi)` no template usa o indice NA LINHA
+                    # (`k`), nao no grupo — com o indice do grupo, a palavra
+                    # que sai italica era OUTRA em cada motor.
+                    italico = eh_hi and self._hash_det(li * 7 + k) > 0.65
                     f = self.fonte(6 if italico else 5, tam_i, peso)
                     m, cor_e = self._mascara_cor(f, limpar(w["text"]), 0.0)
                     h_m, w_m = m.shape
@@ -2718,9 +2832,13 @@ class Renderizador:
             fim_f = max(ini_f + 1, round(fim_ms / 1000 * self.fps))
 
             texto = " ".join(str(w.get("text") or "") for w in grupo)
-            # quebra visual gulosa pela largura interna
+            # quebra visual gulosa. `maxWidth: safeWidth` no template e
+            # CONTENT-box (o padding fica por fora): o texto quebra em
+            # safe_w cheio, e a bolha total sai safe_w + 2*pad. Descontar o
+            # padding aqui deixava as bolhas ~1,1 fonte mais estreitas e as
+            # quebras cairiam em palavras diferentes das do Remotion.
             linhas, atual = [], ""
-            interno = safe_w - 2 * pad_x
+            interno = safe_w
             for palavra in texto.split():
                 tent = (atual + " " + palavra).strip()
                 if atual and f.getlength(tent) > interno:
@@ -3449,7 +3567,7 @@ class Renderizador:
         accent = (self.ed.get("hook") or {}).get("accent") or "#ff5200"
         tinta = self._tinta_na_caixa(accent)
         tam = 64
-        f = self.fonte(4, tam, marca="hook")
+        f = self.fonte(4, tam, 900, marca="hook")   # hookWeight(900)
         camadas = []
         for i, mk in enumerate(marcadores):
             ini = int(round(float(mk["atSec"]) * self.fps))
@@ -3465,7 +3583,9 @@ class Renderizador:
             for est in range(9):
                 t = min(1.0, est / 8)
                 esc = 0.6 + 0.4 * self._ease_back(t)
-                m = self._mascara(self.fonte(4, max(8, int(tam * esc)), marca="hook"), texto, 0.0)
+                m = self._mascara(
+                    self.fonte(4, max(8, int(tam * esc)), 900, marca="hook"),
+                    texto, 0.0)   # hookWeight(900) — marca variavel inclusa
                 h_m, w_m = m.shape
                 pad_x, pad_t, pad_b = (int(26 * esc), int(18 * esc), int(22 * esc))
                 cw, ch = w_m + 2 * pad_x, int(tam * esc) + pad_t + pad_b
@@ -3501,7 +3621,10 @@ class Renderizador:
                 jan = (est, est + 1) if est < 8 else (8, 1e9)
                 leg.palavras.append(Palavra(
                     x0, y0, rgb, alpha, sombra, inicio_f=0, enter=1,
-                    janela=jan, sobe=0.0))
+                    janela=jan, sobe=0.0,
+                    # `opacity: min(1, pop*1.4)` do ListCounter — sem isto o
+                    # selo nascia 100% opaco ainda em escala 0.6
+                    opac=min(1.0, t * 1.4)))
             camadas.append(leg)
         return camadas
 
@@ -3648,7 +3771,9 @@ class Renderizador:
             base = np.zeros((ch + 2 * folga, cw + 2 * folga), dtype=np.float32)
             base[folga:folga + ch, folga:folga + cw] = \
                 np.asarray(masc, dtype=np.float32) / 255.0
-            sombra = self._sombra_de(base, [(0, 18, 50, 0.45)], k=0.5)
+            # drop-shadow(0 14px 34px .45) do template: e filter, sigma =
+            # raio INTEIRO (k=BLUR_K), nao a metade do box-shadow do cartao.
+            sombra = self._sombra_de(base, [(0, 14, 34, 0.45)], k=BLUR_K)
             leg = Camada(ini, min(self.frames, fim) - 1)
             leg.dur_f = total
             leg.saida_f = 1e9
@@ -3748,7 +3873,8 @@ class Renderizador:
         # opacidade propria — e passou a apagar a subida de 46px do SOLO_BIG
         # quando ele ganhou estagios de escala.
         desloc = int(round(p.sobe * (1.0 - op)))
-        py, px = p.y0 - y0 + desloc, p.x0 - x0
+        py = p.y0 - y0 + desloc
+        px = p.x0 - x0 + int(round(p.desliza * (1.0 - op)))
         ys0, xs0 = max(0, py), max(0, px)
         ys1 = min(tela.shape[0], py + h)
         xs1 = min(tela.shape[1], px + w)
@@ -3836,9 +3962,10 @@ class Renderizador:
             return
         if animando and rapido:
             pronto8 = leg.cache_pronto.copy()
-            ax0 = min(max(0, p.x0 - x0) for p, _ in animando)
+            ax0 = min(max(0, p.x0 - x0 - abs(int(p.desliza))) for p, _ in animando)
             ay0 = min(max(0, p.y0 - y0 - int(p.sobe)) for p, _ in animando)
-            ax1 = max(min(x1 - x0, p.x0 - x0 + p.alpha.shape[1]) for p, _ in animando)
+            ax1 = max(min(x1 - x0, p.x0 - x0 + p.alpha.shape[1] + abs(int(p.desliza)) + 1)
+                      for p, _ in animando)
             ay1 = max(min(y1 - y0, p.y0 - y0 + p.alpha.shape[0] + int(p.sobe) + 1)
                       for p, _ in animando)
             if ax1 > ax0 and ay1 > ay0:
@@ -3871,7 +3998,8 @@ class Renderizador:
         # opacidade propria — e passou a apagar a subida de 46px do SOLO_BIG
         # quando ele ganhou estagios de escala.
         desloc = int(round(p.sobe * (1.0 - op)))
-        py, px = p.y0 - abs_y0 + desloc, p.x0 - abs_x0
+        py = p.y0 - abs_y0 + desloc
+        px = p.x0 - abs_x0 + int(round(p.desliza * (1.0 - op)))
         ys0, xs0 = max(0, py), max(0, px)
         ys1, xs1 = min(sub.shape[0], py + h), min(sub.shape[1], px + w)
         if ys1 <= ys0 or xs1 <= xs0:

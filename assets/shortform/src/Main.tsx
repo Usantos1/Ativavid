@@ -1463,7 +1463,7 @@ const HookIntro: React.FC = () => {
 // `sfxManual` vem do editor: o usuario escolheu um som da Biblioteca e um
 // instante. Gemeo do laco em `render_proprio.Renderizador.__init__` — os dois
 // tocam o mesmo arquivo de public/sfx no mesmo segundo.
-const SfxManual: React.FC = () => {
+export const SfxManual: React.FC = () => {
   const {fps} = useVideoConfig();
   const itens = ((D as any).sfxManual ?? []) as {src: string; atSec: number; volume?: number}[];
   if (!itens.length) return null;
@@ -1484,7 +1484,7 @@ const SfxManual: React.FC = () => {
 // ============ EMOJI POSTO NA MAO =============================================
 // Gemeo de `Renderizador._montar_emojis`. x/y sao o CENTRO em fracao do quadro
 // e `size` a altura em fracao da LARGURA — as mesmas contas dos dois lados.
-const EmojisManuais: React.FC = () => {
+export const EmojisManuais: React.FC = () => {
   const {fps, width} = useVideoConfig();
   const itens = ((D as any).emojis ?? []) as {
     char: string; atSec: number; durSec?: number;

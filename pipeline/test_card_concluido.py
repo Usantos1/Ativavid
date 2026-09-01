@@ -24,6 +24,7 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parent.parent
+from pipeline.ancoras import sem_comentarios  # noqa: E402
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
@@ -291,7 +292,7 @@ def test_o_estilo_do_card_e_o_que_varia():
     assert "from app.content_type import LABELS" in corpo, (
         "catálogo duplicado — as duas telas vão discordar"
     )
-    assert "_NOME_HEADLINE" not in src, "o catálogo antigo ficou para trás"
+    assert "_NOME_HEADLINE" not in sem_comentarios(src, "py"), "o catálogo antigo ficou para trás"
 
 
 def test_o_rotulo_usa_os_nomes_do_catalogo(tmp_path):

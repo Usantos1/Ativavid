@@ -132,13 +132,21 @@ def test_o_template_e_o_motor_concordam_em_quem_tem_entrada():
 
 
 def test_enter_zero_nao_vazou_para_a_legenda(tmp_path):
-    """`_opacidade` é compartilhado. `enter <= 0` foi criado para a headline;
-    nenhuma outra chamada do arquivo pode estar passando isso."""
+    """`_opacidade` é compartilhado. `enter <= 0` (aparecer pronto) tem DOIS
+    usos sancionados: a headline `padrao` e o emoji manual (o template mostra
+    os dois já assentados no primeiro quadro deles). Qualquer outra chamada
+    literal com enter=0 é vazamento."""
     import re
 
     py = (REPO / "app" / "render_proprio.py").read_text(encoding="utf-8")
-    valores = re.findall(r"enter=(\d+)", py)
-    assert valores, "nenhuma chamada com enter= literal — a busca quebrou"
-    assert all(int(v) > 0 for v in valores), (
-        f"alguma chamada literal usa enter<=0: {sorted(set(valores))}"
+    linhas_zero = [ln.strip() for ln in py.splitlines()
+                   if re.search(r"enter=0\b", ln)
+                   and not ln.strip().startswith("#")]
+    assert len(linhas_zero) == 1, (
+        f"enter=0 literal fora do lugar sancionado: {linhas_zero}"
     )
+    i = py.index(linhas_zero[0])
+    contexto = py[max(0, i - 400):i]
+    assert "INSTANTANEO" in contexto, "o enter=0 nao e o do emoji manual"
+    valores = re.findall(r"enter=(\d+)", py)
+    assert valores and all(int(v) >= 0 for v in valores)

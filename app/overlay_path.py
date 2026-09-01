@@ -634,9 +634,16 @@ def prepare_overlay_remotion(src_remotion: Path, dest: Path) -> Path:
     # `BubbleCaptions` entrou aqui em 30/08: sem ela exportada, o ramo
     # novo do Overlay nao compila. Sem o ramo, a Bolha de conversa
     # saia como KARAOKE toda vez que a rede de seguranca entrava.
+    # SfxManual/EmojisManuais (31/08): projeto scaffoldado antes da 4.50
+    # traz um Main.tsx sem esses exports — sem a injecao o Overlay novo nao
+    # compila NELE, e emoji/som postos a mao sumiam no fallback.
     for name in ("Karaoke", "Inserts", "EndCard", "HookIntro",
-                 "BubbleCaptions"):
-        text = text.replace(f"const {name}:", f"export const {name}:", 1)
+                 "BubbleCaptions", "SfxManual", "EmojisManuais"):
+        # Idempotente: `const X:` e substring de `export const X:` — sem a
+        # guarda, um template que JA exporta virava `export export const`
+        # e o esbuild derrubava o bundle inteiro ("Unexpected export").
+        if f"export const {name}:" not in text:
+            text = text.replace(f"const {name}:", f"export const {name}:", 1)
     main_tsx.write_text(text, encoding="utf-8")
     return dest
 

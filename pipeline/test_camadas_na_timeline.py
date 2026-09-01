@@ -21,6 +21,10 @@ import re
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
+import sys
+if str(REPO) not in sys.path:
+    sys.path.insert(0, str(REPO))
+from pipeline.ancoras import sem_comentarios  # noqa: E402
 JS = (REPO / "assets" / "preview" / "app.js").read_text(encoding="utf-8")
 
 
@@ -166,7 +170,7 @@ def test_o_bloco_curto_nao_precisa_de_alvo_dentro_dele():
     """O bloco de som tem 0,6s (~24px). Qualquer botão desenhado dentro
     dele — o antigo ✕ — comia o bloco e ainda errava o alvo. Por isso a
     ação mora na barra de cima, que tem espaço."""
-    assert "chip-x" not in JS
+    assert "chip-x" not in sem_comentarios(JS)
     i = JS.index("function refreshTransportActions")
     assert "S.blocoSel" in JS[i:i + 400]
 
@@ -252,7 +256,7 @@ def test_a_coluna_da_capa_nao_tem_mais_o_icone():
 def test_o_excluir_de_cima_apaga_o_bloco_selecionado():
     """"quando clico na imagem deve ativar o delete que temos la em cima
     nao aparecer um X"."""
-    assert "chip-x" not in JS, "o ✕ colado no bloco tinha de sair"
+    assert "chip-x" not in sem_comentarios(JS), "o ✕ colado no bloco tinha de sair"
     i = JS.index("function refreshTransportActions")
     bloco = JS[i:i + 1200]
     assert "S.blocoSel >= 0 ? S.insertsDraft[S.blocoSel] : null" in bloco

@@ -102,6 +102,30 @@
     } catch {
       if (hint) hint.textContent = "Versão sistema: —";
     }
+    // No EDITOR a pastilha existia mas nenhum script instalava clique — o
+    // botao era morto (so o hub tinha handler, em studio.js). Aqui ela
+    // checa atualizacao e diz o resultado no proprio rotulo.
+    const btn = $("#btnTbVersion");
+    const noHub = document.body.classList.contains("hub");
+    if (btn && !btn.dataset.wired && !noHub) {
+      btn.dataset.wired = "1";
+      btn.title = "Clique para checar atualização";
+      btn.onclick = async () => {
+        if (label) label.textContent = "…";
+        try {
+          const res = await fetch("/api/update/check", { cache: "no-store" });
+          const up = await res.json();
+          await refreshHint();
+          if (label && up.updateAvailable) label.textContent = "Atualizar ⤓";
+          btn.classList.toggle("update-available", !!up.updateAvailable);
+          btn.title = up.updateAvailable
+            ? "Há atualização — abra o Início para instalar"
+            : "Você está na versão mais recente";
+        } catch {
+          await refreshHint();
+        }
+      };
+    }
   }
 
   /** Nome do workspace = marca ativa. Mesma leitura do hub, sem estado. */

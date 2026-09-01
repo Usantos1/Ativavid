@@ -41,17 +41,43 @@ PS = (REPO / "helpers" / "preview_server.py").read_text(encoding="utf-8")
 
 @pytest.fixture()
 def video(tmp_path):
+    """Como o final REAL: 3 fluxos — video + audio + CAPA (attached_pic
+    1080x1920, mesma resolucao do video). A fixture de 2 fluxos passava por
+    padrao: o mapeamento default do ffmpeg diante do attached_pic nunca era
+    exercitado, e e exatamente ele que decide se a copia leve sai com o
+    fluxo certo (ver overlay_compose, que anexa a capa no final)."""
     from app.ffmpeg_tools import ffmpeg_bin
 
+    capa = tmp_path / "capa.jpg"
+    subprocess.run(
+        [ffmpeg_bin(), "-y", "-hide_banner", "-loglevel", "error",
+         "-f", "lavfi", "-i", "color=c=red:size=1080x1920:duration=0.1",
+         "-frames:v", "1", str(capa)],
+        check=True, capture_output=True, timeout=60)
     f = tmp_path / "entregue.mp4"
     subprocess.run(
         [ffmpeg_bin(), "-y", "-hide_banner", "-loglevel", "error",
          "-f", "lavfi", "-i", "testsrc=size=1080x1920:rate=30:duration=2",
          "-f", "lavfi", "-i", "sine=frequency=440:duration=2",
-         "-c:v", "libx264", "-crf", "30", "-preset", "ultrafast",
-         "-c:a", "aac", "-shortest", str(f)],
+         "-i", str(capa),
+         "-map", "0:v", "-map", "1:a", "-map", "2",
+         "-c:v:0", "libx264", "-crf", "30", "-preset", "ultrafast",
+         "-c:a", "aac", "-c:v:1", "mjpeg",
+         "-disposition:v:1", "attached_pic", "-shortest", str(f)],
         check=True, capture_output=True, timeout=120)
     return f
+
+
+def test_a_fixture_tem_os_3_fluxos_do_final_real(video):
+    """Se a capa sumir da fixture, os testes abaixo voltam a passar por
+    padrao — este aqui garante que o cenario e o do arquivo de verdade."""
+    from app.ffmpeg_tools import ffprobe_bin
+
+    r = subprocess.run([ffprobe_bin(), "-v", "error", "-show_entries",
+                        "stream=codec_type", "-of", "csv=p=0", str(video)],
+                       capture_output=True, text=True, timeout=30)
+    tipos = [ln.split(",")[0] for ln in r.stdout.split() if ln]
+    assert tipos.count("video") == 2 and "audio" in tipos, tipos
 
 
 def test_a_copia_do_final_leva_o_som(video, tmp_path):

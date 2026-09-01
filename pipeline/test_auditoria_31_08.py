@@ -248,15 +248,23 @@ def test_sessions_cifra_quando_da(tmp_path, monkeypatch):
 
 
 def test_biblioteca_sem_argumento_resolve_pelo_projectsRoot(tmp_path, monkeypatch):
+    """Le o settings.json VIA Path.home() de proposito: os testes
+    falsificam a home (nunca a pasta real do usuario), e o settings_store
+    fixa o caminho verdadeiro na importacao."""
     from app import broll_library as bl
 
-    raiz = tmp_path / "ATIVAVID" / "Projetos"
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
+    raiz = tmp_path / "Fora" / "Projetos"
     raiz.mkdir(parents=True)
-    monkeypatch.setattr("app.settings_store.load_settings",
-                        lambda: {"projectsRoot": str(raiz)})
+    (tmp_path / "ATIVAVID").mkdir()
+    (tmp_path / "ATIVAVID" / "settings.json").write_text(
+        json.dumps({"projectsRoot": str(raiz)}), encoding="utf-8")
     root = bl.library_root(None)
     assert root == raiz.parent / "Biblioteca", \
         "cair no Path.home() cria a Biblioteca fantasma do C: de novo"
+    # sem settings salvo, continua na home (o caso padrao de instalacao)
+    (tmp_path / "ATIVAVID" / "settings.json").unlink()
+    assert bl.library_root(None) == tmp_path / "ATIVAVID" / "Biblioteca"
 
 
 def test_apply_task_encerrada_envelhece(tmp_path, monkeypatch):

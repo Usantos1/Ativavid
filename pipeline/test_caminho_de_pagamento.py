@@ -16,6 +16,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
+from pipeline.ancoras import bloco_da_funcao  # noqa: E402
 
 JS = (REPO / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
 DOUTOR = (REPO / "helpers" / "doutor.py").read_text(encoding="utf-8")
@@ -23,8 +24,7 @@ DOUTOR = (REPO / "helpers" / "doutor.py").read_text(encoding="utf-8")
 
 def test_o_botao_de_assinar_depende_do_link():
     """Se esta regra mudar, o teste abaixo perde o sentido."""
-    i = JS.index("function openLicenseDialog(")
-    bloco = JS[i:JS.index("\nfunction openCheckout(", i)]
+    bloco = bloco_da_funcao(JS, "openLicenseDialog")
     assert "anual.hidden = !L.checkoutUrl" in bloco
     assert "mensal.hidden = !L.checkoutUrlMensal" in bloco
 

@@ -21,6 +21,10 @@ uma nova.
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
+import sys
+if str(REPO) not in sys.path:
+    sys.path.insert(0, str(REPO))
+from pipeline.ancoras import bloco_da_funcao, sem_comentarios  # noqa: E402
 HTML = (REPO / "assets" / "studio" / "index.html").read_text(encoding="utf-8")
 JS = (REPO / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
 CSS = (REPO / "assets" / "studio" / "studio.css").read_text(encoding="utf-8")
@@ -63,8 +67,7 @@ def test_cada_plano_da_janela_abre_o_SEU_link():
 
 
 def test_plano_sem_link_nao_aparece_na_janela():
-    i = JS.index("function openLicenseDialog(")
-    b = JS[i:JS.index("\nfunction openCheckout(", i)]
+    b = bloco_da_funcao(JS, "openLicenseDialog")
     assert "anual.hidden = !L.checkoutUrl" in b
     assert "mensal.hidden = !L.checkoutUrlMensal" in b
 
@@ -72,17 +75,17 @@ def test_plano_sem_link_nao_aparece_na_janela():
 def test_a_chave_de_ativacao_saiu_do_app():
     for morto in ("dlgChave", "licenseKeyInput", "licDlgKey",
                   "btnLicenseActivate", "btnLicDlgActivate"):
-        assert morto not in HTML, f"{morto} ainda esta na tela"
-        assert morto not in JS, f"{morto} ainda esta no script"
-    assert "activateLicenseKey" not in JS
-    assert "dlg-chave" not in CSS
+        assert morto not in sem_comentarios(HTML), f"{morto} ainda esta na tela"
+        assert morto not in sem_comentarios(JS), f"{morto} ainda esta no script"
+    assert "activateLicenseKey" not in sem_comentarios(JS)
+    assert "dlg-chave" not in sem_comentarios(CSS)
 
 
 def test_nao_sobrou_preco_chumbado_de_um_plano_so():
     """`priceLabel` dizia "R$ 399 / ano" para todo mundo — com dois planos
     isso vira mentira, e o preco agora mora em cada plano da tela."""
-    assert "priceLabel" not in LIC
-    assert "priceLabel" not in JS
+    assert "priceLabel" not in sem_comentarios(LIC, "py")
+    assert "priceLabel" not in sem_comentarios(JS)
 
 
 def test_nao_ha_botao_de_adiar():
@@ -91,7 +94,7 @@ def test_nao_ha_botao_de_adiar():
     b = _janela()
     assert "btnLicDlgLater" not in b
     assert "Agora não" not in b
-    assert "btnLicDlgLater" not in JS
+    assert "btnLicDlgLater" not in sem_comentarios(JS)
 
 
 def test_o_link_vai_junto_com_o_botao():
@@ -100,12 +103,10 @@ def test_o_link_vai_junto_com_o_botao():
     de Licenca ainda nao existe na tela) ANTES de gravar `state.license`, e
     a janela desenha com o payload recem-chegado enquanto o clique lia o
     estado velho, vazio."""
-    i = JS.index("function renderLicense(")
-    cabeca = JS[i:i + 700]
-    assert "state.license = lic;" in cabeca, "o estado tem de entrar antes do return"
-    assert cabeca.index("state.license = lic;") < cabeca.index("if (!hint) return;")
+    corpo = bloco_da_funcao(JS, "renderLicense")
+    assert corpo.index("state.license = lic;") < corpo.index("if (!hint) return;"), (
+        "o estado tem de entrar antes do return que sai cedo")
     # e o botao carrega o proprio endereco, para nao depender do estado
-    j = JS.index("function openLicenseDialog(")
-    b = JS[j:JS.index("\nfunction openCheckout(", j)]
+    b = bloco_da_funcao(JS, "openLicenseDialog")
     assert "anual.dataset.url" in b and "mensal.dataset.url" in b
     assert "openCheckout(b.dataset.url" in JS
