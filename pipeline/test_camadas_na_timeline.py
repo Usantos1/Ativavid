@@ -143,7 +143,10 @@ def test_da_para_tirar_o_que_foi_posto_na_mao():
     bloco = JS[i:i + 700]
     # histórico ANTES: remover por engano não pode custar o trabalho
     assert bloco.index("pushHistory()") < bloco.index("splice(i, 1)")
-    assert "if (!c || !c.isNew) return;" in bloco
+    # Desde a 4.61 a mídia manual JÁ APLICADA também se tira (a ausência na
+    # lista salva é o que apaga do vídeo); o resto continua protegido.
+    assert "if (!c || !(c.isNew || (c.kind === 'insert' && c.manual))) return;" in bloco
+    assert "S.manualApagado = true" in bloco
 
 
 def test_o_gancho_nao_se_apaga_pela_linha_do_tempo():
@@ -158,7 +161,8 @@ def test_o_bloco_da_mao_se_pega_tambem_na_edicao():
     clicar no bloco só levava a agulha para o ponto. Mover e esticar eram
     coisas só do Visual; mas o que ele põe à mão nasce em tempo de rascunho,
     que é o relógio da Edição."""
-    assert "const daMao = chip && S.insertsDraft[+chip.dataset.i]?.isNew;" in JS
+    # Desde a 4.61 o bloco manual APLICADO também se pega (camada viva)
+    assert "const daMao = chip && (S.insertsDraft[+chip.dataset.i]?.isNew" in JS
     i = JS.index("const daMao =")
     bloco = JS[i:i + 700]
     assert "(S.tab === 2 || daMao)" in bloco

@@ -1886,10 +1886,21 @@ function redo() {
 function edlDirty() {
   return S.draft.some((r) => r.added || r.removed || r.start !== r.orig.start || r.end !== r.orig.end);
 }
+function geoDoInsert(c) {
+  return JSON.stringify([+(+c.start).toFixed(3), +(+c.end).toFixed(3),
+    c.x ?? null, c.y ?? null, c.w ?? null, c.h ?? null, c.size ?? null,
+    c.entrada ?? null, c.saida ?? null, c.fx ?? null, c.fy ?? null]);
+}
+function manualMudou() {
+  return !!S.manualApagado || S.insertsDraft.some(
+    (c) => c.kind === 'insert'
+      && (c.isNew || (c.manual && c.origGeo != null && c.origGeo !== geoDoInsert(c))));
+}
 function insertsDirty() {
   // isNew: added from the image picker this session, so there is no orig to
   // diff against — it is dirty by existing at all
-  return S.insertsDraft.some((c) => c.isNew || c.start !== c.orig.start || c.end !== c.orig.end);
+  return manualMudou()
+    || S.insertsDraft.some((c) => c.isNew || c.start !== c.orig.start || c.end !== c.orig.end);
 }
 function dirtyCount() {
   let n = S.draft.filter((r) => r.added || r.removed || r.start !== r.orig.start || r.end !== r.orig.end).length;
@@ -3018,14 +3029,18 @@ function closeCaptionEditor() {
 }
 
 function stripAutoInsertsIfLimpa() {
-  // Estilo Limpa = quadro cheio. Sem cards de imagem por cima — só o que o
-  // usuário colocar à mão depois (isNew no draft). Pipeline/IA não deixam inserts.
+  // Estilo Limpa = quadro cheio. Sem cards de imagem AUTOMÁTICOS por cima.
+  // O que o usuário pôs À MÃO (manual) FICA: era varrido junto e o vídeo
+  // inserido "sumia da timeline" depois do render (caso real de 02/09).
   const edit = (S.style && S.style.edit) || 'limpa';
   if (String(edit).toLowerCase() !== 'limpa') return false;
   let changed = false;
   if (S.editData && Array.isArray(S.editData.inserts) && S.editData.inserts.length) {
-    S.editData.inserts = [];
-    changed = true;
+    const manuais = S.editData.inserts.filter((it) => it && it.manual);
+    if (manuais.length !== S.editData.inserts.length) {
+      S.editData.inserts = manuais;
+      changed = true;
+    }
   }
   return changed;
 }
@@ -3063,6 +3078,20 @@ function buildInsertsDraft() {
       credit: it.credit || '',
       auto: !!it.auto,
       hint: !!it.hint,
+      // Mídia posta À MÃO volta como CAMADA VIVA depois do render (4.61):
+      // com a geometria, animações e enquadramento que já valem no vídeo —
+      // mover/apagar/reenquadrar continua daqui, sem recomeçar.
+      manual: !!it.manual,
+      mid: it.mid || null,
+      ...(it.x != null ? { x: +it.x } : {}),
+      ...(it.y != null ? { y: +it.y } : {}),
+      ...(it.w != null ? { w: +it.w } : {}),
+      ...(it.h != null ? { h: +it.h } : {}),
+      ...(it.size != null ? { size: +it.size } : {}),
+      ...(it.entrada ? { entrada: it.entrada } : {}),
+      ...(it.saida ? { saida: it.saida } : {}),
+      ...(it.fx != null ? { fx: +it.fx } : {}),
+      ...(it.fy != null ? { fy: +it.fy } : {}),
     });
   });
   // split-layout images (CustomGraphics reads the same array) — they are images
@@ -3094,7 +3123,14 @@ function buildInsertsDraft() {
   (d.wordAccents || []).forEach((w, i) => {
     list.push({ kind: 'word', label: w.text, start: +w.start, end: +w.end, ref: i });
   });
-  S.insertsDraft = list.map((c) => ({ ...c, orig: { start: c.start, end: c.end } }));
+  S.insertsDraft = list.map((c) => ({
+    ...c,
+    orig: { start: c.start, end: c.end },
+    // retrato do estado carregado: qualquer mexida num insert manual JA
+    // aplicado (geometria, efeito, enquadramento) vira alteracao pendente
+    ...(c.manual ? { origGeo: geoDoInsert(c) } : {}),
+  }));
+  S.manualApagado = false;
 }
 
 async function loadWave() {
@@ -3645,8 +3681,9 @@ function desenharMidiaNoPreview() {
   if (!box) return;
   const t = renderedToDraft(video.currentTime || 0);
   const agora = S.insertsDraft.filter(
-    (c) => c.isNew && t >= c.start && t < c.end
-    && (c.kind === 'emoji' || c.kind === 'insert'));
+    (c) => t >= c.start && t < c.end
+    && ((c.kind === 'emoji' && c.isNew)
+      || (c.kind === 'insert' && (c.isNew || c.manual))));
   const chave = agora.map((c) => `${c.kind}:${c.label}:${c.start}`).join('|');
   if (box.dataset.chave === chave) return;   // sem repintar a cada quadro
   // Caixa ainda sem tamanho (video carregando): pintar agora sairia um
@@ -3744,7 +3781,7 @@ function renderFxPanel() {
   const lane = $('fxLane');
   if (!painel || !lane) return;
   const c = S.blocoSel >= 0 ? S.insertsDraft[S.blocoSel] : null;
-  const mostrar = !!(c && c.kind === 'insert' && c.isNew);
+  const mostrar = !!(c && c.kind === 'insert' && (c.isNew || c.manual));
   painel.classList.toggle('hidden', !mostrar);
   if (!mostrar) { lane.innerHTML = ''; return; }
   lane.innerHTML = '';
@@ -3798,8 +3835,10 @@ function renderFxPanel() {
  * trazer de volta — remover por engano nao pode custar o trabalho todo. */
 function removerBlocoDaMao(i) {
   const c = S.insertsDraft[i];
-  if (!c || !c.isNew) return;
+  if (!c || !(c.isNew || (c.kind === 'insert' && c.manual))) return;
   pushHistory();
+  // manual JA aplicado: a ausencia na lista salva e o que APAGA do video
+  if (c.manual && !c.isNew) S.manualApagado = true;
   S.blocoSel = -1;
   S.insertsDraft.splice(i, 1);
   renderAll();
@@ -4875,7 +4914,8 @@ function renderChips() {
   $('trkCaptions').classList.toggle('hidden', !showCaps);
   // Na Edicao o bloco de faixas so aparece quando ha midia posta na mao —
   // sem isso a faixa nasce vazia e come altura da linha do tempo.
-  const temManual = S.insertsDraft.some((c) => c.isNew || c.kind === 'hook');
+  const temManual = S.insertsDraft.some(
+    (c) => c.isNew || c.kind === 'hook' || (c.kind === 'insert' && c.manual));
   insertTracksEl.classList.toggle('hidden', !phase2 && !temManual);
   insertTracksEl.innerHTML = '';
   if (!showCaps) {
@@ -4926,7 +4966,8 @@ function desenharFaixasDeInsert(phase2) {
   // aqui", estando na Edicao).
   const visiveis = soManuais
     ? S.insertsDraft.map((c, i) => ({ c, i }))
-        .filter(({ c }) => c.isNew || c.kind === 'hook')
+        .filter(({ c }) => c.isNew || c.kind === 'hook'
+          || (c.kind === 'insert' && c.manual))
     : S.insertsDraft.map((c, i) => ({ c, i }));
   if (soManuais && !visiveis.length) return;
 
@@ -5761,7 +5802,9 @@ panel.addEventListener('pointerdown', (e) => {
   // O bloco POSTO NA MAO tambem se ajusta na Edicao: ele nasce em tempo de
   // rascunho, que e o relogio daquela tela. So os inserts da IA continuam
   // presos ao Visual, onde o relogio deles bate.
-  const daMao = chip && S.insertsDraft[+chip.dataset.i]?.isNew;
+  const daMao = chip && (S.insertsDraft[+chip.dataset.i]?.isNew
+    || (S.insertsDraft[+chip.dataset.i]?.kind === 'insert'
+      && S.insertsDraft[+chip.dataset.i]?.manual));
   if (handle && chip && (S.tab === 2 || daMao)) {
     const i = +handle.dataset.i;
     drag = { type: 'chip-trim', i, side: handle.classList.contains('l') ? 'l' : 'r', x0: e.clientX, c: { ...S.insertsDraft[i] }, preSnapshot: snapshotState() };
@@ -6735,7 +6778,9 @@ function pushInsertFromRef(src, label, credit) {
   S.insertsDraft.push({
     kind: 'insert', label: label || (src || '').split('/').pop(),
     start, end, orig: { start, end },
-    isNew: true, src, credit: credit || '',
+    isNew: true, manual: true,
+    mid: `m${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`,
+    src, credit: credit || '',
   });
   renderAll(); refreshHeader();
   desenharMidiaNoPreview();
@@ -7137,28 +7182,34 @@ async function saveEditsAndReturnToQueue() {
   }
   if (insertsDirty()) {
     const limpa = (S.style?.edit || 'limpa') === 'limpa';
-    // Em limpa: só inserts que o usuário acabou de criar à mão (isNew).
-    const keepInsert = (c) => c.kind === 'insert' && !c.isNew && !limpa;
-    const keepNew = (c) => c.kind === 'insert' && c.isNew;
+    // Em limpa: só a mídia manual sobrevive; o automático some.
+    // Manual NUNCA entra em `inserts` — vai inteiro em `manualInserts`.
+    const keepInsert = (c) => c.kind === 'insert' && !c.isNew && !c.manual && !limpa;
     payload.editData = {
       inserts: S.insertsDraft.filter(keepInsert).map((c) => ({
         ref: c.ref, start: +c.start.toFixed(3), end: +c.end.toFixed(3),
       })),
-      newInserts: S.insertsDraft.filter(keepNew).map((c) => ({
-        src: c.src, credit: c.credit || '',
-        start: +c.start.toFixed(3), end: +c.end.toFixed(3),
-        // onde e de que tamanho, quando o usuario mexeu
-        ...(c.x != null ? { x: +c.x } : {}),
-        ...(c.y != null ? { y: +c.y } : {}),
-        ...(c.size != null ? { size: +c.size } : {}),
-        ...(c.w != null ? { w: +c.w } : {}),
-        ...(c.h != null ? { h: +c.h } : {}),
-        // animacoes e enquadramento escolhidos no preview
-        ...(c.entrada ? { entrada: c.entrada } : {}),
-        ...(c.saida ? { saida: c.saida } : {}),
-        ...(c.fx != null ? { fx: +c.fx } : {}),
-        ...(c.fy != null ? { fy: +c.fy } : {}),
-      })),
+      // Estado COMPLETO da mídia manual (4.61): o pipeline SUBSTITUI o que
+      // há de manual por esta lista — mover/apagar/reenquadrar um insert
+      // já aplicado não duplica nem ressuscita. Apagado = ausente daqui.
+      manualInserts: S.insertsDraft
+        .filter((c) => c.kind === 'insert' && (c.isNew || c.manual))
+        .map((c) => ({
+          mid: c.mid || `m${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`,
+          src: c.src, credit: c.credit || '',
+          start: +c.start.toFixed(3), end: +c.end.toFixed(3),
+          // onde e de que tamanho, quando o usuario mexeu
+          ...(c.x != null ? { x: +c.x } : {}),
+          ...(c.y != null ? { y: +c.y } : {}),
+          ...(c.size != null ? { size: +c.size } : {}),
+          ...(c.w != null ? { w: +c.w } : {}),
+          ...(c.h != null ? { h: +c.h } : {}),
+          // animacoes e enquadramento escolhidos no preview
+          ...(c.entrada ? { entrada: c.entrada } : {}),
+          ...(c.saida ? { saida: c.saida } : {}),
+          ...(c.fx != null ? { fx: +c.fx } : {}),
+          ...(c.fy != null ? { fy: +c.fy } : {}),
+        })),
       // Emoji: comeco E duracao (ele fica na tela enquanto o bloco durar).
       emojis: S.insertsDraft.filter((c) => c.kind === 'emoji' && c.char).map((c) => ({
         char: c.char, atSec: +c.start.toFixed(3),
@@ -7235,7 +7286,11 @@ async function saveEditsAndReturnToQueue() {
     if (r.removed) r.hardRemoved = true;
   });
   S.draft = S.draft.filter((r) => !r.removed);
-  S.insertsDraft.forEach((c) => { c.orig = { start: c.start, end: c.end }; });
+  S.insertsDraft.forEach((c) => {
+    c.orig = { start: c.start, end: c.end };
+    if (c.manual) c.origGeo = geoDoInsert(c);
+  });
+  S.manualApagado = false;
   S.history = [];
   S.future = [];
   refreshUndoRedoButtons();

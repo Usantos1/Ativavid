@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.61
+
+- **O vídeo/imagem inserido não some mais da timeline depois do render.**
+  Ele volta como CAMADA VIVA: o bloco reaparece na linha do tempo e o
+  cartão no preview, com a posição, tamanho, efeitos e enquadramento que
+  já valem no vídeo — dá para mover, redimensionar, trocar a animação,
+  reenquadrar ou apagar, e o Aplicar acende na hora. Apagar o bloco tira
+  do vídeo no próximo Aplicar; nada duplica ao aplicar de novo.
+
 ## 4.60
 
 - **Enquadrar: agora dá para recortar o que aparece no cartão.** Duplo

@@ -872,29 +872,23 @@ def midia_do_editor(edit_dir: Path, public: Path, edit_data: dict) -> None:
             return False
     inseridos, perdidos = 0, []
     inserts = list(edit_data.get("inserts") or [])
-    # Ja aplicado? Esta funcao roda no render completo E no "Aplicar
-    # alteracoes"; sem esta marca, aplicar duas vezes poria a mesma imagem
-    # duas vezes no video.
-    ja = {(str(x.get("src") or ""), round(float(x.get("start") or 0), 2))
-          for x in inserts if isinstance(x, dict)}
-    for it in (ed.get("newInserts") or []):
-        if not isinstance(it, dict):
-            continue
+
+    def _sanear_manual(it: dict) -> dict | None:
+        """Um insert manual saneado (src em public/, tempos, geometria,
+        animacoes, enquadramento) — ou None quando nao da para usar."""
         src = str(it.get("src") or "").replace("\\", "/").lstrip("/")
         if not src or ".." in src.split("/"):
-            continue
+            return None
         if not _repor(src):
             perdidos.append(src)
-            continue
+            return None
         try:
             ini = float(it.get("start"))
             fim = float(it.get("end"))
         except (TypeError, ValueError):
-            continue
+            return None
         if fim - ini < 0.2:
             fim = ini + 2.5
-        if (src, round(ini, 2)) in ja:
-            continue
         geo = {}
         for chave, lim in (("x", 1.0), ("y", 1.0), ("size", 1.0),
                            ("w", 1.0), ("h", 1.0)):
@@ -919,16 +913,51 @@ def midia_do_editor(edit_dir: Path, public: Path, edit_data: dict) -> None:
                 geo[foco] = min(1.0, max(0.0, float(it[foco])))
             except (TypeError, ValueError):
                 pass
-        inserts.append({"src": src, "start": round(ini, 3),
-                        "end": round(fim, 3),
-                        "credit": str(it.get("credit") or ""),
-                        **geo,
-                        # `manual`: o corte nao pode descartar isto como
-                        # descarta o b-roll automatico do estilo limpa
-                        "manual": True})
-        inseridos += 1
-    if inseridos:
+        mid = re.sub(r"[^A-Za-z0-9_-]", "", str(it.get("mid") or ""))[:24]
+        return {"src": src, "start": round(ini, 3),
+                "end": round(fim, 3),
+                "credit": str(it.get("credit") or ""),
+                **geo,
+                **({"mid": mid} if mid else {}),
+                # `manual`: o corte nao pode descartar isto como
+                # descarta o b-roll automatico do estilo limpa
+                "manual": True}
+
+    manuais = ed.get("manualInserts")
+    if isinstance(manuais, list):
+        # PROTOCOLO da 4.61: a tela manda o estado COMPLETO da midia manual
+        # e ele SUBSTITUI o que ha de manual no edit-data — mover, apagar ou
+        # reenquadrar um insert JA aplicado deixa de duplicar/ressuscitar.
+        # O b-roll automatico (sem `manual`) fica como esta.
+        inserts = [x for x in inserts
+                   if isinstance(x, dict) and not x.get("manual")]
+        for it in manuais:
+            if not isinstance(it, dict):
+                continue
+            novo = _sanear_manual(it)
+            if novo is not None:
+                inserts.append(novo)
+                inseridos += 1
         edit_data["inserts"] = inserts
+    else:
+        # Caminho legado (preview antigo): newInserts so ACRESCENTA.
+        # Ja aplicado? Esta funcao roda no render completo E no "Aplicar
+        # alteracoes"; sem esta marca, aplicar duas vezes poria a mesma
+        # imagem duas vezes no video.
+        ja = {(str(x.get("src") or ""), round(float(x.get("start") or 0), 2))
+              for x in inserts if isinstance(x, dict)}
+        for it in (ed.get("newInserts") or []):
+            if not isinstance(it, dict):
+                continue
+            novo = _sanear_manual(it)
+            if novo is None:
+                continue
+            if (novo["src"], round(novo["start"], 2)) in ja:
+                continue
+            inserts.append(novo)
+            inseridos += 1
+        if inseridos:
+            edit_data["inserts"] = inserts
 
     emojis = list(edit_data.get("emojis") or [])
     ja_emoji = {(str(x.get("char") or ""), round(float(x.get("atSec") or 0), 2))
