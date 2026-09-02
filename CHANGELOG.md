@@ -1,5 +1,17 @@
 # Changelog
 
+## 4.74
+
+- **ElevenLabs saiu do produto.** Nada no ATIVAVID depende mais de conta ou
+  créditos de nuvem: a transcrição roda na sua máquina (como já era o
+  padrão) e a trilha é composta pela IA local (MusicGen), com a sua
+  Biblioteca de trilhas de reserva.
+- O card da chave ElevenLabs saiu das Integrações e o Doutor não cobra mais
+  essa chave. Configuração antiga que apontava para a nuvem continua
+  funcionando — resolve para o motor local, sem erro.
+- O card de Música em Configurações ficou mais simples: sem escolha de
+  motor (só existe um), mantendo o instalar/estado da IA local.
+
 ## 4.73
 
 - **Emoji e efeito sonoro não somem mais depois do render.** Eles voltam

@@ -558,7 +558,6 @@ _MARCADORES_TRANSCRICAO = (
     "WHISPER_GUARDA",
     "WHISPER_COMPONENTE_CUDA",
     "WHISPER_ACELERACAO_FALHOU",
-    "ELEVENLABS_FALHOU",
     "Whisper backend:",
     # Revisao textual do Gemini sobre o transcript local. As tres linhas sao
     # o unico sinal que sai dela, e as tres tem de aparecer: a que diz que
@@ -597,7 +596,7 @@ def _backend_transcricao() -> str:
     except Exception as e:  # noqa: BLE001
         print(f"TRANSCRICAO_MODO_FALHOU {type(e).__name__}: {str(e)[:120]}",
               flush=True)
-        escolhido = "elevenlabs"
+        escolhido = "local"
     print(f"TRANSCRICAO_BACKEND {escolhido}", flush=True)
     return escolhido
 
@@ -2191,13 +2190,11 @@ def _arquivar_trilha(trilha: Path, ct: str, raiz_projetos: Path,
 
 
 def _preferencia_motor_musica() -> str:
-    """auto (nuvem primeiro) | local (IA local primeiro) | nuvem (só ela)."""
-    try:
-        from app.settings_store import load_settings
-        v = str(load_settings().get("musicEngine") or "auto").lower().strip()
-    except Exception:
-        return "auto"
-    return v if v in ("auto", "local", "nuvem") else "auto"
+    """Sempre "local": a nuvem (ElevenLabs Music) saiu do produto em
+    02/09/2026 a pedido do dono. Valores antigos gravados em configuração
+    ("auto"/"nuvem") resolvem para local sem erro; a biblioteca de trilhas
+    segue de reserva quando o motor local não compõe."""
+    return "local"
 
 
 def _motor_musica_dir(raiz_projetos: Path) -> str:
@@ -3929,23 +3926,10 @@ def run(
         from concurrent.futures import ThreadPoolExecutor
 
         with ThreadPoolExecutor(max_workers=4) as _an_ex:
-            # `--backend elevenlabs` explícito, não o `auto` que estava aqui.
-            # O `auto` só escolhe o Scribe para fonte acima de 5 min, e NENHUMA
-            # fonte do usuário chega perto disso: das 149 medidas no disco dele,
-            # a mais longa tem 2,8 min. Resultado, 149 de 149 foram para o Groq
-            # — o plano pago de Scribe nunca foi usado no vídeo curto, que é
-            # todo o trabalho dele.
-            #
-            # Não é só qualidade. O Groq gratuito responde 429 sob carga e o
-            # cliente espera 5,10,20,40,60,60s por tentativa: e é isso que a
-            # fase ANALYZE mostra. Medido por período nos projetos dele, o
-            # custo por segundo de fonte foi de 2,27 na manhã de 20/08 (lote
-            # grande, muito 429) contra 0,12 na tarde do MESMO dia — 19x de
-            # espalhamento sem nada mudar no código.
-            #
-            # Quem não tem chave do ElevenLabs não é afetado: `transcribe_one`
-            # desce para o Groq sozinho quando a chave falta, e agora também
-            # quando o Scribe falha em execução.
+            # O backend vem de app/transcricao/modo — LOCAL, o único motor
+            # do produto desde 02/09/2026 (o Scribe/ElevenLabs saiu a pedido
+            # do dono). O helper transcribe.py ainda conhece outros backends
+            # para uso de ferramenta, mas o pipeline só pede o local.
             _f_tr = _an_ex.submit(
                 _helper, "transcribe.py", str(src),
                 "--edit-dir", str(edit_dir), "--language", language,
@@ -4336,47 +4320,18 @@ def run(
                       f"({dur_antiga:.0f}s >= {planned_keep:.0f}s) — sem "
                       "gasto de créditos", flush=True)
         if planned_keep >= 3 and not reuso:
-            _pref_musica = _preferencia_motor_musica()
-
             def _music_worker() -> None:
-                pronto = lambda: (music_tmp.exists()  # noqa: E731
-                                  and music_tmp.stat().st_size > 1000)
+                # So o motor LOCAL compoe (a nuvem saiu do produto em
+                # 02/09/2026). A biblioteca de trilhas fecha a fila la no
+                # [7/9] quando o motor nao entrega.
                 segundos = int(planned_keep) + 2
-
-                def _nuvem() -> None:
-                    _helper("elevenlabs_music.py", music_vibe,
-                            "-o", str(music_tmp),
-                            "--length-sec", str(segundos), check=False)
-
-                def _local() -> None:
-                    if _tentar_musicgen(music_tmp, music_vibe, segundos,
-                                        edit_dir.parents[1],
-                                        tentativas=_MOTOR_TENTATIVAS):
-                        _music_via["motor"] = True
-                        # POR QUE o local compos: escolha dele (modo
-                        # "local", a nuvem nem e chamada) ou reserva
-                        # (modo "auto", a nuvem falhou). A ficha dizia
-                        # "o ElevenLabs estava indisponivel" nos dois.
-                        _music_via["motivo"] = (
-                            "escolha" if _pref_musica == "local"
-                            else "reserva")
-                        print("[7/9] trilha composta pelo MOTOR LOCAL "
-                              "(MusicGen)", flush=True)
-
-                # "local": a IA da propria maquina compoe primeiro — nao
-                # gasta credito nenhum e a nuvem vira reserva. "nuvem": so
-                # ElevenLabs. "auto" (padrao): nuvem primeiro, local de
-                # reserva. Em todos, a biblioteca fecha a fila la no [7/9].
-                if _pref_musica == "local":
-                    _local()
-                    if not pronto():
-                        _nuvem()
-                elif _pref_musica == "nuvem":
-                    _nuvem()
-                else:
-                    _nuvem()
-                    if not pronto():
-                        _local()
+                if _tentar_musicgen(music_tmp, music_vibe, segundos,
+                                    edit_dir.parents[1],
+                                    tentativas=_MOTOR_TENTATIVAS):
+                    _music_via["motor"] = True
+                    _music_via["motivo"] = "escolha"
+                    print("[7/9] trilha composta pelo MOTOR LOCAL "
+                          "(MusicGen)", flush=True)
 
             music_thread = _threading.Thread(
                 target=_music_worker, daemon=True, name="music-ai")
@@ -4881,36 +4836,25 @@ def run(
             else:
                 # O caminho que DEU CERTO tambem precisa se identificar: a
                 # ficha so sabia dizer a trilha quando algo tinha desviado
-                # do normal, entao a nuvem — o caso comum — aparecia como
-                # linha nenhuma. Ele pediu a linha em todo video (31/08).
-                _RENDER_META["musicaFonte"] = "nuvem: ElevenLabs Music"
+                # do normal. So o motor local compoe (a nuvem saiu em
+                # 02/09/2026), entao um arquivo sem marca de motor/reuso e
+                # anomalia — dizer de onde veio evita a ficha muda.
+                _RENDER_META["musicaFonte"] = "motor: MusicGen local"
         else:
-            # Antecipada falhou (rede/planned<3s) — chamada síncrona antiga.
-            _mproc = _helper(
-                "elevenlabs_music.py", music_vibe,
-                "-o", str(trilha),
-                "--length-sec", str(int(duration) + 2),
-                check=False,
-            )
+            # Antecipada nao entregou (planned<3s, motor recusou ou fio
+            # estourou o prazo) — uma tentativa sincrona do motor local.
             if not trilha.exists():
-                _mtxt = ((_mproc.stderr or "") + (_mproc.stdout or ""))
-                if "insufficient_credits" in _mtxt or "payment_required" in _mtxt:
-                    _RENDER_META["musicaSkip"] = (
-                        "créditos do ElevenLabs esgotados — renove o plano")
-                else:
-                    _RENDER_META["musicaSkip"] = (
-                        "geração falhou: " + _mtxt.strip()[-140:]
-                        if _mtxt.strip() else "geração falhou (sem detalhe)")
-                if (_preferencia_motor_musica() != "nuvem"
-                        and _tentar_musicgen(trilha, music_vibe,
-                                             int(duration) + 2,
-                                             edit_dir.parents[1])):
-                    _RENDER_META.pop("musicaSkip", None)
+                if _tentar_musicgen(trilha, music_vibe,
+                                    int(duration) + 2,
+                                    edit_dir.parents[1]):
                     _RENDER_META["musicaFonte"] = "motor: MusicGen local"
-                    # Aqui a nuvem FOI chamada e falhou — reserva de fato.
-                    _RENDER_META["musicaMotivo"] = "reserva"
+                    _RENDER_META["musicaMotivo"] = "escolha"
                     print("[7/9] trilha composta pelo MOTOR LOCAL "
                           "(MusicGen)", flush=True)
+                else:
+                    _RENDER_META["musicaSkip"] = (
+                        str(_RENDER_META.get("musicaMotorRecusa") or "")
+                        or "o motor local não compôs")
                 try:
                     from app.content_type import normalize_content_type
                     _ct_bib = "longform" if is_longform else (
@@ -4937,11 +4881,11 @@ def run(
                         " · plano B: deixe MP3s em "
                         "ATIVAVID/Biblioteca/Trilhas")
         if trilha.exists():
-            # Sobrou o caminho sincrono: a antecipada falhou e a chamada
-            # direta ao ElevenLabs salvou a trilha, sem passar por nenhum
-            # dos ramos acima.
+            # Rede de seguranca do rotulo: todo caminho acima ja se
+            # identifica; se algum deixou passar, o unico compositor que
+            # resta e o motor local.
             if not _RENDER_META.get("musicaFonte"):
-                _RENDER_META["musicaFonte"] = "nuvem: ElevenLabs Music"
+                _RENDER_META["musicaFonte"] = "motor: MusicGen local"
             try:
                 trilha.with_suffix(".vibe.txt").write_text(
                     music_vibe.strip(), encoding="utf-8")

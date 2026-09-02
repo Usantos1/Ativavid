@@ -116,24 +116,20 @@ def checar_chaves() -> None:
     valores: dict[str, str] = {}
     _ler_env(Path.home() / "ATIVAVID" / ".env", valores)
     _ler_env(SKILL / ".env", valores)
-    for k in ("GROQ_API_KEY", "ELEVENLABS_API_KEY", "PEXELS_API_KEY"):
+    for k in ("GROQ_API_KEY", "PEXELS_API_KEY"):
         if os.environ.get(k):
             valores.setdefault(k, os.environ[k])
 
-    # A transcricao NAO depende mais de chave nenhuma: ela roda na propria
-    # maquina (faster-whisper local, padrao desde 21/08/2026). Cobrar chave
-    # aqui virou aviso falso -- e bloqueio falso e pior que nenhum, porque
-    # ensina a ignorar o relatorio.
-    tem_eleven = bool(valores.get("ELEVENLABS_API_KEY"))
+    # A transcricao NAO depende de chave nenhuma: ela roda na propria
+    # maquina (faster-whisper local, padrao desde 21/08/2026). E a trilha
+    # tambem nao: o ElevenLabs saiu do produto em 02/09/2026 — quem compoe
+    # e a IA local (MusicGen), com a Biblioteca de trilhas de reserva.
+    # Cobrar chave aqui viraria aviso falso, que ensina a ignorar o
+    # relatorio.
     diz(OK, "Transcricao roda nesta maquina",
         "Nao precisa de conta, chave nem internet depois que os componentes "
         "locais estiverem instalados.")
 
-    if not tem_eleven:
-        diz(AVISO, "Sem chave da ElevenLabs",
-            "So afeta a trilha sonora por IA e a voz. A transcricao nao usa "
-            "essa chave.",
-            "Escreva ELEVENLABS_API_KEY=... no arquivo .env")
     if not valores.get("PEXELS_API_KEY"):
         diz(AVISO, "Sem chave da Pexels",
             "So afeta as imagens ilustrativas de banco. O video sai normal sem elas.",

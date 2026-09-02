@@ -148,10 +148,11 @@ def _aviso_de_trilha(job: dict, edit: Path) -> None:
             motivo = str(t.get("musicaMotivo") or "").strip()
             job["trilhaNota"] = "IA local (MusicGen)"
             if motivo == "escolha":
-                job["trilhaDetalhe"] = ("é o motor escolhido em Configurações, "
+                job["trilhaDetalhe"] = ("a IA da sua máquina compôs a trilha, "
                                         "sem gastar créditos")
             elif motivo == "reserva":
-                job["trilhaDetalhe"] = "o ElevenLabs não respondeu"
+                # ficha de render antigo (quando a nuvem ainda existia)
+                job["trilhaDetalhe"] = "a nuvem não respondeu na época"
         else:
             # O NOME DO ARQUIVO nao serve de recado: "anuncio--20260822-
             # 193504_a001_08221324_cf96c4.mp3" nao diz nada ao usuario, nao

@@ -40,11 +40,14 @@ def test_acha_a_chave_no_env_do_usuario(monkeypatch, tmp_path):
 
 
 def test_sem_chave_nenhuma_o_aviso_continua(monkeypatch, tmp_path):
-    """O aviso VERDADEIRO nao pode sumir junto com o falso."""
+    """O aviso VERDADEIRO nao pode sumir junto com o falso. Desde 02/09 a
+    chave do ElevenLabs saiu do produto — o Doutor nao pode cobra-la; o
+    aviso da Pexels (que segue em uso) continua."""
     (tmp_path / "ATIVAVID").mkdir()
     itens = _rodar(monkeypatch, tmp_path)
     titulos = " | ".join(str(i.get("titulo")) for i in itens)
-    assert "Sem chave da ElevenLabs" in titulos, titulos
+    assert "ElevenLabs" not in titulos, titulos
+    assert "Sem chave da Pexels" in titulos, titulos
 
 
 def test_a_ordem_das_fontes_e_a_do_app():

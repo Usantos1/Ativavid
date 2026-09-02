@@ -90,8 +90,8 @@ def test_a_revisao_nao_e_um_modo_de_transcricao():
     Um quarto valor teria de ser traduzido de volta em todo lugar que compara
     com `elevenlabs`, e a revisão é ortogonal ao motor.
     """
-    assert set((modo.LOCAL, modo.SCRIBE, modo.AUTO)) == {"local", "elevenlabs", "auto"}
-    assert modo.backend_para_o_pipeline() in (modo.LOCAL, modo.SCRIBE)
+    assert set((modo.LOCAL, modo.AUTO)) == {"local", "auto"}
+    assert modo.backend_para_o_pipeline() == modo.LOCAL
     assert not hasattr(modo, "LOCAL_MAIS_GEMINI")
 
 
@@ -101,8 +101,9 @@ def test_a_chave_da_revisao_nao_mexe_no_motor(monkeypatch):
     monkeypatch.setenv("ATIVAVID_REVISAO", "gemini")
     assert modo.backend_para_o_pipeline() == modo.LOCAL
 
+    # valor antigo "elevenlabs" resolve para local (o Scribe saiu em 02/09)
     monkeypatch.setenv("ATIVAVID_TRANSCRICAO", "elevenlabs")
-    assert modo.backend_para_o_pipeline() == modo.SCRIBE
+    assert modo.backend_para_o_pipeline() == modo.LOCAL
 
 
 def test_o_sufixo_desejado_acompanha_o_interruptor(monkeypatch):

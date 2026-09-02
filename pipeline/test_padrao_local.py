@@ -49,12 +49,15 @@ def test_sem_configuracao_nenhuma_o_padrao_e_local(monkeypatch):
     assert modo.backend_para_o_pipeline() == modo.LOCAL
 
 
-def test_quem_pede_scribe_recebe_scribe(monkeypatch):
-    """Ele continua disponível — como escolha, não como surpresa."""
+def test_pedir_o_scribe_antigo_resolve_para_local(monkeypatch):
+    """O Scribe saiu do PRODUTO em 02/09/2026 ("vamos remover todo o
+    elevenlabs da jogada"). Configuração velha não trava nem escolhe
+    nuvem: cai no local, sem erro."""
     import app.transcricao.modo as modo
 
-    monkeypatch.setenv("ATIVAVID_TRANSCRICAO", modo.SCRIBE)
-    assert modo.backend_para_o_pipeline() == modo.SCRIBE
+    monkeypatch.setenv("ATIVAVID_TRANSCRICAO", "elevenlabs")
+    assert modo.backend_para_o_pipeline() == modo.LOCAL
+    assert not hasattr(modo, "SCRIBE")
 
 
 def test_nao_ha_queda_automatica_para_o_scribe(monkeypatch):
@@ -285,10 +288,10 @@ def test_faltar_chave_nao_bloqueia_mais_o_app():
 
     codigo = apenas_codigo(REPO / "helpers" / "doutor.py")
     assert "Nenhuma chave de transcricao" not in codigo
-    i = codigo.index("tem_eleven =")
-    trecho = codigo[i:i + 900]
-    assert "BLOQUEIO" not in trecho, "voltou a bloquear por falta de chave"
-    assert "transcricao nao usa" in trecho.lower() or "não usa" in trecho.lower()
+    # Desde 02/09 o Doutor nem menciona a chave do ElevenLabs: transcricao
+    # e trilha rodam na maquina, cobrar chave seria aviso falso.
+    assert "ELEVENLABS_API_KEY" not in codigo
+    assert "Transcricao roda nesta maquina" in codigo
 
 
 def test_o_scribe_continua_existindo():

@@ -92,7 +92,8 @@ def test_o_gancho_esta_no_ponto_de_falha_da_ia():
     limpar o musicaSkip quando salva o video; sem faixa na pasta, o aviso
     ganha a dica de onde por os MP3s."""
     s = (RAIZ / "pipeline" / "run_fast.py").read_text(encoding="utf-8")
-    i = s.find('"créditos do ElevenLabs esgotados')
+    # ancora do caminho sincrono desde a saida da nuvem (02/09)
+    i = s.find('"o motor local não compôs"')
     assert i > 0
     trecho = s[i:i + 2600]
     assert "_trilha_da_biblioteca(" in trecho
@@ -296,11 +297,13 @@ def test_launcher_sem_motor_sai_rapido_com_3(tmp_path, monkeypatch):
     assert "motor local" in r.stdout
 
 
-def test_ordem_dos_planos_elevenlabs_motor_biblioteca():
-    """A retentativa sincrona tenta NESTA ordem: ElevenLabs -> motor local
-    -> biblioteca; e a biblioteca so roda se a trilha ainda nao existe."""
+def test_ordem_dos_planos_motor_biblioteca():
+    """Desde 02/09 (nuvem fora): a retentativa sincrona tenta motor local
+    -> biblioteca; a biblioteca so roda se a trilha ainda nao existe. E a
+    nuvem NAO e chamada em lugar nenhum do pipeline."""
     s = (RAIZ / "pipeline" / "run_fast.py").read_text(encoding="utf-8")
-    i = s.find('"créditos do ElevenLabs esgotados')
+    assert "elevenlabs_music.py" not in s
+    i = s.find("# Antecipada nao entregou")
     assert i > 0
     trecho = s[i:i + 2600]
     i_motor = trecho.find("_tentar_musicgen(trilha")
@@ -333,55 +336,53 @@ def test_o_card_conta_que_o_motor_compos(tmp_path):
 
 # ---------- motor local como PRINCIPAL (3.05) ----------
 
-def test_preferencia_le_o_settings_e_rejeita_valor_estranho(monkeypatch):
+def test_preferencia_resolve_sempre_para_local(monkeypatch):
+    """A nuvem saiu (02/09): qualquer valor gravado — inclusive os antigos
+    "auto"/"nuvem" — resolve para local, sem erro."""
     import app.settings_store as ss
-    for valor, esperado in (("local", "local"), ("nuvem", "nuvem"),
-                            ("auto", "auto"), ("banana", "auto"),
-                            (None, "auto")):
+    for valor in ("local", "nuvem", "auto", "banana", None):
         monkeypatch.setattr(ss, "load_settings",
                             lambda v=valor: {"musicEngine": v})
-        assert rf._preferencia_motor_musica() == esperado
+        assert rf._preferencia_motor_musica() == "local"
 
 
-def test_settings_tem_a_chave_com_padrao_nuvem_primeiro():
-    """O padrao NAO pode mudar sozinho: maquina de cliente nao tem o motor
-    local, e "local" ali faria toda trilha esperar o launcher falhar."""
+def test_settings_tem_a_chave_com_padrao_local():
+    """Desde 02/09 so a IA local compoe; maquina sem o motor cai direto na
+    Biblioteca de trilhas (o launcher sai com 3 na hora, sem espera)."""
     from app.settings_store import DEFAULTS
-    assert DEFAULTS["musicEngine"] == "auto"
+    assert DEFAULTS["musicEngine"] == "local"
 
 
-def test_com_local_primeiro_o_motor_roda_antes_da_nuvem():
-    """Ordem dentro do fio antecipado: em "local", _local() vem antes de
-    _nuvem(); em "auto", o contrario."""
+def test_o_fio_antecipado_so_compoe_no_motor_local():
+    """Desde 02/09 o worker antecipado tem UM compositor: o motor local.
+    Nenhum ramo de nuvem sobra dentro dele."""
     s = (RAIZ / "pipeline" / "run_fast.py").read_text(encoding="utf-8")
     i = s.find("def _music_worker")
     assert i > 0
-    # Ate o fim da funcao, nao uma janela fixa: a 4.25 acrescentou 7 linhas
-    # dentro do `_local()` (o motivo que a ficha usa) e a janela de 1800
-    # passou a cortar antes dos dois ramos — o teste acusava sem defeito.
     fim = s.find("music_thread = _threading.Thread", i)
     assert fim > i, "o fio antecipado mudou de nome — reancore este teste"
     corpo = s[i:fim]
-    ramo_local = corpo[corpo.find('if _pref_musica == "local":'):]
-    assert ramo_local.find("_local()") < ramo_local.find("_nuvem()"), \
-        "com a preferencia local, a IA local tem de compor primeiro"
-    ramo_auto = corpo[corpo.find("else:"):]
-    assert ramo_auto.find("_nuvem()") < ramo_auto.find("_local()")
+    assert "_tentar_musicgen(music_tmp" in corpo
+    assert "_nuvem" not in corpo and "elevenlabs" not in corpo.lower()
 
 
-def test_so_nuvem_nao_chama_o_motor_na_retentativa():
+def test_a_retentativa_chama_o_motor_sem_perguntar_preferencia():
+    """Sem nuvem nao ha preferencia a consultar: o sincrono vai direto ao
+    motor local."""
     s = (RAIZ / "pipeline" / "run_fast.py").read_text(encoding="utf-8")
-    i = s.find('_preferencia_motor_musica() != "nuvem"')
-    assert i > 0, "a retentativa sincrona ignora a preferencia 'nuvem'"
-    assert "_tentar_musicgen(trilha" in s[i:i + 300]
+    assert '_preferencia_motor_musica() != "nuvem"' not in s
+    assert "_tentar_musicgen(trilha" in s
 
 
-def test_a_tela_de_configuracoes_deixa_escolher_o_motor():
+def test_a_tela_de_configuracoes_explica_o_motor_unico():
+    """O dropdown de nuvem saiu (02/09): o card de Musica so explica a IA
+    local e mantem o instalar/estado do motor."""
     html = (RAIZ / "assets" / "studio" / "index.html").read_text(encoding="utf-8")
-    assert 'id="musicEngine"' in html and 'value="local"' in html
+    assert 'id="musicEngine"' not in html
+    assert 'id="musicEngineHint"' in html and "Biblioteca" in html
+    assert 'id="btnInstalarMotorMusica"' in html
     js = (RAIZ / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
-    assert "btnSaveMusicEngine" in js
-    assert "musicEngine" in js.split("loadSistema")[0] or "musicEngine" in js
+    assert "btnSaveMusicEngine" not in js
 
 
 # ---------- toda trilha gerada vai para a Biblioteca (3.07) ----------
@@ -553,8 +554,8 @@ def test_falha_que_nao_e_recusa_nao_insiste(monkeypatch, tmp_path):
 
 def test_o_fio_antecipado_insiste_e_o_sincrono_nao():
     s = (RAIZ / "pipeline" / "run_fast.py").read_text(encoding="utf-8")
-    i = s.find("def _local() -> None:")
-    assert "tentativas=_MOTOR_TENTATIVAS" in s[i:i + 400], \
+    i = s.find("def _music_worker")
+    assert "tentativas=_MOTOR_TENTATIVAS" in s[i:i + 900], \
         "o fio paralelo tem de insistir"
     j = s.find("_tentar_musicgen(trilha")
     assert "tentativas" not in s[j:j + 200], \

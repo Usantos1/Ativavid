@@ -42,13 +42,15 @@ def test_motor_local_por_ESCOLHA_nao_acusa_o_elevenlabs(tmp_path):
     nota = _nota(tmp_path, {"musicaFonte": "motor: MusicGen local",
                             "musicaMotivo": "escolha"})
     assert "ElevenLabs" not in nota, nota
-    assert "escolhido em Configurações" in nota
+    assert "IA da sua máquina" in nota
 
 
 def test_motor_local_de_RESERVA_conta_o_que_houve(tmp_path):
+    """"reserva" só existe em ficha antiga (nuvem ainda no produto) — o
+    detalhe explica sem citar a marca que saiu."""
     nota = _nota(tmp_path, {"musicaFonte": "motor: MusicGen local",
                             "musicaMotivo": "reserva"})
-    assert "ElevenLabs" in nota
+    assert "nuvem" in nota
 
 
 def test_render_antigo_sem_motivo_fica_neutro(tmp_path):
@@ -59,11 +61,12 @@ def test_render_antigo_sem_motivo_fica_neutro(tmp_path):
     assert "ElevenLabs" not in nota, nota
 
 
-def test_o_pipeline_grava_os_dois_motivos():
-    i = RF.index("def _local() -> None:")
+def test_o_pipeline_grava_o_motivo():
+    """Com um compositor só (motor local, desde 02/09) o motivo vivo é
+    "escolha"; "reserva" ficou para as fichas antigas."""
+    i = RF.index("def _music_worker")
     bloco = RF[i:i + 900]
-    assert '"escolha" if _pref_musica == "local"' in bloco
-    assert '"reserva"' in bloco
+    assert '_music_via["motivo"] = "escolha"' in bloco
     # e o motivo viaja no timing.json
     assert 'payload["musicaMotivo"] = _RENDER_META["musicaMotivo"]' in RF
 

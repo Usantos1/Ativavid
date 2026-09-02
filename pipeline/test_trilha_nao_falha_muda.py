@@ -18,8 +18,9 @@ sys.path.insert(0, str(RAIZ))
 def test_pipeline_registra_a_falha_da_trilha():
     s = (RAIZ / "pipeline" / "run_fast.py").read_text(encoding="utf-8")
     assert '"musicaSkip"' in s, "o registro da falha da trilha sumiu"
-    assert "insufficient_credits" in s, \
-        "a causa mais comum (creditos esgotados) precisa de mensagem propria"
+    # Desde 02/09 nao ha nuvem para esgotar credito: a mensagem propria e a
+    # recusa do motor local (musicaMotorRecusa alimenta o skip)
+    assert 'musicaMotorRecusa' in s
     i = s.find('payload["musicaSkip"]')
     assert i > 0, "musicaSkip nao chega ao timing.json"
 
@@ -73,10 +74,11 @@ def test_meta_do_plano_carrega_o_motivo_do_groq():
     assert 'ULTIMO_GROQ_MOTIVO = "sessao"' in gw
 
 
-def test_testar_elevenlabs_avisa_creditos():
+def test_o_teste_de_chave_da_nuvem_saiu_junto_com_ela():
+    """O botao Testar do ElevenLabs saiu com a integracao (02/09); o hint
+    de teste continua vivo para as chaves que ficaram (Groq/Pexels)."""
     s = (RAIZ / "app" / "local_server.py").read_text(encoding="utf-8")
-    assert "character_limit" in s, \
-        "o Testar dizia OK com a carteira zerada — chave valida != creditos"
+    assert 'which == "elevenlabs"' not in s
     js = (RAIZ / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
     assert "res.hint" in js, "a UI descarta o hint do teste de chave"
 

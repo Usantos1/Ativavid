@@ -236,7 +236,6 @@ class DesktopHandler(ps.Handler):
                 "fingerprint": boot_fingerprint(),
                 "projectsRoot": str(self.projects_root),
                 "hasGroq": bool(keys.get("GROQ_API_KEY")),
-                "hasElevenLabs": bool(keys.get("ELEVENLABS_API_KEY")),
                 "hasLlmProxy": bool(llm.get("hasKey") and llm.get("baseUrl")),
                 "llmGateway": gws,
                 "busy": self.worker.busy_id,
@@ -291,7 +290,6 @@ class DesktopHandler(ps.Handler):
             keys = ls.load_env_keys()
             self._json({
                 "GROQ_API_KEY": bool(keys.get("GROQ_API_KEY")),
-                "ELEVENLABS_API_KEY": bool(keys.get("ELEVENLABS_API_KEY")),
                 "PEXELS_API_KEY": bool(keys.get("PEXELS_API_KEY")),
             })
             return

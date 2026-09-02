@@ -74,7 +74,9 @@ def test_o_motivo_nao_some_ele_vai_para_o_title(tmp_path):
     no detalhe, senao a informacao morre."""
     job = _trilha(tmp_path, {"musicaFonte": "motor: MusicGen local",
                              "musicaMotivo": "reserva"})
-    assert "ElevenLabs" in job["trilhaDetalhe"]
+    # "reserva" so existe em ficha ANTIGA (quando a nuvem ainda existia) —
+    # o detalhe explica sem citar marca que saiu do produto
+    assert "nuvem" in job["trilhaDetalhe"]
     job = _ia(tmp_path, {"ok": True, "backend": "groq", "groqVia": "parse"})
     assert "ilegível" in job["iaDetalhe"]
 
@@ -102,9 +104,12 @@ def test_o_card_repinta_quando_so_o_detalhe_muda():
     assert "j.iaDetalhe" in bloco and "j.trilhaDetalhe" in bloco
 
 
-def test_a_nuvem_que_deu_certo_se_identifica():
-    """Sem isto a linha da Trilha so existia quando algo desviou."""
-    assert '_RENDER_META["musicaFonte"] = "nuvem: ElevenLabs Music"' in RF
+def test_a_trilha_que_deu_certo_se_identifica():
+    """Sem isto a linha da Trilha so existia quando algo desviou. Desde
+    02/09 o unico compositor e o motor local — a rede de seguranca do
+    rotulo aponta para ele, nunca inventa nuvem."""
+    assert '_RENDER_META["musicaFonte"] = "motor: MusicGen local"' in RF
+    assert '= "nuvem: ElevenLabs Music"' not in RF
 
 
 def test_trilha_da_nuvem_continua_indo_para_o_acervo():

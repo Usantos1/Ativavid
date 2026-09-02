@@ -997,7 +997,7 @@ def save_env_keys(updates: dict[str, str]) -> None:
     # expose to this process (worker children inherit)
     for k, v in current.items():
         os.environ[k] = v
-    for k in ("GROQ_API_KEY", "ELEVENLABS_API_KEY", "PEXELS_API_KEY"):
+    for k in ("GROQ_API_KEY", "PEXELS_API_KEY"):
         if k not in current and k in os.environ:
             os.environ.pop(k, None)
 
@@ -1985,7 +1985,6 @@ class StudioHandler(BaseHTTPRequestHandler):
                 "fingerprint": boot_fingerprint(),
                 "projectsRoot": str(self.projects_root),
                 "hasGroq": bool(keys.get("GROQ_API_KEY")),
-                "hasElevenLabs": bool(keys.get("ELEVENLABS_API_KEY")),
                 "busy": self.worker.busy_id,
                 "queued": self.worker.q.qsize(),
                 "license": lic.public_status(),
@@ -2056,7 +2055,6 @@ class StudioHandler(BaseHTTPRequestHandler):
             keys = load_env_keys()
             self._json({
                 "GROQ_API_KEY": bool(keys.get("GROQ_API_KEY")),
-                "ELEVENLABS_API_KEY": bool(keys.get("ELEVENLABS_API_KEY")),
                 "PEXELS_API_KEY": bool(keys.get("PEXELS_API_KEY")),
             })
             return
@@ -2399,7 +2397,7 @@ class StudioHandler(BaseHTTPRequestHandler):
         if path == "/api/keys":
             body = self._read_json() or {}
             allowed = {k: body[k] for k in (
-                "GROQ_API_KEY", "ELEVENLABS_API_KEY", "PEXELS_API_KEY",
+                "GROQ_API_KEY", "PEXELS_API_KEY",
                 "IG_USER_ID", "META_ACCESS_TOKEN") if k in body}
             try:
                 save_env_keys(allowed)
@@ -2408,7 +2406,6 @@ class StudioHandler(BaseHTTPRequestHandler):
                 return
             self._json({"ok": True, "keys": {
                 "GROQ_API_KEY": bool(load_env_keys().get("GROQ_API_KEY")),
-                "ELEVENLABS_API_KEY": bool(load_env_keys().get("ELEVENLABS_API_KEY")),
                 "PEXELS_API_KEY": bool(load_env_keys().get("PEXELS_API_KEY")),
                 "IG_USER_ID": bool(load_env_keys().get("IG_USER_ID")),
                 "META_ACCESS_TOKEN": bool(load_env_keys().get("META_ACCESS_TOKEN")),
@@ -2422,8 +2419,6 @@ class StudioHandler(BaseHTTPRequestHandler):
             patch: dict[str, str] = {}
             if body.get("GROQ_API_KEY"):
                 patch["GROQ_API_KEY"] = str(body["GROQ_API_KEY"])
-            if body.get("ELEVENLABS_API_KEY"):
-                patch["ELEVENLABS_API_KEY"] = str(body["ELEVENLABS_API_KEY"])
             if body.get("PEXELS_API_KEY"):
                 patch["PEXELS_API_KEY"] = str(body["PEXELS_API_KEY"])
             for k in ("IG_USER_ID", "META_ACCESS_TOKEN"):
@@ -2466,44 +2461,6 @@ class StudioHandler(BaseHTTPRequestHandler):
                         timeout=12,
                     )
                     self._json({"ok": r.status_code < 400, "status": r.status_code})
-                except Exception as e:  # noqa: BLE001
-                    self._json({"ok": False, "error": str(e)[:120]}, 502)
-                return
-            if which == "elevenlabs":
-                key = keys.get("ELEVENLABS_API_KEY") or ""
-                if not key:
-                    self._json({"ok": False, "error": "ELEVENLABS_API_KEY ausente — cole a chave e salve."}, 400)
-                    return
-                try:
-                    import requests
-                    r = requests.get(
-                        "https://api.elevenlabs.io/v1/user",
-                        headers={"xi-api-key": key},
-                        timeout=12,
-                    )
-                    # Chave valida != creditos disponiveis: a trilha morreu
-                    # com "insufficient_credits" enquanto este teste dizia
-                    # "OK" (caso real, 26/08). O /v1/user traz a assinatura;
-                    # sobra de caracteres zerada = carteira no talo.
-                    aviso = None
-                    if r.status_code < 400:
-                        try:
-                            sub = (r.json() or {}).get("subscription") or {}
-                            usados = int(sub.get("character_count") or 0)
-                            teto = int(sub.get("character_limit") or 0)
-                            if teto and usados >= teto:
-                                aviso = ("chave v\u00e1lida, mas os cr\u00e9ditos do "
-                                         "plano acabaram \u2014 trilha/voz v\u00e3o "
-                                         "falhar at\u00e9 renovar")
-                            elif teto:
-                                aviso = f"cr\u00e9ditos: {teto - usados} de {teto}"
-                        except Exception:  # noqa: BLE001
-                            aviso = None
-                    payload = {"ok": r.status_code < 400,
-                               "status": r.status_code}
-                    if aviso:
-                        payload["hint"] = aviso
-                    self._json(payload)
                 except Exception as e:  # noqa: BLE001
                     self._json({"ok": False, "error": str(e)[:120]}, 502)
                 return

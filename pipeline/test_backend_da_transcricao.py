@@ -77,15 +77,16 @@ def test_todos_os_pontos_usam_o_MESMO_motor_no_mesmo_job():
 
 
 def test_a_resolucao_nunca_devolve_auto_nem_groq(monkeypatch):
-    """`auto` e `groq` são exatamente o que a mudança veio tirar do caminho."""
-    from app.transcricao.modo import AUTO, LOCAL, SCRIBE, backend_para_o_pipeline
+    """`auto` e `groq` são exatamente o que a mudança veio tirar do caminho.
+    Desde 02/09 o Scribe também saiu: TUDO resolve para local."""
+    from app.transcricao.modo import AUTO, LOCAL, backend_para_o_pipeline
 
-    for pedido in ("", AUTO, LOCAL, SCRIBE, "lixo"):
+    for pedido in ("", AUTO, LOCAL, "elevenlabs", "lixo"):
         if pedido:
             monkeypatch.setenv("ATIVAVID_TRANSCRICAO", pedido)
         else:
             monkeypatch.delenv("ATIVAVID_TRANSCRICAO", raising=False)
-        assert backend_para_o_pipeline() in (LOCAL, SCRIBE)
+        assert backend_para_o_pipeline() == LOCAL
 
 
 def test_auto_resolve_para_o_motor_local():

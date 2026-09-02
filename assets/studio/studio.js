@@ -4187,10 +4187,8 @@ function wireForms() {
     e.preventDefault();
     const body = {};
     const g = ($("#keyGroq")?.value || "").trim();
-    const el = ($("#keyEl")?.value || "").trim();
     const px = ($("#keyPx")?.value || "").trim();
     if (g) body.GROQ_API_KEY = g;
-    if (el) body.ELEVENLABS_API_KEY = el;
     if (px) body.PEXELS_API_KEY = px;
 
     if (!Object.keys(body).length) {
@@ -4206,7 +4204,6 @@ function wireForms() {
       });
       const ok = [];
       if (res.keys?.GROQ_API_KEY) ok.push("Groq");
-      if (res.keys?.ELEVENLABS_API_KEY) ok.push("ElevenLabs");
       if (res.keys?.PEXELS_API_KEY) ok.push("Pexels");
       $("#keysStatus").textContent = ok.length ? `Salvo: ${ok.join(", ")}` : "Salvo.";
       toast(ok.length ? `Chaves salvas (${ok.join(", ")})` : "Chaves salvas");
@@ -4290,10 +4287,8 @@ function wireForms() {
       $("#keysStatus").textContent = `Testando ${service}…`;
       const body = { service };
       const g = ($("#keyGroq")?.value || "").trim();
-      const el = ($("#keyEl")?.value || "").trim();
       const px = ($("#keyPx")?.value || "").trim();
       if (service === "groq" && g) body.GROQ_API_KEY = g;
-      if (service === "elevenlabs" && el) body.ELEVENLABS_API_KEY = el;
       if (service === "pexels" && px) body.PEXELS_API_KEY = px;
       try {
         const res = await api("/api/keys/test", {
@@ -4346,21 +4341,6 @@ function wireForms() {
         toast(e.message || "Não deu para começar a instalação");
         btnMotor.disabled = false;
       }
-    };
-  }
-  const btnSaveMusic = $("#btnSaveMusicEngine");
-  if (btnSaveMusic) {
-    btnSaveMusic.onclick = async () => {
-      const musicEngine = $("#musicEngine").value;
-      await api("/api/settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ musicEngine }),
-      });
-      toast(musicEngine === "local"
-        ? "IA local passa a compor as trilhas — sem gastar créditos"
-        : "Motor de música salvo");
-      loadSistema().catch(() => {});
     };
   }
   const btnHwBench = $("#btnHwBench");
@@ -5293,18 +5273,8 @@ function applySistemaData(data) {
   pintarMotorMusica().then((d) => {
     if (d && d.rodando) acompanharMotorMusica();
   }).catch(() => {});
-  if ($("#musicEngine")) {
-    const me = s.musicEngine || "auto";
-    $("#musicEngine").value = me;
-    const dica = $("#musicEngineHint");
-    if (dica) {
-      dica.textContent = me === "local"
-        ? "A IA da sua máquina compõe a trilha de cada vídeo (grátis); a nuvem fica de reserva."
-        : me === "nuvem"
-          ? "Só o ElevenLabs compõe; se falhar, entra uma trilha da sua biblioteca."
-          : "O ElevenLabs compõe; se falhar, a IA local da sua máquina assume.";
-    }
-  }
+  // O motor de música não se escolhe mais (só a IA local compõe desde a
+  // saída do ElevenLabs em 02/09/2026) — a dica é fixa no HTML.
   loadHardwareCard().catch(() => {});
   if ($("#projectsRootHint") && m.projectsRoot) {
     $("#projectsRootHint").textContent = m.projectsRoot || "";
