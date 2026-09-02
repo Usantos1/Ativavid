@@ -25,15 +25,17 @@ FPS = 30.0
 FRAMES = 40
 
 
-def _renderizador(tmp_path: Path, entrada: str | None):
+def _renderizador(tmp_path: Path, entrada: str | None, saida: str | None = None):
     from app.render_proprio import Renderizador
 
-    public = tmp_path / f"public_{entrada or 'padrao'}"
+    public = tmp_path / f"public_{entrada or 'padrao'}_{saida or 'suave'}"
     public.mkdir()
     Image.new("RGB", (200, 130), (255, 40, 40)).save(public / "foto.jpg")
     it = {"src": "foto.jpg", "start": 0.0, "end": FRAMES / FPS}
     if entrada:
         it["entrada"] = entrada
+    if saida:
+        it["saida"] = saida
     ed = {"inserts": [it]}
     (public / "edit-data.json").write_text(json.dumps(ed), encoding="utf-8")
     return Renderizador(public, ed, frames=FRAMES, fps=FPS, width=W, height=H)
@@ -100,6 +102,57 @@ def test_entrada_estranha_cai_no_padrao(tmp_path):
     assert abs(cx2 - cxp) < 2 and abs(area2 - areap) <= areap * 0.02
 
 
+def test_zoom_chega_de_longe_e_fade_nao_se_mexe(tmp_path):
+    zoom = _renderizador(tmp_path, "zoom")
+    _, z1 = _caixa(zoom, 1)
+    pad = _renderizador(tmp_path, None)
+    _, p1 = _caixa(pad, 1)
+    # zoom nasce MAIOR que o final (1,25) — bem maior que o padrão (0,94)
+    assert z1 > p1 * 1.3, f"zoom f1={z1} padrao f1={p1}"
+    fade = _renderizador(tmp_path, "fade")
+    cxa, _ = _caixa(fade, 1)
+    cxb, _ = _caixa(fade, 12)
+    assert abs(cxa - cxb) < 2, "fade não pode se mexer"
+
+
+def test_saida_deslizar_vai_para_a_direita(tmp_path):
+    rend = _renderizador(tmp_path, None, "deslizar")
+    cx_meio, _ = _caixa(rend, FRAMES - 12)
+    cx_fim, a_fim = _caixa(rend, FRAMES - 3)
+    assert a_fim > 0
+    assert cx_fim > cx_meio + 15, f"não saiu p/ direita: {cx_meio} -> {cx_fim}"
+
+
+def test_saida_encolher_diminui(tmp_path):
+    rend = _renderizador(tmp_path, None, "encolher")
+    _, a_meio = _caixa(rend, FRAMES - 12)
+    _, a_fim = _caixa(rend, FRAMES - 3)
+    suave = _renderizador(tmp_path, None)
+    _, s_fim = _caixa(suave, FRAMES - 3)
+    assert a_fim < a_meio * 0.8, f"não encolheu: {a_meio} -> {a_fim}"
+    assert a_fim < s_fim, "encolher deveria ser menor que a saída suave"
+
+
+def test_saida_corte_segura_a_tinta_ate_o_fim(tmp_path):
+    """Sem fade: no penúltimo quadro o cartão ainda está inteiro."""
+    import numpy as np
+
+    corte = _renderizador(tmp_path, None, "corte")
+    suave = _renderizador(tmp_path, None)
+
+    def alfa_max(rend, f):
+        buf = np.zeros((H, W, 4), dtype=np.uint8)
+        for leg in rend.camadas:
+            if getattr(leg, "insert", None) is None:
+                continue
+            rend._desenhar_insert(leg, float(f - leg.inicio_f), buf, [0, 0, 0, 0], False)
+        return int(buf[..., 3].max())
+
+    f = FRAMES - 3
+    assert alfa_max(corte, f) > 240, "corte seco não pode esmaecer"
+    assert alfa_max(suave, f) < 160, "a saída suave deveria estar esmaecendo"
+
+
 def test_template_e_motor_tem_as_mesmas_formulas():
     """As três entradas moram nos DOIS motores — quem mexer numa fórmula
     precisa mexer nas duas (regra do motor-proprio-cobre-tudo)."""
@@ -109,7 +162,10 @@ def test_template_e_motor_tem_as_mesmas_formulas():
         assert "2.70158" in lado and "1.70158" in lado, "back.out sumiu de um motor"
         assert "0.35" in lado, "o deslizar de 35% sumiu de um motor"
     assert "entrada === 'pop'" in tsx and "entrada === 'deslizar'" in tsx
+    assert "entrada === 'zoom'" in tsx and "saida === 'encolher'" in tsx
+    assert "saida === 'corte'" in tsx and "saida === 'deslizar'" in tsx
     assert '"pop"' in py and '"deslizar"' in py
+    assert '"zoom"' in py and '"encolher"' in py and '"corte"' in py
     # e o pipeline deixa a escolha PASSAR do preview para o edit-data
     rf = (REPO / "pipeline" / "run_fast.py").read_text(encoding="utf-8")
     assert 'geo["entrada"]' in rf, "run_fast parou de repassar a entrada"

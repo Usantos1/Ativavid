@@ -3879,32 +3879,12 @@ body.styles-wide .setup-actions .btn.primary {
 .midia-previa-card video { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
 .midia-previa-card.arte video { object-fit: contain; }
 
-/* Seletor de ENTRADA do cartao (padrao/pop/deslizar) — aparece no hover */
-.midia-previa-entrada {
-  position: absolute;
-  top: 6px;
-  left: 50%;
-  translate: -50% 0;
-  display: flex;
-  gap: 4px;
-  opacity: 0;
-  transition: opacity .15s;
-  z-index: 3;
-}
-.midia-previa-card:hover .midia-previa-entrada { opacity: 1; }
-.midia-previa-entrada .ent-btn {
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  background: rgba(0, 0, 0, 0.62);
-  color: #fff;
-  font-size: 10px;
-  padding: 3px 8px;
-  border-radius: 999px;
-  cursor: pointer;
-  line-height: 1;
-}
-.midia-previa-entrada .ent-btn.on {
-  background: var(--accent, #ff2e63);
-  border-color: transparent;
+/* (o seletor de entrada saiu de cima do cartao na 4.59 — vive no painel
+   `fx` da timeline; o estado ativo dos botoes e compartilhado) */
+.ent-btn.on {
+  background: var(--accent, #ff2e63) !important;
+  border-color: transparent !important;
+  color: #fff !important;
 }
 
 /* Demonstracao da entrada escolhida, no proprio cartao (espelha os motores:
@@ -3926,3 +3906,72 @@ body.styles-wide .setup-actions .btn.primary {
 .midia-previa-card.ent-demo-padrao   { animation: entDemoPadrao .3s ease-out; }
 .midia-previa-card.ent-demo-pop      { animation: entDemoPop .34s ease-out; }
 .midia-previa-card.ent-demo-deslizar { animation: entDemoDeslizar .3s ease-out; }
+
+/* Entrada E saida (4.59) — painel `fx` na TIMELINE (fora do video, pedido
+   de 01/09): aparece quando um bloco de midia posto na mao esta
+   selecionado. */
+.fx-track .fx-lane {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 5px 8px;
+}
+.fx-lane .fx-nome {
+  font-size: 11px;
+  color: var(--muted, #9aa3b2);
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fx-lane .fx-row { display: flex; gap: 4px; align-items: center; }
+.fx-lane .fx-rotulo {
+  font-size: 10px;
+  color: var(--muted, #9aa3b2);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  margin-right: 2px;
+}
+.fx-lane .ent-btn {
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.18));
+  background: var(--bg, #12151c);
+  color: var(--text, #e8ecf3);
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  line-height: 1;
+}
+@keyframes entDemoFade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes entDemoZoom {
+  from { opacity: 0; transform: scale(1.25); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes saiDemoSuave {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+@keyframes saiDemoEncolher {
+  from { opacity: 1; transform: scale(1); }
+  to   { opacity: 0; transform: scale(0.6); }
+}
+@keyframes saiDemoDeslizar {
+  from { opacity: 1; transform: translateX(0); }
+  to   { opacity: 0; transform: translateX(35%); }
+}
+@keyframes saiDemoCorte {
+  0%   { opacity: 1; }
+  92%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+.midia-previa-card.ent-demo-fade     { animation: entDemoFade .3s ease-out; }
+.midia-previa-card.ent-demo-zoom     { animation: entDemoZoom .3s ease-out; }
+/* saida: mostra o fim e VOLTA (o cartao nao pode sumir da tela de edicao) */
+.midia-previa-card.sai-demo-suave    { animation: saiDemoSuave .35s ease-in alternate 2; }
+.midia-previa-card.sai-demo-encolher { animation: saiDemoEncolher .35s ease-in alternate 2; }
+.midia-previa-card.sai-demo-deslizar { animation: saiDemoDeslizar .35s ease-in alternate 2; }
+.midia-previa-card.sai-demo-corte    { animation: saiDemoCorte .5s linear alternate 2; }

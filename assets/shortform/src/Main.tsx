@@ -561,14 +561,16 @@ const ehVideo = (s: string) => /\.(mp4|mov|webm)$/i.test(s);
 const InsertCard: React.FC<{
   src: string; totalFrames: number;
   x?: number; y?: number; size?: number; w?: number; h?: number;
-  entrada?: string;
-}> = ({src, totalFrames, x, y, size, w, h, entrada}) => {
+  entrada?: string; saida?: string;
+}> = ({src, totalFrames, x, y, size, w, h, entrada, saida}) => {
   const frame = useCurrentFrame();
   // `t` cru e `enter` (cubic-out) — as MESMAS contas de `_desenhar_insert`
   // no motor próprio; mudar aqui exige mudar lá.
   const t = Math.min(1, Math.max(0, frame / 9));
   const enter = 1 - (1 - t) ** 3;
-  const exit = interpolate(frame, [totalFrames - 7, totalFrames], [1, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
+  const sLin = interpolate(frame, [totalFrames - 7, totalFrames], [0, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
+  // `corte` segura opacidade cheia até o fim (some no último quadro).
+  const exit = saida === 'corte' ? 1 : 1 - sLin;
   const opacity = Math.min(enter, exit);
   // dynamic zoom: the image itself grows slowly while on screen (Ken-Burns)
   const grow = interpolate(frame, [0, totalFrames], [1, 1.08], {extrapolateRight: 'clamp'});
@@ -576,16 +578,24 @@ const InsertCard: React.FC<{
   //   padrao   sobe 26px, escala 0,92 → 1
   //   pop      escala 0,5 → 1 com overshoot (back.out)
   //   deslizar vem da esquerda (35% da largura do cartão)
+  //   fade     só opacidade  ·  zoom  escala 1,25 → 1
   let scale: number; let yEnt = 0; let xEnt = 0;
   if (entrada === 'pop') {
     const b = 1 + 2.70158 * (t - 1) ** 3 + 1.70158 * (t - 1) ** 2;
     scale = (0.5 + 0.5 * b) * grow;
   } else if (entrada === 'deslizar') {
     scale = grow;
+  } else if (entrada === 'fade') {
+    scale = grow;
+  } else if (entrada === 'zoom') {
+    scale = (1.25 - 0.25 * enter) * grow;
   } else {
     scale = interpolate(enter, [0, 1], [0.92, 1]) * grow;
     yEnt = interpolate(enter, [0, 1], [26, 0]);
   }
+  // Saída escolhida: suave (fade, padrão) · encolher · deslizar p/ direita
+  // · corte (seco)
+  if (saida === 'encolher') scale *= 1 - 0.4 * sLin;
   const {width: qLarg, height: qAlt} = useVideoConfig();
   // largura e ALTURA soltas: com a proporcao travada a imagem nunca cobria
   // a tela (o cartao e 780x500 e o quadro e 9:16)
@@ -599,6 +609,7 @@ const InsertCard: React.FC<{
   const cx = Math.min(1, Math.max(0, x ?? 0.5)) * qLarg;
   const cy = Math.min(1, Math.max(0, y ?? (CARD_TOP + CARD_H / 2) / 1920)) * qAlt;
   if (entrada === 'deslizar') xEnt = -0.35 * larg * (1 - enter);
+  if (saida === 'deslizar') xEnt += 0.35 * larg * sLin;
   return (
     <AbsoluteFill>
       <Sfx src="whoosh.mp3" />
@@ -632,7 +643,7 @@ const Inserts: React.FC = () => {
             <InsertCard src={it.src} totalFrames={duration}
               x={(it as any).x} y={(it as any).y} size={(it as any).size}
               w={(it as any).w} h={(it as any).h}
-              entrada={(it as any).entrada} />
+              entrada={(it as any).entrada} saida={(it as any).saida} />
           </Sequence>
         );
       })}

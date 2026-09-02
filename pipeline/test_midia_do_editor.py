@@ -274,8 +274,10 @@ def test_altura_livre_nao_deforma_a_foto():
     j = tsx.index("const InsertCard")
     # `cover` continua sendo a regra da FOTO; arte com transparência entra em
     # `contain` (uma logo recortada não serve para nada) — ver o teste
-    # `test_png_transparente_nao_ganha_fundo`.
-    assert "objectFit: arte ? 'contain' : 'cover'" in tsx[j:j + 3400]
+    # `test_png_transparente_nao_ganha_fundo`. A função INTEIRA, não uma
+    # janela fixa: janela fixa quebra quando a função cresce.
+    fim = tsx.index("\nconst Inserts", j)
+    assert "objectFit: arte ? 'contain' : 'cover'" in tsx[j:fim]
 
 
 def test_oito_alcas_e_o_lado_oposto_parado():

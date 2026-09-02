@@ -1,5 +1,19 @@
 # Changelog
 
+## 4.59
+
+- **Efeitos de entrada E saída para vídeo/imagem, escolhidos na timeline.**
+  Selecione o bloco de mídia (clique nele na linha do tempo ou no próprio
+  cartão) e a faixa **fx** aparece na timeline — fora do vídeo, sem tapar
+  nada. Entradas: Suave, Pop, Deslizar, Fade e Zoom. Saídas: Suave,
+  Encolher, Deslizar e Corte seco. O clique demonstra o movimento no
+  cartão, e o vídeo final sai igual nos dois motores de render.
+- **Ctrl+V cola imagem na agulha.** Copiou uma imagem em qualquer lugar
+  (print, WhatsApp Web, pasta do Windows) e deu Ctrl+V no editor: ela
+  entra na Biblioteca e na timeline no ponto da agulha.
+- **Cartão de vídeo sem "tela preta".** O preview pula o comecinho escuro
+  do take e mostra um quadro com conteúdo assim que o arquivo carrega.
+
 ## 4.58
 
 - **Vídeo adicionado à mão aparece de verdade no preview.** Um take de

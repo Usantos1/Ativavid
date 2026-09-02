@@ -3683,6 +3683,13 @@ function desenharMidiaNoPreview() {
         vid.loop = true;
         vid.autoplay = true;
         vid.playsInline = true;
+        // O primeiro quadro de muito take e PRETO (fade de camera): o
+        // cartao parecia uma "tela preta" ate o play andar. Pula para um
+        // quadro com conteudo assim que os metadados chegam.
+        vid.addEventListener('loadedmetadata', () => {
+          const d = Number(vid.duration) || 0;
+          if (d > 0.6) vid.currentTime = Math.min(1.0, d * 0.15);
+        }, { once: true });
         vid.play().catch(() => {});
       } else {
         const img = el('img', '', card);
@@ -3693,42 +3700,75 @@ function desenharMidiaNoPreview() {
     // a etiqueta com o nome do arquivo nao entra na arte: ela e uma faixa
     // preta, que e justamente o que a arte nao quer atras dela
     if (!arte) el('div', 'midia-previa-nome', card).textContent = c.label || '';
-    // Entrada do cartao (padrao/pop/deslizar) — escolhida aqui, desenhada
-    // igual nos dois motores. Aparece ao passar o mouse sobre o cartao.
-    if (c.kind === 'insert') seletorDeEntrada(card, c);
+    // indice para o painel de efeitos achar ESTE cartao (demo do movimento)
+    card.dataset.idx = String(S.insertsDraft.indexOf(c));
     cartaoArrastavel(card, c, box);
   }
 }
 
-/* O usuario pediu (01/09) para ESCOLHER a animacao de entrada do video ou
- * imagem posto na mao. Tres opcoes, as mesmas formulas nos dois motores;
- * clicar ja mostra a animacao no proprio cartao. */
+/* O usuario pediu (01/09) para ESCOLHER as animacoes do video ou imagem
+ * posto na mao — entrada E saida. As mesmas formulas nos dois motores;
+ * clicar ja demonstra o movimento no proprio cartao. */
 const ENTRADAS_DE_MIDIA = [
   ['padrao', 'Suave', 'Sobe e aparece (padrão)'],
   ['pop', 'Pop', 'Cresce com quique'],
   ['deslizar', 'Deslizar', 'Entra pela esquerda'],
+  ['fade', 'Fade', 'Só aparece, sem movimento'],
+  ['zoom', 'Zoom', 'Chega de longe (1,25 → 1)'],
 ];
+const SAIDAS_DE_MIDIA = [
+  ['suave', 'Suave', 'Some devagar (padrão)'],
+  ['encolher', 'Encolher', 'Diminui e some'],
+  ['deslizar', 'Deslizar', 'Sai pela direita'],
+  ['corte', 'Corte', 'Some de uma vez, sem fade'],
+];
+const DEMOS_DE_MIDIA = ['ent-demo-padrao', 'ent-demo-pop', 'ent-demo-deslizar',
+  'ent-demo-fade', 'ent-demo-zoom',
+  'sai-demo-suave', 'sai-demo-encolher', 'sai-demo-deslizar', 'sai-demo-corte'];
 
-function seletorDeEntrada(card, c) {
-  const barra = el('div', 'midia-previa-entrada', card);
-  for (const [id, rotulo, dica] of ENTRADAS_DE_MIDIA) {
-    const b = el('button', `ent-btn${(c.entrada || 'padrao') === id ? ' on' : ''}`, barra);
-    b.type = 'button';
-    b.textContent = rotulo;
-    b.title = dica;
-    b.addEventListener('pointerdown', (e) => e.stopPropagation());
-    b.addEventListener('click', (e) => {
-      e.stopPropagation();
-      c.entrada = id === 'padrao' ? null : id;
-      barra.querySelectorAll('.ent-btn').forEach((x) => x.classList.toggle('on', x === b));
-      // demonstra a escolha no proprio cartao
-      card.classList.remove('ent-demo-padrao', 'ent-demo-pop', 'ent-demo-deslizar');
-      void card.offsetWidth;   // reinicia a animacao CSS
-      card.classList.add(`ent-demo-${id}`);
-      refreshHeader();
-      scheduleAutosave();
-    });
-  }
+/* O painel `fx` mora na TIMELINE, nao sobre o video — os botoes em cima do
+ * cartao tapavam o conteudo (feedback ao vivo de 01/09). Ele aparece quando
+ * um bloco de midia posto na mao esta selecionado (clique no bloco da linha
+ * do tempo ou no proprio cartao). */
+function renderFxPanel() {
+  const painel = $('fxPanel');
+  const lane = $('fxLane');
+  if (!painel || !lane) return;
+  const c = S.blocoSel >= 0 ? S.insertsDraft[S.blocoSel] : null;
+  const mostrar = !!(c && c.kind === 'insert' && c.isNew);
+  painel.classList.toggle('hidden', !mostrar);
+  if (!mostrar) { lane.innerHTML = ''; return; }
+  lane.innerHTML = '';
+  const nome = el('span', 'fx-nome', lane);
+  nome.textContent = c.label || 'mídia';
+  nome.title = c.label || '';
+  const demoNoCartao = (prefixo, id) => {
+    const card = document.querySelector(
+      `.midia-previa-card[data-idx="${S.blocoSel}"]`);
+    if (!card) return;
+    card.classList.remove(...DEMOS_DE_MIDIA);
+    void card.offsetWidth;   // reinicia a animacao CSS
+    card.classList.add(`${prefixo}-demo-${id}`);
+  };
+  const linha = (rotulo, opcoes, campo, padrao, prefixo) => {
+    const row = el('div', 'fx-row', lane);
+    el('span', 'fx-rotulo', row).textContent = rotulo;
+    for (const [id, nomeB, dica] of opcoes) {
+      const b = el('button', `ent-btn${(c[campo] || padrao) === id ? ' on' : ''}`, row);
+      b.type = 'button';
+      b.textContent = nomeB;
+      b.title = dica;
+      b.addEventListener('click', () => {
+        c[campo] = id === padrao ? null : id;
+        row.querySelectorAll('.ent-btn').forEach((x) => x.classList.toggle('on', x === b));
+        demoNoCartao(prefixo, id);
+        refreshHeader();
+        scheduleAutosave();
+      });
+    }
+  };
+  linha('entrada', ENTRADAS_DE_MIDIA, 'entrada', 'padrao', 'ent');
+  linha('saída', SAIDAS_DE_MIDIA, 'saida', 'suave', 'sai');
 }
 
 /* O emoji se arrasta sobre o video e a roda muda o tamanho — o mesmo gesto
@@ -3936,7 +3976,17 @@ function cartaoArrastavel(card, c, box) {
     arr = null;
     card.classList.remove('dragging');
     try { card.releasePointerCapture(e.pointerId); } catch { /* ja solto */ }
-    if (!moveu) return;
+    if (!moveu) {
+      // clique simples SELECIONA o bloco — e o painel de efeitos da
+      // timeline (fx) aparece para ele
+      const i = S.insertsDraft.indexOf(c);
+      if (i >= 0 && S.blocoSel !== i) {
+        S.blocoSel = i;
+        renderAll();
+        refreshHeader();
+      }
+      return;
+    }
     pushHistory();
     c.x = +Number(card.dataset.nx || c.x || 0.5).toFixed(4);
     c.y = +Number(card.dataset.ny || c.y || CARTAO_Y_PAD).toFixed(4);
@@ -6163,6 +6213,7 @@ function toggleSelectedTake() {
 }
 
 function refreshTransportActions() {
+  renderFxPanel();
   const btn = $('btnDeleteTake');
   if (!btn) return;
   // Bloco posto na mao (imagem, som, emoji) acende o MESMO botao: o usuario
@@ -6344,12 +6395,9 @@ $('imgLibFolder')?.addEventListener('click', async () => {
     toast('Não abri a pasta da biblioteca', 2500);
   }
 });
-$('imgLibUpload')?.addEventListener('change', async (e) => {
-  const file = e.target.files && e.target.files[0];
-  e.target.value = '';
-  if (!file) return;
+async function subirArquivoParaTimeline(file, origemNome) {
   const fd = new FormData();
-  fd.append('file', file, file.name);
+  fd.append('file', file, file.name || origemNome || 'colado.png');
   const folder = projectFolder();
   const qs = folder ? `?use=1&folder=${encodeURIComponent(folder)}` : '';
   toast('Enviando…', 1500);
@@ -6358,15 +6406,50 @@ $('imgLibUpload')?.addEventListener('change', async (e) => {
     const data = await res.json();
     if (!res.ok || data.error) throw new Error(data.error || 'falha no upload');
     if (data.used && data.used.src) {
-      pushInsertFromRef(data.used.src, data.name || file.name, data.used.credit || 'biblioteca');
+      pushInsertFromRef(data.used.src, data.name || file.name || origemNome,
+        data.used.credit || 'biblioteca');
       toggleImgPicker(false);
       toast('✓ Arquivo na biblioteca e na timeline', 3500);
-    } else {
-      await loadLibraryResults();
-      toast('✓ Salvo na biblioteca — clique para inserir', 3000);
+      return true;
     }
+    await loadLibraryResults();
+    toast('✓ Salvo na biblioteca — clique para inserir', 3000);
+    return false;
   } catch (err) {
     toast(err.message || 'Upload falhou', 3500);
+    return false;
+  }
+}
+
+$('imgLibUpload')?.addEventListener('change', async (e) => {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  await subirArquivoParaTimeline(file);
+});
+
+/* Ctrl+V direto no editor: imagem (ou video) copiada em qualquer lugar —
+ * print, WhatsApp Web, pasta do Windows — cola na timeline NO PONTO DA
+ * AGULHA (pedido de 01/09: "se der ctrl c em imagem e ctrl v no editor
+ * deve colar a imagem no local da agulha"). O upload ja guarda na
+ * Biblioteca e o `pushInsertFromRef` ja usa a agulha. */
+document.addEventListener('paste', async (e) => {
+  if (!BASE || S.applying || isTypingContext()) return;
+  const itens = (e.clipboardData && e.clipboardData.items) || [];
+  for (const it of itens) {
+    if (it.kind !== 'file') continue;
+    const file = it.getAsFile();
+    if (!file) continue;
+    const tipo = String(file.type || '');
+    if (!tipo.startsWith('image/') && !tipo.startsWith('video/')) continue;
+    e.preventDefault();
+    // Print colado vem sem nome ("image.png") — carimbo para nao sobrescrever
+    const nome = file.name && file.name !== 'image.png'
+      ? file.name
+      : `colado-${Date.now()}.${(tipo.split('/')[1] || 'png').replace('jpeg', 'jpg')}`;
+    const arquivo = new File([file], nome, { type: file.type });
+    await subirArquivoParaTimeline(arquivo, nome);
+    return;
   }
 });
 
@@ -6948,8 +7031,9 @@ async function saveEditsAndReturnToQueue() {
         ...(c.size != null ? { size: +c.size } : {}),
         ...(c.w != null ? { w: +c.w } : {}),
         ...(c.h != null ? { h: +c.h } : {}),
-        // animacao de entrada escolhida no cartao do preview
+        // animacoes escolhidas no cartao do preview
         ...(c.entrada ? { entrada: c.entrada } : {}),
+        ...(c.saida ? { saida: c.saida } : {}),
       })),
       // Emoji: comeco E duracao (ele fica na tela enquanto o bloco durar).
       emojis: S.insertsDraft.filter((c) => c.kind === 'emoji' && c.char).map((c) => ({

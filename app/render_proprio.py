@@ -502,8 +502,10 @@ class Camada:
     # (largura, altura, centro x, centro y) do cartao — o usuario pode mover
     # e redimensionar a imagem que ele mesmo pos
     insert_caixa: tuple | None = None
-    # animacao de entrada do cartao: padrao | pop | deslizar
+    # animacao de entrada do cartao: padrao | pop | deslizar | fade | zoom
     insert_entrada: str = "padrao"
+    # animacao de saida: suave | encolher | deslizar | corte
+    insert_saida: str = "suave"
     cache_chave: tuple | None = None
     cache_tela: np.ndarray | None = None
     cache_pronto: np.ndarray | None = None
@@ -3903,9 +3905,10 @@ class Renderizador:
             leg.insert_quadros = (pasta, masc) if video else None
             # onde e de que tamanho: sem isto o desenho voltaria ao cartao fixo
             leg.insert_caixa = (cw, ch, ccx, ccy)
-            # animacao de ENTRADA escolhida pelo usuario no preview
-            # (padrao | pop | deslizar) — espelho do InsertCard do template
+            # animacoes escolhidas pelo usuario no preview — espelho do
+            # InsertCard do template (mesmas formulas)
             leg.insert_entrada = str(it.get("entrada") or "padrao")
+            leg.insert_saida = str(it.get("saida") or "suave")
             camadas.append(leg)
             self.eventos_sfx.append(("whoosh.mp3", ini / self.fps, 0.09))
         return camadas
@@ -3939,7 +3942,11 @@ class Renderizador:
         # entra em 9 quadros (Easing.out cubic), sai nos ultimos 7
         t = min(1.0, f / 9.0)
         ent = 1.0 - (1.0 - t) ** 3
-        sai = 1.0 if f <= total - 7 else max(0.0, (total - f) / 7.0)
+        s_lin = 0.0 if f <= total - 7 else min(1.0, (f - (total - 7)) / 7.0)
+        saida = getattr(leg, "insert_saida", "suave")
+        # `corte` segura opacidade cheia ate o fim (some no ultimo quadro,
+        # como um corte seco); as outras saidas usam o fade de sempre.
+        sai = 1.0 if saida == "corte" else 1.0 - s_lin
         op = min(ent, sai)
         if op <= 0.004:
             return
@@ -3953,6 +3960,8 @@ class Renderizador:
         #   padrao   sobe 26px, escala 0,92 -> 1
         #   pop      escala 0,5 -> 1 com overshoot (back.out)
         #   deslizar vem da esquerda (35% da largura do cartao)
+        #   fade     so opacidade
+        #   zoom     escala 1,25 -> 1
         entrada = getattr(leg, "insert_entrada", "padrao")
         dx = 0.0
         if entrada == "pop":
@@ -3963,9 +3972,22 @@ class Renderizador:
             escala = cresce
             dy = 0.0
             dx = -0.35 * cw * (1.0 - ent)
+        elif entrada == "fade":
+            escala = cresce
+            dy = 0.0
+        elif entrada == "zoom":
+            escala = (1.25 - 0.25 * ent) * cresce
+            dy = 0.0
         else:
             escala = (0.92 + 0.08 * ent) * cresce
             dy = 26.0 * (1.0 - ent)
+        # Saida escolhida — espelho do template:
+        #   suave    so o fade (padrao)  ·  encolher  escala 1 -> 0,6
+        #   deslizar sai pela DIREITA    ·  corte     seco, sem fade
+        if saida == "encolher":
+            escala *= 1.0 - 0.4 * s_lin
+        elif saida == "deslizar":
+            dx += 0.35 * cw * s_lin
         lw = max(1, int(round(cw * escala)))
         lh = max(1, int(round(ch * escala)))
         # `scale` do CSS cresce a partir do CENTRO da caixa
