@@ -126,6 +126,15 @@ def test_broll_segue_no_remotion():
     assert "b-roll" in (motivo_nao_elegivel(com_broll) or "")
 
 
+def test_o_limiter_respeita_o_teto_da_casa():
+    """0.95 entregou o primeiro vídeo real em -0,44 dBTP (alvo ≤ -1,0,
+    medido no arquivo entregue em 02/09): o teto é 0.87 (~-1,2 dB), com
+    folga para o overshoot de true peak do encoder."""
+    s = (REPO / "helpers" / "compose_longform.py").read_text(encoding="utf-8")
+    assert "alimiter=limit=0.87" in s
+    assert "alimiter=limit=0.95" not in s
+
+
 def test_o_pipeline_liga_o_compose_no_longform():
     rf = (REPO / "pipeline" / "run_fast.py").read_text(encoding="utf-8")
     i = rf.index('_RENDER_META["overlaySkip"] = "longform"')

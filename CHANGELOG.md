@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.79
+
+- **Áudio do vídeo longo com o teto certo.** O primeiro vídeo longo pelo
+  caminho novo saiu com o pico de áudio em -0,4 dB (o padrão da casa é
+  -1,0) — a soma da voz com a trilha não tinha limitador na saída. Agora
+  tem, com folga, no mesmo padrão dos Reels.
+
 ## 4.78
 
 - **Atualizar avisa quando tem vídeo sendo editado.** Atualizar fecha o

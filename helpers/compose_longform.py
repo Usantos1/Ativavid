@@ -328,13 +328,19 @@ def compor_longform(edit_dir: Path, public: Path, ed: dict,
                           f"[sf{i_extra}]")
             rotulos.append(f"[sf{i_extra}]")
             i_extra += 1
+        # Teto de pico SEMPRE na saída: a voz do cut já chega em ~-0,45
+        # dBFS (limiter do render.py) e a soma com trilha/sfx pode passar
+        # disso. O primeiro vídeo real saiu em -0,44 dBTP com alvo da casa
+        # de <= -1,0 (medido no arquivo entregue, 02/09) — 0.87 ~ -1,2 dB,
+        # com folga para o overshoot de true peak do encoder.
+        _TETO = "alimiter=limit=0.87"
         if len(rotulos) > 1:
             cadeia.append("".join(rotulos)
                           + f"amix=inputs={len(rotulos)}:normalize=0:"
-                          "duration=first[aout]")
-            mapa_a = "[aout]"
+                          f"duration=first,{_TETO}[aout]")
         else:
-            mapa_a = "[voz]"
+            cadeia.append(f"[voz]{_TETO}[aout]")
+        mapa_a = "[aout]"
 
         def _rodar(codec: list[str]) -> subprocess.CompletedProcess:
             cmd = (["ffmpeg", "-y", *entradas,
