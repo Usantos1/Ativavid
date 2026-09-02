@@ -268,7 +268,7 @@ def test_altura_livre_nao_deforma_a_foto():
     py = (Path(__file__).resolve().parent.parent / "app"
           / "render_proprio.py").read_text(encoding="utf-8")
     i = py.index("# objectFit: cover")
-    assert "esc = max(cw / im.width, ch / im.height)" in py[i:i + 260]
+    assert "esc = max(cw / im.width, ch / im.height)" in py[i:i + 600]
     tsx = (Path(__file__).resolve().parent.parent / "assets" / "shortform"
            / "src" / "Main.tsx").read_text(encoding="utf-8")
     j = tsx.index("const InsertCard")

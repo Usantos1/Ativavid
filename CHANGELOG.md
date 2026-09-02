@@ -1,5 +1,20 @@
 # Changelog
 
+## 4.60
+
+- **Enquadrar: agora dá para recortar o que aparece no cartão.** Duplo
+  clique no vídeo/imagem inserido (ou o botão **Enquadrar** na faixa fx) e
+  o arrasto passa a mover o conteúdo dentro do quadro — você escolhe a
+  parte que fica visível. Sai igual nos dois motores de render (e mudar o
+  enquadramento de um take de vídeo re-extrai os quadros certos).
+- **Trava de centro com linha de alinhamento.** Arrastando o cartão, perto
+  do meio ele gruda no centro (vertical e horizontal) e a linha acende —
+  igual editor profissional.
+- **Medidas das margens durante o arrasto.** Enquanto arrasta, cada lado
+  mostra a distância até a borda em pixels do vídeo (ex.: `149 | 149` dos
+  dois lados = centralizado), do lado de fora do cartão. Solta o mouse,
+  some tudo.
+
 ## 4.59
 
 - **Efeitos de entrada E saída para vídeo/imagem, escolhidos na timeline.**

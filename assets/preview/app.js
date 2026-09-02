@@ -1188,6 +1188,7 @@ let S = {
   captions: [], // grouped caption lines [{text,start,end}] (rendered space)
   editData: null, // edit-data.json content (phase 2)
   insertsDraft: [], // editable inserts [{kind,label,start,end,ref,orig}]
+  enquadrando: null, // índice do bloco em modo Enquadrar (pan do conteúdo)
   wave: null,
   thumbCount: 0,
   tab: tabFromPath(),
@@ -3701,7 +3702,15 @@ function desenharMidiaNoPreview() {
     // preta, que e justamente o que a arte nao quer atras dela
     if (!arte) el('div', 'midia-previa-nome', card).textContent = c.label || '';
     // indice para o painel de efeitos achar ESTE cartao (demo do movimento)
-    card.dataset.idx = String(S.insertsDraft.indexOf(c));
+    const idx = S.insertsDraft.indexOf(c);
+    card.dataset.idx = String(idx);
+    aplicarEnquadramento(card, c);
+    if (S.enquadrando === idx) card.classList.add('enquadrando');
+    card.addEventListener('dblclick', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (c.kind === 'insert') alternarEnquadrar(S.insertsDraft.indexOf(c));
+    });
     cartaoArrastavel(card, c, box);
   }
 }
@@ -3742,6 +3751,12 @@ function renderFxPanel() {
   const nome = el('span', 'fx-nome', lane);
   nome.textContent = c.label || 'mídia';
   nome.title = c.label || '';
+  // ENQUADRAR: o mesmo modo do duplo clique no cartao, com botao visivel
+  const enq = el('button', `ent-btn${S.enquadrando === S.blocoSel ? ' on' : ''}`, lane);
+  enq.type = 'button';
+  enq.textContent = 'Enquadrar';
+  enq.title = 'Escolher que parte da imagem/vídeo aparece no cartão (ou duplo clique no cartão)';
+  enq.addEventListener('click', () => alternarEnquadrar(S.blocoSel));
   const demoNoCartao = (prefixo, id) => {
     const card = document.querySelector(
       `.midia-previa-card[data-idx="${S.blocoSel}"]`);
@@ -3881,6 +3896,93 @@ function posicionarCartao(card, c, box) {
   card.style.top = `${((c.y ?? CARTAO_Y_PAD) - lh / 2) * 100}%`;
 }
 
+/* Guias de arrasto (pedido de 02/09): linha de centro que ACENDE quando o
+ * cartao trava no meio, e as MEDIDAS de cada lado ("87 img 87") do lado de
+ * fora do cartao — em pixels do VIDEO (1080x1920), que e a medida que vale
+ * no render. So aparecem enquanto arrasta. */
+function _guias(box) {
+  let g = box.querySelector('.guias-arrasto');
+  if (!g) {
+    g = el('div', 'guias-arrasto', box);
+    for (const cls of ['guia-centro-v', 'guia-centro-h', 'gm gm-esq',
+                       'gm gm-dir', 'gm gm-topo', 'gm gm-baixo']) {
+      el('div', `${cls} hidden`, g);
+    }
+  }
+  return g;
+}
+
+function atualizarGuias(box, card, nx, ny, snapX, snapY) {
+  const g = _guias(box);
+  g.querySelector('.guia-centro-v').classList.toggle('hidden', !snapX);
+  g.querySelector('.guia-centro-h').classList.toggle('hidden', !snapY);
+  const lw = card.offsetWidth / Math.max(1, box.clientWidth);
+  const lh = card.offsetHeight / Math.max(1, box.clientHeight);
+  const bordas = {
+    esq: { v: (nx - lw / 2) * 1080, x: (nx - lw / 2) / 2, y: ny },
+    dir: { v: (1 - nx - lw / 2) * 1080, x: (nx + lw / 2 + 1) / 2, y: ny },
+    topo: { v: (ny - lh / 2) * 1920, x: nx, y: (ny - lh / 2) / 2 },
+    baixo: { v: (1 - ny - lh / 2) * 1920, x: nx, y: (ny + lh / 2 + 1) / 2 },
+  };
+  for (const [lado, b] of Object.entries(bordas)) {
+    const m = g.querySelector(`.gm-${lado}`);
+    const px = Math.round(b.v);
+    m.classList.toggle('hidden', px < 12);   // colado na borda: sem numero
+    m.textContent = String(Math.max(0, px));
+    m.style.left = `${b.x * 100}%`;
+    m.style.top = `${b.y * 100}%`;
+  }
+}
+
+function esconderGuias(box) {
+  const g = box.querySelector('.guias-arrasto');
+  if (g) g.querySelectorAll('div').forEach((n) => n.classList.add('hidden'));
+}
+
+/* ENQUADRAR (recorte do que aparece): o cartao corta a imagem/video em
+ * `cover`, e fx/fy dizem QUE PARTE fica visivel (0,5 = centro, o padrao) —
+ * o mesmo object-position dos dois motores. Duplo clique no cartao entra e
+ * sai do modo; no modo, arrastar move o conteudo dentro do quadro. */
+function aplicarEnquadramento(card, c) {
+  const m = card.querySelector('img, video');
+  if (m) m.style.objectPosition = `${(c.fx ?? 0.5) * 100}% ${(c.fy ?? 0.5) * 100}%`;
+}
+
+function panDoConteudo(card, c, dx, dy, arr) {
+  const m = card.querySelector('img, video');
+  if (!m) return;
+  const natW = m.naturalWidth || m.videoWidth || 0;
+  const natH = m.naturalHeight || m.videoHeight || 0;
+  if (!natW || !natH) return;
+  const esc = Math.max(card.offsetWidth / natW, card.offsetHeight / natH);
+  const sobraX = natW * esc - card.offsetWidth;
+  const sobraY = natH * esc - card.offsetHeight;
+  if (arr.fx0 == null) { arr.fx0 = c.fx ?? 0.5; arr.fy0 = c.fy ?? 0.5; }
+  // arrastar para a direita mostra o que esta a ESQUERDA (conteudo acompanha o dedo)
+  if (sobraX > 1) c.fx = +Math.min(1, Math.max(0, arr.fx0 - dx / sobraX)).toFixed(4);
+  if (sobraY > 1) c.fy = +Math.min(1, Math.max(0, arr.fy0 - dy / sobraY)).toFixed(4);
+  aplicarEnquadramento(card, c);
+}
+
+function alternarEnquadrar(i) {
+  // indice invalido (bloco deselecionado no meio) so pode DESLIGAR o modo
+  if (i == null || i < 0 || !S.insertsDraft[i]) {
+    S.enquadrando = null;
+    document.querySelectorAll('.midia-previa-card.enquadrando')
+      .forEach((cd) => cd.classList.remove('enquadrando'));
+    return;
+  }
+  const ligou = S.enquadrando !== i;
+  S.enquadrando = ligou ? i : null;
+  document.querySelectorAll('.midia-previa-card').forEach((cd) => {
+    cd.classList.toggle('enquadrando', ligou && cd.dataset.idx === String(i));
+  });
+  renderFxPanel();
+  toast(ligou
+    ? 'Enquadrar: arraste para escolher a parte que aparece — duplo clique para sair'
+    : '✓ Enquadramento salvo', 3200);
+}
+
 /* Quatro cantos e quatro lados. Cada alca puxa o SEU lado e deixa o oposto
  * parado — puxar a direita cresce para a direita, e nao para os dois lados.
  * Por isso a conta e em bordas e o centro sai delas. */
@@ -3960,20 +4062,34 @@ function cartaoArrastavel(card, c, box) {
     const dy = e.clientY - arr.y0;
     if (!arr.moveu && Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
     arr.moveu = true;
+    // Modo ENQUADRAR: o arrasto move o CONTEUDO dentro do cartao (escolhe
+    // que parte da imagem/video aparece), nao o cartao. Ver enquadrarCartao.
+    if (S.enquadrando === S.insertsDraft.indexOf(c)) {
+      panDoConteudo(card, c, dx, dy, arr);
+      return;
+    }
     card.classList.add('dragging');
-    const nx = Math.max(0.02, Math.min(0.98, arr.cx + dx / arr.larg));
-    const ny = Math.max(0.02, Math.min(0.98, arr.cy + dy / arr.alt));
+    let nx = Math.max(0.02, Math.min(0.98, arr.cx + dx / arr.larg));
+    let ny = Math.max(0.02, Math.min(0.98, arr.cy + dy / arr.alt));
+    // TRAVA no centro (pedido de 02/09): perto do meio, gruda — e a linha
+    // de alinhamento acende. 8px de tela e o iman de sempre dos editores.
+    const snapX = Math.abs(nx - 0.5) * arr.larg < 8;
+    const snapY = Math.abs(ny - 0.5) * arr.alt < 8;
+    if (snapX) nx = 0.5;
+    if (snapY) ny = 0.5;
     card.style.left = `${nx * arr.larg - card.offsetWidth / 2}px`;
     card.style.top = `${ny * arr.alt - card.offsetHeight / 2}px`;
     // (a largura/altura nao mudam no arrasto — so o centro)
     card.dataset.nx = String(nx);
     card.dataset.ny = String(ny);
+    atualizarGuias(box, card, nx, ny, snapX, snapY);
   });
 
   const soltar = (e) => {
     if (!arr) return;
     const moveu = arr.moveu;
     arr = null;
+    esconderGuias(box);
     card.classList.remove('dragging');
     try { card.releasePointerCapture(e.pointerId); } catch { /* ja solto */ }
     if (!moveu) {
@@ -3985,6 +4101,12 @@ function cartaoArrastavel(card, c, box) {
         renderAll();
         refreshHeader();
       }
+      return;
+    }
+    if (S.enquadrando === S.insertsDraft.indexOf(c)) {
+      // pan do enquadramento: fx/fy ja foram atualizados durante o arrasto
+      refreshHeader();
+      scheduleAutosave();
       return;
     }
     pushHistory();
@@ -7031,9 +7153,11 @@ async function saveEditsAndReturnToQueue() {
         ...(c.size != null ? { size: +c.size } : {}),
         ...(c.w != null ? { w: +c.w } : {}),
         ...(c.h != null ? { h: +c.h } : {}),
-        // animacoes escolhidas no cartao do preview
+        // animacoes e enquadramento escolhidos no preview
         ...(c.entrada ? { entrada: c.entrada } : {}),
         ...(c.saida ? { saida: c.saida } : {}),
+        ...(c.fx != null ? { fx: +c.fx } : {}),
+        ...(c.fy != null ? { fy: +c.fy } : {}),
       })),
       // Emoji: comeco E duracao (ele fica na tela enquanto o bloco durar).
       emojis: S.insertsDraft.filter((c) => c.kind === 'emoji' && c.char).map((c) => ({

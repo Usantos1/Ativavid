@@ -59,6 +59,18 @@ INSERT_Y_PAD = (INSERT_TOP + INSERT_H / 2) / 1920
 INSERT_SIZE_PAD = INSERT_W / 1080
 
 
+def _foco_do_insert(it: dict, chave: str) -> float:
+    """Enquadramento 0..1 (0,5 = centro). `or 0.5` seria armadilha: fx=0.0
+    (borda esquerda) e falsy e viraria centro — por isso o teste de None."""
+    v = it.get(chave)
+    if v is None:
+        return 0.5
+    try:
+        return min(1.0, max(0.0, float(v)))
+    except (TypeError, ValueError):
+        return 0.5
+
+
 def geometria_do_insert(it: dict, larg: int, alt: int) -> tuple[int, int, float, float]:
     """(largura, altura, centro x, centro y) em pixels do cartao.
 
@@ -3794,14 +3806,21 @@ class Renderizador:
             inicio_f=0, enter=enter, sobe=sobe))
 
     # ----- b-roll / inserts (InsertCard.tsx) --------------------------------
-    def _quadros_do_take(self, cam: Path, total: int) -> Path | None:
+    def _quadros_do_take(self, cam: Path, total: int,
+                         fx: float = 0.5, fy: float = 0.5) -> Path | None:
         """Extrai o take ja no tamanho do cartao, uma vez, para o disco.
 
         Guardar os quadros em memoria custaria 1,5 MB cada (780x500 RGBA):
         um take de 2,5s levaria ~117 MB. Em JPEG no disco sao ~60 KB por
         quadro, e so os quadros da janela do insert sao lidos.
+
+        `fx`/`fy` = enquadramento (object-position): o crop do `cover` sai
+        do centro para a parte escolhida. Entram na CHAVE do cache — mudar o
+        enquadramento re-extrai.
         """
-        destino = cam.parent / f".f-{cam.stem[:24]}"
+        marca_foco = ("" if abs(fx - 0.5) < 1e-3 and abs(fy - 0.5) < 1e-3
+                      else f"-{fx:.2f}x{fy:.2f}")
+        destino = cam.parent / f".f-{cam.stem[:24]}{marca_foco}"
         pronto = destino / "ok.txt"
         if pronto.is_file():
             return destino
@@ -3812,7 +3831,7 @@ class Renderizador:
         # `fps` alinha o take ao relogio do video; scale+crop e o `cover`
         vf = (f"fps={self.fps:.6f},scale={INSERT_W}:{INSERT_H}:"
               f"force_original_aspect_ratio=increase,"
-              f"crop={INSERT_W}:{INSERT_H}")
+              f"crop={INSERT_W}:{INSERT_H}:(iw-ow)*{fx:.4f}:(ih-oh)*{fy:.4f}")
         try:
             r = subprocess.run(
                 ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
@@ -3850,7 +3869,10 @@ class Renderizador:
                 continue
             # Take de VIDEO (Biblioteca): o cartao toca o take, nao uma foto
             video = cam.suffix.lower() in (".mp4", ".mov", ".webm")
-            pasta = self._quadros_do_take(cam, total) if video else None
+            foco_x = _foco_do_insert(it, "fx")
+            foco_y = _foco_do_insert(it, "fy")
+            pasta = (self._quadros_do_take(cam, total, fx=foco_x, fy=foco_y)
+                     if video else None)
             if video and pasta is None:
                 continue
             try:
@@ -3875,13 +3897,17 @@ class Renderizador:
                 im.paste(menor, ((cw - nw) // 2, (ch - nh) // 2))
                 masc = im.getchannel("A")
             else:
-                # objectFit: cover — recorta o excedente, nao deforma
+                # objectFit: cover — recorta o excedente, nao deforma.
+                # fx/fy = ENQUADRAMENTO (object-position do template): que
+                # parte do excedente fica visivel; 0,5 = centro, o padrao.
+                fx, fy = foco_x, foco_y
                 esc = max(cw / im.width, ch / im.height)
                 nw = max(1, round(im.width * esc))
                 nh = max(1, round(im.height * esc))
-                im = im.resize((nw, nh), Image.LANCZOS).crop((
-                    (nw - cw) // 2, (nh - ch) // 2,
-                    (nw - cw) // 2 + cw, (nh - ch) // 2 + ch))
+                x0 = int(round((nw - cw) * fx))
+                y0 = int(round((nh - ch) * fy))
+                im = im.resize((nw, nh), Image.LANCZOS).crop(
+                    (x0, y0, x0 + cw, y0 + ch))
                 masc = Image.new("L", (cw, ch), 0)
                 ImageDraw.Draw(masc).rounded_rectangle(
                     [0, 0, cw - 1, ch - 1], radius=raio, fill=255)

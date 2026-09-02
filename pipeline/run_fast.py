@@ -911,6 +911,14 @@ def midia_do_editor(edit_dir: Path, public: Path, edit_data: dict) -> None:
             geo["entrada"] = str(it["entrada"])
         if str(it.get("saida") or "") in ("encolher", "deslizar", "corte"):
             geo["saida"] = str(it["saida"])
+        # enquadramento (que parte da imagem/video aparece): 0..1, 0,5=centro
+        for foco in ("fx", "fy"):
+            if it.get(foco) is None:
+                continue
+            try:
+                geo[foco] = min(1.0, max(0.0, float(it[foco])))
+            except (TypeError, ValueError):
+                pass
         inserts.append({"src": src, "start": round(ini, 3),
                         "end": round(fim, 3),
                         "credit": str(it.get("credit") or ""),

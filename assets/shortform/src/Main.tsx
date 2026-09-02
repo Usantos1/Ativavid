@@ -561,8 +561,8 @@ const ehVideo = (s: string) => /\.(mp4|mov|webm)$/i.test(s);
 const InsertCard: React.FC<{
   src: string; totalFrames: number;
   x?: number; y?: number; size?: number; w?: number; h?: number;
-  entrada?: string; saida?: string;
-}> = ({src, totalFrames, x, y, size, w, h, entrada, saida}) => {
+  entrada?: string; saida?: string; fx?: number; fy?: number;
+}> = ({src, totalFrames, x, y, size, w, h, entrada, saida, fx, fy}) => {
   const frame = useCurrentFrame();
   // `t` cru e `enter` (cubic-out) — as MESMAS contas de `_desenhar_insert`
   // no motor próprio; mudar aqui exige mudar lá.
@@ -619,12 +619,16 @@ const InsertCard: React.FC<{
         boxShadow: arte ? undefined : '0 18px 50px rgba(0,0,0,0.45)',
         filter: arte ? 'drop-shadow(0 14px 34px rgba(0,0,0,0.45))' : undefined}}>
         {/* Take de video da Biblioteca entra igual a uma foto. Mudo de
-            proposito: o som do take passaria por cima da fala. */}
+            proposito: o som do take passaria por cima da fala.
+            `fx`/`fy` = ENQUADRAMENTO escolhido no preview (object-position,
+            0,5 = centro) — espelho do crop com offset no motor próprio. */}
         {ehVideo(src) ? (
           <OffthreadVideo src={staticFile(src)} muted
-            style={{width: '100%', height: '100%', objectFit: 'cover'}} />
+            style={{width: '100%', height: '100%', objectFit: 'cover',
+              objectPosition: `${(fx ?? 0.5) * 100}% ${(fy ?? 0.5) * 100}%`}} />
         ) : (
-          <Img src={staticFile(src)} style={{width: '100%', height: '100%', objectFit: arte ? 'contain' : 'cover'}} />
+          <Img src={staticFile(src)} style={{width: '100%', height: '100%', objectFit: arte ? 'contain' : 'cover',
+            objectPosition: arte ? undefined : `${(fx ?? 0.5) * 100}% ${(fy ?? 0.5) * 100}%`}} />
         )}
       </div>
     </AbsoluteFill>
@@ -643,7 +647,8 @@ const Inserts: React.FC = () => {
             <InsertCard src={it.src} totalFrames={duration}
               x={(it as any).x} y={(it as any).y} size={(it as any).size}
               w={(it as any).w} h={(it as any).h}
-              entrada={(it as any).entrada} saida={(it as any).saida} />
+              entrada={(it as any).entrada} saida={(it as any).saida}
+              fx={(it as any).fx} fy={(it as any).fy} />
           </Sequence>
         );
       })}
