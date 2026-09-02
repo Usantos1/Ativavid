@@ -71,8 +71,10 @@ def test_o_salvar_manda_o_instante_do_efeito():
 
 def test_o_efeito_tem_faixa_propria_na_linha_do_tempo():
     """Misturado com as fotos numa fileira só, o efeito some entre elas."""
+    # o bloco dos groups cresceu na 4.66 (mídia primeiro + comentários) —
+    # janela maior; a lição de sempre: nunca janela justa
     i = JS.index("const isSfx = (c) => c.kind === 'sfx';")
-    bloco = JS[i:i + 500]
+    bloco = JS[i:i + 900]
     assert "icon: 'music'" in bloco
     assert "!isText(c) && !isSfx(c)" in bloco
 
