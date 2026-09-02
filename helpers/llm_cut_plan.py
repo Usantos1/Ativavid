@@ -227,7 +227,15 @@ def _system_prompt(preset: dict | None = None) -> str:
         "(respeitando LIMPEZA_FALA e a INTENÇÃO). NÃO remova frases só porque 'encurtam'.\n"
     )
     return (
-        role
+        # TAREFA DE TEXTO, dito ANTES do papel: o Gemini Flash leu "editor…
+        # monte um corte" como pedido para editar video de verdade e recusou
+        # com "Não fui programado para fazer isso. Só consigo gerar texto."
+        # (job real de 02/09, video de 15min — o plano caiu na heuristica).
+        "TAREFA DE TEXTO: você recebe uma transcrição e devolve APENAS um "
+        "JSON com o plano de corte. Nada aqui pede para editar, renderizar "
+        "ou acessar arquivos de vídeo — o aplicativo faz isso depois, com o "
+        "seu JSON.\n"
+        + role
         + "Recebe a transcrição empacotada e o estilo da marca. Monte um corte "
         "fiel ao que a pessoa disse.\n\n"
         "REGRAS:\n"
@@ -305,7 +313,16 @@ def _chamar_e_parsear(messages: list[dict]) -> tuple[dict | list, str, str]:
 
         if backend == "groq" or not gw._groq_key():
             raise
-        print(f"[ia] resposta de {backend} com JSON quebrado ({str(e)[:60]}) "
+        # Recusa é diagnóstico diferente de vírgula faltando: o log dizia
+        # "JSON quebrado" quando o Gemini tinha RECUSADO a tarefa inteira
+        # ("só consigo gerar texto") — e a investigação começou pelo lado
+        # errado. Nomear o que veio encurta a próxima caçada.
+        _baixo = (text or "").lower()
+        _recusou = any(m in _baixo for m in (
+            "não fui programado", "nao fui programado",
+            "consigo gerar texto", "i can't help", "i cannot help"))
+        _motivo = "RECUSA da tarefa" if _recusou else f"JSON quebrado ({str(e)[:60]})"
+        print(f"[ia] resposta de {backend} com {_motivo} "
               "— refazendo no groq", flush=True)
         resp = gw._groq_chat(
             messages, None,

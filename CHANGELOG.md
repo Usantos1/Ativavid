@@ -1,5 +1,15 @@
 # Changelog
 
+## 4.76
+
+- **A IA não recusa mais o plano de corte.** Em vídeo longo, o Gemini
+  entendia o pedido como "edite um arquivo de vídeo" e respondia "só
+  consigo gerar texto" — e o corte caía no plano automático. O pedido
+  agora deixa claro desde a primeira linha que a tarefa é devolver o
+  plano em texto (JSON). O registro do job também passa a dizer quando
+  foi recusa (antes aparecia como "JSON quebrado", que confundia o
+  diagnóstico).
+
 ## 4.75
 
 - **Vídeo longo não derruba mais o corte.** Um vídeo de 15 minutos vira
