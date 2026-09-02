@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.65
+
+- **O bloco de mídia mostra a mídia, não o nome.** Na timeline, a imagem
+  ou vídeo inserido aparece como miniatura repetida dentro do bloco —
+  igual à faixa do vídeo principal. O nome do arquivo continua no
+  tooltip, para quem quiser conferir.
+
 ## 4.64
 
 - **Mais 8 animações no menu.** Entradas novas: **Quicar** (cai de cima e

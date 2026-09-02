@@ -3678,6 +3678,48 @@ const LAYOUTS_COM_PREVIA = ['degrade', 'vinheta', 'cinema', 'borda'];
  * So o que foi posto na mao (`isNew`): o insert que a IA colocou esta no
  * relogio do video FINAL e apareceria fora de hora aqui.
  * Som nao entra: nao se ve, e um icone dele so taparia a imagem. */
+/* O bloco de mídia da timeline MOSTRA a mídia, não o nome (02/09). Imagem
+ * entra como fundo repetido (filmstrip); vídeo ganha UM quadro capturado
+ * via canvas, com cache por src — capturar é caro e os chips repintam a
+ * toda hora. O nome continua no title (tooltip). */
+const MINIATURAS = new Map();   // src -> dataURL ('' = captura em andamento)
+
+function miniaturaNoChip(chip, src) {
+  chip.classList.add('com-midia');
+  const url = mediaHref(`remotion/public/${src}`);
+  if (!/\.(mp4|mov|m4v|webm|mkv)$/i.test(String(src))) {
+    chip.style.backgroundImage = `url("${url}")`;
+    return;
+  }
+  const pronta = MINIATURAS.get(src);
+  if (pronta) { chip.style.backgroundImage = `url("${pronta}")`; return; }
+  if (pronta === '') return;   // outra captura em voo pinta ao terminar
+  MINIATURAS.set(src, '');
+  const v = document.createElement('video');
+  v.muted = true;
+  v.preload = 'metadata';
+  v.src = url;
+  v.addEventListener('loadeddata', () => {
+    const d = Number(v.duration) || 0;
+    v.currentTime = Math.min(1.0, d * 0.15);
+  }, { once: true });
+  v.addEventListener('seeked', () => {
+    try {
+      const cv = document.createElement('canvas');
+      const esc = 72 / Math.max(1, v.videoHeight);
+      cv.width = Math.max(1, Math.round(v.videoWidth * esc));
+      cv.height = 72;
+      cv.getContext('2d').drawImage(v, 0, 0, cv.width, cv.height);
+      const data = cv.toDataURL('image/jpeg', 0.6);
+      MINIATURAS.set(src, data);
+      document.querySelectorAll(`.chip.insert[data-src="${CSS.escape(src)}"]`)
+        .forEach((ch) => { ch.style.backgroundImage = `url("${data}")`; });
+    } catch { MINIATURAS.delete(src); }
+    v.removeAttribute('src');
+  }, { once: true });
+  v.addEventListener('error', () => MINIATURAS.delete(src), { once: true });
+}
+
 function desenharMidiaNoPreview() {
   const box = $('midiaOverlay');
   if (!box) return;
@@ -5150,6 +5192,13 @@ function desenharFaixasDeInsert(phase2) {
         ? `${c.label} — ${vol}% de volume (roda do mouse muda)`
         : c.label;
       if (ehSom) somComVolume(chip, c);
+      // Bloco de midia MOSTRA a midia (pedido de 02/09: "o preview vale
+      // mais que o nome") — igual a faixa do video principal.
+      if (c.kind === 'insert' && c.src) {
+        chip.dataset.src = c.src;
+        chip.textContent = '';
+        miniaturaNoChip(chip, c.src);
+      }
       chip.dataset.i = i;
       if (c.start !== c.orig.start || c.end !== c.orig.end) chip.classList.add('dirty');
       el('div', 'handle l', chip).dataset.i = i;

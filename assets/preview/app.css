@@ -4163,3 +4163,13 @@ body > .fx-drop { position: fixed; bottom: auto; }
 /* selecionado/animando fica no topo da pilha de cartoes */
 .midia-previa-card.sel { z-index: 5; }
 .midia-previa-card.enquadrando { z-index: 6; }
+
+/* Bloco de midia com a PROPRIA midia de fundo (filmstrip), como o video
+   principal — o nome vive no tooltip */
+.chip.insert.com-midia {
+  background-size: auto 100%;
+  background-repeat: repeat-x;
+  background-position: left center;
+  background-color: #0b0e13;
+}
+.chip.insert.com-midia.sel { outline-offset: 1px; }
