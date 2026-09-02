@@ -94,7 +94,7 @@ def test_deslizar_vem_da_esquerda(tmp_path):
 
 
 def test_entrada_estranha_cai_no_padrao(tmp_path):
-    rend = _renderizador(tmp_path, "girar")   # valor que não existe
+    rend = _renderizador(tmp_path, "cambalhota")   # valor que não existe
     cx2, area2 = _caixa(rend, 2)
     assert area2 > 0
     pad = _renderizador(tmp_path, None)
@@ -153,6 +153,81 @@ def test_saida_corte_segura_a_tinta_ate_o_fim(tmp_path):
     assert alfa_max(suave, f) < 160, "a saída suave deveria estar esmaecendo"
 
 
+def test_entradas_novas_vem_do_lado_certo(tmp_path):
+    dir_ = _renderizador(tmp_path, "direita")
+    cx1, _ = _caixa(dir_, 1)
+    cx12, _ = _caixa(dir_, 12)
+    assert cx1 > cx12 + 15, f"'direita' não veio da direita: {cx1} -> {cx12}"
+
+    def _cy(rend, f):
+        import numpy as np
+
+        buf = np.zeros((H, W, 4), dtype=np.uint8)
+        for leg in rend.camadas:
+            if getattr(leg, "insert", None) is None:
+                continue
+            rend._desenhar_insert(leg, float(f - leg.inicio_f), buf, [0, 0, 0, 0], False)
+        a = buf[..., 3] > 8
+        ys = np.where(a.any(axis=1))[0]
+        return float(ys.mean()) if len(ys) else -1
+
+    baixo = _renderizador(tmp_path, "baixo")
+    assert _cy(baixo, 1) > _cy(baixo, 12) + 15, "'baixo' não subiu"
+    saiu = _renderizador(tmp_path, None, "baixo")
+    assert _cy(saiu, FRAMES - 3) > _cy(saiu, FRAMES - 12) + 10, "saída 'baixo' não caiu"
+
+
+def test_girar_desenha_o_cartao_torto_na_entrada(tmp_path):
+    """Cartão reto tem toda linha com a mesma largura; girado, as larguras
+    variam linha a linha — é a prova de que a rotação foi desenhada."""
+    import numpy as np
+
+    def larguras(rend, f):
+        buf = np.zeros((H, W, 4), dtype=np.uint8)
+        for leg in rend.camadas:
+            if getattr(leg, "insert", None) is None:
+                continue
+            rend._desenhar_insert(leg, float(f - leg.inicio_f), buf, [0, 0, 0, 0], False)
+        # BORDA ESQUERDA por linha: num cartão reto ela é vertical (x
+        # constante); girado, ela escorrega linha a linha (tan 8° ~ 0,15).
+        # A largura da fatia não serve: retângulo inclinado tem fatias de
+        # largura ~constante no miolo.
+        # No quadro 1 a opacidade ainda está em ~0,3 — limiar baixo.
+        a = buf[..., 3] > 40
+        xs = [int(np.where(r)[0][0]) for r in a if r.any()]
+        n = len(xs)
+        # só o MEIO: cantos arredondados entortam a borda nas pontas
+        return xs[n // 4:(3 * n) // 4] or xs
+
+    rend = _renderizador(tmp_path, "girar")
+    torto = larguras(rend, 1)
+    reto = larguras(rend, 14)
+    assert torto and reto
+    assert (max(torto) - min(torto)) > 10, f"não girou: {min(torto)}..{max(torto)}"
+    assert (max(reto) - min(reto)) < 4, f"assentou torto: {min(reto)}..{max(reto)}"
+
+
+def test_saida_zoom_cresce_enquanto_some(tmp_path):
+    """Largura do CORPO do cartão, não área total: o fade derruba a franja
+    da sombra abaixo do limiar e mascararia o crescimento."""
+    import numpy as np
+
+    def largura(rend, f):
+        buf = np.zeros((H, W, 4), dtype=np.uint8)
+        for leg in rend.camadas:
+            if getattr(leg, "insert", None) is None:
+                continue
+            rend._desenhar_insert(leg, float(f - leg.inicio_f), buf, [0, 0, 0, 0], False)
+        corpo = buf[..., 3] > 60
+        xs = np.where(corpo.any(axis=0))[0]
+        return int(xs.max() - xs.min() + 1) if len(xs) else 0
+
+    rend = _renderizador(tmp_path, None, "zoom")
+    meio = largura(rend, FRAMES - 12)
+    fim = largura(rend, FRAMES - 3)
+    assert fim > meio * 1.1, f"saída zoom não cresceu: {meio} -> {fim}"
+
+
 def test_template_e_motor_tem_as_mesmas_formulas():
     """As três entradas moram nos DOIS motores — quem mexer numa fórmula
     precisa mexer nas duas (regra do motor-proprio-cobre-tudo)."""
@@ -164,8 +239,14 @@ def test_template_e_motor_tem_as_mesmas_formulas():
     assert "entrada === 'pop'" in tsx and "entrada === 'deslizar'" in tsx
     assert "entrada === 'zoom'" in tsx and "saida === 'encolher'" in tsx
     assert "saida === 'corte'" in tsx and "saida === 'deslizar'" in tsx
+    for novo in ("'direita'", "'baixo'", "'cima'", "'girar'", "'esquerda'"):
+        assert novo in tsx, f"efeito {novo} sumiu do template"
     assert '"pop"' in py and '"deslizar"' in py
     assert '"zoom"' in py and '"encolher"' in py and '"corte"' in py
+    for novo in ('"direita"', '"baixo"', '"cima"', '"girar"', '"esquerda"'):
+        assert novo in py, f"efeito {novo} sumiu do motor proprio"
+    # rotacao: CSS gira em graus horarios, Pillow anti-horario
+    assert "rotate(-ang" in py and "rotate: Math.abs(ang)" in tsx
     # e o pipeline deixa a escolha PASSAR do preview para o edit-data
     rf = (REPO / "pipeline" / "run_fast.py").read_text(encoding="utf-8")
     assert 'geo["entrada"]' in rf, "run_fast parou de repassar a entrada"

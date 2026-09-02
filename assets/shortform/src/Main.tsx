@@ -574,28 +574,35 @@ const InsertCard: React.FC<{
   const opacity = Math.min(enter, exit);
   // dynamic zoom: the image itself grows slowly while on screen (Ken-Burns)
   const grow = interpolate(frame, [0, totalFrames], [1, 1.08], {extrapolateRight: 'clamp'});
-  // Entrada escolhida pelo usuário no preview:
+  // Entrada escolhida pelo usuário no preview (espelho de _desenhar_insert):
   //   padrao   sobe 26px, escala 0,92 → 1
   //   pop      escala 0,5 → 1 com overshoot (back.out)
-  //   deslizar vem da esquerda (35% da largura do cartão)
-  //   fade     só opacidade  ·  zoom  escala 1,25 → 1
-  let scale: number; let yEnt = 0; let xEnt = 0;
+  //   deslizar/direita/baixo/cima  vem daquele lado
+  //   fade só opacidade · zoom 1,25 → 1 · girar −12° → 0
+  let scale: number; let yEnt = 0; let xEnt = 0; let ang = 0;
   if (entrada === 'pop') {
     const b = 1 + 2.70158 * (t - 1) ** 3 + 1.70158 * (t - 1) ** 2;
     scale = (0.5 + 0.5 * b) * grow;
-  } else if (entrada === 'deslizar') {
+  } else if (entrada === 'deslizar' || entrada === 'direita') {
+    scale = grow;
+  } else if (entrada === 'baixo' || entrada === 'cima') {
     scale = grow;
   } else if (entrada === 'fade') {
     scale = grow;
   } else if (entrada === 'zoom') {
     scale = (1.25 - 0.25 * enter) * grow;
+  } else if (entrada === 'girar') {
+    scale = (0.85 + 0.15 * enter) * grow;
+    ang = -12 * (1 - enter);
   } else {
     scale = interpolate(enter, [0, 1], [0.92, 1]) * grow;
     yEnt = interpolate(enter, [0, 1], [26, 0]);
   }
   // Saída escolhida: suave (fade, padrão) · encolher · deslizar p/ direita
-  // · corte (seco)
+  // · esquerda · baixo · zoom 1 → 1,3 · girar +12° · corte (seco)
   if (saida === 'encolher') scale *= 1 - 0.4 * sLin;
+  if (saida === 'zoom') scale *= 1 + 0.3 * sLin;
+  if (saida === 'girar') { scale *= 1 - 0.15 * sLin; ang += 12 * sLin; }
   const {width: qLarg, height: qAlt} = useVideoConfig();
   // largura e ALTURA soltas: com a proporcao travada a imagem nunca cobria
   // a tela (o cartao e 780x500 e o quadro e 9:16)
@@ -609,11 +616,17 @@ const InsertCard: React.FC<{
   const cx = Math.min(1, Math.max(0, x ?? 0.5)) * qLarg;
   const cy = Math.min(1, Math.max(0, y ?? (CARD_TOP + CARD_H / 2) / 1920)) * qAlt;
   if (entrada === 'deslizar') xEnt = -0.35 * larg * (1 - enter);
+  if (entrada === 'direita') xEnt = 0.35 * larg * (1 - enter);
+  if (entrada === 'baixo') yEnt = 0.45 * alt * (1 - enter);
+  if (entrada === 'cima') yEnt = -0.45 * alt * (1 - enter);
   if (saida === 'deslizar') xEnt += 0.35 * larg * sLin;
+  if (saida === 'esquerda') xEnt -= 0.35 * larg * sLin;
+  if (saida === 'baixo') yEnt += 0.45 * alt * sLin;
   return (
     <AbsoluteFill>
       <Sfx src="whoosh.mp3" />
       <div style={{position: 'absolute', width: larg, height: alt, left: cx - larg / 2, top: cy - alt / 2, borderRadius: arte ? 0 : Math.max(4, Math.round((28 * larg) / CARD_W)), overflow: 'hidden', opacity, scale: String(scale), translate: `${xEnt}px ${yEnt}px`,
+        rotate: Math.abs(ang) > 0.05 ? `${ang}deg` : undefined,
         // Arte com transparencia (uma logo em PNG) nao quer cartao: a sombra
         // sai da FORMA dela, nao de um retangulo atras dela.
         boxShadow: arte ? undefined : '0 18px 50px rgba(0,0,0,0.45)',

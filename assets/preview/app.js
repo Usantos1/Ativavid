@@ -3760,19 +3760,33 @@ function desenharMidiaNoPreview() {
 const ENTRADAS_DE_MIDIA = [
   ['padrao', 'Suave', 'Sobe e aparece (padrão)'],
   ['pop', 'Pop', 'Cresce com quique'],
-  ['deslizar', 'Deslizar', 'Entra pela esquerda'],
+  ['deslizar', 'Da esquerda', 'Entra pela esquerda'],
+  ['direita', 'Da direita', 'Entra pela direita'],
+  ['baixo', 'De baixo', 'Sobe de baixo'],
+  ['cima', 'De cima', 'Desce de cima'],
   ['fade', 'Fade', 'Só aparece, sem movimento'],
   ['zoom', 'Zoom', 'Chega de longe (1,25 → 1)'],
+  ['girar', 'Girar', 'Gira e assenta'],
 ];
 const SAIDAS_DE_MIDIA = [
   ['suave', 'Suave', 'Some devagar (padrão)'],
   ['encolher', 'Encolher', 'Diminui e some'],
-  ['deslizar', 'Deslizar', 'Sai pela direita'],
+  ['deslizar', 'P/ direita', 'Sai pela direita'],
+  ['esquerda', 'P/ esquerda', 'Sai pela esquerda'],
+  ['baixo', 'P/ baixo', 'Cai para baixo'],
+  ['zoom', 'Zoom', 'Cresce e some'],
+  ['girar', 'Girar', 'Gira e some'],
   ['corte', 'Corte', 'Some de uma vez, sem fade'],
 ];
-const DEMOS_DE_MIDIA = ['ent-demo-padrao', 'ent-demo-pop', 'ent-demo-deslizar',
-  'ent-demo-fade', 'ent-demo-zoom',
-  'sai-demo-suave', 'sai-demo-encolher', 'sai-demo-deslizar', 'sai-demo-corte'];
+const DEMOS_DE_MIDIA = [
+  ...ENTRADAS_DE_MIDIA.map(([id]) => `ent-demo-${id}`),
+  ...SAIDAS_DE_MIDIA.map(([id]) => `sai-demo-${id}`),
+];
+
+function _nomeDaAnim(lista, id, padrao) {
+  const hit = lista.find(([k]) => k === (id || padrao));
+  return hit ? hit[1] : padrao;
+}
 
 /* O painel `fx` mora na TIMELINE, nao sobre o video — os botoes em cima do
  * cartao tapavam o conteudo (feedback ao vivo de 01/09). Ele aparece quando
@@ -3782,6 +3796,9 @@ function renderFxPanel() {
   const painel = $('fxPanel');
   const lane = $('fxLane');
   if (!painel || !lane) return;
+  // o dropdown vive no <body> (a lane rola e clipa filhos absolutos) —
+  // repintar o painel descarta qualquer dropdown antigo
+  document.querySelectorAll('body > .fx-drop').forEach((d) => d.remove());
   const c = S.blocoSel >= 0 ? S.insertsDraft[S.blocoSel] : null;
   const mostrar = !!(c && c.kind === 'insert' && (c.isNew || c.manual));
   painel.classList.toggle('hidden', !mostrar);
@@ -3804,26 +3821,61 @@ function renderFxPanel() {
     void card.offsetWidth;   // reinicia a animacao CSS
     card.classList.add(`${prefixo}-demo-${id}`);
   };
-  const linha = (rotulo, opcoes, campo, padrao, prefixo) => {
-    const row = el('div', 'fx-row', lane);
-    el('span', 'fx-rotulo', row).textContent = rotulo;
-    for (const [id, nomeB, dica] of opcoes) {
-      const b = el('button', `ent-btn${(c[campo] || padrao) === id ? ' on' : ''}`, row);
-      b.type = 'button';
-      b.textContent = nomeB;
-      b.title = dica;
-      b.addEventListener('click', () => {
-        c[campo] = id === padrao ? null : id;
-        row.querySelectorAll('.ent-btn').forEach((x) => x.classList.toggle('on', x === b));
-        demoNoCartao(prefixo, id);
-        refreshHeader();
-        scheduleAutosave();
-      });
-    }
+  // UM botao "Animações" com dropdown (pedido de 02/09): o catalogo cresceu
+  // e duas fileiras de botoes nao cabiam mais na faixa.
+  const anim = el('button', 'ent-btn fx-anim-btn', lane);
+  anim.type = 'button';
+  anim.textContent = `Animações: ${_nomeDaAnim(ENTRADAS_DE_MIDIA, c.entrada, 'padrao')}`
+    + ` → ${_nomeDaAnim(SAIDAS_DE_MIDIA, c.saida, 'suave')}`;
+  anim.title = 'Escolher a animação de entrada e de saída';
+  const drop = el('div', 'fx-drop hidden', document.body);
+  const montarDrop = () => {
+    drop.innerHTML = '';
+    const coluna = (rotulo, opcoes, campo, padrao, prefixo) => {
+      const col = el('div', 'fx-drop-col', drop);
+      el('div', 'fx-drop-titulo', col).textContent = rotulo;
+      for (const [id, nomeB, dica] of opcoes) {
+        const b = el('button', `fx-opt${(c[campo] || padrao) === id ? ' on' : ''}`, col);
+        b.type = 'button';
+        b.textContent = nomeB;
+        b.title = dica;
+        b.addEventListener('click', (e) => {
+          e.stopPropagation();
+          c[campo] = id === padrao ? null : id;
+          demoNoCartao(prefixo, id);
+          anim.textContent = `Animações: ${_nomeDaAnim(ENTRADAS_DE_MIDIA, c.entrada, 'padrao')}`
+            + ` → ${_nomeDaAnim(SAIDAS_DE_MIDIA, c.saida, 'suave')}`;
+          montarDrop();   // re-marca o ativo, mantendo o dropdown aberto
+          refreshHeader();
+          scheduleAutosave();
+        });
+      }
+    };
+    coluna('Entrada', ENTRADAS_DE_MIDIA, 'entrada', 'padrao', 'ent');
+    coluna('Saída', SAIDAS_DE_MIDIA, 'saida', 'suave', 'sai');
   };
-  linha('entrada', ENTRADAS_DE_MIDIA, 'entrada', 'padrao', 'ent');
-  linha('saída', SAIDAS_DE_MIDIA, 'saida', 'suave', 'sai');
+  anim.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const abrir = drop.classList.contains('hidden');
+    if (abrir) {
+      montarDrop();
+      const r = anim.getBoundingClientRect();
+      drop.style.left = `${Math.max(8, Math.min(window.innerWidth - 280, r.left))}px`;
+      drop.style.bottom = `${window.innerHeight - r.top + 6}px`;
+    }
+    drop.classList.toggle('hidden', !abrir);
+  });
 }
+
+// clique fora fecha o dropdown de animações — UM listener global (dentro de
+// renderFxPanel acumularia um por repintura)
+document.addEventListener('click', (e) => {
+  document.querySelectorAll('.fx-drop:not(.hidden)').forEach((d) => {
+    if (!d.contains(e.target) && !e.target.closest?.('.fx-anim-btn')) {
+      d.classList.add('hidden');
+    }
+  });
+});
 
 /* O emoji se arrasta sobre o video e a roda muda o tamanho — o mesmo gesto
  * da manchete e da legenda. Ele nascia no centro-alto e ficava la: tirar do

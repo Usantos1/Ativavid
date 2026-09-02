@@ -901,9 +901,13 @@ def midia_do_editor(edit_dir: Path, public: Path, edit_data: dict) -> None:
             piso = 0.02 if chave in ("x", "y") else 0.05
             geo[chave] = min(lim, max(piso, v))
         # animacoes escolhidas no preview; valor estranho vira padrao
-        if str(it.get("entrada") or "") in ("pop", "deslizar", "fade", "zoom"):
+        if str(it.get("entrada") or "") in (
+                "pop", "deslizar", "direita", "baixo", "cima",
+                "fade", "zoom", "girar"):
             geo["entrada"] = str(it["entrada"])
-        if str(it.get("saida") or "") in ("encolher", "deslizar", "corte"):
+        if str(it.get("saida") or "") in (
+                "encolher", "deslizar", "esquerda", "baixo",
+                "zoom", "girar", "corte"):
             geo["saida"] = str(it["saida"])
         # enquadramento (que parte da imagem/video aparece): 0..1, 0,5=centro
         for foco in ("fx", "fy"):

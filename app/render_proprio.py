@@ -4001,11 +4001,11 @@ class Renderizador:
         # Entrada escolhida pelo usuario — MESMAS formulas do InsertCard:
         #   padrao   sobe 26px, escala 0,92 -> 1
         #   pop      escala 0,5 -> 1 com overshoot (back.out)
-        #   deslizar vem da esquerda (35% da largura do cartao)
-        #   fade     so opacidade
-        #   zoom     escala 1,25 -> 1
+        #   deslizar/direita/baixo/cima  vem daquele lado
+        #   fade so opacidade · zoom 1,25 -> 1 · girar -12 graus -> 0
         entrada = getattr(leg, "insert_entrada", "padrao")
         dx = 0.0
+        ang = 0.0
         if entrada == "pop":
             b = 1.0 + 2.70158 * (t - 1.0) ** 3 + 1.70158 * (t - 1.0) ** 2
             escala = (0.5 + 0.5 * b) * cresce
@@ -4014,39 +4014,70 @@ class Renderizador:
             escala = cresce
             dy = 0.0
             dx = -0.35 * cw * (1.0 - ent)
+        elif entrada == "direita":
+            escala = cresce
+            dy = 0.0
+            dx = 0.35 * cw * (1.0 - ent)
+        elif entrada == "baixo":
+            escala = cresce
+            dy = 0.45 * ch * (1.0 - ent)
+        elif entrada == "cima":
+            escala = cresce
+            dy = -0.45 * ch * (1.0 - ent)
         elif entrada == "fade":
             escala = cresce
             dy = 0.0
         elif entrada == "zoom":
             escala = (1.25 - 0.25 * ent) * cresce
             dy = 0.0
+        elif entrada == "girar":
+            escala = (0.85 + 0.15 * ent) * cresce
+            dy = 0.0
+            ang = -12.0 * (1.0 - ent)
         else:
             escala = (0.92 + 0.08 * ent) * cresce
             dy = 26.0 * (1.0 - ent)
         # Saida escolhida — espelho do template:
-        #   suave    so o fade (padrao)  ·  encolher  escala 1 -> 0,6
-        #   deslizar sai pela DIREITA    ·  corte     seco, sem fade
+        #   suave (fade) · encolher 1 -> 0,6 · deslizar p/ DIREITA ·
+        #   esquerda · baixo · zoom 1 -> 1,3 · girar +12 graus ·
+        #   corte seco (sem fade)
         if saida == "encolher":
             escala *= 1.0 - 0.4 * s_lin
         elif saida == "deslizar":
             dx += 0.35 * cw * s_lin
+        elif saida == "esquerda":
+            dx -= 0.35 * cw * s_lin
+        elif saida == "baixo":
+            dy += 0.45 * ch * s_lin
+        elif saida == "zoom":
+            escala *= 1.0 + 0.3 * s_lin
+        elif saida == "girar":
+            escala *= 1.0 - 0.15 * s_lin
+            ang += 12.0 * s_lin
         lw = max(1, int(round(cw * escala)))
         lh = max(1, int(round(ch * escala)))
         # `scale` do CSS cresce a partir do CENTRO da caixa
         cx = ccx + dx
         cy = ccy + dy
-        x0, y0 = int(round(cx - lw / 2)), int(round(cy - lh / 2))
         folga = 70
         L, A = lw + 2 * folga, lh + 2 * folga
         tela_im = sombra_im.resize((L, A), Image.BILINEAR)
         tela_im.alpha_composite(im.resize((lw, lh), Image.BILINEAR),
                                 (folga, folga))
+        if abs(ang) > 0.05:
+            # `rotate` do CSS gira em graus HORARIOS sobre o centro; o do
+            # Pillow e anti-horario — por isso o sinal trocado. `expand`
+            # cresce a tela e o centro continua sendo o centro.
+            tela_im = tela_im.rotate(-ang, resample=Image.BILINEAR,
+                                     expand=True)
+            L, A = tela_im.size
         comp = np.asarray(tela_im, dtype=np.uint8)
         if op < 0.996:
             comp = comp.copy()
             comp[..., 3] = (comp[..., 3] * op).astype(np.uint8)
-        # recorta no que cabe no quadro
-        fx, fy = x0 - folga, y0 - folga
+        # recorta no que cabe no quadro (posicao pelo CENTRO — com rotacao a
+        # tela expandida continua centrada no mesmo ponto)
+        fx, fy = int(round(cx - L / 2)), int(round(cy - A / 2))
         cx0, cy0 = max(0, fx), max(0, fy)
         cx1 = min(buf.shape[1], fx + L)
         cy1 = min(buf.shape[0], fy + A)

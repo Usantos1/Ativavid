@@ -1,5 +1,16 @@
 # Changelog
 
+## 4.63
+
+- **Botão "Animações" com o catálogo dobrado.** Na faixa fx, um botão só
+  abre o menu com as animações de entrada e de saída lado a lado.
+  Entradas novas: **Da direita, De baixo, De cima e Girar** (além de
+  Suave, Pop, Da esquerda, Fade e Zoom). Saídas novas: **P/ esquerda,
+  P/ baixo, Zoom e Girar** (além de Suave, Encolher, P/ direita e Corte).
+  O clique demonstra o movimento no cartão e o render sai igual nos dois
+  motores — inclusive a rotação do Girar, desenhada pixel a pixel no
+  motor rápido.
+
 ## 4.62
 
 - **Lados cortam, cantos redimensionam — como num editor profissional.**
