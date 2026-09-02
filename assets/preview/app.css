@@ -4177,3 +4177,29 @@ body > .fx-drop { position: fixed; bottom: auto; }
 /* faixa de midia ALTA como o filmstrip do video principal */
 .lane-midia { height: 58px; }
 .lane-midia .chip.insert.com-midia { font-size: 0; }
+
+/* listas de animacao com rolagem (18 entradas / 14 saidas) + demos novas */
+.fx-drop-col { max-height: 300px; overflow-y: auto; }
+@keyframes entDemoNenhum {
+  0% { opacity: 0; } 20% { opacity: 0; } 21% { opacity: 1; } 100% { opacity: 1; }
+}
+@keyframes entDemoCarimbo {
+  0%   { opacity: 0; transform: scale(1.9); }
+  30%  { opacity: 1; }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes demoPiscar {
+  0% { opacity: 0.15; } 16% { opacity: 1; } 33% { opacity: 0.15; }
+  50% { opacity: 1; } 66% { opacity: 0.3; } 100% { opacity: 1; }
+}
+@keyframes entDemoEsticar {
+  from { opacity: 0; transform: scaleY(0.05); }
+  to   { opacity: 1; transform: scaleY(1); }
+}
+.midia-previa-card.ent-demo-nenhum  { animation: entDemoNenhum .4s linear; }
+.midia-previa-card.ent-demo-carimbo { animation: entDemoCarimbo .3s ease-out; }
+.midia-previa-card.ent-demo-piscar  { animation: demoPiscar .4s linear; }
+.midia-previa-card.ent-demo-esticar { animation: entDemoEsticar .3s ease-out; }
+.midia-previa-card.sai-demo-nenhum  { animation: entDemoNenhum .4s linear reverse; }
+.midia-previa-card.sai-demo-piscar  { animation: demoPiscar .4s linear reverse; }
+.midia-previa-card.sai-demo-esticar { animation: entDemoEsticar .3s ease-in alternate 2 reverse; }

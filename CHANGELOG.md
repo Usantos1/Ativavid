@@ -1,5 +1,21 @@
 # Changelog
 
+## 4.68
+
+- **"Nenhum" nas animações — e mais 3 pares novos.** Agora dá para
+  desligar a animação de entrada e/ou de saída (**Nenhum**: aparece
+  inteiro no primeiro quadro / fica até o fim). E chegaram **Carimbo**
+  (bate grande e assenta, como a headline), **Piscar** (estroboscópio ao
+  entrar ou antes de sumir) e **Esticar** (abre/fecha na vertical, como
+  persiana). São **18 entradas e 14 saídas**, com rolagem no menu — tudo
+  idêntico nos dois motores de render.
+- **Trecho excluído não volta mais no refazer (vídeos de vários takes).**
+  Num vídeo do Multiplicador (ou de várias partes), excluir um trecho e
+  depois refazer — por exemplo, ao adicionar uma foto — remontava o corte
+  do zero e o trecho voltava. Agora o refazer mantém o seu corte, como já
+  acontecia nos vídeos de uma fonte só; mudar ritmo/intensidade/tipo
+  continua replanejando de propósito.
+
 ## 4.67
 
 - **Sem imagem dupla na aba Visual.** O vídeo final já traz a mídia

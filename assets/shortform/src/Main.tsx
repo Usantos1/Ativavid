@@ -572,6 +572,8 @@ const elastico = (p: number): number => {
   if (p >= 1) return 1;
   return 2 ** (-10 * p) * Math.sin((p * 10 - 0.75) * ((2 * Math.PI) / 3)) + 1;
 };
+// estroboscopio do PISCAR — espelho de _PISCA no motor próprio
+const PISCA = [0.15, 1, 0.15, 1, 0.3, 1];
 
 const InsertCard: React.FC<{
   src: string; totalFrames: number;
@@ -584,9 +586,21 @@ const InsertCard: React.FC<{
   const t = Math.min(1, Math.max(0, frame / 9));
   const enter = 1 - (1 - t) ** 3;
   const sLin = interpolate(frame, [totalFrames - 7, totalFrames], [0, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
-  // `corte` segura opacidade cheia até o fim (some no último quadro).
-  const exit = saida === 'corte' ? 1 : 1 - sLin;
-  const opacity = Math.min(enter, exit);
+  // OPACIDADE por efeito — espelho de _desenhar_insert:
+  //   nenhum aparece inteiro do quadro 0 · carimbo sobe rápido · piscar
+  //   estroboscópio · corte/nenhum na saída seguram cheio até o fim
+  let opEnt: number;
+  if (entrada === 'nenhum') opEnt = 1;
+  else if (entrada === 'carimbo') opEnt = Math.min(1, t * 2.5);
+  else if (entrada === 'piscar') opEnt = frame >= 0 && frame < 6 ? PISCA[frame] : 1;
+  else opEnt = enter;
+  let opSai: number;
+  if (saida === 'corte' || saida === 'nenhum') opSai = 1;
+  else if (saida === 'piscar') {
+    const idx = Math.round(totalFrames - 1 - frame);
+    opSai = idx >= 0 && idx < 6 ? PISCA[idx] : 1;
+  } else opSai = 1 - sLin;
+  const opacity = Math.min(opEnt, opSai);
   // dynamic zoom: the image itself grows slowly while on screen (Ken-Burns)
   const grow = interpolate(frame, [0, totalFrames], [1, 1.08], {extrapolateRight: 'clamp'});
   // Entrada escolhida pelo usuário no preview (espelho de _desenhar_insert):
@@ -595,7 +609,7 @@ const InsertCard: React.FC<{
   //   deslizar/direita/baixo/cima  vem daquele lado
   //   fade só opacidade · zoom 1,25 → 1 · girar −12° → 0
   let scale: number; let yEnt = 0; let xEnt = 0; let ang = 0;
-  let sx = 1; let desfoque = 0;
+  let sx = 1; let sy = 1; let desfoque = 0;
   if (entrada === 'pop') {
     const b = 1 + 2.70158 * (t - 1) ** 3 + 1.70158 * (t - 1) ** 2;
     scale = (0.5 + 0.5 * b) * grow;
@@ -621,6 +635,16 @@ const InsertCard: React.FC<{
   } else if (entrada === 'virar') {
     scale = grow;
     sx = Math.max(0.02, enter);
+  } else if (entrada === 'nenhum' || entrada === 'piscar') {
+    scale = grow;
+  } else if (entrada === 'carimbo') {
+    // bate grande e assenta em 7 quadros, como o carimbo da headline
+    const t7 = Math.min(1, Math.max(0, frame / 7));
+    const e7 = 1 - (1 - t7) ** 3;
+    scale = (1.9 - 0.9 * e7) * grow;
+  } else if (entrada === 'esticar') {
+    scale = grow;
+    sy = Math.max(0.03, enter);
   } else {
     scale = interpolate(enter, [0, 1], [0.92, 1]) * grow;
     yEnt = interpolate(enter, [0, 1], [26, 0]);
@@ -633,6 +657,7 @@ const InsertCard: React.FC<{
   if (saida === 'girar') { scale *= 1 - 0.15 * sLin; ang += 12 * sLin; }
   if (saida === 'borrao') desfoque = Math.max(desfoque, 14 * sLin);
   if (saida === 'virar') sx *= Math.max(0.02, 1 - sLin);
+  if (saida === 'esticar') sy *= Math.max(0.03, 1 - sLin);
   const {width: qLarg, height: qAlt} = useVideoConfig();
   // largura e ALTURA soltas: com a proporcao travada a imagem nunca cobria
   // a tela (o cartao e 780x500 e o quadro e 9:16)
@@ -657,7 +682,7 @@ const InsertCard: React.FC<{
   return (
     <AbsoluteFill>
       <Sfx src="whoosh.mp3" />
-      <div style={{position: 'absolute', width: larg, height: alt, left: cx - larg / 2, top: cy - alt / 2, borderRadius: arte ? 0 : Math.max(4, Math.round((28 * larg) / CARD_W)), overflow: 'hidden', opacity, scale: `${scale * sx} ${scale}`, translate: `${xEnt}px ${yEnt}px`,
+      <div style={{position: 'absolute', width: larg, height: alt, left: cx - larg / 2, top: cy - alt / 2, borderRadius: arte ? 0 : Math.max(4, Math.round((28 * larg) / CARD_W)), overflow: 'hidden', opacity, scale: `${scale * sx} ${scale * sy}`, translate: `${xEnt}px ${yEnt}px`,
         rotate: Math.abs(ang) > 0.05 ? `${ang}deg` : undefined,
         // Arte com transparencia (uma logo em PNG) nao quer cartao: a sombra
         // sai da FORMA dela, nao de um retangulo atras dela. O borrao entra

@@ -71,6 +71,11 @@ def _foco_do_insert(it: dict, chave: str) -> float:
         return 0.5
 
 
+# Padrao do PISCAR (estroboscopio): opacidade por QUADRO nos 6 primeiros
+# (entrada) / ultimos (saida). Espelho do PISCA do template.
+_PISCA = (0.15, 1.0, 0.15, 1.0, 0.3, 1.0)
+
+
 def _quique(p: float) -> float:
     """easeOutBounce clássico — a MESMA função do template (mudar lá e cá)."""
     n1, d1 = 7.5625, 2.75
@@ -4017,11 +4022,28 @@ class Renderizador:
         t = min(1.0, f / 9.0)
         ent = 1.0 - (1.0 - t) ** 3
         s_lin = 0.0 if f <= total - 7 else min(1.0, (f - (total - 7)) / 7.0)
+        entrada = getattr(leg, "insert_entrada", "padrao")
         saida = getattr(leg, "insert_saida", "suave")
-        # `corte` segura opacidade cheia ate o fim (some no ultimo quadro,
-        # como um corte seco); as outras saidas usam o fade de sempre.
-        sai = 1.0 if saida == "corte" else 1.0 - s_lin
-        op = min(ent, sai)
+        # OPACIDADE por efeito (espelho do InsertCard):
+        #   nenhum aparece inteiro do quadro 0 · carimbo sobe rapido
+        #   piscar estroboscopio nos 6 primeiros/ultimos quadros
+        #   corte/nenhum na saida seguram cheio ate o fim
+        if entrada == "nenhum":
+            op_ent = 1.0
+        elif entrada == "carimbo":
+            op_ent = min(1.0, t * 2.5)
+        elif entrada == "piscar":
+            op_ent = _PISCA[int(f)] if 0 <= int(f) < 6 else 1.0
+        else:
+            op_ent = ent
+        if saida in ("corte", "nenhum"):
+            op_sai = 1.0
+        elif saida == "piscar":
+            idx = int(round(total - 1 - f))
+            op_sai = _PISCA[idx] if 0 <= idx < 6 else 1.0
+        else:
+            op_sai = 1.0 - s_lin
+        op = min(op_ent, op_sai)
         if op <= 0.004:
             return
         cw, ch, ccx, ccy = getattr(
@@ -4035,10 +4057,10 @@ class Renderizador:
         #   pop      escala 0,5 -> 1 com overshoot (back.out)
         #   deslizar/direita/baixo/cima  vem daquele lado
         #   fade so opacidade · zoom 1,25 -> 1 · girar -12 graus -> 0
-        entrada = getattr(leg, "insert_entrada", "padrao")
         dx = 0.0
         ang = 0.0
         sx = 1.0          # escala so na LARGURA (efeito Virar)
+        sy = 1.0          # escala so na ALTURA (efeito Esticar)
         desfoque = 0.0    # raio do blur em px de 1080 (efeito Borrao)
         if entrada == "pop":
             b = 1.0 + 2.70158 * (t - 1.0) ** 3 + 1.70158 * (t - 1.0) ** 2
@@ -4087,6 +4109,19 @@ class Renderizador:
             escala = cresce
             dy = 0.0
             sx = max(0.02, ent)
+        elif entrada == "nenhum" or entrada == "piscar":
+            escala = cresce
+            dy = 0.0
+        elif entrada == "carimbo":
+            # bate grande e assenta em 7 quadros, como o carimbo da headline
+            t7 = min(1.0, f / 7.0)
+            e7 = 1.0 - (1.0 - t7) ** 3
+            escala = (1.9 - 0.9 * e7) * cresce
+            dy = 0.0
+        elif entrada == "esticar":
+            escala = cresce
+            dy = 0.0
+            sy = max(0.03, ent)
         else:
             escala = (0.92 + 0.08 * ent) * cresce
             dy = 26.0 * (1.0 - ent)
@@ -4113,8 +4148,10 @@ class Renderizador:
             desfoque = max(desfoque, 14.0 * s_lin)
         elif saida == "virar":
             sx *= max(0.02, 1.0 - s_lin)
+        elif saida == "esticar":
+            sy *= max(0.03, 1.0 - s_lin)
         lw = max(1, int(round(cw * escala * sx)))
-        lh = max(1, int(round(ch * escala)))
+        lh = max(1, int(round(ch * escala * sy)))
         # `scale` do CSS cresce a partir do CENTRO da caixa
         cx = ccx + dx
         cy = ccy + dy

@@ -3812,6 +3812,7 @@ function desenharMidiaNoPreview() {
  * posto na mao — entrada E saida. As mesmas formulas nos dois motores;
  * clicar ja demonstra o movimento no proprio cartao. */
 const ENTRADAS_DE_MIDIA = [
+  ['nenhum', 'Nenhum', 'Aparece de uma vez, sem animação'],
   ['padrao', 'Suave', 'Sobe e aparece (padrão)'],
   ['pop', 'Pop', 'Cresce com quique'],
   ['deslizar', 'Da esquerda', 'Entra pela esquerda'],
@@ -3826,8 +3827,12 @@ const ENTRADAS_DE_MIDIA = [
   ['balancar', 'Balançar', 'Pêndulo que assenta'],
   ['borrao', 'Borrão', 'Chega desfocado'],
   ['virar', 'Virar', 'Abre como uma porta'],
+  ['carimbo', 'Carimbo', 'Bate grande e assenta'],
+  ['piscar', 'Piscar', 'Pisca ao entrar'],
+  ['esticar', 'Esticar', 'Abre na vertical, como persiana'],
 ];
 const SAIDAS_DE_MIDIA = [
+  ['nenhum', 'Nenhum', 'Fica até o fim, sem animação'],
   ['suave', 'Suave', 'Some devagar (padrão)'],
   ['encolher', 'Encolher', 'Diminui e some'],
   ['deslizar', 'P/ direita', 'Sai pela direita'],
@@ -3838,6 +3843,8 @@ const SAIDAS_DE_MIDIA = [
   ['cima', 'P/ cima', 'Sobe e some'],
   ['borrao', 'Borrão', 'Desfoca e some'],
   ['virar', 'Virar', 'Fecha como uma porta'],
+  ['piscar', 'Piscar', 'Pisca antes de sumir'],
+  ['esticar', 'Esticar', 'Fecha na vertical, como persiana'],
   ['corte', 'Corte', 'Some de uma vez, sem fade'],
 ];
 const DEMOS_DE_MIDIA = [

@@ -290,6 +290,50 @@ def test_borrao_chega_desfocado(tmp_path):
     assert m2 > m14 * 2, f"não chegou desfocado: {m2} vs {m14}"
 
 
+def _alfa_max(rend, f):
+    import numpy as np
+
+    buf = np.zeros((H, W, 4), dtype=np.uint8)
+    for leg in rend.camadas:
+        if getattr(leg, "insert", None) is None:
+            continue
+        rend._desenhar_insert(leg, float(f - leg.inicio_f), buf, [0, 0, 0, 0], False)
+    return int(buf[..., 3].max())
+
+
+def test_nenhum_aparece_inteiro_no_quadro_zero(tmp_path):
+    rend = _renderizador(tmp_path, "nenhum")
+    assert _alfa_max(rend, 0) > 240, "entrada 'nenhum' tem de nascer inteira"
+    pad = _renderizador(tmp_path, None)
+    assert _alfa_max(pad, 0) < 40, "o padrão deveria nascer transparente"
+
+
+def test_carimbo_bate_grande(tmp_path):
+    rend = _renderizador(tmp_path, "carimbo")
+    l1, _, _ = _corpo(rend, 1)
+    l14, _, _ = _corpo(rend, 14)
+    # 1,2 e nao 1,57: no quadro 1 o cartao gigante ja estoura a borda da
+    # tela de teste (540px) e o corpo medido e o recorte
+    assert l1 > l14 * 1.2, f"carimbo não bateu grande: {l1} vs {l14}"
+
+
+def test_piscar_estroboscopa(tmp_path):
+    rend = _renderizador(tmp_path, "piscar")
+    a0 = _alfa_max(rend, 0)
+    a1 = _alfa_max(rend, 1)
+    assert a0 < 60, f"quadro 0 do piscar deveria estar apagado: {a0}"
+    assert a1 > 240, f"quadro 1 do piscar deveria estar aceso: {a1}"
+
+
+def test_esticar_abre_na_vertical(tmp_path):
+    """Inverso do virar: a ALTURA nasce esmagada, a largura vem inteira."""
+    rend = _renderizador(tmp_path, "esticar")
+    l1, a1, _ = _corpo(rend, 1)
+    l14, a14, _ = _corpo(rend, 14)
+    assert a1 < a14 * 0.6, f"altura não abriu: {a1} vs {a14}"
+    assert l1 > l14 * 0.8, f"a largura não deveria encolher: {l1} vs {l14}"
+
+
 def test_quem_entra_depois_pinta_por_cima(tmp_path):
     """Relato de 02/09: o cartão girando passava POR TRÁS de outra imagem.
     A ordem de pintura é a de INÍCIO na timeline, não a de criação — o
@@ -331,13 +375,16 @@ def test_template_e_motor_tem_as_mesmas_formulas():
     assert "entrada === 'zoom'" in tsx and "saida === 'encolher'" in tsx
     assert "saida === 'corte'" in tsx and "saida === 'deslizar'" in tsx
     for novo in ("'direita'", "'baixo'", "'cima'", "'girar'", "'esquerda'",
-                 "'quicar'", "'elastico'", "'balancar'", "'borrao'", "'virar'"):
+                 "'quicar'", "'elastico'", "'balancar'", "'borrao'", "'virar'",
+                 "'nenhum'", "'carimbo'", "'piscar'", "'esticar'"):
         assert novo in tsx, f"efeito {novo} sumiu do template"
     assert '"pop"' in py and '"deslizar"' in py
     assert '"zoom"' in py and '"encolher"' in py and '"corte"' in py
     for novo in ('"direita"', '"baixo"', '"cima"', '"girar"', '"esquerda"',
-                 '"quicar"', '"elastico"', '"balancar"', '"borrao"', '"virar"'):
+                 '"quicar"', '"elastico"', '"balancar"', '"borrao"', '"virar"',
+                 '"nenhum"', '"carimbo"', '"piscar"', '"esticar"'):
         assert novo in py, f"efeito {novo} sumiu do motor proprio"
+    assert "_PISCA" in py and "PISCA = [0.15" in tsx, "o estroboscopio divergiu"
     # os easings compartilhados e o blur com o sigma certo
     assert "def _quique" in py and "const quique" in tsx
     assert "def _elastico" in py and "const elastico" in tsx

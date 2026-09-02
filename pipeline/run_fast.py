@@ -904,11 +904,13 @@ def midia_do_editor(edit_dir: Path, public: Path, edit_data: dict) -> None:
         if str(it.get("entrada") or "") in (
                 "pop", "deslizar", "direita", "baixo", "cima",
                 "fade", "zoom", "girar",
-                "quicar", "elastico", "balancar", "borrao", "virar"):
+                "quicar", "elastico", "balancar", "borrao", "virar",
+                "nenhum", "carimbo", "piscar", "esticar"):
             geo["entrada"] = str(it["entrada"])
         if str(it.get("saida") or "") in (
                 "encolher", "deslizar", "esquerda", "baixo", "cima",
-                "zoom", "girar", "borrao", "virar", "corte"):
+                "zoom", "girar", "borrao", "virar", "corte",
+                "nenhum", "piscar", "esticar"):
             geo["saida"] = str(it["saida"])
         # enquadramento (que parte da imagem/video aparece): 0..1, 0,5=centro
         for foco in ("fx", "fy"):
@@ -1100,7 +1102,8 @@ def load_preview_edit_ranges(edit_dir: Path, source_key: str) -> list[dict] | No
 _CUT_STYLE_KEYS = ("rhythm", "intensity", "editingIntent", "contentType", "speechClean")
 
 
-def load_manual_edl_ranges(edit_dir: Path, source_key: str, preset: dict) -> list[dict] | None:
+def load_manual_edl_ranges(edit_dir: Path, source_key: str, preset: dict,
+                           fontes: set[str] | None = None) -> list[dict] | None:
     """Reprocesso respeita o corte que o usuário já aplicou no editor.
 
     Sem isto, um requeue por mudança de headline/estilo replaneja com a IA e
@@ -1159,8 +1162,14 @@ def load_manual_edl_ranges(edit_dir: Path, source_key: str, preset: dict) -> lis
         if not isinstance(r, dict):
             continue
         src = str(r.get("source") or source_key)
-        if src != source_key:
-            return None  # multi-take fica fora do reuso
+        # Multi-take REUSA desde a 4.68: sem isto, todo reprocesso de um
+        # filho do Multiplicador remontava o corte heuristico e RESSUSCITAVA
+        # o trecho que o usuario tinha excluido (caso real de 02/09 — ele
+        # apagou um pedaco, adicionou uma foto, refez, e o pedaco voltou).
+        # `fontes` valida que o EDL fala das fontes DESTE job; fora delas
+        # (reimport, estrutura mudou) o reuso nao se aplica.
+        if src not in (fontes if fontes else {source_key}):
+            return None
         try:
             start, end = float(r["start"]), float(r["end"])
         except (KeyError, TypeError, ValueError):
@@ -4051,9 +4060,15 @@ def run(
             pass
         print(f"[edits] corte do editor · {len(ranges)} takes", flush=True)
         set_stage(edit_dir, "planning", "Aplicando seus ajustes…", 38)
-    elif len(sources) == 1 and (manual := load_manual_edl_ranges(edit_dir, source_key, preset)):
+    elif (manual := load_manual_edl_ranges(
+            edit_dir, source_key, preset,
+            fontes=set(sources_map.keys()) or {source_key})):
+        # vale tambem para MULTI-TAKE (filho do Multiplicador): sem isto o
+        # reprocesso remontava o corte e ressuscitava trecho excluido
         ranges = manual
         llm_meta = {"ok": True, "backend": "manual_edl"}
+        if len(sources) > 1:
+            llm_meta["takes"] = len(sources)
         print(f"[edits] mantendo seu corte aplicado · {len(ranges)} takes", flush=True)
         set_stage(edit_dir, "planning", "Mantendo seus cortes…", 38)
     elif str(preset.get("editingIntent") or "").lower() == "intact" and len(sources) == 1:
