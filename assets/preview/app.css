@@ -3874,3 +3874,55 @@ body.styles-wide .setup-actions .btn.primary {
 /* Mesma armadilha do studio.css (4.42): `[hidden]` do navegador perde
    para qualquer `display` de autor. Aqui tambem o atributo manda. */
 [hidden] { display: none !important; }
+
+/* Take de video no cartao de midia (o <img> mostrava icone quebrado) */
+.midia-previa-card video { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+.midia-previa-card.arte video { object-fit: contain; }
+
+/* Seletor de ENTRADA do cartao (padrao/pop/deslizar) — aparece no hover */
+.midia-previa-entrada {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  translate: -50% 0;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity .15s;
+  z-index: 3;
+}
+.midia-previa-card:hover .midia-previa-entrada { opacity: 1; }
+.midia-previa-entrada .ent-btn {
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(0, 0, 0, 0.62);
+  color: #fff;
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  cursor: pointer;
+  line-height: 1;
+}
+.midia-previa-entrada .ent-btn.on {
+  background: var(--accent, #ff2e63);
+  border-color: transparent;
+}
+
+/* Demonstracao da entrada escolhida, no proprio cartao (espelha os motores:
+   9 quadros ~ 0,3s; padrao sobe 26px, pop 0,5->1 com quique, deslizar vem
+   da esquerda) */
+@keyframes entDemoPadrao {
+  from { opacity: 0; transform: translateY(26px) scale(0.92); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes entDemoPop {
+  0%   { opacity: 0; transform: scale(0.5); }
+  70%  { opacity: 1; transform: scale(1.05); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes entDemoDeslizar {
+  from { opacity: 0; transform: translateX(-35%); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.midia-previa-card.ent-demo-padrao   { animation: entDemoPadrao .3s ease-out; }
+.midia-previa-card.ent-demo-pop      { animation: entDemoPop .34s ease-out; }
+.midia-previa-card.ent-demo-deslizar { animation: entDemoDeslizar .3s ease-out; }

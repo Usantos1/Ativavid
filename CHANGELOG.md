@@ -1,5 +1,22 @@
 # Changelog
 
+## 4.58
+
+- **Vídeo adicionado à mão aparece de verdade no preview.** Um take de
+  vídeo posto pela caixa "imagem ou vídeo" saía como ícone de imagem
+  quebrada e, ao redimensionar, virava um pontinho invisível no canto.
+  Agora o cartão toca o vídeo (mudo, como no render) e o tamanho é
+  proporcional à tela — redimensionar a janela não desloca mais nada.
+- **Adicionou mídia, o "Aplicar alterações" acende.** Vídeo, imagem, som
+  ou emoji posto na mão agora conta como alteração pendente: o botão
+  vermelho de cima faz tudo em um clique (salva e envia à fila) — sem
+  precisar procurar o salvar dentro do "Mais…".
+- **Animação de entrada do vídeo/imagem, à sua escolha.** Passe o mouse
+  sobre o cartão no preview: Suave (sobe e aparece, o padrão), Pop
+  (cresce com quique) ou Deslizar (entra pela esquerda). O clique já
+  demonstra o movimento no próprio cartão, e o vídeo final sai igual nos
+  dois motores de render.
+
 ## 4.57
 
 - **Multiplicador de criativos.** Novo botão na tela inicial: você solta as

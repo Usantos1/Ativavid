@@ -502,6 +502,8 @@ class Camada:
     # (largura, altura, centro x, centro y) do cartao — o usuario pode mover
     # e redimensionar a imagem que ele mesmo pos
     insert_caixa: tuple | None = None
+    # animacao de entrada do cartao: padrao | pop | deslizar
+    insert_entrada: str = "padrao"
     cache_chave: tuple | None = None
     cache_tela: np.ndarray | None = None
     cache_pronto: np.ndarray | None = None
@@ -3901,6 +3903,9 @@ class Renderizador:
             leg.insert_quadros = (pasta, masc) if video else None
             # onde e de que tamanho: sem isto o desenho voltaria ao cartao fixo
             leg.insert_caixa = (cw, ch, ccx, ccy)
+            # animacao de ENTRADA escolhida pelo usuario no preview
+            # (padrao | pop | deslizar) — espelho do InsertCard do template
+            leg.insert_entrada = str(it.get("entrada") or "padrao")
             camadas.append(leg)
             self.eventos_sfx.append(("whoosh.mp3", ini / self.fps, 0.09))
         return camadas
@@ -3932,24 +3937,39 @@ class Renderizador:
                 else:
                     im = getattr(leg, "_take_im", None) or im
         # entra em 9 quadros (Easing.out cubic), sai nos ultimos 7
-        ent = min(1.0, f / 9.0)
-        ent = 1.0 - (1.0 - ent) ** 3
+        t = min(1.0, f / 9.0)
+        ent = 1.0 - (1.0 - t) ** 3
         sai = 1.0 if f <= total - 7 else max(0.0, (total - f) / 7.0)
         op = min(ent, sai)
         if op <= 0.004:
             return
-        # Ken-Burns: a imagem cresce 8% enquanto esta na tela
-        cresce = 1.0 + 0.08 * min(1.0, f / max(1.0, total))
-        escala = (0.92 + 0.08 * ent) * cresce
-        dy = 26.0 * (1.0 - ent)
         cw, ch, ccx, ccy = getattr(
             leg, "insert_caixa",
             (INSERT_W, INSERT_H, self.w / 2.0,
              INSERT_TOP + INSERT_H / 2.0))
+        # Ken-Burns: a imagem cresce 8% enquanto esta na tela
+        cresce = 1.0 + 0.08 * min(1.0, f / max(1.0, total))
+        # Entrada escolhida pelo usuario — MESMAS formulas do InsertCard:
+        #   padrao   sobe 26px, escala 0,92 -> 1
+        #   pop      escala 0,5 -> 1 com overshoot (back.out)
+        #   deslizar vem da esquerda (35% da largura do cartao)
+        entrada = getattr(leg, "insert_entrada", "padrao")
+        dx = 0.0
+        if entrada == "pop":
+            b = 1.0 + 2.70158 * (t - 1.0) ** 3 + 1.70158 * (t - 1.0) ** 2
+            escala = (0.5 + 0.5 * b) * cresce
+            dy = 0.0
+        elif entrada == "deslizar":
+            escala = cresce
+            dy = 0.0
+            dx = -0.35 * cw * (1.0 - ent)
+        else:
+            escala = (0.92 + 0.08 * ent) * cresce
+            dy = 26.0 * (1.0 - ent)
         lw = max(1, int(round(cw * escala)))
         lh = max(1, int(round(ch * escala)))
         # `scale` do CSS cresce a partir do CENTRO da caixa
-        cx = ccx
+        cx = ccx + dx
         cy = ccy + dy
         x0, y0 = int(round(cx - lw / 2)), int(round(cy - lh / 2))
         folga = 70

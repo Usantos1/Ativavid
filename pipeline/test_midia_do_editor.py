@@ -220,8 +220,11 @@ def test_o_cartao_nunca_deforma():
 def test_os_dois_motores_calculam_igual():
     repo = Path(__file__).resolve().parent.parent
     tsx = (repo / "assets" / "shortform" / "src" / "Main.tsx").read_text(encoding="utf-8")
+    # a função INTEIRA, não uma janela fixa de chars — janela fixa quebra
+    # quando a função cresce (a mesma lição do teste do card, 3.15)
     i = tsx.index("const InsertCard")
-    bloco = tsx[i:i + 2200]
+    fim = tsx.index("\nconst Inserts", i)
+    bloco = tsx[i:fim]
     assert "(larg * CARD_H) / CARD_W" in bloco      # altura pela proporção
     assert "cx - larg / 2" in bloco                 # x/y são o centro
     assert "(CARD_TOP + CARD_H / 2) / 1920" in bloco  # mesmo padrão

@@ -906,6 +906,9 @@ def midia_do_editor(edit_dir: Path, public: Path, edit_data: dict) -> None:
                 continue
             piso = 0.02 if chave in ("x", "y") else 0.05
             geo[chave] = min(lim, max(piso, v))
+        # animacao de entrada escolhida no preview; valor estranho vira padrao
+        if str(it.get("entrada") or "") in ("pop", "deslizar"):
+            geo["entrada"] = str(it["entrada"])
         inserts.append({"src": src, "start": round(ini, 3),
                         "end": round(fim, 3),
                         "credit": str(it.get("credit") or ""),

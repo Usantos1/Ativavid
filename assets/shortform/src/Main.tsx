@@ -561,16 +561,31 @@ const ehVideo = (s: string) => /\.(mp4|mov|webm)$/i.test(s);
 const InsertCard: React.FC<{
   src: string; totalFrames: number;
   x?: number; y?: number; size?: number; w?: number; h?: number;
-}> = ({src, totalFrames, x, y, size, w, h}) => {
+  entrada?: string;
+}> = ({src, totalFrames, x, y, size, w, h, entrada}) => {
   const frame = useCurrentFrame();
-  const enter = interpolate(frame, [0, 9], [0, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic)});
+  // `t` cru e `enter` (cubic-out) — as MESMAS contas de `_desenhar_insert`
+  // no motor próprio; mudar aqui exige mudar lá.
+  const t = Math.min(1, Math.max(0, frame / 9));
+  const enter = 1 - (1 - t) ** 3;
   const exit = interpolate(frame, [totalFrames - 7, totalFrames], [1, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
   const opacity = Math.min(enter, exit);
   // dynamic zoom: the image itself grows slowly while on screen (Ken-Burns)
   const grow = interpolate(frame, [0, totalFrames], [1, 1.08], {extrapolateRight: 'clamp'});
-  const scale = interpolate(enter, [0, 1], [0.92, 1]) * grow;
-  // `y` virou a POSICAO (prop); esta e a subida de entrada
-  const yEnt = interpolate(enter, [0, 1], [26, 0]);
+  // Entrada escolhida pelo usuário no preview:
+  //   padrao   sobe 26px, escala 0,92 → 1
+  //   pop      escala 0,5 → 1 com overshoot (back.out)
+  //   deslizar vem da esquerda (35% da largura do cartão)
+  let scale: number; let yEnt = 0; let xEnt = 0;
+  if (entrada === 'pop') {
+    const b = 1 + 2.70158 * (t - 1) ** 3 + 1.70158 * (t - 1) ** 2;
+    scale = (0.5 + 0.5 * b) * grow;
+  } else if (entrada === 'deslizar') {
+    scale = grow;
+  } else {
+    scale = interpolate(enter, [0, 1], [0.92, 1]) * grow;
+    yEnt = interpolate(enter, [0, 1], [26, 0]);
+  }
   const {width: qLarg, height: qAlt} = useVideoConfig();
   // largura e ALTURA soltas: com a proporcao travada a imagem nunca cobria
   // a tela (o cartao e 780x500 e o quadro e 9:16)
@@ -583,10 +598,11 @@ const InsertCard: React.FC<{
   const alt = Math.max(16, Math.round(Math.min(1, Math.max(0.05, h ?? altPadrao)) * qAlt));
   const cx = Math.min(1, Math.max(0, x ?? 0.5)) * qLarg;
   const cy = Math.min(1, Math.max(0, y ?? (CARD_TOP + CARD_H / 2) / 1920)) * qAlt;
+  if (entrada === 'deslizar') xEnt = -0.35 * larg * (1 - enter);
   return (
     <AbsoluteFill>
       <Sfx src="whoosh.mp3" />
-      <div style={{position: 'absolute', width: larg, height: alt, left: cx - larg / 2, top: cy - alt / 2, borderRadius: arte ? 0 : Math.max(4, Math.round((28 * larg) / CARD_W)), overflow: 'hidden', opacity, scale: String(scale), translate: `0px ${yEnt}px`,
+      <div style={{position: 'absolute', width: larg, height: alt, left: cx - larg / 2, top: cy - alt / 2, borderRadius: arte ? 0 : Math.max(4, Math.round((28 * larg) / CARD_W)), overflow: 'hidden', opacity, scale: String(scale), translate: `${xEnt}px ${yEnt}px`,
         // Arte com transparencia (uma logo em PNG) nao quer cartao: a sombra
         // sai da FORMA dela, nao de um retangulo atras dela.
         boxShadow: arte ? undefined : '0 18px 50px rgba(0,0,0,0.45)',
@@ -615,7 +631,8 @@ const Inserts: React.FC = () => {
           <Sequence key={i} from={from} durationInFrames={duration} layout="none">
             <InsertCard src={it.src} totalFrames={duration}
               x={(it as any).x} y={(it as any).y} size={(it as any).size}
-              w={(it as any).w} h={(it as any).h} />
+              w={(it as any).w} h={(it as any).h}
+              entrada={(it as any).entrada} />
           </Sequence>
         );
       })}

@@ -1906,11 +1906,15 @@ function pendingFlags() {
       || (S.capApagadas || []).length > 0,
     edl: !!d.edl || edlDirty(),
     style: !!d.style,
+    // Midia posta na mao (imagem/video/som/emoji) TAMBEM e alteracao
+    // pendente: sem isto o "Aplicar alteracoes" ficava apagado depois de
+    // adicionar um video e o usuario tinha de achar o salvar no "Mais…".
+    midia: insertsDirty(),
   };
 }
 function pendingList() {
   const f = pendingFlags();
-  const labels = { headline: 'headline', captions: 'legenda', edl: 'corte', style: 'estilo' };
+  const labels = { headline: 'headline', captions: 'legenda', edl: 'corte', style: 'estilo', midia: 'mídia' };
   return Object.keys(labels).filter((k) => f[k]).map((k) => labels[k]);
 }
 function refreshHeader() {
@@ -3644,7 +3648,10 @@ function desenharMidiaNoPreview() {
     && (c.kind === 'emoji' || c.kind === 'insert'));
   const chave = agora.map((c) => `${c.kind}:${c.label}:${c.start}`).join('|');
   if (box.dataset.chave === chave) return;   // sem repintar a cada quadro
-  box.dataset.chave = chave;
+  // Caixa ainda sem tamanho (video carregando): pintar agora sairia um
+  // cartao de pixels — pinta, mas SEM gravar a chave, para a proxima
+  // chamada repintar com a caixa de verdade.
+  box.dataset.chave = box.clientWidth > 40 ? chave : '';
   box.innerHTML = '';
   for (const c of agora) {
     if (c.kind === 'emoji') {
@@ -3666,14 +3673,61 @@ function desenharMidiaNoPreview() {
     // ambos em fracao do quadro; a altura segue a proporcao do cartao
     posicionarCartao(card, c, box);
     if (c.src) {
-      const img = el('img', '', card);
-      img.src = `${BASE}/media/remotion/public/${c.src}`;
-      img.alt = '';
+      // Take de VIDEO nao cabe num <img>: saia o icone de imagem quebrada
+      // (print de 01/09) e redimensionar "sumia" com o cartao. O render toca
+      // o take mudo — o preview mostra o mesmo, rodando em loop.
+      if (/\.(mp4|mov|m4v|webm|mkv)$/i.test(String(c.src))) {
+        const vid = el('video', '', card);
+        vid.src = `${BASE}/media/remotion/public/${c.src}`;
+        vid.muted = true;
+        vid.loop = true;
+        vid.autoplay = true;
+        vid.playsInline = true;
+        vid.play().catch(() => {});
+      } else {
+        const img = el('img', '', card);
+        img.src = `${BASE}/media/remotion/public/${c.src}`;
+        img.alt = '';
+      }
     }
     // a etiqueta com o nome do arquivo nao entra na arte: ela e uma faixa
     // preta, que e justamente o que a arte nao quer atras dela
     if (!arte) el('div', 'midia-previa-nome', card).textContent = c.label || '';
+    // Entrada do cartao (padrao/pop/deslizar) — escolhida aqui, desenhada
+    // igual nos dois motores. Aparece ao passar o mouse sobre o cartao.
+    if (c.kind === 'insert') seletorDeEntrada(card, c);
     cartaoArrastavel(card, c, box);
+  }
+}
+
+/* O usuario pediu (01/09) para ESCOLHER a animacao de entrada do video ou
+ * imagem posto na mao. Tres opcoes, as mesmas formulas nos dois motores;
+ * clicar ja mostra a animacao no proprio cartao. */
+const ENTRADAS_DE_MIDIA = [
+  ['padrao', 'Suave', 'Sobe e aparece (padrão)'],
+  ['pop', 'Pop', 'Cresce com quique'],
+  ['deslizar', 'Deslizar', 'Entra pela esquerda'],
+];
+
+function seletorDeEntrada(card, c) {
+  const barra = el('div', 'midia-previa-entrada', card);
+  for (const [id, rotulo, dica] of ENTRADAS_DE_MIDIA) {
+    const b = el('button', `ent-btn${(c.entrada || 'padrao') === id ? ' on' : ''}`, barra);
+    b.type = 'button';
+    b.textContent = rotulo;
+    b.title = dica;
+    b.addEventListener('pointerdown', (e) => e.stopPropagation());
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      c.entrada = id === 'padrao' ? null : id;
+      barra.querySelectorAll('.ent-btn').forEach((x) => x.classList.toggle('on', x === b));
+      // demonstra a escolha no proprio cartao
+      card.classList.remove('ent-demo-padrao', 'ent-demo-pop', 'ent-demo-deslizar');
+      void card.offsetWidth;   // reinicia a animacao CSS
+      card.classList.add(`ent-demo-${id}`);
+      refreshHeader();
+      scheduleAutosave();
+    });
   }
 }
 
@@ -3775,12 +3829,16 @@ function alturaDoCartao(c, box) {
   return Math.min(1, Math.max(0.05, c.h ?? padrao));
 }
 function posicionarCartao(card, c, box) {
-  const lp = larguraDoCartao(c) * box.clientWidth;
-  const ap = alturaDoCartao(c, box) * box.clientHeight;
-  card.style.width = `${lp}px`;
-  card.style.height = `${ap}px`;
-  card.style.left = `${(c.x ?? 0.5) * box.clientWidth - lp / 2}px`;
-  card.style.top = `${(c.y ?? CARTAO_Y_PAD) * box.clientHeight - ap / 2}px`;
+  // PORCENTAGEM, nao pixel: com pixels o cartao ficava do tamanho que a
+  // caixa tinha NA HORA da pintura — redimensionar a janela (ou pintar
+  // antes do video assentar) deixava um cartao de 12x7px no canto ("nao da
+  // pra ver", print de 01/09). Em %, o cartao acompanha a caixa sozinho.
+  const lw = larguraDoCartao(c);
+  const lh = alturaDoCartao(c, box);
+  card.style.width = `${lw * 100}%`;
+  card.style.height = `${lh * 100}%`;
+  card.style.left = `${((c.x ?? 0.5) - lw / 2) * 100}%`;
+  card.style.top = `${((c.y ?? CARTAO_Y_PAD) - lh / 2) * 100}%`;
 }
 
 /* Quatro cantos e quatro lados. Cada alca puxa o SEU lado e deixa o oposto
@@ -6890,6 +6948,8 @@ async function saveEditsAndReturnToQueue() {
         ...(c.size != null ? { size: +c.size } : {}),
         ...(c.w != null ? { w: +c.w } : {}),
         ...(c.h != null ? { h: +c.h } : {}),
+        // animacao de entrada escolhida no cartao do preview
+        ...(c.entrada ? { entrada: c.entrada } : {}),
       })),
       // Emoji: comeco E duracao (ele fica na tela enquanto o bloco durar).
       emojis: S.insertsDraft.filter((c) => c.kind === 'emoji' && c.char).map((c) => ({
@@ -7177,6 +7237,17 @@ $('btnSave').addEventListener('click', async () => {
 if ($('btnApply')) {
   $('btnApply').addEventListener('click', async () => {
     if (S.applying || pendingList().length === 0) return;
+    // O que esta so na sessao (video/imagem/som posto na mao, corte, nota,
+    // conserto de legenda) vai pelo MESMO caminho do salvar — que ja grava,
+    // decide entre Aplicar rapido e fila, e leva para a Fila. Um clique faz
+    // tudo. Antes, quem adicionava um video via o Aplicar apagado e tinha
+    // de achar o salvar dentro do "Mais…".
+    const temSessao = edlDirty() || insertsDirty() || S.notes.length
+      || Object.keys(S.captionFixes).length || (S.capApagadas || []).length;
+    if (temSessao) {
+      await saveEditsAndReturnToQueue();
+      return;
+    }
     S.applying = true;
     document.body.classList.add('applying-corrections');
     refreshHeader();
