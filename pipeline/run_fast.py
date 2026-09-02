@@ -4488,7 +4488,18 @@ def run(
             check=False,
         )
         _helper("chapters.py", str(edit_dir / "edl.json"), "-o", str(edit_dir / "chapters.txt"), check=False)
-        (public / "captions.json").write_text("[]", encoding="utf-8")
+        # Desde 02/09 ("cade a legenda?") a legenda do longform TAMBÉM é
+        # queimada no vídeo (o compose lê captions.json) e o editor ganha a
+        # faixa de legenda — o .srt continua saindo para o CC do YouTube.
+        _helper(
+            "captions_for_remotion.py",
+            "--transcript", str(edit_dir / "transcripts" / "cut.json"),
+            "-o", str(public / "captions.json"),
+            "--max-sec", f"{duration:.6f}",
+            check=False,
+        )
+        if not (public / "captions.json").exists():
+            (public / "captions.json").write_text("[]", encoding="utf-8")
         (public / "caption-cues.json").write_text("[]", encoding="utf-8")
     else:
         cut_tr = edit_dir / "transcripts" / "cut.json"

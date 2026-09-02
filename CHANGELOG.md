@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.80
+
+- **O vídeo longo agora sai com a legenda queimada.** Antes ela ia só
+  como arquivo .srt (para o CC do YouTube) e o editor ficava sem a faixa
+  de legenda — "cadê a legenda?". Agora ela aparece no próprio vídeo
+  (embaixo, centralizada, estilo 16:9), a faixa volta ao editor para
+  corrigir o texto, e o .srt continua saindo — corrigiu no editor, vale
+  para o vídeo e para o arquivo.
+
 ## 4.79
 
 - **Áudio do vídeo longo com o teto certo.** O primeiro vídeo longo pelo

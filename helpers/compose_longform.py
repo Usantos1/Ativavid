@@ -192,6 +192,87 @@ def _pintar_callout(tela: Image.Image, item: dict, f: int, total: int,
     tela.alpha_composite(caixa, (max(-caixa.width, cx), max(-caixa.height, cy)))
 
 
+# ------------------------------------------------------- legenda queimada
+# Pedido de 02/09 ("cade a legenda?"): o longform passou a QUEIMAR a
+# legenda no vídeo, além do .srt para o CC do YouTube. A fonte é o
+# captions.json (palavra a palavra) — o MESMO arquivo que o editor corrige,
+# então conserto de texto vale para o vídeo e para o .srt.
+
+def _paginas_de_legenda(palavras: list[dict]) -> list[dict]:
+    """Agrupa as palavras em páginas de legenda para o 16:9: até 7
+    palavras/42 caracteres, quebrando em pontuação final e em pausas."""
+    paginas: list[dict] = []
+    atual: list[dict] = []
+
+    def _fechar() -> None:
+        if not atual:
+            return
+        t0 = float(atual[0].get("startMs") or 0) / 1000.0
+        t1 = float(atual[-1].get("endMs") or 0) / 1000.0
+        texto = " ".join(str(w.get("text") or "").strip() for w in atual)
+        texto = texto.replace("{", "").replace("}", "").strip()
+        if texto and t1 > t0:
+            paginas.append({"t0": t0, "t1": t1, "texto": texto})
+        atual.clear()
+
+    anterior_fim = None
+    for w in palavras:
+        if not isinstance(w, dict) or not str(w.get("text") or "").strip():
+            continue
+        ini = float(w.get("startMs") or 0)
+        if anterior_fim is not None and ini - anterior_fim >= 800:
+            _fechar()
+        atual.append(w)
+        anterior_fim = float(w.get("endMs") or ini)
+        chars = sum(len(str(x.get("text") or "")) + 1 for x in atual)
+        if (len(atual) >= 7 or chars >= 42
+                or str(w.get("text") or "").rstrip()[-1:] in ".!?…"):
+            _fechar()
+    _fechar()
+    return paginas
+
+
+def _t_ass(seg: float) -> str:
+    cs = int(round(max(0.0, seg) * 100))
+    return f"{cs // 360000}:{cs // 6000 % 60:02d}:{cs // 100 % 60:02d}.{cs % 100:02d}"
+
+
+def _escrever_ass(paginas: list[dict], destino: Path) -> None:
+    linhas = [
+        "[Script Info]", "ScriptType: v4.00+",
+        "PlayResX: 1920", "PlayResY: 1080", "",
+        "[V4+ Styles]",
+        "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, "
+        "OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, "
+        "ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
+        "Alignment, MarginL, MarginR, MarginV, Encoding",
+        # branca, contorno preto 3px, sombra leve, embaixo e centralizada
+        "Style: Legenda,Poppins SemiBold,52,&H00FFFFFF,&H00FFFFFF,"
+        "&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3,1,2,96,96,72,1",
+        "", "[Events]",
+        "Format: Layer, Start, End, Style, Name, MarginL, MarginR, "
+        "MarginV, Effect, Text",
+    ]
+    for p in paginas:
+        linhas.append(f"Dialogue: 0,{_t_ass(p['t0'])},{_t_ass(p['t1'])},"
+                      f"Legenda,,0,0,0,,{p['texto']}")
+    destino.write_text("\n".join(linhas) + "\n", encoding="utf-8")
+
+
+def _t_srt(seg: float) -> str:
+    ms = int(round(max(0.0, seg) * 1000))
+    return (f"{ms // 3600000:02d}:{ms // 60000 % 60:02d}:"
+            f"{ms // 1000 % 60:02d},{ms % 1000:03d}")
+
+
+def _escrever_srt(paginas: list[dict], destino: Path) -> None:
+    blocos = []
+    for n, p in enumerate(paginas, 1):
+        blocos.append(f"{n}\n{_t_srt(p['t0'])} --> {_t_srt(p['t1'])}\n"
+                      f"{p['texto']}\n")
+    destino.write_text("\n".join(blocos), encoding="utf-8")
+
+
 # ------------------------------------------------------------ orquestra
 _DUR_PADRAO = {"chapters": 2.4, "lowerThirds": 4.0, "callouts": 3.0}
 _PINTOR = {"chapters": _pintar_capitulo, "lowerThirds": _pintar_lower_third,
@@ -298,7 +379,28 @@ def compor_longform(edit_dir: Path, public: Path, ed: dict,
                 f"{atual}[ov{n}]overlay=x=0:y=0:eof_action=pass"
                 f":enable='between(t,{s:.6f},{e:.6f})'[v{n}]")
             atual = f"[v{n}]"
-        cadeia.append(f"{atual}format=yuv420p[vout]")
+
+        # Legenda queimada, POR CIMA de tudo (regra da casa). O caminho é
+        # relativo ao cwd do ffmpeg (o tmp): o dois-pontos do drive do
+        # Windows quebraria o parser do filtro subtitles.
+        paginas: list[dict] = []
+        try:
+            palavras = json.loads((public / "captions.json")
+                                  .read_text(encoding="utf-8-sig"))
+            paginas = _paginas_de_legenda(palavras if isinstance(palavras, list)
+                                          else [])
+        except (OSError, json.JSONDecodeError):
+            pass
+        filtro_legenda = ""
+        if paginas:
+            _escrever_ass(paginas, tmp / "legenda.ass")
+            _escrever_srt(paginas, edit_dir / "captions.srt")
+            (tmp / "fonts").mkdir(exist_ok=True)
+            import shutil as _sh
+            for nome in ("Poppins-SemiBold.ttf", "Poppins-Black.ttf"):
+                _sh.copy2(FONTES / nome, tmp / "fonts" / nome)
+            filtro_legenda = "subtitles=legenda.ass:fontsdir=fonts,"
+        cadeia.append(f"{atual}{filtro_legenda}format=yuv420p[vout]")
 
         # ---- áudio: voz do cut + trilha com envelope + sfx dos elementos
         rotulos = ["[voz]"]
@@ -351,8 +453,11 @@ def compor_longform(edit_dir: Path, public: Path, ed: dict,
                     "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
                     "-t", f"{dur:.6f}", "-movflags", "+faststart",
                     str(destino)])
+            # cwd no tmp: o filtro subtitles referencia legenda.ass/fonts
+            # por caminho RELATIVO (o ":" do drive quebraria o parser)
             return subprocess.run(cmd, capture_output=True, text=True,
-                                  encoding="utf-8", errors="replace")
+                                  encoding="utf-8", errors="replace",
+                                  cwd=str(tmp))
 
         engine = "nvenc" if _tem_nvenc() else "x264"
         if engine == "nvenc":
