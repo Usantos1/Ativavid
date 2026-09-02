@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.70
+
+- **A Biblioteca mostra a miniatura dos vídeos.** No "Inserir imagem /
+  B-roll", os clipes de vídeo apareciam como cartão escuro com um play —
+  sem dar para saber qual vídeo era. Agora cada clipe mostra um quadro do
+  próprio vídeo, com o play como selo por cima.
+
 ## 4.69
 
 - **Mudou no Estilo, aplicou na Edição — vai tudo junto.** Antes, mexer

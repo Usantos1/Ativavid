@@ -106,3 +106,18 @@ def test_editor_nao_varre_mais_o_manual_no_limpa():
     # na aba VISUAL o final ja tem a midia queimada: o cartao aplicado NAO
     # desenha por cima (imagem dupla com "a de tras se mexendo", 02/09)
     assert "c.manual && !naFinal" in js
+
+
+def test_clipe_da_biblioteca_mostra_um_quadro():
+    """No seletor 'Inserir imagem / B-roll' o clipe saia como cartao escuro
+    com um play — sem miniatura nao da para saber qual video e (02/09). O
+    capturador de quadro e UM so, com cache por URL, servindo o seletor e
+    os blocos da timeline."""
+    js = (REPO / "assets" / "preview" / "app.js").read_text(encoding="utf-8")
+    assert "function capturarQuadroDeVideo" in js
+    i = js.index("if (it.kind === 'clip') {")
+    assert "capturarQuadroDeVideo(thumb" in js[i:i + 700], (
+        "o clipe da Biblioteca voltou a ficar sem miniatura")
+    # e os blocos da timeline usam o MESMO capturador
+    j = js.index("function miniaturaNoChip")
+    assert "capturarQuadroDeVideo(url" in js[j:j + 600]

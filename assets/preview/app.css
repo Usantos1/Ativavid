@@ -4203,3 +4203,11 @@ body > .fx-drop { position: fixed; bottom: auto; }
 .midia-previa-card.sai-demo-nenhum  { animation: entDemoNenhum .4s linear reverse; }
 .midia-previa-card.sai-demo-piscar  { animation: demoPiscar .4s linear reverse; }
 .midia-previa-card.sai-demo-esticar { animation: entDemoEsticar .3s ease-in alternate 2 reverse; }
+
+/* clipe da Biblioteca com QUADRO do video de fundo; o play vira selo */
+.img-clip-ph.com-quadro {
+  background-size: cover;
+  background-position: center;
+  color: rgba(255, 255, 255, 0.92);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
+}

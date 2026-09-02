@@ -3683,19 +3683,16 @@ const LAYOUTS_COM_PREVIA = ['degrade', 'vinheta', 'cinema', 'borda'];
  * entra como fundo repetido (filmstrip); vídeo ganha UM quadro capturado
  * via canvas, com cache por src — capturar é caro e os chips repintam a
  * toda hora. O nome continua no title (tooltip). */
-const MINIATURAS = new Map();   // src -> dataURL ('' = captura em andamento)
+const MINIATURAS = new Map();   // url -> dataURL, ou lista de callbacks em voo
 
-function miniaturaNoChip(chip, src) {
-  chip.classList.add('com-midia');
-  const url = mediaHref(`remotion/public/${src}`);
-  if (!/\.(mp4|mov|m4v|webm|mkv)$/i.test(String(src))) {
-    chip.style.backgroundImage = `url("${url}")`;
-    return;
-  }
-  const pronta = MINIATURAS.get(src);
-  if (pronta) { chip.style.backgroundImage = `url("${pronta}")`; return; }
-  if (pronta === '') return;   // outra captura em voo pinta ao terminar
-  MINIATURAS.set(src, '');
+/* Captura UM quadro de um vídeo (com cache por URL) e entrega por callback.
+ * Serve os blocos da timeline E os cartões da Biblioteca — capturar é caro
+ * e as duas telas pedem o mesmo quadro. */
+function capturarQuadroDeVideo(url, cb) {
+  const atual = MINIATURAS.get(url);
+  if (typeof atual === 'string' && atual) { cb(atual); return; }
+  if (Array.isArray(atual)) { atual.push(cb); return; }
+  MINIATURAS.set(url, [cb]);
   const v = document.createElement('video');
   v.muted = true;
   v.preload = 'metadata';
@@ -3707,18 +3704,32 @@ function miniaturaNoChip(chip, src) {
   v.addEventListener('seeked', () => {
     try {
       const cv = document.createElement('canvas');
-      const esc = 72 / Math.max(1, v.videoHeight);
+      const esc = 120 / Math.max(1, v.videoHeight);
       cv.width = Math.max(1, Math.round(v.videoWidth * esc));
-      cv.height = 72;
+      cv.height = 120;
       cv.getContext('2d').drawImage(v, 0, 0, cv.width, cv.height);
-      const data = cv.toDataURL('image/jpeg', 0.6);
-      MINIATURAS.set(src, data);
-      document.querySelectorAll(`.chip.insert[data-src="${CSS.escape(src)}"]`)
-        .forEach((ch) => { ch.style.backgroundImage = `url("${data}")`; });
-    } catch { MINIATURAS.delete(src); }
+      const data = cv.toDataURL('image/jpeg', 0.65);
+      const fila = MINIATURAS.get(url);
+      MINIATURAS.set(url, data);
+      (Array.isArray(fila) ? fila : []).forEach((f) => { try { f(data); } catch { /* segue */ } });
+    } catch { MINIATURAS.delete(url); }
     v.removeAttribute('src');
   }, { once: true });
-  v.addEventListener('error', () => MINIATURAS.delete(src), { once: true });
+  v.addEventListener('error', () => MINIATURAS.delete(url), { once: true });
+}
+
+function miniaturaNoChip(chip, src) {
+  chip.classList.add('com-midia');
+  const url = mediaHref(`remotion/public/${src}`);
+  if (!/\.(mp4|mov|m4v|webm|mkv)$/i.test(String(src))) {
+    chip.style.backgroundImage = `url("${url}")`;
+    return;
+  }
+  capturarQuadroDeVideo(url, (data) => {
+    document.querySelectorAll(`.chip.insert[data-src="${CSS.escape(src)}"]`)
+      .forEach((ch) => { ch.style.backgroundImage = `url("${data}")`; });
+    if (chip.isConnected) chip.style.backgroundImage = `url("${data}")`;
+  });
 }
 
 function desenharMidiaNoPreview() {
@@ -6926,7 +6937,17 @@ async function loadLibraryResults() {
     const card = el('button', 'img-card', box);
     const thumb = `/api/library/file?rel=${encodeURIComponent(it.rel)}`;
     if (it.kind === 'clip') {
+      // O clipe MOSTRA um quadro do vídeo (pedido de 02/09: "aqui não
+      // mostra preview do vídeo") — o ▶ vira selo por cima da miniatura.
       card.innerHTML = `<div class="img-clip-ph">▶</div><span class="img-credit">${it.name}</span>`;
+      capturarQuadroDeVideo(thumb, (data) => {
+        if (!card.isConnected) return;
+        const ph = card.querySelector('.img-clip-ph');
+        if (ph) {
+          ph.classList.add('com-quadro');
+          ph.style.backgroundImage = `url("${data}")`;
+        }
+      });
     } else if (it.kind === 'sfx') {
       // som nao tem miniatura: o cartao dizia `<img src=...mp3>` e saia quebrado
       card.innerHTML = `<div class="img-clip-ph som">♪</div>`
