@@ -1,5 +1,19 @@
 # Changelog
 
+## 4.64
+
+- **Mais 8 animações no menu.** Entradas novas: **Quicar** (cai de cima e
+  quica), **Elástico** (estica como mola), **Balançar** (pêndulo que
+  assenta), **Borrão** (chega desfocado) e **Virar** (abre como uma
+  porta) — 14 entradas no total. Saídas novas: **P/ cima**, **Borrão** e
+  **Virar** — 11 saídas. Tudo com o mesmo desenho nos dois motores de
+  render, inclusive o desfoque, calibrado para o motor rápido sair igual
+  ao navegador.
+- **Animação não passa mais por trás de outra imagem.** A ordem das
+  camadas agora é a da timeline: quem entra depois fica por cima (nos
+  dois motores e no preview), e o cartão selecionado sobe ao topo
+  enquanto você mexe nele.
+
 ## 4.63
 
 - **Botão "Animações" com o catálogo dobrado.** Na faixa fx, um botão só

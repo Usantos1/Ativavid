@@ -3686,6 +3686,8 @@ function desenharMidiaNoPreview() {
     (c) => t >= c.start && t < c.end
     && ((c.kind === 'emoji' && c.isNew)
       || (c.kind === 'insert' && (c.isNew || c.manual))));
+  // mesma ordem de pintura dos motores: quem entra depois fica por cima
+  agora.sort((a, b) => (a.start || 0) - (b.start || 0));
   const chave = agora.map((c) => `${c.kind}:${c.label}:${c.start}`).join('|');
   if (box.dataset.chave === chave) return;   // sem repintar a cada quadro
   // Caixa ainda sem tamanho (video carregando): pintar agora sairia um
@@ -3745,6 +3747,9 @@ function desenharMidiaNoPreview() {
     card.dataset.idx = String(idx);
     aplicarEnquadramento(card, c);
     if (S.enquadrando === idx) card.classList.add('enquadrando');
+    // o SELECIONADO fica no topo — a demo da animação nunca roda escondida
+    // atrás de outro cartão
+    if (S.blocoSel === idx) card.classList.add('sel');
     card.addEventListener('dblclick', (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -3767,6 +3772,11 @@ const ENTRADAS_DE_MIDIA = [
   ['fade', 'Fade', 'Só aparece, sem movimento'],
   ['zoom', 'Zoom', 'Chega de longe (1,25 → 1)'],
   ['girar', 'Girar', 'Gira e assenta'],
+  ['quicar', 'Quicar', 'Cai de cima e quica'],
+  ['elastico', 'Elástico', 'Estica como mola'],
+  ['balancar', 'Balançar', 'Pêndulo que assenta'],
+  ['borrao', 'Borrão', 'Chega desfocado'],
+  ['virar', 'Virar', 'Abre como uma porta'],
 ];
 const SAIDAS_DE_MIDIA = [
   ['suave', 'Suave', 'Some devagar (padrão)'],
@@ -3776,6 +3786,9 @@ const SAIDAS_DE_MIDIA = [
   ['baixo', 'P/ baixo', 'Cai para baixo'],
   ['zoom', 'Zoom', 'Cresce e some'],
   ['girar', 'Girar', 'Gira e some'],
+  ['cima', 'P/ cima', 'Sobe e some'],
+  ['borrao', 'Borrão', 'Desfoca e some'],
+  ['virar', 'Virar', 'Fecha como uma porta'],
   ['corte', 'Corte', 'Some de uma vez, sem fade'],
 ];
 const DEMOS_DE_MIDIA = [

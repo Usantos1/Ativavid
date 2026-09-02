@@ -228,6 +228,97 @@ def test_saida_zoom_cresce_enquanto_some(tmp_path):
     assert fim > meio * 1.1, f"saída zoom não cresceu: {meio} -> {fim}"
 
 
+def _corpo(rend, f, limiar=40):
+    """(largura, altura, meios-tons) do corpo desenhado no quadro f."""
+    import numpy as np
+
+    buf = np.zeros((H, W, 4), dtype=np.uint8)
+    for leg in rend.camadas:
+        if getattr(leg, "insert", None) is None:
+            continue
+        rend._desenhar_insert(leg, float(f - leg.inicio_f), buf, [0, 0, 0, 0], False)
+    a = buf[..., 3]
+    corpo = a > limiar
+    xs = np.where(corpo.any(axis=0))[0]
+    ys = np.where(corpo.any(axis=1))[0]
+    meios = int(((a > 20) & (a < 200)).sum())
+    larg = int(xs.max() - xs.min() + 1) if len(xs) else 0
+    alt = int(ys.max() - ys.min() + 1) if len(ys) else 0
+    return larg, alt, meios
+
+
+def test_quicar_cai_de_cima(tmp_path):
+    rend = _renderizador(tmp_path, "quicar")
+    import numpy as np
+
+    def cy(f):
+        buf = np.zeros((H, W, 4), dtype=np.uint8)
+        for leg in rend.camadas:
+            if getattr(leg, "insert", None) is None:
+                continue
+            rend._desenhar_insert(leg, float(f), buf, [0, 0, 0, 0], False)
+        ys = np.where((buf[..., 3] > 40).any(axis=1))[0]
+        return float(ys.mean()) if len(ys) else -1
+
+    assert cy(1) < cy(14) - 15, "quicar não caiu de cima"
+
+
+def test_virar_abre_como_porta(tmp_path):
+    """Só a LARGURA nasce esmagada; a altura já vem inteira (diferente do
+    pop, que encolhe os dois lados)."""
+    rend = _renderizador(tmp_path, "virar")
+    l1, a1, _ = _corpo(rend, 1)
+    l14, a14, _ = _corpo(rend, 14)
+    assert l1 < l14 * 0.6, f"largura não abriu: {l1} vs {l14}"
+    # 0,8 e nao 0,9: no quadro 1 a opacidade (~0,3) tira a sombra da conta
+    # e ela devolve ~30px de rodape no quadro assentado
+    assert a1 > a14 * 0.8, f"a altura não deveria encolher: {a1} vs {a14}"
+
+
+def test_elastico_passa_do_tamanho_e_volta(tmp_path):
+    rend = _renderizador(tmp_path, "elastico")
+    l1, _, _ = _corpo(rend, 1)
+    l14, _, _ = _corpo(rend, 14)
+    assert l1 > l14 * 1.15, f"sem overshoot elástico: {l1} vs {l14}"
+
+
+def test_borrao_chega_desfocado(tmp_path):
+    """Borda borrada = muitos meios-tons de alpha; nítida = poucos."""
+    rend = _renderizador(tmp_path, "borrao")
+    _, _, m2 = _corpo(rend, 2)
+    _, _, m14 = _corpo(rend, 14)
+    assert m2 > m14 * 2, f"não chegou desfocado: {m2} vs {m14}"
+
+
+def test_quem_entra_depois_pinta_por_cima(tmp_path):
+    """Relato de 02/09: o cartão girando passava POR TRÁS de outra imagem.
+    A ordem de pintura é a de INÍCIO na timeline, não a de criação — o
+    array chega de propósito com o mais tardio PRIMEIRO."""
+    import numpy as np
+    from app.render_proprio import Renderizador
+
+    public = tmp_path / "public_z"
+    public.mkdir()
+    Image.new("RGB", (200, 130), (255, 0, 0)).save(public / "verm.jpg")
+    Image.new("RGB", (200, 130), (0, 0, 255)).save(public / "azul.jpg")
+    ed = {"inserts": [
+        # o AZUL começa depois (0,3s) mas vem PRIMEIRO no array
+        {"src": "azul.jpg", "start": 0.3, "end": 1.2,
+         "x": 0.5, "y": 0.5, "w": 0.5, "h": 0.2},
+        {"src": "verm.jpg", "start": 0.0, "end": 1.2,
+         "x": 0.5, "y": 0.5, "w": 0.5, "h": 0.2},
+    ]}
+    (public / "edit-data.json").write_text(json.dumps(ed), encoding="utf-8")
+    rend = Renderizador(public, ed, frames=FRAMES, fps=FPS, width=W, height=H)
+    buf = np.zeros((H, W, 4), dtype=np.uint8)
+    for leg in rend.camadas:
+        if getattr(leg, "insert", None) is None:
+            continue
+        rend._desenhar_insert(leg, float(20 - leg.inicio_f), buf, [0, 0, 0, 0], False)
+    px = buf[H // 2, W // 2]
+    assert px[2] > px[0], f"o azul (que entra depois) deveria estar por cima: {px}"
+
+
 def test_template_e_motor_tem_as_mesmas_formulas():
     """As três entradas moram nos DOIS motores — quem mexer numa fórmula
     precisa mexer nas duas (regra do motor-proprio-cobre-tudo)."""
@@ -239,12 +330,18 @@ def test_template_e_motor_tem_as_mesmas_formulas():
     assert "entrada === 'pop'" in tsx and "entrada === 'deslizar'" in tsx
     assert "entrada === 'zoom'" in tsx and "saida === 'encolher'" in tsx
     assert "saida === 'corte'" in tsx and "saida === 'deslizar'" in tsx
-    for novo in ("'direita'", "'baixo'", "'cima'", "'girar'", "'esquerda'"):
+    for novo in ("'direita'", "'baixo'", "'cima'", "'girar'", "'esquerda'",
+                 "'quicar'", "'elastico'", "'balancar'", "'borrao'", "'virar'"):
         assert novo in tsx, f"efeito {novo} sumiu do template"
     assert '"pop"' in py and '"deslizar"' in py
     assert '"zoom"' in py and '"encolher"' in py and '"corte"' in py
-    for novo in ('"direita"', '"baixo"', '"cima"', '"girar"', '"esquerda"'):
+    for novo in ('"direita"', '"baixo"', '"cima"', '"girar"', '"esquerda"',
+                 '"quicar"', '"elastico"', '"balancar"', '"borrao"', '"virar"'):
         assert novo in py, f"efeito {novo} sumiu do motor proprio"
+    # os easings compartilhados e o blur com o sigma certo
+    assert "def _quique" in py and "const quique" in tsx
+    assert "def _elastico" in py and "const elastico" in tsx
+    assert "desfoque / 2.0" in py and "blur(${desfoque}px)" in tsx
     # rotacao: CSS gira em graus horarios, Pillow anti-horario
     assert "rotate(-ang" in py and "rotate: Math.abs(ang)" in tsx
     # e o pipeline deixa a escolha PASSAR do preview para o edit-data

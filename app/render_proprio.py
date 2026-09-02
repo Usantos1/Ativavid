@@ -71,6 +71,31 @@ def _foco_do_insert(it: dict, chave: str) -> float:
         return 0.5
 
 
+def _quique(p: float) -> float:
+    """easeOutBounce clássico — a MESMA função do template (mudar lá e cá)."""
+    n1, d1 = 7.5625, 2.75
+    if p < 1 / d1:
+        return n1 * p * p
+    if p < 2 / d1:
+        p -= 1.5 / d1
+        return n1 * p * p + 0.75
+    if p < 2.5 / d1:
+        p -= 2.25 / d1
+        return n1 * p * p + 0.9375
+    p -= 2.625 / d1
+    return n1 * p * p + 0.984375
+
+
+def _elastico(p: float) -> float:
+    """easeOutElastic clássico — espelho do template."""
+    import math
+    if p <= 0:
+        return 0.0
+    if p >= 1:
+        return 1.0
+    return (2 ** (-10 * p)) * math.sin((p * 10 - 0.75) * (2 * math.pi / 3)) + 1
+
+
 def _zoom_do_insert(it: dict) -> float:
     """Zoom do conteudo (>=1): amplia ALEM do cover, ancorado em fx/fy —
     e o que torna o corte de UM lado verdadeiro no editor."""
@@ -3868,7 +3893,14 @@ class Renderizador:
         arredondamento ja vem no alpha; o resto (escala, opacidade, subida)
         e por quadro, em `_desenhar_insert`."""
         camadas = []
-        for it in (self.ed.get("inserts") or []):
+        # Ordem de PINTURA = ordem de INICIO na timeline: quem entra depois
+        # desenha por cima (padrao de editor). Sem isto a ordem era a de
+        # criacao, e o cartao girando passava POR TRAS de outra imagem
+        # (relato de 02/09). Espelho do sort no Inserts do template.
+        fila = sorted((self.ed.get("inserts") or []),
+                      key=lambda x: float((x or {}).get("start") or 0.0)
+                      if isinstance(x, dict) else 0.0)
+        for it in fila:
             src = it.get("src")
             if not src:
                 continue
@@ -4006,6 +4038,8 @@ class Renderizador:
         entrada = getattr(leg, "insert_entrada", "padrao")
         dx = 0.0
         ang = 0.0
+        sx = 1.0          # escala so na LARGURA (efeito Virar)
+        desfoque = 0.0    # raio do blur em px de 1080 (efeito Borrao)
         if entrada == "pop":
             b = 1.0 + 2.70158 * (t - 1.0) ** 3 + 1.70158 * (t - 1.0) ** 2
             escala = (0.5 + 0.5 * b) * cresce
@@ -4034,6 +4068,25 @@ class Renderizador:
             escala = (0.85 + 0.15 * ent) * cresce
             dy = 0.0
             ang = -12.0 * (1.0 - ent)
+        elif entrada == "quicar":
+            escala = cresce
+            dy = -0.45 * ch * (1.0 - _quique(t))
+        elif entrada == "elastico":
+            escala = max(0.2, _elastico(t)) * cresce
+            dy = 0.0
+        elif entrada == "balancar":
+            import math
+            escala = cresce
+            dy = 0.0
+            ang = 18.0 * math.exp(-3.0 * t) * math.cos(7.0 * t)
+        elif entrada == "borrao":
+            escala = cresce
+            dy = 0.0
+            desfoque = 14.0 * (1.0 - ent)
+        elif entrada == "virar":
+            escala = cresce
+            dy = 0.0
+            sx = max(0.02, ent)
         else:
             escala = (0.92 + 0.08 * ent) * cresce
             dy = 26.0 * (1.0 - ent)
@@ -4054,7 +4107,13 @@ class Renderizador:
         elif saida == "girar":
             escala *= 1.0 - 0.15 * s_lin
             ang += 12.0 * s_lin
-        lw = max(1, int(round(cw * escala)))
+        elif saida == "cima":
+            dy -= 0.45 * ch * s_lin
+        elif saida == "borrao":
+            desfoque = max(desfoque, 14.0 * s_lin)
+        elif saida == "virar":
+            sx *= max(0.02, 1.0 - s_lin)
+        lw = max(1, int(round(cw * escala * sx)))
         lh = max(1, int(round(ch * escala)))
         # `scale` do CSS cresce a partir do CENTRO da caixa
         cx = ccx + dx
@@ -4071,6 +4130,11 @@ class Renderizador:
             tela_im = tela_im.rotate(-ang, resample=Image.BILINEAR,
                                      expand=True)
             L, A = tela_im.size
+        if desfoque > 0.3:
+            # blur(R) do CSS ~ Gaussiana de sigma R/2; o raio e em px da
+            # composicao (1080), entao escala com a largura real
+            sigma = (desfoque / 2.0) * (self.w / 1080.0)
+            tela_im = tela_im.filter(ImageFilter.GaussianBlur(sigma))
         comp = np.asarray(tela_im, dtype=np.uint8)
         if op < 0.996:
             comp = comp.copy()

@@ -4107,3 +4107,59 @@ body.styles-wide .setup-actions .btn.primary {
 
 /* o dropdown vive no body com posicao fixa (a lane rolavel clipava) */
 body > .fx-drop { position: fixed; bottom: auto; }
+
+/* Demos da leva nova de animações (4.64) */
+@keyframes entDemoQuicar {
+  0%   { opacity: 0; transform: translateY(-45%); }
+  55%  { opacity: 1; transform: translateY(0); }
+  72%  { transform: translateY(-9%); }
+  86%  { transform: translateY(0); }
+  94%  { transform: translateY(-3%); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+@keyframes entDemoElastico {
+  0%   { opacity: 0; transform: scale(0.2); }
+  40%  { opacity: 1; transform: scale(1.18); }
+  65%  { transform: scale(0.94); }
+  85%  { transform: scale(1.04); }
+  100% { transform: scale(1); }
+}
+@keyframes entDemoBalancar {
+  0%   { opacity: 0; transform: rotate(18deg); }
+  35%  { opacity: 1; transform: rotate(-9deg); }
+  65%  { transform: rotate(4deg); }
+  85%  { transform: rotate(-2deg); }
+  100% { transform: rotate(0deg); }
+}
+@keyframes entDemoBorrao {
+  from { opacity: 0; filter: blur(10px); }
+  to   { opacity: 1; filter: blur(0); }
+}
+@keyframes entDemoVirar {
+  from { opacity: 0; transform: scaleX(0.05); }
+  to   { opacity: 1; transform: scaleX(1); }
+}
+@keyframes saiDemoCima {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(-45%); }
+}
+@keyframes saiDemoBorrao {
+  from { opacity: 1; filter: blur(0); }
+  to   { opacity: 0; filter: blur(10px); }
+}
+@keyframes saiDemoVirar {
+  from { opacity: 1; transform: scaleX(1); }
+  to   { opacity: 0; transform: scaleX(0.05); }
+}
+.midia-previa-card.ent-demo-quicar   { animation: entDemoQuicar .55s linear; }
+.midia-previa-card.ent-demo-elastico { animation: entDemoElastico .5s ease-out; }
+.midia-previa-card.ent-demo-balancar { animation: entDemoBalancar .55s ease-out; }
+.midia-previa-card.ent-demo-borrao   { animation: entDemoBorrao .35s ease-out; }
+.midia-previa-card.ent-demo-virar    { animation: entDemoVirar .3s ease-out; }
+.midia-previa-card.sai-demo-cima     { animation: saiDemoCima .35s ease-in alternate 2; }
+.midia-previa-card.sai-demo-borrao   { animation: saiDemoBorrao .4s ease-in alternate 2; }
+.midia-previa-card.sai-demo-virar    { animation: saiDemoVirar .35s ease-in alternate 2; }
+
+/* selecionado/animando fica no topo da pilha de cartoes */
+.midia-previa-card.sel { z-index: 5; }
+.midia-previa-card.enquadrando { z-index: 6; }

@@ -558,6 +558,21 @@ const ehVideo = (s: string) => /\.(mp4|mov|webm)$/i.test(s);
 // largura — as mesmas contas de `geometria_do_insert` no render_proprio.py.
 // Sem os campos sai o cartao de sempre (780x500 a 90px do topo), para
 // projeto antigo nao mudar de aparencia.
+// easeOutBounce/easeOutElastic clássicos — espelhos de _quique/_elastico
+// no motor próprio (mudar lá e cá).
+const quique = (p: number): number => {
+  const n1 = 7.5625; const d1 = 2.75;
+  if (p < 1 / d1) return n1 * p * p;
+  if (p < 2 / d1) { p -= 1.5 / d1; return n1 * p * p + 0.75; }
+  if (p < 2.5 / d1) { p -= 2.25 / d1; return n1 * p * p + 0.9375; }
+  p -= 2.625 / d1; return n1 * p * p + 0.984375;
+};
+const elastico = (p: number): number => {
+  if (p <= 0) return 0;
+  if (p >= 1) return 1;
+  return 2 ** (-10 * p) * Math.sin((p * 10 - 0.75) * ((2 * Math.PI) / 3)) + 1;
+};
+
 const InsertCard: React.FC<{
   src: string; totalFrames: number;
   x?: number; y?: number; size?: number; w?: number; h?: number;
@@ -580,12 +595,13 @@ const InsertCard: React.FC<{
   //   deslizar/direita/baixo/cima  vem daquele lado
   //   fade só opacidade · zoom 1,25 → 1 · girar −12° → 0
   let scale: number; let yEnt = 0; let xEnt = 0; let ang = 0;
+  let sx = 1; let desfoque = 0;
   if (entrada === 'pop') {
     const b = 1 + 2.70158 * (t - 1) ** 3 + 1.70158 * (t - 1) ** 2;
     scale = (0.5 + 0.5 * b) * grow;
   } else if (entrada === 'deslizar' || entrada === 'direita') {
     scale = grow;
-  } else if (entrada === 'baixo' || entrada === 'cima') {
+  } else if (entrada === 'baixo' || entrada === 'cima' || entrada === 'quicar') {
     scale = grow;
   } else if (entrada === 'fade') {
     scale = grow;
@@ -594,15 +610,29 @@ const InsertCard: React.FC<{
   } else if (entrada === 'girar') {
     scale = (0.85 + 0.15 * enter) * grow;
     ang = -12 * (1 - enter);
+  } else if (entrada === 'elastico') {
+    scale = Math.max(0.2, elastico(t)) * grow;
+  } else if (entrada === 'balancar') {
+    scale = grow;
+    ang = 18 * Math.exp(-3 * t) * Math.cos(7 * t);
+  } else if (entrada === 'borrao') {
+    scale = grow;
+    desfoque = 14 * (1 - enter);
+  } else if (entrada === 'virar') {
+    scale = grow;
+    sx = Math.max(0.02, enter);
   } else {
     scale = interpolate(enter, [0, 1], [0.92, 1]) * grow;
     yEnt = interpolate(enter, [0, 1], [26, 0]);
   }
   // Saída escolhida: suave (fade, padrão) · encolher · deslizar p/ direita
-  // · esquerda · baixo · zoom 1 → 1,3 · girar +12° · corte (seco)
+  // · esquerda · baixo/cima · zoom 1 → 1,3 · girar +12° · borrão · virar
+  // · corte (seco)
   if (saida === 'encolher') scale *= 1 - 0.4 * sLin;
   if (saida === 'zoom') scale *= 1 + 0.3 * sLin;
   if (saida === 'girar') { scale *= 1 - 0.15 * sLin; ang += 12 * sLin; }
+  if (saida === 'borrao') desfoque = Math.max(desfoque, 14 * sLin);
+  if (saida === 'virar') sx *= Math.max(0.02, 1 - sLin);
   const {width: qLarg, height: qAlt} = useVideoConfig();
   // largura e ALTURA soltas: com a proporcao travada a imagem nunca cobria
   // a tela (o cartao e 780x500 e o quadro e 9:16)
@@ -619,18 +649,23 @@ const InsertCard: React.FC<{
   if (entrada === 'direita') xEnt = 0.35 * larg * (1 - enter);
   if (entrada === 'baixo') yEnt = 0.45 * alt * (1 - enter);
   if (entrada === 'cima') yEnt = -0.45 * alt * (1 - enter);
+  if (entrada === 'quicar') yEnt = -0.45 * alt * (1 - quique(t));
   if (saida === 'deslizar') xEnt += 0.35 * larg * sLin;
   if (saida === 'esquerda') xEnt -= 0.35 * larg * sLin;
   if (saida === 'baixo') yEnt += 0.45 * alt * sLin;
+  if (saida === 'cima') yEnt -= 0.45 * alt * sLin;
   return (
     <AbsoluteFill>
       <Sfx src="whoosh.mp3" />
-      <div style={{position: 'absolute', width: larg, height: alt, left: cx - larg / 2, top: cy - alt / 2, borderRadius: arte ? 0 : Math.max(4, Math.round((28 * larg) / CARD_W)), overflow: 'hidden', opacity, scale: String(scale), translate: `${xEnt}px ${yEnt}px`,
+      <div style={{position: 'absolute', width: larg, height: alt, left: cx - larg / 2, top: cy - alt / 2, borderRadius: arte ? 0 : Math.max(4, Math.round((28 * larg) / CARD_W)), overflow: 'hidden', opacity, scale: `${scale * sx} ${scale}`, translate: `${xEnt}px ${yEnt}px`,
         rotate: Math.abs(ang) > 0.05 ? `${ang}deg` : undefined,
         // Arte com transparencia (uma logo em PNG) nao quer cartao: a sombra
-        // sai da FORMA dela, nao de um retangulo atras dela.
+        // sai da FORMA dela, nao de um retangulo atras dela. O borrao entra
+        // no MESMO filter (blur(R) ~ Gaussiana de sigma R/2 no motor proprio).
         boxShadow: arte ? undefined : '0 18px 50px rgba(0,0,0,0.45)',
-        filter: arte ? 'drop-shadow(0 14px 34px rgba(0,0,0,0.45))' : undefined}}>
+        filter: [arte ? 'drop-shadow(0 14px 34px rgba(0,0,0,0.45))' : '',
+          desfoque > 0.3 ? `blur(${desfoque}px)` : '']
+          .filter(Boolean).join(' ') || undefined}}>
         {/* Take de video da Biblioteca entra igual a uma foto. Mudo de
             proposito: o som do take passaria por cima da fala.
             `fx`/`fy` = ENQUADRAMENTO escolhido no preview (object-position,
@@ -654,9 +689,12 @@ const InsertCard: React.FC<{
 
 const Inserts: React.FC = () => {
   const {fps} = useVideoConfig();
+  // quem entra DEPOIS monta depois e pinta por cima — espelho do sort em
+  // _montar_inserts no motor próprio
+  const fila = [...D.inserts].sort((a, b) => (a.start ?? 0) - (b.start ?? 0));
   return (
     <>
-      {D.inserts.map((it, i) => {
+      {fila.map((it, i) => {
         const from = Math.round(it.start * fps);
         const duration = Math.round((it.end - it.start) * fps);
         return (
