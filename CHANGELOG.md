@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.67
+
+- **Sem imagem dupla na aba Visual.** O vídeo final já traz a mídia
+  aplicada (com a animação), e o editor desenhava o cartão da camada por
+  cima — dava duas cópias, com "a de trás se mexendo". Na Visual agora só
+  aparece o cartão do que ainda não foi aplicado; na Edição tudo continua
+  como camada.
+
 ## 4.66
 
 - **A faixa de mídia subiu para logo abaixo do vídeo principal — e na

@@ -96,9 +96,13 @@ def test_editor_nao_varre_mais_o_manual_no_limpa():
     i = js.index("function stripAutoInsertsIfLimpa")
     corpo = js[i:i + 900]
     assert "it.manual" in corpo, "o limpa voltou a varrer a mídia manual"
-    # e o desenho do cartão aceita manual, não só isNew
+    # e o desenho do cartão aceita manual, não só isNew (na Edição; na
+    # Visual o final já tem a mídia queimada — ver a âncora naFinal abaixo)
     j = js.index("const agora = S.insertsDraft.filter")
-    assert "c.isNew || c.manual" in js[j:j + 300], (
+    assert "c.isNew || (c.manual && !naFinal)" in js[j:j + 400], (
         "o cartão do insert aplicado sumiu do preview")
     # e o salvar manda o estado completo
     assert "manualInserts: S.insertsDraft" in js
+    # na aba VISUAL o final ja tem a midia queimada: o cartao aplicado NAO
+    # desenha por cima (imagem dupla com "a de tras se mexendo", 02/09)
+    assert "c.manual && !naFinal" in js

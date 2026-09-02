@@ -3724,10 +3724,17 @@ function desenharMidiaNoPreview() {
   const box = $('midiaOverlay');
   if (!box) return;
   const t = renderedToDraft(video.currentTime || 0);
+  // Na aba VISUAL o video e o FINAL, que ja tem a midia aplicada QUEIMADA
+  // nele (animando) — desenhar o cartao por cima dava imagem dupla, com "a
+  // de tras se mexendo" (print de 02/09). La so entra o que ainda NAO foi
+  // aplicado (isNew); na Edicao o video e o cut, sem inserts, entao o
+  // cartao representa a camada.
+  const naFinal = S.tab === 2 && S.state && S.state.finalVideo && !S.finalFailed;
   const agora = S.insertsDraft.filter(
     (c) => t >= c.start && t < c.end
     && ((c.kind === 'emoji' && c.isNew)
-      || (c.kind === 'insert' && (c.isNew || c.manual))));
+      || (c.kind === 'insert'
+        && (c.isNew || (c.manual && !naFinal)))));
   // mesma ordem de pintura dos motores: quem entra depois fica por cima
   agora.sort((a, b) => (a.start || 0) - (b.start || 0));
   const chave = agora.map((c) => `${c.kind}:${c.label}:${c.start}`).join('|');

@@ -116,8 +116,10 @@ def test_a_previa_usa_a_geometria_do_render():
     lugar na tela e noutro no vídeo. `size` é fração da LARGURA, e x/y são
     o centro — as três contas do render."""
     js = (REPO / "assets" / "preview" / "app.js").read_text(encoding="utf-8")
+    # a função inteira, não janela fixa — ela cresce a cada versão (lição
+    # repetida do dia 02/09)
     i = js.index("function desenharMidiaNoPreview")
-    bloco = js[i:i + 1500]
+    bloco = js[i:js.index("function removerBlocoDaMao", i)]
     assert "(c.size ?? 0.22) * box.clientWidth" in bloco
     assert "(c.x ?? 0.5) * 100" in bloco and "(c.y ?? 0.34) * 100" in bloco
     css = (REPO / "assets" / "preview" / "app.css").read_text(encoding="utf-8")
