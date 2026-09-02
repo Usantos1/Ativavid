@@ -1,5 +1,17 @@
 # Changelog
 
+## 4.77
+
+- **Vídeo longo (YouTube 16:9) renderiza em minutos, não em horas.** O
+  vídeo final do formato longo é o corte + lower third + título de
+  capítulo + trilha — mas ele era re-renderizado quadro a quadro num
+  navegador (um vídeo de 11 minutos levava horas por 10 segundos de
+  arte). Agora a arte é pintada direto nos quadros e o vídeo é montado
+  num passe único de ffmpeg, com a mesma aparência (animações de entrada
+  e saída incluídas) e a placa de vídeo acelerando quando existe.
+- Vídeo longo com b-roll (imagem/vídeo de cobertura) segue no caminho
+  antigo por enquanto, com o motivo anotado na ficha.
+
 ## 4.76
 
 - **A IA não recusa mais o plano de corte.** Em vídeo longo, o Gemini

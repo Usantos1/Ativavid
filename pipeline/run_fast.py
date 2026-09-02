@@ -4933,6 +4933,49 @@ def run(
     overlay_final = False
     if is_longform:
         _RENDER_META["overlaySkip"] = "longform"
+        # Caminho RÁPIDO do longform (02/09): o template só põe lower third,
+        # capítulo, callout e trilha por cima do cut (legenda vai em .srt) —
+        # e o primeiro vídeo longo real passou HORAS no Chrome por 9,5s de
+        # arte. O compose próprio pinta só as janelas dos elementos e um
+        # ffmpeg único faz overlay+encode. Com b-roll (cutaway), segue no
+        # Remotion, com o motivo gravado.
+        try:
+            sys.path.insert(0, str(HELPERS))
+            from compose_longform import compor_longform, motivo_nao_elegivel
+
+            _motivo_lf = motivo_nao_elegivel(edit_data)
+            if _motivo_lf:
+                _RENDER_META["longformComposeSkip"] = _motivo_lf
+                print(f"LONGFORM_COMPOSE_SKIP {_motivo_lf}", flush=True)
+            else:
+                set_stage(edit_dir, "rendering",
+                          "Renderizando o vídeo final…", 85)
+                _t_lf = time.perf_counter()
+                _lf = compor_longform(edit_dir, public, edit_data,
+                                      edit_dir / "final.mp4")
+                _timing_mark("REMOTION_RENDER", _t_lf)
+                _RENDER_META["renderPath"] = "LONGFORM_COMPOSE"
+                _RENDER_META["overlayEngine"] = _lf.get("engine")
+                _RENDER_META["overlayFrames"] = _lf.get("quadrosPintados")
+                overlay_final = True
+                print("LONGFORM_COMPOSE_DONE "
+                      f"engine={_lf.get('engine')} "
+                      f"quadros={_lf.get('quadrosPintados')}", flush=True)
+                try:
+                    from app.overlay_compose import garantir_true_peak
+
+                    _au_lf = garantir_true_peak(edit_dir / "final.mp4")
+                    if _au_lf.get("truePeakDb") is not None:
+                        _RENDER_META["truePeak"] = _au_lf.get("truePeakDb")
+                    if _au_lf.get("integratedLufs") is not None:
+                        _RENDER_META["LUFS"] = _au_lf.get("integratedLufs")
+                except Exception as e:  # noqa: BLE001
+                    print(f"[warn] true peak (longform): {e}", flush=True)
+        except Exception as e:  # noqa: BLE001
+            print(f"LONGFORM_COMPOSE_FAILED {e}", flush=True)
+            _RENDER_META["fallbackReason"] = str(e)
+            print("FALLBACK_FULL_REMOTION", flush=True)
+            overlay_final = False
     if (not is_longform):
         try:
             from app.overlay_path import overlay_on, try_overlay_final
