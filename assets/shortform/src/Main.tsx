@@ -561,8 +561,8 @@ const ehVideo = (s: string) => /\.(mp4|mov|webm)$/i.test(s);
 const InsertCard: React.FC<{
   src: string; totalFrames: number;
   x?: number; y?: number; size?: number; w?: number; h?: number;
-  entrada?: string; saida?: string; fx?: number; fy?: number;
-}> = ({src, totalFrames, x, y, size, w, h, entrada, saida, fx, fy}) => {
+  entrada?: string; saida?: string; fx?: number; fy?: number; zoom?: number;
+}> = ({src, totalFrames, x, y, size, w, h, entrada, saida, fx, fy, zoom}) => {
   const frame = useCurrentFrame();
   // `t` cru e `enter` (cubic-out) — as MESMAS contas de `_desenhar_insert`
   // no motor próprio; mudar aqui exige mudar lá.
@@ -625,10 +625,14 @@ const InsertCard: React.FC<{
         {ehVideo(src) ? (
           <OffthreadVideo src={staticFile(src)} muted
             style={{width: '100%', height: '100%', objectFit: 'cover',
-              objectPosition: `${(fx ?? 0.5) * 100}% ${(fy ?? 0.5) * 100}%`}} />
+              objectPosition: `${(fx ?? 0.5) * 100}% ${(fy ?? 0.5) * 100}%`,
+              transformOrigin: `${(fx ?? 0.5) * 100}% ${(fy ?? 0.5) * 100}%`,
+              transform: (zoom ?? 1) > 1.0001 ? `scale(${Math.min(4, zoom ?? 1)})` : undefined}} />
         ) : (
           <Img src={staticFile(src)} style={{width: '100%', height: '100%', objectFit: arte ? 'contain' : 'cover',
-            objectPosition: arte ? undefined : `${(fx ?? 0.5) * 100}% ${(fy ?? 0.5) * 100}%`}} />
+            objectPosition: arte ? undefined : `${(fx ?? 0.5) * 100}% ${(fy ?? 0.5) * 100}%`,
+            transformOrigin: arte ? undefined : `${(fx ?? 0.5) * 100}% ${(fy ?? 0.5) * 100}%`,
+            transform: !arte && (zoom ?? 1) > 1.0001 ? `scale(${Math.min(4, zoom ?? 1)})` : undefined}} />
         )}
       </div>
     </AbsoluteFill>
@@ -648,7 +652,8 @@ const Inserts: React.FC = () => {
               x={(it as any).x} y={(it as any).y} size={(it as any).size}
               w={(it as any).w} h={(it as any).h}
               entrada={(it as any).entrada} saida={(it as any).saida}
-              fx={(it as any).fx} fy={(it as any).fy} />
+              fx={(it as any).fx} fy={(it as any).fy}
+              zoom={(it as any).zoom} />
           </Sequence>
         );
       })}

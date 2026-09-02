@@ -79,8 +79,9 @@ def test_os_quadros_do_take_saem_no_tamanho_do_cartao():
     """Extrair em 1080p e reduzir a cada quadro seria desperdicio; e o
     `cover` tem de ser o mesmo do template (scale+crop, sem deformar)."""
     s = (REPO / "app" / "render_proprio.py").read_text(encoding="utf-8")
+    # a função inteira, não janela fixa — ela cresceu com foco/zoom (4.60+)
     i = s.index("def _quadros_do_take")
-    trecho = s[i:i + 1400]
+    trecho = s[i:i + 2600]
     assert "force_original_aspect_ratio=increase" in trecho
     assert "crop={INSERT_W}:{INSERT_H}" in trecho
     assert "fps={self.fps" in trecho, "sem alinhar o take ao relogio do video"

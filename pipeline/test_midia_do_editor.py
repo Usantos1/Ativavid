@@ -288,8 +288,9 @@ def test_oito_alcas_e_o_lado_oposto_parado():
     i = js.index("const ALCAS = [")
     arr = js[i:js.index("]", i)]               # ate o fim do ARRAY
     assert arr.count("'") == 16, "oito alças (2 aspas cada)"
+    # a função inteira — janela fixa quebra quando ela cresce (3ª vez)
     k = js.index("function alcasDoCartao")
-    bloco = js[k:k + 2200]
+    bloco = js[k:js.index("function cartaoArrastavel", k)]
     for borda in ("l = Math.min", "r = Math.max", "t = Math.min", "b = Math.max"):
         assert borda in bloco, borda
     assert "c.x = +((l + r) / 2)" in bloco and "c.y = +((t + b) / 2)" in bloco

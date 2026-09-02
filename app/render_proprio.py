@@ -71,6 +71,15 @@ def _foco_do_insert(it: dict, chave: str) -> float:
         return 0.5
 
 
+def _zoom_do_insert(it: dict) -> float:
+    """Zoom do conteudo (>=1): amplia ALEM do cover, ancorado em fx/fy —
+    e o que torna o corte de UM lado verdadeiro no editor."""
+    try:
+        return min(4.0, max(1.0, float(it.get("zoom") or 1.0)))
+    except (TypeError, ValueError):
+        return 1.0
+
+
 def geometria_do_insert(it: dict, larg: int, alt: int) -> tuple[int, int, float, float]:
     """(largura, altura, centro x, centro y) em pixels do cartao.
 
@@ -3807,7 +3816,8 @@ class Renderizador:
 
     # ----- b-roll / inserts (InsertCard.tsx) --------------------------------
     def _quadros_do_take(self, cam: Path, total: int,
-                         fx: float = 0.5, fy: float = 0.5) -> Path | None:
+                         fx: float = 0.5, fy: float = 0.5,
+                         zoom: float = 1.0) -> Path | None:
         """Extrai o take ja no tamanho do cartao, uma vez, para o disco.
 
         Guardar os quadros em memoria custaria 1,5 MB cada (780x500 RGBA):
@@ -3819,7 +3829,8 @@ class Renderizador:
         enquadramento re-extrai.
         """
         marca_foco = ("" if abs(fx - 0.5) < 1e-3 and abs(fy - 0.5) < 1e-3
-                      else f"-{fx:.2f}x{fy:.2f}")
+                      and abs(zoom - 1.0) < 1e-3
+                      else f"-{fx:.2f}x{fy:.2f}z{zoom:.2f}")
         destino = cam.parent / f".f-{cam.stem[:24]}{marca_foco}"
         pronto = destino / "ok.txt"
         if pronto.is_file():
@@ -3829,7 +3840,10 @@ class Renderizador:
         shutil.rmtree(destino, ignore_errors=True)
         destino.mkdir(parents=True, exist_ok=True)
         # `fps` alinha o take ao relogio do video; scale+crop e o `cover`
-        vf = (f"fps={self.fps:.6f},scale={INSERT_W}:{INSERT_H}:"
+        # (o zoom amplia a base do scale e o crop volta ao tamanho do cartao)
+        zw = max(1, int(round(INSERT_W * zoom)))
+        zh = max(1, int(round(INSERT_H * zoom)))
+        vf = (f"fps={self.fps:.6f},scale={zw}:{zh}:"
               f"force_original_aspect_ratio=increase,"
               f"crop={INSERT_W}:{INSERT_H}:(iw-ow)*{fx:.4f}:(ih-oh)*{fy:.4f}")
         try:
@@ -3871,7 +3885,8 @@ class Renderizador:
             video = cam.suffix.lower() in (".mp4", ".mov", ".webm")
             foco_x = _foco_do_insert(it, "fx")
             foco_y = _foco_do_insert(it, "fy")
-            pasta = (self._quadros_do_take(cam, total, fx=foco_x, fy=foco_y)
+            pasta = (self._quadros_do_take(cam, total, fx=foco_x, fy=foco_y,
+                                           zoom=_zoom_do_insert(it))
                      if video else None)
             if video and pasta is None:
                 continue
@@ -3900,8 +3915,9 @@ class Renderizador:
                 # objectFit: cover — recorta o excedente, nao deforma.
                 # fx/fy = ENQUADRAMENTO (object-position do template): que
                 # parte do excedente fica visivel; 0,5 = centro, o padrao.
+                # `zoom` amplia alem do cover (corte de um lado no editor).
                 fx, fy = foco_x, foco_y
-                esc = max(cw / im.width, ch / im.height)
+                esc = max(cw / im.width, ch / im.height) * _zoom_do_insert(it)
                 nw = max(1, round(im.width * esc))
                 nh = max(1, round(im.height * esc))
                 x0 = int(round((nw - cw) * fx))

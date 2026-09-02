@@ -913,6 +913,14 @@ def midia_do_editor(edit_dir: Path, public: Path, edit_data: dict) -> None:
                 geo[foco] = min(1.0, max(0.0, float(it[foco])))
             except (TypeError, ValueError):
                 pass
+        # zoom do conteudo (>=1): o corte de UM lado segura a escala
+        if it.get("zoom") is not None:
+            try:
+                z = min(4.0, max(1.0, float(it["zoom"])))
+                if z > 1.0001:
+                    geo["zoom"] = round(z, 4)
+            except (TypeError, ValueError):
+                pass
         mid = re.sub(r"[^A-Za-z0-9_-]", "", str(it.get("mid") or ""))[:24]
         return {"src": src, "start": round(ini, 3),
                 "end": round(fim, 3),

@@ -94,6 +94,65 @@ def test_o_pipeline_repassa_o_enquadramento():
     assert "c.fx != null ? { fx: +c.fx }" in js, "o salvar não manda o fx"
 
 
+def _render_com_zoom(tmp_path: Path, zoom):
+    from app.render_proprio import Renderizador
+
+    public = tmp_path / f"public_z{str(zoom).replace('.', '_')}"
+    public.mkdir()
+    # fundo preto com uma faixa BRANCA no centro: quanto mais zoom, maior a
+    # fatia da faixa dentro da janela — o brilho médio sobe
+    im = Image.new("RGB", (800, 120), (0, 0, 0))
+    im.paste(Image.new("RGB", (100, 120), (255, 255, 255)), (350, 0))
+    im.save(public / "foto.jpg")
+    it = {"src": "foto.jpg", "start": 0.0, "end": FRAMES / FPS}
+    if zoom is not None:
+        it["zoom"] = zoom
+    ed = {"inserts": [it]}
+    (public / "edit-data.json").write_text(json.dumps(ed), encoding="utf-8")
+    rend = Renderizador(public, ed, frames=FRAMES, fps=FPS, width=W, height=H)
+    buf = np.zeros((H, W, 4), dtype=np.uint8)
+    for leg in rend.camadas:
+        if getattr(leg, "insert", None) is None:
+            continue
+        rend._desenhar_insert(leg, 20.0, buf, [0, 0, 0, 0], False)
+    tinta = buf[..., 3] > 128
+    return float(buf[..., 0][tinta].mean()), int(tinta.sum())
+
+
+def test_zoom_amplia_o_conteudo_sem_mudar_o_cartao(tmp_path):
+    """zoom=3: a janela mostra um pedaço menor (a faixa central domina),
+    mas o CARTÃO continua do mesmo tamanho na tela."""
+    brilho1, area1 = _render_com_zoom(tmp_path, None)
+    brilho3, area3 = _render_com_zoom(tmp_path, 3.0)
+    assert brilho3 > brilho1 * 1.5, f"zoom não ampliou: {brilho1:.0f} -> {brilho3:.0f}"
+    assert abs(area3 - area1) < area1 * 0.02, "o zoom mudou o tamanho do cartão"
+
+
+def test_zoom_viaja_pelos_tres_lugares():
+    rf = (REPO / "pipeline" / "run_fast.py").read_text(encoding="utf-8")
+    assert 'geo["zoom"]' in rf
+    tsx = (REPO / "assets" / "shortform" / "src" / "Main.tsx").read_text(encoding="utf-8")
+    assert "scale(${Math.min(4, zoom ?? 1)})" in tsx
+    py = (REPO / "app" / "render_proprio.py").read_text(encoding="utf-8")
+    assert "_zoom_do_insert" in py and "INSERT_W * zoom" in py
+    js = (REPO / "assets" / "preview" / "app.js").read_text(encoding="utf-8")
+    assert "c.zoom != null && +c.zoom > 1.0001" in js
+
+
+def test_alcas_cantos_redimensionam_e_lados_cortam():
+    """Pedido de 02/09: 'clicar dos lados e cortar apenas daquele lado,
+    redimensionar apenas nos cantos'."""
+    js = (REPO / "assets" / "preview" / "app.js").read_text(encoding="utf-8")
+    i = js.index("function alcasDoCartao")
+    bloco = js[i:js.index("function cartaoArrastavel", i)]
+    assert "const canto = lado.length === 2" in bloco
+    assert "cortar deste lado" in bloco.lower() or "cortar deste lado" in bloco
+    # canto preserva a proporção (fator único nas duas dimensões)
+    assert "arr.w0 * k" in bloco and "arr.h0 * k" in bloco
+    # lado segura a ESCALA do conteúdo via zoom
+    assert "arr.S0 / fit1" in bloco
+
+
 def test_arrasto_tem_trava_de_centro_e_medidas():
     """As guias: iman de 8px no centro, linha acesa só no snap, e as
     medidas das margens em pixels do VÍDEO (1080x1920), fora do cartão."""

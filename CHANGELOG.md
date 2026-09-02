@@ -1,5 +1,15 @@
 # Changelog
 
+## 4.62
+
+- **Lados cortam, cantos redimensionam — como num editor profissional.**
+  No cartão de vídeo/imagem: arrastar uma alça **lateral** corta só
+  daquele lado (o conteúdo que fica não se mexe nem muda de tamanho —
+  some só o pedaço que você tirou); arrastar um **canto** redimensiona a
+  imagem inteira mantendo a proporção e o enquadramento. Por trás disso o
+  cartão ganhou zoom de conteúdo, que sai idêntico nos dois motores de
+  render.
+
 ## 4.61
 
 - **O vídeo/imagem inserido não some mais da timeline depois do render.**

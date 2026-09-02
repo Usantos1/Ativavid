@@ -1889,7 +1889,8 @@ function edlDirty() {
 function geoDoInsert(c) {
   return JSON.stringify([+(+c.start).toFixed(3), +(+c.end).toFixed(3),
     c.x ?? null, c.y ?? null, c.w ?? null, c.h ?? null, c.size ?? null,
-    c.entrada ?? null, c.saida ?? null, c.fx ?? null, c.fy ?? null]);
+    c.entrada ?? null, c.saida ?? null, c.fx ?? null, c.fy ?? null,
+    c.zoom ?? null]);
 }
 function manualMudou() {
   return !!S.manualApagado || S.insertsDraft.some(
@@ -3092,6 +3093,7 @@ function buildInsertsDraft() {
       ...(it.saida ? { saida: it.saida } : {}),
       ...(it.fx != null ? { fx: +it.fx } : {}),
       ...(it.fy != null ? { fy: +it.fy } : {}),
+      ...(it.zoom != null ? { zoom: +it.zoom } : {}),
     });
   });
   // split-layout images (CustomGraphics reads the same array) — they are images
@@ -3984,7 +3986,14 @@ function esconderGuias(box) {
  * sai do modo; no modo, arrastar move o conteudo dentro do quadro. */
 function aplicarEnquadramento(card, c) {
   const m = card.querySelector('img, video');
-  if (m) m.style.objectPosition = `${(c.fx ?? 0.5) * 100}% ${(c.fy ?? 0.5) * 100}%`;
+  if (!m) return;
+  m.style.objectPosition = `${(c.fx ?? 0.5) * 100}% ${(c.fy ?? 0.5) * 100}%`;
+  // `zoom` (>=1) amplia o conteudo ALEM do cover, ancorado no ponto do
+  // enquadramento — e o que torna o corte de UM lado verdadeiro mesmo
+  // quando o conteudo ja esta justo naquele eixo. Mesma conta nos motores.
+  const z = Math.max(1, +(c.zoom ?? 1));
+  m.style.transformOrigin = `${(c.fx ?? 0.5) * 100}% ${(c.fy ?? 0.5) * 100}%`;
+  m.style.transform = z > 1.0001 ? `scale(${z})` : '';
 }
 
 function panDoConteudo(card, c, dx, dy, arr) {
@@ -3993,7 +4002,8 @@ function panDoConteudo(card, c, dx, dy, arr) {
   const natW = m.naturalWidth || m.videoWidth || 0;
   const natH = m.naturalHeight || m.videoHeight || 0;
   if (!natW || !natH) return;
-  const esc = Math.max(card.offsetWidth / natW, card.offsetHeight / natH);
+  const esc = Math.max(card.offsetWidth / natW, card.offsetHeight / natH)
+    * Math.max(1, +(c.zoom ?? 1));
   const sobraX = natW * esc - card.offsetWidth;
   const sobraY = natH * esc - card.offsetHeight;
   if (arr.fx0 == null) { arr.fx0 = c.fx ?? 0.5; arr.fy0 = c.fy ?? 0.5; }
@@ -4028,9 +4038,17 @@ function alternarEnquadrar(i) {
 const ALCAS = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
 
 function alcasDoCartao(card, c, box) {
+  /* Divisão de gestos dos editores profissionais (pedido de 02/09):
+   * CANTOS redimensionam (a imagem inteira cresce/diminui na proporção,
+   * o enquadramento não muda); LADOS cortam DAQUELE lado — o conteúdo
+   * que sobra fica parado na tela e só o pedaço arrastado some (o fx/fy
+   * é compensado para ancorar o lado oposto). */
   for (const lado of ALCAS) {
+    const canto = lado.length === 2;
     const alca = el('div', `previa-alca alca-${lado}`, card);
-    alca.title = 'Arraste para mudar o tamanho';
+    alca.title = canto
+      ? 'Arraste para redimensionar (mantém a proporção)'
+      : 'Arraste para cortar deste lado';
     let arr = null;
     alca.addEventListener('pointerdown', (e) => {
       if (S.applying || e.button !== 0) return;
@@ -4041,8 +4059,14 @@ function alcasDoCartao(card, c, box) {
       const lh = alturaDoCartao(c, box);
       const cx = c.x ?? 0.5;
       const cy = c.y ?? CARTAO_Y_PAD;
+      const m = card.querySelector('img, video');
       arr = { x0: e.clientX, y0: e.clientY, larg: r.width, alt: r.height,
               l: cx - lw / 2, r: cx + lw / 2, t: cy - lh / 2, b: cy + lh / 2,
+              w0: lw, h0: lh,
+              fx0: c.fx ?? 0.5, fy0: c.fy ?? 0.5,
+              natW: (m && (m.naturalWidth || m.videoWidth)) || 0,
+              natH: (m && (m.naturalHeight || m.videoHeight)) || 0,
+              arte: card.classList.contains('arte'),
               moveu: false };
       alca.setPointerCapture(e.pointerId);
     });
@@ -4053,10 +4077,57 @@ function alcasDoCartao(card, c, box) {
       if (!arr.moveu && Math.abs(dx) < 0.005 && Math.abs(dy) < 0.005) return;
       arr.moveu = true;
       let { l, r, t, b } = arr;
-      if (lado.includes('w')) l = Math.min(r - 0.08, Math.max(0, arr.l + dx));
-      if (lado.includes('e')) r = Math.max(l + 0.08, Math.min(1, arr.r + dx));
-      if (lado.includes('n')) t = Math.min(b - 0.05, Math.max(0, arr.t + dy));
-      if (lado.includes('s')) b = Math.max(t + 0.05, Math.min(1, arr.b + dy));
+      if (canto) {
+        // REDIMENSIONA na proporção, com o canto OPOSTO parado
+        const kx = (arr.w0 + (lado.includes('e') ? dx : -dx)) / arr.w0;
+        const ky = (arr.h0 + (lado.includes('s') ? dy : -dy)) / arr.h0;
+        const k = Math.max(0.12, Math.abs(dx) >= Math.abs(dy) ? kx : ky);
+        const nw = Math.max(0.08, Math.min(1, arr.w0 * k));
+        const nh = Math.max(0.05, Math.min(1, arr.h0 * k));
+        if (lado.includes('e')) r = Math.min(1, arr.l + nw); else l = Math.max(0, arr.r - nw);
+        if (lado.includes('s')) b = Math.min(1, arr.t + nh); else t = Math.max(0, arr.b - nh);
+      } else {
+        // CORTA daquele lado: só a borda arrastada se mexe...
+        if (lado === 'w') l = Math.min(r - 0.08, Math.max(0, arr.l + dx));
+        if (lado === 'e') r = Math.max(l + 0.08, Math.min(1, arr.r + dx));
+        if (lado === 'n') t = Math.min(b - 0.05, Math.max(0, arr.t + dy));
+        if (lado === 's') b = Math.max(t + 0.05, Math.min(1, arr.b + dy));
+        // ...e o CONTEÚDO fica parado: a ESCALA do conteúdo não muda (se o
+        // cover re-encaixaria, o `zoom` segura) e o enquadramento é
+        // compensado para o lado oposto mostrar exatamente o que mostrava.
+        // (arte em `contain` não croppa — não há o que compensar)
+        if (!arr.arte && arr.natW > 0 && arr.natH > 0) {
+          const W = arr.larg; const H = arr.alt;
+          const w0 = arr.w0 * W; const h0 = arr.h0 * H;
+          const w1 = (r - l) * W; const h1 = (b - t) * H;
+          if (arr.S0 == null) {
+            arr.S0 = Math.max(w0 / arr.natW, h0 / arr.natH)
+              * Math.max(1, +(c.zoom ?? 1));
+          }
+          const fit1 = Math.max(w1 / arr.natW, h1 / arr.natH);
+          const z1 = Math.min(4, Math.max(1, arr.S0 / fit1));
+          c.zoom = +z1.toFixed(4);
+          const S1 = fit1 * z1;     // escala real (pode ceder no clamp)
+          if (lado === 'e' || lado === 'w') {
+            const sobra0 = arr.natW * arr.S0 - w0;
+            const sobra1 = arr.natW * S1 - w1;
+            if (sobra1 > 0.5) {
+              c.fx = +(Math.min(1, Math.max(0, lado === 'e'
+                ? (sobra0 * arr.fx0) / sobra1
+                : 1 - (sobra0 * (1 - arr.fx0)) / sobra1))).toFixed(4);
+            }
+          } else {
+            const sobra0 = arr.natH * arr.S0 - h0;
+            const sobra1 = arr.natH * S1 - h1;
+            if (sobra1 > 0.5) {
+              c.fy = +(Math.min(1, Math.max(0, lado === 's'
+                ? (sobra0 * arr.fy0) / sobra1
+                : 1 - (sobra0 * (1 - arr.fy0)) / sobra1))).toFixed(4);
+            }
+          }
+          aplicarEnquadramento(card, c);
+        }
+      }
       c.w = +(r - l).toFixed(4);
       c.size = c.w;
       c.h = +(b - t).toFixed(4);
@@ -7209,6 +7280,7 @@ async function saveEditsAndReturnToQueue() {
           ...(c.saida ? { saida: c.saida } : {}),
           ...(c.fx != null ? { fx: +c.fx } : {}),
           ...(c.fy != null ? { fy: +c.fy } : {}),
+          ...(c.zoom != null && +c.zoom > 1.0001 ? { zoom: +c.zoom } : {}),
         })),
       // Emoji: comeco E duracao (ele fica na tela enquanto o bloco durar).
       emojis: S.insertsDraft.filter((c) => c.kind === 'emoji' && c.char).map((c) => ({
