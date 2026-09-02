@@ -1,5 +1,17 @@
 # Changelog
 
+## 4.71
+
+- **Recorte de tempo do vídeo inserido (in/out).** Arrastar a borda
+  **esquerda** do bloco de vídeo agora corta o **começo do arquivo** —
+  você escolhe qual trecho do take entra, como num editor profissional
+  (a dica mostra "take a partir de Xs"). A borda direita segue definindo
+  a duração. O preview do cartão já toca a partir do ponto escolhido, e o
+  render sai igual nos dois motores.
+- **Conserto de raiz junto:** os quadros do take agora são extraídos no
+  tamanho real do cartão — redimensionar um cartão de vídeo podia
+  derrubar o render (máscara e quadro de tamanhos diferentes).
+
 ## 4.70
 
 - **A Biblioteca mostra a miniatura dos vídeos.** No "Inserir imagem /

@@ -83,5 +83,7 @@ def test_os_quadros_do_take_saem_no_tamanho_do_cartao():
     i = s.index("def _quadros_do_take")
     trecho = s[i:i + 2600]
     assert "force_original_aspect_ratio=increase" in trecho
-    assert "crop={INSERT_W}:{INSERT_H}" in trecho
+    # desde a 4.71 o crop é no tamanho REAL do cartão (cw:ch) — quadro de
+    # 780x500 fixo quebrava o putalpha quando o cartão era redimensionado
+    assert "crop={cw}:{ch}" in trecho
     assert "fps={self.fps" in trecho, "sem alinhar o take ao relogio do video"

@@ -3846,8 +3846,10 @@ class Renderizador:
 
     # ----- b-roll / inserts (InsertCard.tsx) --------------------------------
     def _quadros_do_take(self, cam: Path, total: int,
+                         cw: int = INSERT_W, ch: int = INSERT_H,
                          fx: float = 0.5, fy: float = 0.5,
-                         zoom: float = 1.0) -> Path | None:
+                         zoom: float = 1.0,
+                         src_in: float = 0.0) -> Path | None:
         """Extrai o take ja no tamanho do cartao, uma vez, para o disco.
 
         Guardar os quadros em memoria custaria 1,5 MB cada (780x500 RGBA):
@@ -3858,10 +3860,13 @@ class Renderizador:
         do centro para a parte escolhida. Entram na CHAVE do cache — mudar o
         enquadramento re-extrai.
         """
+        # O TAMANHO DO CARTAO entra na chave: os quadros saem ja no tamanho
+        # certo (a mascara e do cartao — quadro de outro tamanho quebrava o
+        # putalpha quando o usuario redimensionava um cartao de video).
         marca_foco = ("" if abs(fx - 0.5) < 1e-3 and abs(fy - 0.5) < 1e-3
-                      and abs(zoom - 1.0) < 1e-3
-                      else f"-{fx:.2f}x{fy:.2f}z{zoom:.2f}")
-        destino = cam.parent / f".f-{cam.stem[:24]}{marca_foco}"
+                      and abs(zoom - 1.0) < 1e-3 and src_in < 1e-3
+                      else f"-{fx:.2f}x{fy:.2f}z{zoom:.2f}i{src_in:.2f}")
+        destino = cam.parent / f".f-{cam.stem[:20]}-{cw}x{ch}{marca_foco}"
         pronto = destino / "ok.txt"
         if pronto.is_file():
             return destino
@@ -3871,15 +3876,17 @@ class Renderizador:
         destino.mkdir(parents=True, exist_ok=True)
         # `fps` alinha o take ao relogio do video; scale+crop e o `cover`
         # (o zoom amplia a base do scale e o crop volta ao tamanho do cartao)
-        zw = max(1, int(round(INSERT_W * zoom)))
-        zh = max(1, int(round(INSERT_H * zoom)))
+        zw = max(1, int(round(cw * zoom)))
+        zh = max(1, int(round(ch * zoom)))
         vf = (f"fps={self.fps:.6f},scale={zw}:{zh}:"
               f"force_original_aspect_ratio=increase,"
-              f"crop={INSERT_W}:{INSERT_H}:(iw-ow)*{fx:.4f}:(ih-oh)*{fy:.4f}")
+              f"crop={cw}:{ch}:(iw-ow)*{fx:.4f}:(ih-oh)*{fy:.4f}")
+        # in-point: `-ss` ANTES do -i (seek rapido por keyframe + refino)
+        antes_i = (["-ss", f"{src_in:.3f}"] if src_in > 1e-3 else [])
         try:
             r = subprocess.run(
                 ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-                 "-i", str(cam), "-an",
+                 *antes_i, "-i", str(cam), "-an",
                  "-vf", vf, "-frames:v", str(max(1, total)), "-q:v", "3",
                  str(destino / "%04d.jpg")],
                 capture_output=True, text=True, timeout=180, **NOWIN)
@@ -3922,8 +3929,17 @@ class Renderizador:
             video = cam.suffix.lower() in (".mp4", ".mov", ".webm")
             foco_x = _foco_do_insert(it, "fx")
             foco_y = _foco_do_insert(it, "fy")
-            pasta = (self._quadros_do_take(cam, total, fx=foco_x, fy=foco_y,
-                                           zoom=_zoom_do_insert(it))
+            try:
+                src_in = min(7200.0, max(0.0, float(it.get("srcIn") or 0.0)))
+            except (TypeError, ValueError):
+                src_in = 0.0
+            # a geometria vem ANTES da extracao: os quadros do take saem ja
+            # no tamanho do CARTAO (mascara e quadro do mesmo tamanho)
+            cw, ch, ccx, ccy = geometria_do_insert(it, self.w, self.h)
+            pasta = (self._quadros_do_take(cam, total, cw=cw, ch=ch,
+                                           fx=foco_x, fy=foco_y,
+                                           zoom=_zoom_do_insert(it),
+                                           src_in=src_in)
                      if video else None)
             if video and pasta is None:
                 continue
@@ -3933,7 +3949,6 @@ class Renderizador:
             except (OSError, IndexError):
                 print(f"  [warn] insert ilegivel: {src}", flush=True)
                 continue
-            cw, ch, ccx, ccy = geometria_do_insert(it, self.w, self.h)
             raio = max(4, int(round(INSERT_RAIO * cw / INSERT_W)))
             # ARTE com transparencia (uma logo em PNG) nao e uma foto: ela
             # nao quer cartao, nao quer ser recortada e a sombra dela sai da

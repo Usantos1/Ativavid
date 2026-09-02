@@ -920,6 +920,14 @@ def midia_do_editor(edit_dir: Path, public: Path, edit_data: dict) -> None:
                 geo[foco] = min(1.0, max(0.0, float(it[foco])))
             except (TypeError, ValueError):
                 pass
+        # in-point do take de video (segundos DENTRO do arquivo)
+        if it.get("srcIn") is not None:
+            try:
+                v = float(it["srcIn"])
+                if 0.0 < v <= 7200.0:
+                    geo["srcIn"] = round(v, 3)
+            except (TypeError, ValueError):
+                pass
         # zoom do conteudo (>=1): o corte de UM lado segura a escala
         if it.get("zoom") is not None:
             try:

@@ -579,7 +579,8 @@ const InsertCard: React.FC<{
   src: string; totalFrames: number;
   x?: number; y?: number; size?: number; w?: number; h?: number;
   entrada?: string; saida?: string; fx?: number; fy?: number; zoom?: number;
-}> = ({src, totalFrames, x, y, size, w, h, entrada, saida, fx, fy, zoom}) => {
+  srcIn?: number;
+}> = ({src, totalFrames, x, y, size, w, h, entrada, saida, fx, fy, zoom, srcIn}) => {
   const frame = useCurrentFrame();
   // `t` cru e `enter` (cubic-out) — as MESMAS contas de `_desenhar_insert`
   // no motor próprio; mudar aqui exige mudar lá.
@@ -658,7 +659,7 @@ const InsertCard: React.FC<{
   if (saida === 'borrao') desfoque = Math.max(desfoque, 14 * sLin);
   if (saida === 'virar') sx *= Math.max(0.02, 1 - sLin);
   if (saida === 'esticar') sy *= Math.max(0.03, 1 - sLin);
-  const {width: qLarg, height: qAlt} = useVideoConfig();
+  const {width: qLarg, height: qAlt, fps: qFps} = useVideoConfig();
   // largura e ALTURA soltas: com a proporcao travada a imagem nunca cobria
   // a tela (o cartao e 780x500 e o quadro e 9:16)
   const larg = Math.max(16, Math.round(Math.min(1, Math.max(0.08, w ?? size ?? CARD_W / 1080)) * qLarg));
@@ -697,6 +698,7 @@ const InsertCard: React.FC<{
             0,5 = centro) — espelho do crop com offset no motor próprio. */}
         {ehVideo(src) ? (
           <OffthreadVideo src={staticFile(src)} muted
+            startFrom={Math.max(0, Math.round((srcIn ?? 0) * qFps))}
             style={{width: '100%', height: '100%', objectFit: 'cover',
               objectPosition: `${(fx ?? 0.5) * 100}% ${(fy ?? 0.5) * 100}%`,
               transformOrigin: `${(fx ?? 0.5) * 100}% ${(fy ?? 0.5) * 100}%`,
@@ -729,7 +731,7 @@ const Inserts: React.FC = () => {
               w={(it as any).w} h={(it as any).h}
               entrada={(it as any).entrada} saida={(it as any).saida}
               fx={(it as any).fx} fy={(it as any).fy}
-              zoom={(it as any).zoom} />
+              zoom={(it as any).zoom} srcIn={(it as any).srcIn} />
           </Sequence>
         );
       })}

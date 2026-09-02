@@ -1891,7 +1891,7 @@ function geoDoInsert(c) {
   return JSON.stringify([+(+c.start).toFixed(3), +(+c.end).toFixed(3),
     c.x ?? null, c.y ?? null, c.w ?? null, c.h ?? null, c.size ?? null,
     c.entrada ?? null, c.saida ?? null, c.fx ?? null, c.fy ?? null,
-    c.zoom ?? null]);
+    c.zoom ?? null, c.srcIn ?? null]);
 }
 function manualMudou() {
   return !!S.manualApagado || S.insertsDraft.some(
@@ -3095,6 +3095,7 @@ function buildInsertsDraft() {
       ...(it.fx != null ? { fx: +it.fx } : {}),
       ...(it.fy != null ? { fy: +it.fy } : {}),
       ...(it.zoom != null ? { zoom: +it.zoom } : {}),
+      ...(it.srcIn != null ? { srcIn: +it.srcIn } : {}),
     });
   });
   // split-layout images (CustomGraphics reads the same array) — they are images
@@ -3791,8 +3792,14 @@ function desenharMidiaNoPreview() {
         // quadro com conteudo assim que os metadados chegam.
         vid.addEventListener('loadedmetadata', () => {
           const d = Number(vid.duration) || 0;
-          if (d > 0.6) vid.currentTime = Math.min(1.0, d * 0.15);
+          const dentro = Math.max(0, +c.srcIn || 0);
+          vid.currentTime = dentro || (d > 0.6 ? Math.min(1.0, d * 0.15) : 0);
         }, { once: true });
+        // o loop volta ao 0 do ARQUIVO; com in-point, pula de volta para ele
+        vid.addEventListener('timeupdate', () => {
+          const dentro = Math.max(0, +c.srcIn || 0);
+          if (dentro && vid.currentTime < dentro - 0.05) vid.currentTime = dentro;
+        });
         vid.play().catch(() => {});
       } else {
         const img = el('img', '', card);
@@ -6179,8 +6186,19 @@ panel.addEventListener('pointermove', (e) => {
     showTooltip(e, `${fmt(r.start)} → ${fmt(r.end)} <span class="delta">(${d >= 0 ? '+' : ''}${d.toFixed(2)}s)</span>`);
   } else if (drag.type === 'chip-trim') {
     const c = S.insertsDraft[drag.i];
-    if (drag.side === 'l') c.start = Math.min(Math.max(0, drag.c.start + dt), c.end - 0.15);
-    else c.end = Math.max(drag.c.end + dt, c.start + 0.15);
+    if (drag.side === 'l') {
+      c.start = Math.min(Math.max(0, drag.c.start + dt), c.end - 0.15);
+      // VIDEO inserido: encurtar pela ESQUERDA corta o COMEÇO do arquivo
+      // (in-point), como num editor profissional — o que sobra do take não
+      // se mexe na tela. Pedido de 02/09 ("recortar o vídeo ao adicionar").
+      if (c.kind === 'insert' && /\.(mp4|mov|m4v|webm|mkv)$/i.test(String(c.src || ''))) {
+        c.srcIn = +Math.max(0, (drag.c.srcIn || 0) + (c.start - drag.c.start)).toFixed(3);
+        renderChips();
+        refreshHeader();
+        showTooltip(e, `${fmt(c.start)} → ${fmt(c.end)} · take a partir de ${fmt(c.srcIn)}`);
+        return;
+      }
+    } else c.end = Math.max(drag.c.end + dt, c.start + 0.15);
     renderChips();
     refreshHeader();
     showTooltip(e, `${fmt(c.start)} → ${fmt(c.end)}`);
@@ -7477,6 +7495,7 @@ async function saveEditsAndReturnToQueue() {
           ...(c.fx != null ? { fx: +c.fx } : {}),
           ...(c.fy != null ? { fy: +c.fy } : {}),
           ...(c.zoom != null && +c.zoom > 1.0001 ? { zoom: +c.zoom } : {}),
+          ...(c.srcIn != null && +c.srcIn > 0.001 ? { srcIn: +c.srcIn } : {}),
         })),
       // Emoji: comeco E duracao (ele fica na tela enquanto o bloco durar).
       emojis: S.insertsDraft.filter((c) => c.kind === 'emoji' && c.char).map((c) => ({
