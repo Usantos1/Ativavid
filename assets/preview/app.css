@@ -4173,3 +4173,7 @@ body > .fx-drop { position: fixed; bottom: auto; }
   background-color: #0b0e13;
 }
 .chip.insert.com-midia.sel { outline-offset: 1px; }
+
+/* faixa de midia ALTA como o filmstrip do video principal */
+.lane-midia { height: 58px; }
+.lane-midia .chip.insert.com-midia { font-size: 0; }

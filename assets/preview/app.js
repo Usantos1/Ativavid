@@ -5154,8 +5154,11 @@ function desenharFaixasDeInsert(phase2) {
   const isText = (c) => c.kind === 'hook' || c.kind === 'word' || c.kind === 'emoji';
   const isSfx = (c) => c.kind === 'sfx';
   const groups = [
+    // MIDIA primeiro (logo abaixo do video) e ALTA como o filmstrip — a
+    // miniatura de 22px nao dava para ver o que era (pedido de 02/09)
+    { icon: 'inserts', cls: 'orange', alto: true,
+      items: visiveis.filter(({ c }) => !isText(c) && !isSfx(c)) },
     { icon: 'text', cls: 'teal', items: visiveis.filter(({ c }) => isText(c)) },
-    { icon: 'inserts', cls: 'orange', items: visiveis.filter(({ c }) => !isText(c) && !isSfx(c)) },
     // faixa propria: som e imagem sao coisas diferentes de editar, e
     // misturados numa fileira so o efeito some entre as fotos
     { icon: 'music', cls: 'olive', items: visiveis.filter(({ c }) => isSfx(c)) },
@@ -5179,7 +5182,7 @@ function desenharFaixasDeInsert(phase2) {
       const lab = el('div', 'track-label', trk);
       // only the first lane of a group carries the icon; the rest are continuations
       if (t === 0) el('span', `tl-chip ${g.cls}`, lab).innerHTML = ICON[g.icon];
-      lanes.push(el('div', 'lane', trk));
+      lanes.push(el('div', g.alto ? 'lane lane-midia' : 'lane', trk));
     }
     for (const { c, i } of g.items) {
       const chip = el('div', `chip insert ${isText(c) ? 'hook' : ''}`, lanes[assign.get(i) ?? 0]);

@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.66
+
+- **A faixa de mídia subiu para logo abaixo do vídeo principal — e na
+  mesma altura.** As imagens e vídeos inseridos aparecem como camadas
+  grandes, com miniatura legível, colados no filmstrip do vídeo. A faixa
+  de texto (gancho) e a de sons vêm em seguida.
+
 ## 4.65
 
 - **O bloco de mídia mostra a mídia, não o nome.** Na timeline, a imagem
