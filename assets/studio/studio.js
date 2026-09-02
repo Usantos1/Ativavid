@@ -884,7 +884,7 @@ function cardHtml(j, opts) {
     : "";
   return `<article class="project-card ${j.status}${compact ? " compact" : ""}${enter ? " pc-enter" : ""}" data-card-id="${safeId}" data-card-sig="${escapeHtml(cardSig(j, opts))}">
     <div class="pc-thumb">
-      <div class="pc-thumb-fallback${thumb ? "" : " skeleton"}">9:16</div>
+      <div class="pc-thumb-fallback${thumb ? "" : " skeleton"}">${fmt || "9:16"}</div>
       ${thumbImg}
     </div>
     <div class="pc-body">

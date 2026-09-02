@@ -1,5 +1,17 @@
 # Changelog
 
+## 4.75
+
+- **Vídeo longo não derruba mais o corte.** Um vídeo de 15 minutos vira
+  centenas de trechos, e a soma do áudio estourava o limite de comando do
+  Windows — o corte morria com "nome do arquivo muito grande". O mix
+  agora soma em lotes (mesmo som, comandos pequenos).
+- **O card mostra o formato certo do vídeo.** Um vídeo com preset YouTube
+  aparecia na Fila com "9:16" ao lado da duração — o rótulo era fixo na
+  tela. Agora ele vem do preset do job: Reels 9:16, YouTube 16:9,
+  Quadrado 1:1, Feed 4:5. O corte em si sempre esteve certo; só o rótulo
+  mentia.
+
 ## 4.74
 
 - **ElevenLabs saiu do produto.** Nada no ATIVAVID depende mais de conta ou

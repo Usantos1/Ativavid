@@ -1646,6 +1646,56 @@ def plan_jcut(edl: dict, edit_dir: Path, cfg: dict) -> list[dict]:
     return plan
 
 
+# O Windows corta a linha de comando em ~32k caracteres. Um video de 15min
+# virou 280 trechos, e os 280 `-i` + o filter_complex passaram do teto —
+# CreateProcess falhou com WinError 206 e o corte morreu (caso real de
+# 02/09, primeira fonte longa do usuario). Mixar em LOTES mantem cada
+# chamada pequena: amix com normalize=0 e soma pura, entao somar por partes
+# e somar as partes da o MESMO resultado; o limiter so entra no mix final,
+# senao limitaria duas vezes.
+_MIX_LOTE = 48
+
+
+def _mix_lote(entradas: list[tuple[Path, float]], destino: Path,
+              limitar: bool) -> None:
+    """Soma as faixas de `entradas` (caminho, offset em segundos) num wav."""
+    inputs: list[str] = []
+    labels = ""
+    refs = ""
+    for k, (p, off) in enumerate(entradas):
+        inputs += ["-i", str(p)]
+        # delay in SAMPLES: adelay's integer-millisecond form leaves the mix a
+        # fraction short of the video, and a downstream -shortest then amputates
+        # whole frames of picture.
+        smp = int(round(off * 48000))
+        labels += f"[{k}:a]adelay={smp}S|{smp}S[d{k}];"
+        refs += f"[d{k}]"
+    cauda = ",alimiter=limit=0.95" if limitar else ""
+    run(["ffmpeg", "-y", *inputs, "-filter_complex",
+         f"{labels}{refs}amix=inputs={len(entradas)}:normalize=0:"
+         f"duration=longest{cauda}[a]", "-map", "[a]", "-c:a", "pcm_s16le",
+         str(destino)], quiet=True)
+
+
+def _mixar_audio(plan: list[dict], work: Path) -> Path:
+    audio_only = work / "_jcut_audio.wav"
+    entradas = [(p["audio_path"], float(p["a_off"])) for p in plan]
+    if len(entradas) <= _MIX_LOTE:
+        _mix_lote(entradas, audio_only, limitar=True)
+        return audio_only
+    parciais: list[Path] = []
+    for n, i0 in enumerate(range(0, len(entradas), _MIX_LOTE)):
+        parte = work / f"_jcut_mix{n}.wav"
+        # offsets ABSOLUTOS dentro de cada lote: o parcial ja nasce alinhado
+        # ao relogio do video e o mix final soma tudo em offset zero
+        _mix_lote(entradas[i0:i0 + _MIX_LOTE], parte, limitar=False)
+        parciais.append(parte)
+    _mix_lote([(p, 0.0) for p in parciais], audio_only, limitar=True)
+    for p in parciais:
+        p.unlink(missing_ok=True)
+    return audio_only
+
+
 def assemble_jcut(plan: list[dict], out_path: Path, edit_dir: Path) -> None:
     """Concat the video track, sum the offset audio tracks, mux them together."""
     work = edit_dir / "clips_graded"
@@ -1657,23 +1707,7 @@ def assemble_jcut(plan: list[dict], out_path: Path, edit_dir: Path) -> None:
          "-c", "copy", str(video_only)], quiet=True)
     vlist.unlink(missing_ok=True)
 
-    inputs: list[str] = []
-    labels = ""
-    refs = ""
-    for k, p in enumerate(plan):
-        inputs += ["-i", str(p["audio_path"])]
-        # delay in SAMPLES: adelay's integer-millisecond form leaves the mix a
-        # fraction short of the video, and a downstream -shortest then amputates
-        # whole frames of picture.
-        smp = int(round(p["a_off"] * 48000))
-        labels += f"[{k}:a]adelay={smp}S|{smp}S[d{k}];"
-        refs += f"[d{k}]"
-
-    audio_only = work / "_jcut_audio.wav"
-    run(["ffmpeg", "-y", *inputs, "-filter_complex",
-         f"{labels}{refs}amix=inputs={len(plan)}:normalize=0:duration=longest,"
-         f"alimiter=limit=0.95[a]", "-map", "[a]", "-c:a", "pcm_s16le",
-         str(audio_only)], quiet=True)
+    audio_only = _mixar_audio(plan, work)
 
     total = sum(p["v_out"] - p["v_in"] for p in plan)
     # NO -shortest here: a sub-millisecond audio shortfall would truncate video.

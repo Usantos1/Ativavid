@@ -463,6 +463,30 @@ def _aviso_de_ia(job: dict, edit: Path) -> None:
            if de_sessao else "Gere de novo para o título sair da IA."))
 
 
+# O rotulo de formato do card. A tela chumbar "9:16" mentia para todo
+# preset que nao fosse Reels — caso real de 02/09: video de YouTube (fonte
+# 1920x1080, exportPreset=youtube) na Fila com "9:16" ao lado da duracao.
+_FORMATO_LABEL = {"reels": "9:16", "youtube": "16:9",
+                  "square": "1:1", "feed": "4:5"}
+
+
+def _formato_do_video(job: dict, edit: Path) -> None:
+    """`formatLabel` a partir do preset USADO no job (preset-used.json);
+    sem ele (job na fila, projeto velho), do preset pedido no proprio job."""
+    preset = None
+    try:
+        preset = json.loads((edit / "preset-used.json")
+                            .read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError):
+        pass
+    if not isinstance(preset, dict):
+        preset = job.get("preset") if isinstance(job.get("preset"), dict) else {}
+    exp = str((preset or {}).get("exportPreset") or "").strip().lower()
+    rotulo = _FORMATO_LABEL.get(exp)
+    if rotulo:
+        job["formatLabel"] = rotulo
+
+
 def build(store: Any, projects_root: Path, *, com_links: bool = False) -> list[dict]:
     """Cards prontos para a tela, do mais recente para o mais antigo."""
     from app.local_server import (  # import tardio: o local_server usa este módulo
@@ -495,6 +519,7 @@ def build(store: Any, projects_root: Path, *, com_links: bool = False) -> list[d
                 j["score"] = json.loads(score_path.read_text(encoding="utf-8-sig"))
             except (OSError, json.JSONDecodeError):
                 pass
+        _formato_do_video(j, edit)
         _fonte_do_video(j, edit)
         _modo_de_edicao(j, edit)
         _resumo_do_corte(j, edit)
