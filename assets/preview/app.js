@@ -1891,11 +1891,11 @@ function geoDoInsert(c) {
   return JSON.stringify([+(+c.start).toFixed(3), +(+c.end).toFixed(3),
     c.x ?? null, c.y ?? null, c.w ?? null, c.h ?? null, c.size ?? null,
     c.entrada ?? null, c.saida ?? null, c.fx ?? null, c.fy ?? null,
-    c.zoom ?? null, c.srcIn ?? null, c.camada ?? null]);
+    c.zoom ?? null, c.srcIn ?? null, c.camada ?? null, c.volume ?? null]);
 }
 function manualMudou() {
   return !!S.manualApagado || S.insertsDraft.some(
-    (c) => c.kind === 'insert'
+    (c) => (c.kind === 'insert' || c.kind === 'emoji' || c.kind === 'sfx')
       && (c.isNew || (c.manual && c.origGeo != null && c.origGeo !== geoDoInsert(c))));
 }
 function insertsDirty() {
@@ -3099,6 +3099,30 @@ function buildInsertsDraft() {
       ...(it.camada != null ? { camada: it.camada | 0 } : {}),
     });
   });
+  // Emoji e efeito sonoro postos na mao TAMBEM voltam como camada viva
+  // depois do render (mesma familia da 4.61): sem isto eles sumiam da
+  // timeline — e mover duplicava, apagar ressuscitava (append no pipeline).
+  (d.emojis || []).forEach((it) => {
+    if (!it || !it.char) return;
+    const start = Math.max(0, +it.atSec || 0);
+    list.push({
+      kind: 'emoji', label: it.char, char: it.char,
+      start, end: start + (+it.durSec > 0.05 ? +it.durSec : 1.6),
+      manual: true,
+      x: it.x != null ? +it.x : 0.5,
+      y: it.y != null ? +it.y : 0.34,
+      size: it.size != null ? +it.size : 0.22,
+    });
+  });
+  (d.sfxManual || []).forEach((it) => {
+    if (!it || !it.src) return;
+    const start = Math.max(0, +it.atSec || 0);
+    list.push({
+      kind: 'sfx', label: (it.src || '').split('/').pop(),
+      start, end: start + SFX_BLOCO_S, src: it.src,
+      manual: true, volume: it.volume != null ? +it.volume : 0.5,
+    });
+  });
   // split-layout images (CustomGraphics reads the same array) — they are images
   // like any other insert, so they belong on the image track, not in code
   (d.splitInserts || []).forEach((it, i) => {
@@ -3746,7 +3770,7 @@ function desenharMidiaNoPreview() {
   const naFinal = S.tab === 2 && S.state && S.state.finalVideo && !S.finalFailed;
   const agora = S.insertsDraft.filter(
     (c) => t >= c.start && t < c.end
-    && ((c.kind === 'emoji' && c.isNew)
+    && ((c.kind === 'emoji' && (c.isNew || (c.manual && !naFinal)))
       || (c.kind === 'insert'
         && (c.isNew || (c.manual && !naFinal)))));
   // mesma ordem de pintura dos motores: camada primeiro (fileira de baixo
@@ -3980,7 +4004,9 @@ document.addEventListener('click', (e) => {
  * trazer de volta — remover por engano nao pode custar o trabalho todo. */
 function removerBlocoDaMao(i) {
   const c = S.insertsDraft[i];
-  if (!c || !(c.isNew || (c.kind === 'insert' && c.manual))) return;
+  // emoji e som JA aplicados (manual) tambem saem daqui — a ausencia na
+  // lista salva e o que apaga do video (protocolo de substituicao)
+  if (!c || !(c.isNew || c.manual)) return;
   pushHistory();
   // manual JA aplicado: a ausencia na lista salva e o que APAGA do video
   if (c.manual && !c.isNew) S.manualApagado = true;
@@ -5172,7 +5198,7 @@ function renderChips() {
   // Na Edicao o bloco de faixas so aparece quando ha midia posta na mao —
   // sem isso a faixa nasce vazia e come altura da linha do tempo.
   const temManual = S.insertsDraft.some(
-    (c) => c.isNew || c.kind === 'hook' || (c.kind === 'insert' && c.manual));
+    (c) => c.isNew || c.kind === 'hook' || c.manual);
   insertTracksEl.classList.toggle('hidden', !phase2 && !temManual);
   insertTracksEl.innerHTML = '';
   if (!showCaps) {
@@ -5223,8 +5249,7 @@ function desenharFaixasDeInsert(phase2) {
   // aqui", estando na Edicao).
   const visiveis = soManuais
     ? S.insertsDraft.map((c, i) => ({ c, i }))
-        .filter(({ c }) => c.isNew || c.kind === 'hook'
-          || (c.kind === 'insert' && c.manual))
+        .filter(({ c }) => c.isNew || c.kind === 'hook' || c.manual)
     : S.insertsDraft.map((c, i) => ({ c, i }));
   if (soManuais && !visiveis.length) return;
 
@@ -6084,9 +6109,10 @@ panel.addEventListener('pointerdown', (e) => {
   // O bloco POSTO NA MAO tambem se ajusta na Edicao: ele nasce em tempo de
   // rascunho, que e o relogio daquela tela. So os inserts da IA continuam
   // presos ao Visual, onde o relogio deles bate.
+  // `manual` cobre insert, emoji e som ja aplicados — todos voltam como
+  // camada viva e continuam ajustaveis
   const daMao = chip && (S.insertsDraft[+chip.dataset.i]?.isNew
-    || (S.insertsDraft[+chip.dataset.i]?.kind === 'insert'
-      && S.insertsDraft[+chip.dataset.i]?.manual));
+    || S.insertsDraft[+chip.dataset.i]?.manual);
   if (handle && chip && (S.tab === 2 || daMao)) {
     const i = +handle.dataset.i;
     drag = { type: 'chip-trim', i, side: handle.classList.contains('l') ? 'l' : 'r', x0: e.clientX, c: { ...S.insertsDraft[i] }, preSnapshot: snapshotState() };
@@ -7548,6 +7574,10 @@ async function saveEditsAndReturnToQueue() {
           ...(c.srcIn != null && +c.srcIn > 0.001 ? { srcIn: +c.srcIn } : {}),
           ...((c.camada | 0) > 0 ? { camada: c.camada | 0 } : {}),
         })),
+      // Marca do protocolo de SUBSTITUICAO (4.73): estas listas sao o
+      // estado COMPLETO de emoji/som — o pipeline troca, nao soma. Um
+      // preview velho em cache nao manda a marca e cai no caminho antigo.
+      emojiSfxCompleto: true,
       // Emoji: comeco E duracao (ele fica na tela enquanto o bloco durar).
       emojis: S.insertsDraft.filter((c) => c.kind === 'emoji' && c.char).map((c) => ({
         char: c.char, atSec: +c.start.toFixed(3),

@@ -992,7 +992,13 @@ def midia_do_editor(edit_dir: Path, public: Path, edit_data: dict) -> None:
         if inseridos:
             edit_data["inserts"] = inserts
 
-    emojis = list(edit_data.get("emojis") or [])
+    # PROTOCOLO de substituicao (4.73, mesma regra do manualInserts/4.61):
+    # a tela nova manda o estado COMPLETO de emoji e som com a marca
+    # `emojiSfxCompleto` — a lista dela SUBSTITUI a do edit-data (mover
+    # deixou de duplicar, apagar deixou de ressuscitar). Preview velho em
+    # cache nao manda a marca e continua no somar+deduplicar de sempre.
+    completo = bool(ed.get("emojiSfxCompleto"))
+    emojis = [] if completo else list(edit_data.get("emojis") or [])
     ja_emoji = {(str(x.get("char") or ""), round(float(x.get("atSec") or 0), 2))
                 for x in emojis if isinstance(x, dict)}
     n_emoji = 0
@@ -1021,10 +1027,10 @@ def midia_do_editor(edit_dir: Path, public: Path, edit_data: dict) -> None:
             "size": min(0.8, max(0.05, _f("size", 0.22))),
         })
         n_emoji += 1
-    if n_emoji:
+    if n_emoji or completo:
         edit_data["emojis"] = emojis
 
-    sons = list(edit_data.get("sfxManual") or [])
+    sons = [] if completo else list(edit_data.get("sfxManual") or [])
     ja_som = {(str(x.get("src") or ""), round(float(x.get("atSec") or 0), 2))
               for x in sons if isinstance(x, dict)}
     n_som = 0
@@ -1050,7 +1056,7 @@ def midia_do_editor(edit_dir: Path, public: Path, edit_data: dict) -> None:
         sons.append({"src": nome, "atSec": round(max(0.0, em), 3),
                      "volume": max(0.0, min(1.5, vol))})
         n_som += 1
-    if n_som:
+    if n_som or completo:
         edit_data["sfxManual"] = sons
     if inseridos or n_som or n_emoji:
         print(f"[editor] mídia posta na mão: {inseridos} insert(s), "

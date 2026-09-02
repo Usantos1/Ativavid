@@ -144,16 +144,22 @@ def test_da_para_tirar_o_que_foi_posto_na_mao():
     # histórico ANTES: remover por engano não pode custar o trabalho
     assert bloco.index("pushHistory()") < bloco.index("splice(i, 1)")
     # Desde a 4.61 a mídia manual JÁ APLICADA também se tira (a ausência na
-    # lista salva é o que apaga do vídeo); o resto continua protegido.
-    assert "if (!c || !(c.isNew || (c.kind === 'insert' && c.manual))) return;" in bloco
+    # lista salva é o que apaga do vídeo); desde a 4.73 emoji e som aplicados
+    # entram na mesma regra. O resto continua protegido pela falta das duas
+    # marcas (isNew/manual).
+    assert "if (!c || !(c.isNew || c.manual)) return;" in bloco
     assert "S.manualApagado = true" in bloco
 
 
 def test_o_gancho_nao_se_apaga_pela_linha_do_tempo():
     """Ele é parte do estilo — desliga-se no Estilo, não com um ✕ que
-    apagaria a manchete do vídeo sem dizer isso."""
+    apagaria a manchete do vídeo sem dizer isso. A guarda passa quem tem
+    isNew ou manual; o gancho não nasce com NENHUMA das duas marcas."""
     i = JS.index("function removerBlocoDaMao")
-    assert "!c.isNew" in JS[i:i + 300]
+    assert "if (!c || !(c.isNew || c.manual)) return;" in JS[i:i + 400]
+    j = JS.index("kind: 'hook', label: `Gancho")
+    linha = JS[j:JS.index("\n", j)]
+    assert "manual" not in linha and "isNew" not in linha, linha
 
 
 def test_o_bloco_da_mao_se_pega_tambem_na_edicao():

@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.73
+
+- **Emoji e efeito sonoro não somem mais depois do render.** Eles voltam
+  para a timeline como camada viva — dá para mover, ajustar o volume,
+  trocar de lugar ou apagar, e o próximo "Aplicar" respeita exatamente o
+  que está na tela (mover não duplica mais; apagar não ressuscita mais).
+- No Visual, o emoji já queimado no vídeo não aparece dobrado — o cartão
+  vivo só entra na Edição, igual às imagens.
+
 ## 4.72
 
 - **Camadas de verdade na timeline.** Arraste um bloco de imagem ou vídeo
