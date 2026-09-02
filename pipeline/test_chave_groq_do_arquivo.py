@@ -49,7 +49,9 @@ def test_leitura_quebrada_nao_levanta(monkeypatch):
 
 def test_o_plano_b_de_parse_depende_dessa_chave():
     """Amarra o motivo: se alguem trocar a condicao, este teste explica."""
+    # A função inteira, não janela fixa: a retentativa na própria sessão
+    # (4.78) empurrou a checagem da chave para depois dos 500 chars.
     s = (RAIZ / "helpers" / "llm_cut_plan.py").read_text(encoding="utf-8")
-    i = s.index("except json.JSONDecodeError as e:")
-    corpo = s[i:i + 500]
+    i = s.index("def _chamar_e_parsear")
+    corpo = s[i:s.index("\ndef ", i + 10)]
     assert "gw._groq_key()" in corpo

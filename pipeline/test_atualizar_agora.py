@@ -89,9 +89,11 @@ def test_o_botao_de_ajustes_instala_no_app_e_nao_abre_o_navegador():
     assert i > 0
     assert "instalarAtualizacao(btnUpdateOpen)" in js[i:i + 300], \
         "o botao de Ajustes saiu do caminho unico"
-    # e o caminho unico tenta instalar primeiro; navegador so no catch
+    # e o caminho unico tenta instalar primeiro; navegador so no catch.
+    # A funcao INTEIRA, nao janela fixa: a guarda da fila (4.78) cresceu o
+    # comeco e 1400 chars cortavam o catch.
     j = js.find("async function instalarAtualizacao(")
-    corpo = js[j:j + 1400]
+    corpo = js[j:js.find("\nasync function", j + 10)]
     i_instalar = corpo.find('action: "instalar"')
     i_navegador = corpo.find("openUpdateDownload(")
     assert 0 < i_instalar < i_navegador, \
@@ -131,7 +133,7 @@ def test_o_navegador_continua_como_rede_de_seguranca():
     falhar (proxy de empresa, antivirus) — senao o usuario fica sem saida."""
     js = (RAIZ / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
     i = js.find("async function instalarAtualizacao(")
-    corpo = js[i:i + 1400]
+    corpo = js[i:js.find("\nasync function", i + 10)]
     assert "catch" in corpo and "openUpdateDownload(" in corpo
 
 

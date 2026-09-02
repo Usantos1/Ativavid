@@ -305,31 +305,51 @@ def _chamar_e_parsear(messages: list[dict]) -> tuple[dict | list, str, str]:
     cai para o Groq, que com response_format=json_object devolve JSON válido
     por contrato.
     """
-    text, backend = _chat_com_rede(messages)
-    try:
-        return _extract_json(text), backend, text
-    except json.JSONDecodeError as e:
-        from app import llm_gateway as gw
+    from app import llm_gateway as gw
 
-        if backend == "groq" or not gw._groq_key():
-            raise
+    def _diagnostico(texto: str, erro: Exception) -> str:
         # Recusa é diagnóstico diferente de vírgula faltando: o log dizia
         # "JSON quebrado" quando o Gemini tinha RECUSADO a tarefa inteira
-        # ("só consigo gerar texto") — e a investigação começou pelo lado
-        # errado. Nomear o que veio encurta a próxima caçada.
-        _baixo = (text or "").lower()
-        _recusou = any(m in _baixo for m in (
+        # ("só consigo gerar texto" / "sou só um modelo de linguagem") — e
+        # a investigação começou pelo lado errado.
+        baixo = (texto or "").lower()
+        recusou = any(m in baixo for m in (
             "não fui programado", "nao fui programado",
-            "consigo gerar texto", "i can't help", "i cannot help"))
-        _motivo = "RECUSA da tarefa" if _recusou else f"JSON quebrado ({str(e)[:60]})"
-        print(f"[ia] resposta de {backend} com {_motivo} "
-              "— refazendo no groq", flush=True)
-        resp = gw._groq_chat(
-            messages, None,
-            extras={"response_format": {"type": "json_object"}})
-        gw.ULTIMO_GROQ_MOTIVO = "parse"
-        texto = str(resp["choices"][0]["message"]["content"] or "")
-        return _extract_json(texto), "groq", texto
+            "consigo gerar texto", "modelo de linguagem",
+            "não consigo te ajudar", "nao consigo te ajudar",
+            "i can't help", "i cannot help"))
+        return ("RECUSA da tarefa" if recusou
+                else f"JSON quebrado ({str(erro)[:60]})")
+
+    ultimo: json.JSONDecodeError | None = None
+    for tentativa in (1, 2):
+        text, backend = _chat_com_rede(messages)
+        try:
+            return _extract_json(text), backend, text
+        except json.JSONDecodeError as e:
+            ultimo = e
+            if backend == "groq":
+                break            # rede já caiu no Groq; repetir não muda
+            _motivo = _diagnostico(text, e)
+            if tentativa == 1:
+                # Caso real de 02/09: o Flash RECUSOU a 1ª chamada e entregou
+                # o plano COMPLETO na 2ª, com o MESMO prompt. Repetir na
+                # própria sessão custa segundos; o Groq engasga (HTTP 400)
+                # na transcrição longa.
+                print(f"[ia] resposta de {backend} com {_motivo} "
+                      "— repetindo na própria sessão", flush=True)
+                continue
+            if not gw._groq_key():
+                raise
+            print(f"[ia] resposta de {backend} com {_motivo} "
+                  "— refazendo no groq", flush=True)
+            resp = gw._groq_chat(
+                messages, None,
+                extras={"response_format": {"type": "json_object"}})
+            gw.ULTIMO_GROQ_MOTIVO = "parse"
+            texto = str(resp["choices"][0]["message"]["content"] or "")
+            return _extract_json(texto), "groq", texto
+    raise ultimo  # type: ignore[misc]
 
 
 def _extract_json(text: str) -> dict | list:

@@ -1986,6 +1986,23 @@ async function acompanharAtualizacao() {
 }
 
 async function instalarAtualizacao(btn) {
+  // Atualizar FECHA o app — e um render no meio recomeça do zero (caso
+  // real de 02/09: um vídeo de 11min estava há 55min renderizando e a
+  // atualização o reiniciou sem aviso). Com a fila ocupada, avisa antes.
+  try {
+    const js = await api("/api/jobs");
+    const ocupados = (js.jobs || []).filter((j) =>
+      j.status === "processing" || j.status === "importing").length;
+    if (ocupados > 0) {
+      const ok = await pedirConfirmacao(
+        "Atualizar agora?",
+        `Tem ${ocupados} vídeo${ocupados > 1 ? "s" : ""} sendo editado`
+        + ` agora. Atualizar fecha o ATIVAVID e ess${ocupados > 1 ? "es"
+          : "e"} vídeo recomeça do zero depois.`,
+        "Atualizar mesmo assim", true);
+      if (!ok) return false;
+    }
+  } catch { /* fila indisponível não trava a atualização */ }
   const rotulo = btn ? btn.textContent : "";
   if (btn) { btn.disabled = true; btn.textContent = "Baixando…"; }
   else toast("Baixando a atualização…", 8000);

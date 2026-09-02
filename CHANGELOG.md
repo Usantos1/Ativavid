@@ -1,5 +1,15 @@
 # Changelog
 
+## 4.78
+
+- **Atualizar avisa quando tem vídeo sendo editado.** Atualizar fecha o
+  aplicativo, e um render no meio recomeça do zero — agora o app avisa e
+  pede confirmação antes, em vez de fechar calado por cima do trabalho.
+- **A IA insiste antes de desistir do plano de corte.** Quando o Gemini
+  recusa ou responde fora do formato, o app repete o pedido na própria
+  sessão (na prática a segunda tentativa responde certo) antes de cair
+  nos caminhos de reserva.
+
 ## 4.77
 
 - **Vídeo longo (YouTube 16:9) renderiza em minutos, não em horas.** O
