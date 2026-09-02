@@ -936,6 +936,16 @@ def midia_do_editor(edit_dir: Path, public: Path, edit_data: dict) -> None:
                     geo["zoom"] = round(z, 4)
             except (TypeError, ValueError):
                 pass
+        # camada manual (0 = mais atras; maior = mais na frente) — vem do
+        # arrasto VERTICAL do bloco na timeline; os motores pintam por
+        # (camada, start), sempre abaixo de legenda/headline
+        if it.get("camada") is not None:
+            try:
+                cam = int(it["camada"])
+                if 1 <= cam <= 4:
+                    geo["camada"] = cam
+            except (TypeError, ValueError):
+                pass
         mid = re.sub(r"[^A-Za-z0-9_-]", "", str(it.get("mid") or ""))[:24]
         return {"src": src, "start": round(ini, 3),
                 "end": round(fim, 3),

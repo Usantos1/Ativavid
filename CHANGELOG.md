@@ -1,5 +1,17 @@
 # Changelog
 
+## 4.72
+
+- **Camadas de verdade na timeline.** Arraste um bloco de imagem ou vídeo
+  **para cima ou para baixo** e ele muda de camada — a faixa de mídia ganha
+  uma fileira por camada, como num editor profissional. A fileira de baixo
+  aparece **na frente** no vídeo; legenda e headline continuam sempre por
+  cima de tudo. A dica durante o arrasto mostra a camada ("camada 2").
+- Um bloco novo já nasce na primeira fileira livre — nunca em cima de outro
+  que ocupa o mesmo trecho.
+- A ordem de pintura (camada e depois início) sai igual no preview e nos
+  dois motores de render.
+
 ## 4.71
 
 - **Recorte de tempo do vídeo inserido (in/out).** Arrastar a borda

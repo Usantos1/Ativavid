@@ -3905,13 +3905,20 @@ class Renderizador:
         arredondamento ja vem no alpha; o resto (escala, opacidade, subida)
         e por quadro, em `_desenhar_insert`."""
         camadas = []
-        # Ordem de PINTURA = ordem de INICIO na timeline: quem entra depois
-        # desenha por cima (padrao de editor). Sem isto a ordem era a de
-        # criacao, e o cartao girando passava POR TRAS de outra imagem
-        # (relato de 02/09). Espelho do sort no Inserts do template.
-        fila = sorted((self.ed.get("inserts") or []),
-                      key=lambda x: float((x or {}).get("start") or 0.0)
-                      if isinstance(x, dict) else 0.0)
+        # Ordem de PINTURA = (camada, inicio): a camada manual escolhida no
+        # arrasto vertical manda primeiro; dentro da mesma camada, quem entra
+        # depois desenha por cima (padrao de editor — o cartao girando passava
+        # POR TRAS de outra imagem, relato de 02/09). Espelho do sort no
+        # Inserts do template.
+        def _ordem_de_pintura(x):
+            if not isinstance(x, dict):
+                return (0, 0.0)
+            try:
+                cam = int(x.get("camada") or 0)
+            except (TypeError, ValueError):
+                cam = 0
+            return (cam, float(x.get("start") or 0.0))
+        fila = sorted((self.ed.get("inserts") or []), key=_ordem_de_pintura)
         for it in fila:
             src = it.get("src")
             if not src:

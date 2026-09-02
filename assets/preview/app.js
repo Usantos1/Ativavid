@@ -1891,7 +1891,7 @@ function geoDoInsert(c) {
   return JSON.stringify([+(+c.start).toFixed(3), +(+c.end).toFixed(3),
     c.x ?? null, c.y ?? null, c.w ?? null, c.h ?? null, c.size ?? null,
     c.entrada ?? null, c.saida ?? null, c.fx ?? null, c.fy ?? null,
-    c.zoom ?? null, c.srcIn ?? null]);
+    c.zoom ?? null, c.srcIn ?? null, c.camada ?? null]);
 }
 function manualMudou() {
   return !!S.manualApagado || S.insertsDraft.some(
@@ -3096,6 +3096,7 @@ function buildInsertsDraft() {
       ...(it.fy != null ? { fy: +it.fy } : {}),
       ...(it.zoom != null ? { zoom: +it.zoom } : {}),
       ...(it.srcIn != null ? { srcIn: +it.srcIn } : {}),
+      ...(it.camada != null ? { camada: it.camada | 0 } : {}),
     });
   });
   // split-layout images (CustomGraphics reads the same array) — they are images
@@ -3748,9 +3749,11 @@ function desenharMidiaNoPreview() {
     && ((c.kind === 'emoji' && c.isNew)
       || (c.kind === 'insert'
         && (c.isNew || (c.manual && !naFinal)))));
-  // mesma ordem de pintura dos motores: quem entra depois fica por cima
-  agora.sort((a, b) => (a.start || 0) - (b.start || 0));
-  const chave = agora.map((c) => `${c.kind}:${c.label}:${c.start}`).join('|');
+  // mesma ordem de pintura dos motores: camada primeiro (fileira de baixo
+  // na timeline = por cima no video), depois quem entra depois fica por cima
+  agora.sort((a, b) => ((a.camada | 0) - (b.camada | 0))
+    || ((a.start || 0) - (b.start || 0)));
+  const chave = agora.map((c) => `${c.kind}:${c.label}:${c.start}:${c.camada | 0}`).join('|');
   if (box.dataset.chave === chave) return;   // sem repintar a cada quadro
   // Caixa ainda sem tamanho (video carregando): pintar agora sairia um
   // cartao de pixels — pinta, mas SEM gravar a chave, para a proxima
@@ -5242,18 +5245,33 @@ function desenharFaixasDeInsert(phase2) {
 
   for (const g of groups) {
     if (!g.items.length) continue;
-    // overlapping elements stack onto extra lanes within the same group
-    const order = [...g.items].sort((a, b) => a.c.start - b.c.start || a.c.end - b.c.end);
-    const trackEnd = [];
     const assign = new Map();
-    for (const { c, i } of order) {
-      let t = trackEnd.findIndex((end) => c.start >= end - 1e-6);
-      if (t < 0) { t = trackEnd.length; trackEnd.push(0); }
-      trackEnd[t] = c.end;
-      assign.set(i, t);
+    let fileiras;
+    if (g.alto) {
+      // MIDIA: a fileira e a CAMADA escolhida pelo usuario (arrasto
+      // vertical). Fileira de baixo = pintada por cima no video — a
+      // hierarquia de camadas do pedido de 02/09.
+      let maxCam = 0;
+      for (const { c, i } of g.items) {
+        const cam = c.camada | 0;
+        assign.set(i, cam);
+        if (cam > maxCam) maxCam = cam;
+      }
+      fileiras = maxCam + 1;
+    } else {
+      // texto e som: sem camada manual — sobreposicao empilha sozinha
+      const order = [...g.items].sort((a, b) => a.c.start - b.c.start || a.c.end - b.c.end);
+      const trackEnd = [];
+      for (const { c, i } of order) {
+        let t = trackEnd.findIndex((end) => c.start >= end - 1e-6);
+        if (t < 0) { t = trackEnd.length; trackEnd.push(0); }
+        trackEnd[t] = c.end;
+        assign.set(i, t);
+      }
+      fileiras = Math.max(trackEnd.length, 1);
     }
     const lanes = [];
-    for (let t = 0; t < Math.max(trackEnd.length, 1); t++) {
+    for (let t = 0; t < fileiras; t++) {
       const trk = el('div', 'track', insertTracksEl);
       const lab = el('div', 'track-label', trk);
       // only the first lane of a group carries the icon; the rest are continuations
@@ -6084,7 +6102,11 @@ panel.addEventListener('pointerdown', (e) => {
       renderChips();
       refreshHeader();
     }
-    drag = { type: 'chip-move', i, x0: e.clientX, c: { ...S.insertsDraft[i] }, preSnapshot: snapshotState() };
+    drag = { type: 'chip-move', i, x0: e.clientX, y0: e.clientY,
+             // altura da fileira de midia: arrastar uma fileira inteira na
+             // vertical troca o bloco de CAMADA (hierarquia, pedido de 02/09)
+             laneH: chip.closest('.track')?.offsetHeight || 60,
+             c: { ...S.insertsDraft[i] }, preSnapshot: snapshotState() };
     try { panel.setPointerCapture(e.pointerId); } catch (err) { /* synthetic/touch */ }
     e.preventDefault();
     return;
@@ -6207,9 +6229,21 @@ panel.addEventListener('pointermove', (e) => {
     const dur = drag.c.end - drag.c.start;
     c.start = Math.max(0, drag.c.start + dt);
     c.end = c.start + dur;
+    // bloco de MIDIA tambem anda na VERTICAL: cada fileira e uma camada
+    // (fileira de baixo pinta por cima no video)
+    let rotuloCam = '';
+    if (c.kind === 'insert' && (c.manual || c.isNew)) {
+      const fileiras = Math.round((e.clientY - drag.y0) / drag.laneH);
+      const cam = Math.min(4, Math.max(0, (drag.c.camada | 0) + fileiras));
+      if (cam !== (c.camada | 0)) {
+        if (cam > 0) c.camada = cam; else delete c.camada;
+      }
+      if ((c.camada | 0) !== (drag.c.camada | 0)) rotuloCam = ` · camada ${(c.camada | 0) + 1}`;
+      desenharMidiaNoPreview();
+    }
     renderChips();
     refreshHeader();
-    showTooltip(e, `${fmt(c.start)} → ${fmt(c.end)}`);
+    showTooltip(e, `${fmt(c.start)} → ${fmt(c.end)}${rotuloCam}`);
   } else if (drag.type === 'clip-range') {
     drag.x1 = e.clientX;
     if (!(S.draft[drag.i] && S.draft[drag.i].removed)) {
@@ -6251,7 +6285,8 @@ panel.addEventListener('pointermove', (e) => {
     if (drag && drag.preSnapshot) {
       const moved = drag.type === 'trim'
         ? (S.draft[drag.i].start !== drag.r.start || S.draft[drag.i].end !== drag.r.end)
-        : (S.insertsDraft[drag.i].start !== drag.c.start || S.insertsDraft[drag.i].end !== drag.c.end);
+        : (S.insertsDraft[drag.i].start !== drag.c.start || S.insertsDraft[drag.i].end !== drag.c.end
+           || (S.insertsDraft[drag.i].camada | 0) !== (drag.c.camada | 0));
       if (moved) {
         pushHistory(drag.preSnapshot);
         if (drag.type === 'trim') persistEdl();
@@ -7056,11 +7091,26 @@ function pushSfxFromRef(src, label) {
   scheduleAutosave();
 }
 
+/* A camada inicial de um insert novo: a MENOR fileira sem colisao de tempo
+ * com o que ja esta na faixa de midia — o bloco novo nao nasce em cima de
+ * outro. Depois o usuario arrasta o bloco na VERTICAL para trocar. */
+function camadaLivre(start, end) {
+  const ocupa = S.insertsDraft.filter(
+    (c) => c.kind === 'insert' && (c.manual || c.isNew)
+      && c.start < end - 1e-6 && c.end > start + 1e-6);
+  for (let cam = 0; cam <= 4; cam++) {
+    if (!ocupa.some((c) => (c.camada | 0) === cam)) return cam;
+  }
+  return 4;
+}
+
 function pushInsertFromRef(src, label, credit) {
   pushHistory();
   const start = Math.max(0, renderedToDraft(video.currentTime));
   const end = start + 2.5;
+  const camada = camadaLivre(start, end);
   S.insertsDraft.push({
+    ...(camada > 0 ? { camada } : {}),
     kind: 'insert', label: label || (src || '').split('/').pop(),
     start, end, orig: { start, end },
     isNew: true, manual: true,
@@ -7496,6 +7546,7 @@ async function saveEditsAndReturnToQueue() {
           ...(c.fy != null ? { fy: +c.fy } : {}),
           ...(c.zoom != null && +c.zoom > 1.0001 ? { zoom: +c.zoom } : {}),
           ...(c.srcIn != null && +c.srcIn > 0.001 ? { srcIn: +c.srcIn } : {}),
+          ...((c.camada | 0) > 0 ? { camada: c.camada | 0 } : {}),
         })),
       // Emoji: comeco E duracao (ele fica na tela enquanto o bloco durar).
       emojis: S.insertsDraft.filter((c) => c.kind === 'emoji' && c.char).map((c) => ({

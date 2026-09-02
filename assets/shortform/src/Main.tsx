@@ -718,7 +718,8 @@ const Inserts: React.FC = () => {
   const {fps} = useVideoConfig();
   // quem entra DEPOIS monta depois e pinta por cima — espelho do sort em
   // _montar_inserts no motor próprio
-  const fila = [...D.inserts].sort((a, b) => (a.start ?? 0) - (b.start ?? 0));
+  const fila = [...D.inserts].sort(
+    (a, b) => ((a.camada ?? 0) - (b.camada ?? 0)) || ((a.start ?? 0) - (b.start ?? 0)));
   return (
     <>
       {fila.map((it, i) => {
