@@ -134,7 +134,9 @@ def test_zoom_viaja_pelos_tres_lugares():
     tsx = (REPO / "assets" / "shortform" / "src" / "Main.tsx").read_text(encoding="utf-8")
     assert "scale(${Math.min(4, zoom ?? 1)})" in tsx
     py = (REPO / "app" / "render_proprio.py").read_text(encoding="utf-8")
-    assert "_zoom_do_insert" in py and "INSERT_W * zoom" in py
+    # 4.71: a base do scale virou o tamanho REAL do cartao (cw), nao mais o
+    # fixo INSERT_W
+    assert "_zoom_do_insert" in py and "round(cw * zoom)" in py
     js = (REPO / "assets" / "preview" / "app.js").read_text(encoding="utf-8")
     assert "c.zoom != null && +c.zoom > 1.0001" in js
 
