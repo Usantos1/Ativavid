@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.69
+
+- **Mudou no Estilo, aplicou na Edição — vai tudo junto.** Antes, mexer
+  na aba Estilo e aplicar pela Edição levava só a timeline: headline,
+  card final e o resto do estilo saíam velhos, sem aviso. Agora qualquer
+  mexida no Estilo acende o "Aplicar alterações" (mostra "estilo" no
+  pendente) e o clique salva o estilo junto e refaz a Fase 2 completa.
+  Mexeu SÓ no estilo? O mesmo botão aplica também.
+
 ## 4.68
 
 - **"Nenhum" nas animações — e mais 3 pares novos.** Agora dá para

@@ -41,7 +41,9 @@ def _chaves(inicio: str, fim: str) -> set[str]:
 
 
 PADRAO = _chaves("    const house = {", "    };")
-REFAZER = _chaves("  const payload = {", "  };")
+# desde a 4.69 o payload do refazer mora em montarPayloadDeEstilo() — o
+# Aplicar da Edição e o botão da aba usam a MESMA montagem
+REFAZER = _chaves("function montarPayloadDeEstilo() {", "\n}")
 
 
 def test_os_dois_blocos_existem():
@@ -97,8 +99,8 @@ def test_dialogo_de_importar_reseta_o_modo():
 
 def test_o_refazer_envia_o_modo():
     s = (RAIZ / "assets" / "preview" / "app.js").read_text(encoding="utf-8")
-    b = s[s.find("  const payload = {"):]
-    b = b[:b.find("  };")]
+    b = s[s.find("function montarPayloadDeEstilo() {"):]
+    b = b[:b.find("\n}")]
     assert "editingIntent" in b, "o modo nao vai no payload do refazer"
 
 
@@ -170,8 +172,8 @@ def test_aba_antiga_nao_rebaixa_o_modo():
     mandou o valor velho no Salvar e refazer e rebaixou o modo sem ninguem
     pedir. Nao tocou: vai null, e o servidor preserva o que esta gravado."""
     s = (RAIZ / "assets" / "preview" / "app.js").read_text(encoding="utf-8")
-    b = s[s.find("  const payload = {"):]
-    b = b[:b.find("  };")]
+    b = s[s.find("function montarPayloadDeEstilo() {"):]
+    b = b[:b.find("\n}")]
     assert "S.editIntentTocado ?" in b, \
         "o payload voltou a mandar o seletor sem checar se foi tocado"
     assert "editIntentTocado = true" in s, \

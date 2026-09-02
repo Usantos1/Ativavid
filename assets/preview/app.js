@@ -1189,6 +1189,7 @@ let S = {
   editData: null, // edit-data.json content (phase 2)
   insertsDraft: [], // editable inserts [{kind,label,start,end,ref,orig}]
   enquadrando: null, // índice do bloco em modo Enquadrar (pan do conteúdo)
+  styleTocado: false, // mexeu na aba Estilo sem salvar por lá — o Aplicar leva junto
   wave: null,
   thumbCount: 0,
   tab: tabFromPath(),
@@ -1918,7 +1919,7 @@ function pendingFlags() {
     captions: !!d.captions || Object.keys(S.captionFixes).length > 0
       || (S.capApagadas || []).length > 0,
     edl: !!d.edl || edlDirty(),
-    style: !!d.style,
+    style: !!d.style || !!S.styleTocado,
     // Midia posta na mao (imagem/video/som/emoji) TAMBEM e alteracao
     // pendente: sem isto o "Aplicar alteracoes" ficava apagado depois de
     // adicionar um video e o usuario tinha de achar o salvar no "Mais…".
@@ -4629,6 +4630,137 @@ $('styleSetup').addEventListener('click', (e) => {
   }
 });
 
+/* O payload COMPLETO da aba Estilo — extraído do setupGo para o
+ * Aplicar da Edição poder salvar o estilo junto (pedido de 02/09:
+ * 'mudei em Estilo, apliquei em Editar e o estilo não foi'). */
+function montarPayloadDeEstilo() {
+  const rerender = !S.state.awaitingStyle;
+  return {
+    // a save with Fase 2 already on disk is a RE-RENDER request, not a
+    // first pick — the skill has to know which of the two it is looking at
+    type: 'style-setup',
+    rerender,
+    edit: S.style.edit,
+    editName: styleName('edits', S.style.edit),
+    headline: S.style.headline,
+    headlineName: styleName('headlines', S.style.headline),
+    captions: S.style.captions,
+    captionsName: styleName('captions', S.style.captions),
+    accent: S.style.accent,
+    accentName: accentName(S.style.accent),
+    // whether the picked headline style actually paints it — so the skill does
+    // not go hunting for an accent in a look that has none
+    accentUsed: HL_ACCENT_USERS.includes(S.style.headline),
+    // independent from the headline accent above — null means "no pick, keep
+    // each caption style's own default colour" (see defaultStyle())
+    captionAccent: S.style.captionAccent,
+    captionAccentName: S.style.captionAccent ? accentName(S.style.captionAccent) : null,
+    captionAccentUsed: legendaAccentUsed() && !!S.style.captionAccent,
+    // "ênfase": the one accented element per style (stacked serif line, scatter
+    // highlighted word) — independent from captionAccent above (base legenda
+    // text) and from accent (headline). null means "keep the style's own
+    // default (#ff5200)", same semantics as captionAccent.
+    emphasisAccent: S.style.emphasisAccent,
+    emphasisAccentName: S.style.emphasisAccent ? accentName(S.style.emphasisAccent) : null,
+    emphasisAccentUsed: emphasisAccentUsed() && !!S.style.emphasisAccent,
+    // "círculo riscado": stacked-only pencil-circle stroke, independent from
+    // emphasisAccent too. null means "keep PencilOutline's own default (green
+    // #39E508)".
+    circleAccent: S.style.circleAccent,
+    circleAccentName: S.style.circleAccent ? accentName(S.style.circleAccent) : null,
+    circleAccentUsed: circleAccentUsed() && !!S.style.circleAccent,
+    emphasisStyle: S.style.emphasisStyle || 'circle',
+    elements: { ...S.style.elements },
+    elementNames: STYLE_CATALOG.elements
+      .filter((e) => S.style.elements[e.id])
+      .map((e) => e.name),
+    note: S.style.note,
+    fastMode: !!S.fastMode,
+    oneClick: !!S.fastMode,
+    rhythm: S.style.rhythm || 'dinamico',
+    intensity: S.style.intensity || 'medio',
+    speechClean: S.style.speechClean || 'medio',
+    videoGoal: S.style.videoGoal || 'reels',
+    brollMode: S.style.brollMode || 'quando_necessario',
+    captionChunk: S.style.captionChunk || 'frase_curta',
+    captionPosition: S.style.captionPosition || 'baixo',
+    captionSize: S.style.captionSize || 'm',
+    captionFont: S.style.captionFont || null,
+    headlineFont: S.style.headlineFont || null,
+    emphasisWords: S.style.emphasisWords || null,
+    postHashtags: S.style.postHashtags || null,
+    postSeo: S.style.postSeo || null,
+    postRodape: S.style.postRodape || null,
+    headlineDuration: S.style.headlineDuration || 'curta',
+    headlinePos: S.style.headlinePos || 'padrao',
+    legendaAposHeadline: S.style.legendaAposHeadline || null,
+    headlineAnimation: S.style.headlineAnimation || 'padrao',
+    exportPreset: S.style.exportPreset || 'reels',
+    colorGrade: S.style.colorGrade || 'marca',
+    // TIPO DE CONTEUDO e o texto do CARD FINAL iam so no "Salvar como padrao".
+    // Quem trocasse o tipo na tela de Estilo e clicasse "Salvar e refazer a
+    // Fase 2" mandava tudo MENOS esses dois: o job seguia com o tipo antigo.
+    //
+    // E o efeito nao para no titulo. `contentType` e um dos knobs congelados
+    // em `edl.json.cutStyle`, e o pipeline so REPLANEJA o corte quando um
+    // deles muda. Nao chegando, o corte era considerado igual e reaproveitado
+    // — dai o "mandei refazer e veio a mesma minutagem".
+    //
+    // O servidor sempre aceitou os dois: estao em `brand_presets.STYLE_KEYS`,
+    // e `preset_from_style_payload` ignora `null`, entao mandar sem escolha
+    // nao apaga o que ja havia.
+    contentType: S.contentType || $('autoContentType')?.value || null,
+    endCardCopy: S.endCardCopy || null,
+    // A MARCA escolhida na tela. O servidor grava no job_intent, que e
+    // lido a cada render — sem isto, trocar a marca mudava o editor e o
+    // video saia com a marca antiga assim mesmo.
+    brandId: (S.presetUsed && S.presetUsed.brandId) || null,
+    // O PRESET escolhido na linha de cima do editor. Sem ele o editor
+    // mudava e o render continuava no preset antigo.
+    brandPresetId: (S.presetUsed && S.presetUsed.brandPresetId) || null,
+    // MODO DE EDICAO: e ele que decide se a IA planeja o corte. Sem este
+    // campo um projeto criado em "Edicao leve" ficava preso no modo para
+    // sempre — trocar o estilo e refazer nunca mudava a minutagem.
+    // So vai quando o usuario TOCOU no seletor nesta tela: null preserva o
+    // que esta gravado, e uma aba antiga nao rebaixa o modo por engano.
+    editingIntent: S.editIntentTocado ? ($('autoEditIntent')?.value || null) : null,
+  };
+}
+
+/* Salva o estilo deste projeto (preview_style.json) sem requeue — o
+ * chamador decide quando refazer. É o que faz o Aplicar da Edição levar
+ * junto o que foi mexido na aba Estilo. */
+async function salvarEstiloDoProjeto() {
+  try {
+    const res = await fetch(`${BASE}/api/save`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(montarPayloadDeEstilo()),
+    });
+    const ok = !!(await res.json().catch(() => ({}))).ok;
+    if (ok) S.styleTocado = false;
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+// Qualquer mexida na aba Estilo marca o projeto como "estilo tocado": o
+// Aplicar da Edição passa a salvar o estilo junto (pedido de 02/09 — ele
+// mudava na aba Estilo, aplicava na Edição e o estilo não ia).
+(() => {
+  const setup = $('styleSetup');
+  if (!setup) return;
+  setup.addEventListener('change', () => { S.styleTocado = true; refreshHeader(); });
+  setup.addEventListener('click', (e) => {
+    if (e.target.closest('.opt, .swatch, input, select, textarea')
+        || (e.target.closest('button') && !e.target.closest('#setupGo, #setupSaveDefault'))) {
+      S.styleTocado = true;
+      refreshHeader();
+    }
+  });
+})();
+
 $('setupGo').addEventListener('click', async () => {
   S.style.note = $('setupNote').value.trim();
 
@@ -4735,97 +4867,9 @@ $('setupGo').addEventListener('click', async () => {
     return;
   }
 
-  const rerender = !S.state.awaitingStyle;
-  const payload = {
-    // a save with Fase 2 already on disk is a RE-RENDER request, not a first
-    // pick — the skill has to know which of the two it is looking at
-    type: 'style-setup',
-    rerender,
-    edit: S.style.edit,
-    editName: styleName('edits', S.style.edit),
-    headline: S.style.headline,
-    headlineName: styleName('headlines', S.style.headline),
-    captions: S.style.captions,
-    captionsName: styleName('captions', S.style.captions),
-    accent: S.style.accent,
-    accentName: accentName(S.style.accent),
-    // whether the picked headline style actually paints it — so the skill does
-    // not go hunting for an accent in a look that has none
-    accentUsed: HL_ACCENT_USERS.includes(S.style.headline),
-    // independent from the headline accent above — null means "no pick, keep
-    // each caption style's own default colour" (see defaultStyle())
-    captionAccent: S.style.captionAccent,
-    captionAccentName: S.style.captionAccent ? accentName(S.style.captionAccent) : null,
-    captionAccentUsed: legendaAccentUsed() && !!S.style.captionAccent,
-    // "ênfase": the one accented element per style (stacked serif line, scatter
-    // highlighted word) — independent from captionAccent above (base legenda
-    // text) and from accent (headline). null means "keep the style's own
-    // default (#ff5200)", same semantics as captionAccent.
-    emphasisAccent: S.style.emphasisAccent,
-    emphasisAccentName: S.style.emphasisAccent ? accentName(S.style.emphasisAccent) : null,
-    emphasisAccentUsed: emphasisAccentUsed() && !!S.style.emphasisAccent,
-    // "círculo riscado": stacked-only pencil-circle stroke, independent from
-    // emphasisAccent too. null means "keep PencilOutline's own default (green
-    // #39E508)".
-    circleAccent: S.style.circleAccent,
-    circleAccentName: S.style.circleAccent ? accentName(S.style.circleAccent) : null,
-    circleAccentUsed: circleAccentUsed() && !!S.style.circleAccent,
-    emphasisStyle: S.style.emphasisStyle || 'circle',
-    elements: { ...S.style.elements },
-    elementNames: STYLE_CATALOG.elements
-      .filter((e) => S.style.elements[e.id])
-      .map((e) => e.name),
-    note: S.style.note,
-    fastMode: !!S.fastMode,
-    oneClick: !!S.fastMode,
-    rhythm: S.style.rhythm || 'dinamico',
-    intensity: S.style.intensity || 'medio',
-    speechClean: S.style.speechClean || 'medio',
-    videoGoal: S.style.videoGoal || 'reels',
-    brollMode: S.style.brollMode || 'quando_necessario',
-    captionChunk: S.style.captionChunk || 'frase_curta',
-    captionPosition: S.style.captionPosition || 'baixo',
-    captionSize: S.style.captionSize || 'm',
-    captionFont: S.style.captionFont || null,
-    headlineFont: S.style.headlineFont || null,
-    emphasisWords: S.style.emphasisWords || null,
-    postHashtags: S.style.postHashtags || null,
-    postSeo: S.style.postSeo || null,
-    postRodape: S.style.postRodape || null,
-    headlineDuration: S.style.headlineDuration || 'curta',
-    headlinePos: S.style.headlinePos || 'padrao',
-    legendaAposHeadline: S.style.legendaAposHeadline || null,
-    headlineAnimation: S.style.headlineAnimation || 'padrao',
-    exportPreset: S.style.exportPreset || 'reels',
-    colorGrade: S.style.colorGrade || 'marca',
-    // TIPO DE CONTEUDO e o texto do CARD FINAL iam so no "Salvar como padrao".
-    // Quem trocasse o tipo na tela de Estilo e clicasse "Salvar e refazer a
-    // Fase 2" mandava tudo MENOS esses dois: o job seguia com o tipo antigo.
-    //
-    // E o efeito nao para no titulo. `contentType` e um dos knobs congelados
-    // em `edl.json.cutStyle`, e o pipeline so REPLANEJA o corte quando um
-    // deles muda. Nao chegando, o corte era considerado igual e reaproveitado
-    // — dai o "mandei refazer e veio a mesma minutagem".
-    //
-    // O servidor sempre aceitou os dois: estao em `brand_presets.STYLE_KEYS`,
-    // e `preset_from_style_payload` ignora `null`, entao mandar sem escolha
-    // nao apaga o que ja havia.
-    contentType: S.contentType || $('autoContentType')?.value || null,
-    endCardCopy: S.endCardCopy || null,
-    // A MARCA escolhida na tela. O servidor grava no job_intent, que e
-    // lido a cada render — sem isto, trocar a marca mudava o editor e o
-    // video saia com a marca antiga assim mesmo.
-    brandId: (S.presetUsed && S.presetUsed.brandId) || null,
-    // O PRESET escolhido na linha de cima do editor. Sem ele o editor
-    // mudava e o render continuava no preset antigo.
-    brandPresetId: (S.presetUsed && S.presetUsed.brandPresetId) || null,
-    // MODO DE EDICAO: e ele que decide se a IA planeja o corte. Sem este
-    // campo um projeto criado em "Edicao leve" ficava preso no modo para
-    // sempre — trocar o estilo e refazer nunca mudava a minutagem.
-    // So vai quando o usuario TOCOU no seletor nesta tela: null preserva o
-    // que esta gravado, e uma aba antiga nao rebaixa o modo por engano.
-    editingIntent: S.editIntentTocado ? ($('autoEditIntent')?.value || null) : null,
-  };
+  const payload = montarPayloadDeEstilo();
+  const rerender = !!payload.rerender;
+
   const res = await fetch(`${BASE}/api/save`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -7461,19 +7505,33 @@ async function saveEditsAndReturnToQueue() {
       renderedEnd: +f.end.toFixed(3),
     })).concat(capApagar);
   }
-  if (!payload.edl && !payload.editData && !payload.notes && !payload.captionFixes && !payload.extraSources) {
+  // O que foi mexido na aba ESTILO vai JUNTO: sem isto, mudar o estilo e
+  // aplicar pela Edição levava só a timeline — headline e card final saíam
+  // velhos (caso real de 02/09, nos filhos do Multiplicador).
+  const tinhaEstilo = !!S.styleTocado;
+  const estiloSalvo = tinhaEstilo ? await salvarEstiloDoProjeto() : false;
+  if (tinhaEstilo && !estiloSalvo) {
+    toast('Não consegui salvar o estilo — tente de novo', 4000);
+    return false;
+  }
+  const algoNaTimeline = !!(payload.edl || payload.editData || payload.notes
+    || payload.captionFixes || payload.extraSources);
+  if (!algoNaTimeline && !estiloSalvo) {
     toast('Nada para salvar', 2000);
     return false;
   }
-  const res = await fetch(`${BASE}/api/save`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok || !data.ok) {
-    toast('Erro ao salvar — o servidor está de pé?', 4000);
-    return false;
+  let data = {};
+  if (algoNaTimeline) {
+    const res = await fetch(`${BASE}/api/save`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) {
+      toast('Erro ao salvar — o servidor está de pé?', 4000);
+      return false;
+    }
   }
   // O servidor agora diz se a correcao de legenda pegou. Antes ele respondia
   // ok sempre e esta linha jogava fora o pedido do usuario mesmo quando nada
@@ -7500,12 +7558,14 @@ async function saveEditsAndReturnToQueue() {
   renderAll();
   refreshHeader();
 
-  const captionOnly = !!(payload.captionFixes && !payload.edl && !payload.editData && !payload.extraSources);
+  const captionOnly = !!(payload.captionFixes && !payload.edl && !payload.editData && !payload.extraSources) && !estiloSalvo;
   // Refazer o vídeo do zero (re-analisar, re-transcrever, re-cortar) só é
   // necessário quando entra material NOVO ou muda algo que a IA precisa
   // reler. Ajuste de corte, legenda e headline vai pelo Aplicar rápido, que
   // reaproveita o que já está pronto: minutos em vez de uma hora.
-  const needsFullRerun = !!(payload.extraSources || payload.editData);
+  // estilo mexido = Fase 2 refeita por inteiro (o quick apply não veste
+  // estilo novo)
+  const needsFullRerun = !!(payload.extraSources || payload.editData || estiloSalvo);
   if (BASE && BASE.startsWith('/p/') && !captionOnly && !needsFullRerun) {
     if (payload.edl) {
       const ok = await persistCorrection({ op: 'set_edl', ranges: payload.edl.ranges });
@@ -7708,7 +7768,8 @@ if ($('btnApply')) {
     // decide entre Aplicar rapido e fila, e leva para a Fila. Um clique faz
     // tudo. Antes, quem adicionava um video via o Aplicar apagado e tinha
     // de achar o salvar dentro do "Mais…".
-    const temSessao = edlDirty() || insertsDirty() || S.notes.length
+    const temSessao = edlDirty() || insertsDirty() || S.styleTocado
+      || S.notes.length
       || Object.keys(S.captionFixes).length || (S.capApagadas || []).length;
     if (temSessao) {
       await saveEditsAndReturnToQueue();
