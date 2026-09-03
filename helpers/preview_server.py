@@ -465,6 +465,9 @@ class Handler(BaseHTTPRequestHandler):
     projects_roots: list[Path] = []
     scoped = False  # per-request: is this a /p/<pasta>/ view of ANOTHER project?
     scope_miss = False  # per-request: /p/<pasta>/ nomeou um projeto inexistente
+    # callable(edit_dir) -> nome do card do hub, ou None; o desktop_server
+    # empresta o dele (o preview nao enxerga o banco de jobs)
+    titulo_do_card = None
     protocol_version = "HTTP/1.1"
 
     # ---- helpers ----
@@ -1648,6 +1651,17 @@ class Handler(BaseHTTPRequestHandler):
             state["finalVideo"] = resolved_final
         elif "finalVideo" in state:
             state.pop("finalVideo")  # declared but nothing on disk → treat as absent
+        # O nome do CARD do hub (mesma regra do displayTitle), quando o hub
+        # emprestou o resolvedor — o editor mostrava o stem do arquivo final
+        # e o card o titulo travado ("G2 · C1 · CTA2"), 03/09. So na resposta.
+        resolvedor = getattr(type(self), "titulo_do_card", None)
+        if callable(resolvedor):
+            try:
+                nome = resolvedor(self.root)
+                if nome:
+                    state["jobTitle"] = str(nome)[:80]
+            except Exception:  # noqa: BLE001 — o nome nunca derruba o estado
+                pass
         # attach small data files + mtimes so the UI hot-reloads on change
         mtimes: dict[str, float] = {}
         for key in ("video", "finalVideo", "edl", "captions", "editData"):

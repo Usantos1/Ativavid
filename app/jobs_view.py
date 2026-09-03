@@ -487,6 +487,36 @@ def _formato_do_video(job: dict, edit: Path) -> None:
         job["formatLabel"] = rotulo
 
 
+def titulo_do_card(store: Any, edit_dir: Path) -> str | None:
+    """O nome que o CARD do hub mostra para o projeto de `edit_dir`.
+
+    Espelho do `displayTitle` da tela (03/09: o editor mostrava "Bateria
+    descarregando rápido..." e o card "G2 · C1 · CTA2" — regras diferentes):
+    título travado > stem do arquivo final (exceto final/cut genéricos) >
+    título resolvido do job. None quando o projeto não é um job.
+    """
+    alvo = str(edit_dir).replace("\\", "/").rstrip("/").lower()
+    job = None
+    for j in store.list():
+        ed = str(j.get("editDir") or "").replace("\\", "/").rstrip("/").lower()
+        if ed and ed == alvo:
+            job = j
+            break
+    if not job:
+        return None
+    if job.get("titleLocked") and str(job.get("title") or "").strip():
+        return str(job["title"]).strip()[:80]
+    if str(job.get("status") or "") == "done" and job.get("final"):
+        stem = Path(str(job["final"])).stem.strip()
+        if stem and stem.lower() not in ("final", "cut"):
+            return stem[:80]
+    try:
+        from app.local_server import _resolve_job_title
+        return str(_resolve_job_title(job, edit_dir) or "")[:80] or None
+    except Exception:  # noqa: BLE001
+        return str(job.get("title") or job.get("name") or "")[:80] or None
+
+
 # Cache do card PRONTO. A montagem lê ~13 arquivos por projeto (timing,
 # verificação, corte, preset, ficha...) e com 246 projetos eram 3.200
 # leituras por chamada — 1 a 2 s a cada volta do preview (02/09). Job

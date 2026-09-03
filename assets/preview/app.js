@@ -2535,6 +2535,11 @@ function refreshProjectChrome() {
 }
 
 function nomeDoVideoEditado() {
+  // O servidor manda o titulo DO CARD (mesma regra do hub, inclusive o
+  // titulo travado dos criativos do Multiplicador — "G2 · C1 · CTA2");
+  // sem ele (servidor antigo), o stem do arquivo final.
+  const doCard = String((S.state && S.state.jobTitle) || '').trim();
+  if (doCard) return doCard.slice(0, 80);
   const fin = String((S.state && S.state.finalVideo) || '').trim();
   if (!fin) return '';
   const stem = fin.split(/[/\\]/).pop().replace(/\.[^.]+$/, '').trim();

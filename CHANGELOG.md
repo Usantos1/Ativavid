@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.85
+
+- **Editor e card mostram o mesmo nome.** O editor mostrava o nome do
+  arquivo final enquanto o card mostrava o título do projeto (nos
+  criativos do Multiplicador, "G2 · C1 · CTA2" de um lado e a manchete do
+  outro). Agora o editor recebe o nome exatamente como o card o calcula.
+
 ## 4.84
 
 - **O editor mostra o nome do vídeo editado.** No cabeçalho, além da
