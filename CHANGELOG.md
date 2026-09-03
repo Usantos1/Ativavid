@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.95
+
+- **Multiplicador: escolha a marca e o preset antes de criar as
+  combinações.** A janela ganhou os seletores de Marca e Preset (vêm com a
+  marca ativa e o preset ativo dela); todas as combinações saem com o
+  escolhido. Antes o lote saía com o preset padrão e a pessoa descobria
+  no editor, 27 vídeos depois.
+
 ## 4.94
 
 - **Trial só com cadastro.** Quem instala e abre sem conta vê "Crie sua

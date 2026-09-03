@@ -989,6 +989,16 @@
     </div>
     <p class="hint" id="multiConta">Arraste vídeos para as caixas ou use Escolher vídeos.</p>
     <div class="import-block">
+      <!-- 4.95: a marca e o preset sao escolhidos AQUI. Ate a 4.94 o lote
+           saia com o preset padrao ("Novo") e o usuario descobria no
+           editor, 27 videos depois. -->
+      <label class="import-field">Marca
+        <select id="multiBrandSelect"></select>
+      </label>
+      <label class="import-field">Preset (como os vídeos devem parecer)
+        <select id="multiPresetSelect"></select>
+      </label>
+      <p class="hint" id="multiPresetHint">Todas as combinações saem com este preset.</p>
       <label class="import-field">Tipo de conteúdo
         <select id="multiContentType">
           <option value="ad" selected>Anúncio (AIDA)</option>

@@ -141,3 +141,50 @@ def test_rota_existe_gateada_e_liberada_no_desktop():
 
     desktop = (REPO / "app" / "desktop_server.py").read_text(encoding="utf-8")
     assert '"/api/multiplicador"' in desktop, "desktop não delega /api/multiplicador"
+
+
+# ------------------------------------------------- marca e preset (4.95)
+def test_a_janela_pergunta_marca_e_preset():
+    """"quero escolher o preset ou a marca na hora de multiplicar" (03/09):
+    o lote saia com o preset padrao ("Novo") e ele via no editor, 27
+    videos depois."""
+    html = (REPO / "assets" / "studio" / "index.html").read_text(encoding="utf-8")
+    i = html.index('<dialog id="dlgMulti"')
+    bloco = html[i:html.index("</dialog>", i)]
+    assert 'id="multiBrandSelect"' in bloco and 'id="multiPresetSelect"' in bloco
+    assert 'id="multiContentType"' in bloco
+
+
+def test_a_escolha_vai_no_intent_de_cada_combinacao():
+    js = (REPO / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
+    i = js.index("function wireMultiplicador(")
+    bloco = js[i:js.index("\nasync function importarPorCaminho", i)]
+    assert 'brandId: (brandSel && brandSel.value) || state.brandActive?.id || null' in bloco
+    assert 'brandPresetId: (presetSel && presetSel.value) || null' in bloco
+    assert 'brandStyleSource: "default"' in bloco
+    assert "loadMultiPresets()" in bloco, "abrir a janela carrega marca e presets"
+    j = js.index("async function loadMultiPresets(")
+    fn = js[j:js.index("\nasync function loadBrandsUi", j)]
+    assert "/api/brand-presets?brandId=" in fn and '/api/brands' in fn
+    assert "brandSel.onchange" in fn, "trocar a marca recarrega os presets"
+
+
+def test_o_pipeline_le_marca_e_preset_do_intent(tmp_path):
+    """O que a janela manda tem de chegar ao preset do job: e o mesmo
+    caminho do import normal (resolve_for_edit)."""
+    from app.editing_intent import load as load_intent
+
+    raiz = tmp_path / "Projetos"
+    raiz.mkdir()
+    _mae, fontes = preparar_pasta_mae(raiz, _fontes(tmp_path, 1, 1, 1))
+    combos = materializar_combos(
+        raiz, fontes,
+        intent={"editingIntent": "complete", "contentType": "ad",
+                "brandStyleSource": "default",
+                "brandId": "prime-camp", "brandPresetId": "topo"})
+    dado = load_intent(Path(combos[0]["editDir"])) or {}
+    assert dado["brandId"] == "prime-camp" and dado["brandPresetId"] == "topo"
+    src = (REPO / "app" / "preset_chain.py").read_text(encoding="utf-8")
+    k = src.index("def resolve_for_edit(")
+    corpo = src[k:src.index("\ndef ", k + 10) if "\ndef " in src[k + 10:] else len(src)]
+    assert 'intent.get("brandId")' in corpo and 'intent.get("brandPresetId")' in corpo

@@ -2667,6 +2667,7 @@ function wireMultiplicador() {
     enviando = false;
     render();
     dlg.showModal();
+    loadMultiPresets().catch(() => {});
   };
   const btnCancel = $("#btnMultiCancel");
   if (btnCancel) btnCancel.onclick = () => dlg.close();
@@ -2676,6 +2677,11 @@ function wireMultiplicador() {
     if (enviando) return;
     enviando = true;
     render();
+    // A marca e o preset escolhidos na janela valem para TODAS as
+    // combinacoes (4.95). `resolve_for_edit` le brandId/brandPresetId do
+    // intent de cada projeto — o mesmo caminho do import normal.
+    const brandSel = $("#multiBrandSelect");
+    const presetSel = $("#multiPresetSelect");
     const intent = {
       editingIntent: "complete",
       preserveHook: true,
@@ -2683,7 +2689,9 @@ function wireMultiplicador() {
       preserveCompleteSentences: true,
       preserveContext: true,
       contentType: $("#multiContentType")?.value || "ad",
-      brandId: state.brandActive?.id || null,
+      brandStyleSource: "default",
+      brandId: (brandSel && brandSel.value) || state.brandActive?.id || null,
+      brandPresetId: (presetSel && presetSel.value) || null,
     };
     const fd = new FormData();
     const papeis = {};
@@ -5735,6 +5743,40 @@ async function loadImportPresets() {
   } catch {
     if (hint) hint.textContent = "Usar: o preset padrão";
   }
+}
+
+/** Marca + preset da janela do Multiplicador. A marca ativa e o preset
+ *  ativo dela vem selecionados; trocar a marca recarrega os presets. */
+async function loadMultiPresets() {
+  const brandSel = $("#multiBrandSelect");
+  const presetSel = $("#multiPresetSelect");
+  const hint = $("#multiPresetHint");
+  if (!brandSel || !presetSel) return;
+  const carregarPresets = async (brandId) => {
+    const pack = await api(`/api/brand-presets?brandId=${encodeURIComponent(brandId || "")}`);
+    const presets = pack.presets || [];
+    const activeId = pack.activeId || (pack.active && pack.active.id);
+    presetSel.innerHTML = presets.map((p) =>
+      `<option value="${escapeHtml(p.id)}" ${p.id === activeId ? "selected" : ""}>${escapeHtml(p.name || p.id)}</option>`
+    ).join("") || `<option value="">Padrão da marca</option>`;
+    const aplicar = () => {
+      const p = presets.find((x) => x.id === presetSel.value);
+      if (hint) hint.textContent = p
+        ? `Todas as combinações saem com "${p.name}"${pack.brandName ? ` (${pack.brandName})` : ""}.`
+        : "Todas as combinações saem com o padrão da marca.";
+      if (p && p.contentType && $("#multiContentType")) $("#multiContentType").value = p.contentType;
+    };
+    presetSel.onchange = aplicar;
+    aplicar();
+  };
+  const data = await api("/api/brands");
+  const brands = data.brands || [];
+  const active = brands.find((b) => b.active) || brands[0];
+  brandSel.innerHTML = brands.map((b) =>
+    `<option value="${escapeHtml(b.id)}" ${active && b.id === active.id ? "selected" : ""}>${escapeHtml(b.name || b.id)}</option>`
+  ).join("") || `<option value="">Padrão</option>`;
+  brandSel.onchange = () => carregarPresets(brandSel.value).catch(() => {});
+  await carregarPresets(active ? active.id : "");
 }
 
 async function loadBrandsUi() {
