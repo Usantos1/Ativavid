@@ -4088,3 +4088,6 @@ video.lib-thumb { aspect-ratio: 9 / 16; max-height: 260px; object-fit: contain;
 /* Botão principal desabilitado precisa PARECER desabilitado — sem isto o
    "Criar combinações" vazio parecia clicável (visto no laboratório). */
 #btnMultiGo:disabled { opacity: .45; cursor: not-allowed; filter: grayscale(.4); }
+
+/* "Colar estilo" desabilitado ate alguem copiar (03/09): mesmo visual do link inativo */
+.pc-menu button.disabled, .pc-menu button[disabled] { opacity: 0.4; pointer-events: none; }

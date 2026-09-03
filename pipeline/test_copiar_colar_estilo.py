@@ -24,8 +24,11 @@ def test_o_menu_do_card_oferece_copiar_e_colar():
     bloco = JS[i:JS.index("\nfunction ", i + 10)]
     assert 'data-act="copystyle"' in bloco and "Copiar estilo" in bloco
     assert 'data-act="pastestyle"' in bloco and "Colar estilo (de " in bloco
-    # colar nao aparece no proprio video de origem
-    assert "estiloCopiado().folder !== pastaDoProjeto(j)" in bloco
+    # colar nao age no proprio video de origem
+    assert "c.folder !== pastaDoProjeto(j)" in bloco
+    # e e SEMPRE visivel: sem nada copiado, desabilitado com a dica
+    # ("nao tem colar estilo", 03/09 — escondido ninguem descobria)
+    assert "copie um estilo primeiro" in bloco and "disabled" in bloco
 
 
 def test_copiar_le_o_estilo_salvo_e_recusa_quem_nao_tem():

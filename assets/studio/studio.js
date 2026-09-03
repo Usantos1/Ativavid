@@ -912,9 +912,17 @@ function cardMenuHtml(j, opts) {
         <a role="menuitem" href="${escapeHtml(links.editor)}">Editar</a>
         <a role="menuitem" href="${escapeHtml(links.estilo)}" data-id="${safeId}">Alterar estilo</a>
         ${j.status === "done" ? `<button type="button" role="menuitem" data-act="copystyle" data-id="${safeId}">Copiar estilo</button>` : ""}
-        ${estiloCopiado() && estiloCopiado().folder !== pastaDoProjeto(j)
-          ? `<button type="button" role="menuitem" data-act="pastestyle" data-id="${safeId}">Colar estilo (de ${escapeHtml(estiloCopiado().de)})</button>`
-          : ""}
+        ${(() => {
+          // SEMPRE visivel: escondido ate alguem copiar, ninguem descobria
+          // ("nao tem colar estilo", 03/09). Sem nada copiado fica
+          // desabilitado com a dica; no proprio video de origem tambem.
+          const c = estiloCopiado();
+          if (c && c.folder !== pastaDoProjeto(j)) {
+            return `<button type="button" role="menuitem" data-act="pastestyle" data-id="${safeId}">Colar estilo (de ${escapeHtml(c.de)})</button>`;
+          }
+          const dica = c ? "é o vídeo de origem" : "copie um estilo primeiro";
+          return `<button type="button" role="menuitem" class="disabled" disabled title="${dica}">Colar estilo — ${dica}</button>`;
+        })()}
         ${j.status === "done" && j.publicadoLink
           ? `<a role="menuitem" href="${escapeHtml(j.publicadoLink)}" target="_blank" rel="noopener">Ver no Instagram</a>`
           : ""}

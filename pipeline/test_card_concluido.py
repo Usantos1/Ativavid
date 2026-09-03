@@ -161,7 +161,9 @@ def test_pasta_e_legenda_sairam_para_dentro_do_menu():
     assert 'title="Abrir a pasta publicar"' not in js, "o botão Pasta continua solto"
     assert 'title="Copiar a legenda do post"' not in js, "o botão Legenda continua solto"
     i = js.index("function cardMenuHtml(")
-    menu = js[i:i + 2200]
+    # a funcao inteira, nao janela fixa: o "Colar estilo" (4.88) cresceu
+    # o menu e 2200 chars cortavam o "Tentar novamente"
+    menu = js[i:js.index(chr(10) + "function ", i + 10)]
     for item in ("Abrir pasta", "Copiar legenda do post", "Tentar novamente"):
         assert item in menu, f"faltou {item!r} no menu"
 

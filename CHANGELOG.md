@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.88
+
+- **"Colar estilo" sempre visível no menu.** Ele só aparecia depois de
+  copiar um estilo — escondido, ninguém descobria. Agora fica no menu de
+  todo vídeo pronto: desabilitado com a dica "copie um estilo primeiro"
+  até você copiar, e ativo ("Colar estilo (de …)") nos outros vídeos.
+
 ## 4.87
 
 - **Copiar e colar estilo entre vídeos.** No menu "⋯" de um vídeo pronto,
