@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.83
+
+- **Voltar do vídeo para Concluídos não apaga mais a lista.** A tela
+  guarda o último retrato dos seus projetos e pinta na hora; enquanto o
+  servidor responde ela diz "Carregando…" em vez de "Nenhum vídeo pronto".
+- **A lista carrega 4–5x mais rápido.** O servidor guarda o card dos
+  vídeos concluídos e só remonta quando o projeto muda de verdade
+  (medido com 246 projetos: 0,66 s → 0,14 s, card idêntico).
+
 ## 4.82
 
 - **O selo e o capítulo do vídeo longo aparecem na Edição.** Eles só

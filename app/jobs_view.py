@@ -487,8 +487,31 @@ def _formato_do_video(job: dict, edit: Path) -> None:
         job["formatLabel"] = rotulo
 
 
+# Cache do card PRONTO. A montagem lê ~13 arquivos por projeto (timing,
+# verificação, corte, preset, ficha...) e com 246 projetos eram 3.200
+# leituras por chamada — 1 a 2 s a cada volta do preview (02/09). Job
+# concluído não muda sozinho: a assinatura é o próprio registro do banco +
+# o mtime da pasta edit e do timing.json (um "Aplicar" reescreve os dois).
+_CACHE_PRONTOS: dict[str, tuple[str, dict]] = {}
+
+
+def _assinatura_do_pronto(j: dict, edit: Path, com_links: bool) -> str:
+    import os
+
+    def _mt(p: Path) -> int:
+        try:
+            return os.stat(p).st_mtime_ns
+        except OSError:
+            return 0
+
+    return (f"{json.dumps(j, sort_keys=True, default=str)}|{int(com_links)}"
+            f"|{_mt(edit)}|{_mt(edit / 'timing.json')}")
+
+
 def build(store: Any, projects_root: Path, *, com_links: bool = False) -> list[dict]:
     """Cards prontos para a tela, do mais recente para o mais antigo."""
+    import copy
+
     from app.local_server import (  # import tardio: o local_server usa este módulo
         STAGE_LABELS,
         enrich_job_display,
@@ -497,8 +520,49 @@ def build(store: Any, projects_root: Path, *, com_links: bool = False) -> list[d
     )
 
     jobs = store.list()
-    for j in jobs:
+    for idx, j in enumerate(jobs):
         edit = Path(j.get("editDir") or "")
+        assinatura = None
+        if str(j.get("status") or "") == "done" and j.get("id"):
+            assinatura = _assinatura_do_pronto(j, edit, com_links)
+            guardado = _CACHE_PRONTOS.get(str(j["id"]))
+            if guardado and guardado[0] == assinatura:
+                jobs[idx] = copy.deepcopy(guardado[1])
+                continue
+        _montar_card(j, edit, com_links, STAGE_LABELS, enrich_job_display,
+                     medir_duracao_em_fundo, resolve_delivery_mp4, store)
+        if assinatura is not None:
+            _CACHE_PRONTOS[str(j["id"])] = (assinatura, copy.deepcopy(j))
+    _CACHE_PRONTOS_LIMPAR({str(j.get("id")) for j in jobs})
+
+    try:
+        from app.eta_estimate import attach_eta, collect_history
+
+        hist = collect_history(projects_root)
+        for j in jobs:
+            attach_eta(j, hist, Path(j.get("editDir") or ""))
+    except Exception:  # noqa: BLE001 - a estimativa nunca pode derrubar a Fila
+        pass
+
+    try:
+        from app.apply_tasks import enrich_jobs_list
+
+        enrich_jobs_list(jobs, projects_root)
+    except Exception:  # noqa: BLE001
+        pass
+    return jobs
+
+
+def _CACHE_PRONTOS_LIMPAR(vivos: set[str]) -> None:
+    """Job apagado sai do cache — senão o dicionário só cresce."""
+    for k in [k for k in _CACHE_PRONTOS if k not in vivos]:
+        _CACHE_PRONTOS.pop(k, None)
+
+
+def _montar_card(j: dict, edit: Path, com_links: bool, STAGE_LABELS, enrich_job_display,
+                 medir_duracao_em_fundo, resolve_delivery_mp4, store) -> None:
+    """O card de UM job (a parte cara: leituras de arquivo)."""
+    if True:
         j["hasCut"] = (edit / "cut.mp4").exists()
         j["hasFinal"] = resolve_delivery_mp4(edit) is not None
         j["hasThumb"] = (edit / "thumb.jpg").exists()
@@ -536,19 +600,3 @@ def build(store: Any, projects_root: Path, *, com_links: bool = False) -> list[d
             medir_duracao_em_fundo(store, str(j.get("id") or ""),
                                    j.get("sources") or [j.get("source")])
 
-    try:
-        from app.eta_estimate import attach_eta, collect_history
-
-        hist = collect_history(projects_root)
-        for j in jobs:
-            attach_eta(j, hist, Path(j.get("editDir") or ""))
-    except Exception:  # noqa: BLE001 - a estimativa nunca pode derrubar a Fila
-        pass
-
-    try:
-        from app.apply_tasks import enrich_jobs_list
-
-        enrich_jobs_list(jobs, projects_root)
-    except Exception:  # noqa: BLE001
-        pass
-    return jobs

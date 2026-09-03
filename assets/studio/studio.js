@@ -4,6 +4,7 @@ const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 
 const state = {
   jobs: [],
+  jobsLoaded: false,   // primeira resposta do /api/jobs ja chegou?
   view: "import",
   pendingDeleteId: null,
   pendingRenameId: null,
@@ -25,6 +26,14 @@ const state = {
   libCat: "",
   presetBrandId: "padrao",
 };
+
+// Hidrata a lista com o retrato da ultima resposta: a tela pinta na hora e
+// o /api/jobs de verdade substitui em seguida (voltar do preview recarrega
+// a pagina — "some todos e demora segundos pra carregar", 02/09).
+try {
+  const _cache = JSON.parse(localStorage.getItem("ativavid.jobs.cache") || "null");
+  if (Array.isArray(_cache) && _cache.length) state.jobs = _cache;
+} catch { /* retrato ausente ou corrompido: segue vazio */ }
 
 const STATUS_LABEL = {
   importing: "Importando",
@@ -990,6 +999,12 @@ function renderInto(boxId, emptyId, jobs, opts) {
           <button type="button" class="ghost-btn ghost-btn--sm" data-limpar-busca="${
             escapeHtml(String((opts && opts.view) || ""))}">Limpar a busca</button>`;
         empty.querySelector("strong").textContent = `“${termo}”`;
+      } else if (!state.jobsLoaded) {
+        // Antes da primeira resposta do servidor a lista esta vazia porque
+        // ainda NAO CHEGOU, nao porque nao existe: dizer "nenhum video
+        // pronto" para quem tem 250 e mentir por 2s a cada volta do preview
+        // (02/09).
+        empty.textContent = "Carregando os vídeos…";
       } else if (empty.dataset.textoOriginal) {
         empty.textContent = empty.dataset.textoOriginal;
       }
@@ -1430,6 +1445,10 @@ async function refreshJobs() {
   const next = [...locals.filter((j) => !incomingIds.has(j.id)), ...incoming];
   maybeToastApply(state.jobs, next);
   state.jobs = next;
+  state.jobsLoaded = true;
+  // Retrato da lista para a PROXIMA abertura do hub pintar na hora (voltar
+  // do preview recarrega a pagina; o /api/jobs leva 1-2s com 250 projetos)
+  try { localStorage.setItem("ativavid.jobs.cache", JSON.stringify(incoming)); } catch { /* cheio/bloqueado */ }
   renderJobs();
 }
 
