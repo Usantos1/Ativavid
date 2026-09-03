@@ -1657,9 +1657,16 @@ class Handler(BaseHTTPRequestHandler):
         resolvedor = getattr(type(self), "titulo_do_card", None)
         if callable(resolvedor):
             try:
-                nome = resolvedor(self.root)
-                if nome:
-                    state["jobTitle"] = str(nome)[:80]
+                ficha = resolvedor(self.root)
+                # str (so o nome) ou dict {id, title}: o id e o que deixa o
+                # editor renomear/aprovar o video (03/09)
+                if isinstance(ficha, dict):
+                    if ficha.get("title"):
+                        state["jobTitle"] = str(ficha["title"])[:80]
+                    if ficha.get("id"):
+                        state["jobId"] = str(ficha["id"])
+                elif ficha:
+                    state["jobTitle"] = str(ficha)[:80]
             except Exception:  # noqa: BLE001 — o nome nunca derruba o estado
                 pass
         # attach small data files + mtimes so the UI hot-reloads on change

@@ -4242,3 +4242,11 @@ body > .fx-drop { position: fixed; bottom: auto; }
 /* Nome do video editado (o nome do card do hub) no cabecalho do editor —
  * pedido de 03/09. Vai em destaque antes de "arquivo · duracao · formato". */
 .project-meta .proj-nome { color: var(--text, #f2f2f2); font-weight: 700; }
+
+/* Renomear/aprovar no cabecalho do editor (03/09) */
+.project-meta .proj-nome[role="button"] { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+.project-meta .proj-aprovado { margin-left: 8px; color: var(--text, #f2f2f2); font-weight: 600; cursor: pointer; }
+.project-meta .proj-aprovado input { vertical-align: -2px; margin-right: 2px; }
+/* Com nome + Aprovado + arquivo · duracao · formato a linha ficou longa: quebrar
+ * em vez de cortar com reticencias (o "Aprovado" saia cortado, 03/09) */
+.project-meta { white-space: normal; text-overflow: clip; }

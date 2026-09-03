@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.90
+
+- **Renomear e aprovar o vídeo direto do editor.** No cabeçalho, o nome
+  do vídeo agora é clicável (renomear) e ganhou o checkbox **Aprovado**:
+  marcar põe o ✅ na frente do nome, desmarcar tira — o mesmo sinal que
+  você já usava na mão, e o card do hub mostra o mesmo nome.
+
 ## 4.89
 
 - **"Copiar estilo" quebrava antes de copiar** (erro "job is not

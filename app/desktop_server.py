@@ -622,9 +622,9 @@ def build_server(projects_root: Path, port: int) -> tuple[ThreadingHTTPServer, s
     ps.Handler.projects_roots = [projects_root]
     # O editor mostra o MESMO nome do card (03/09): o preview nao enxerga
     # o banco de jobs, entao o hub empresta o resolvedor
-    from app.jobs_view import titulo_do_card as _titulo_do_card
+    from app.jobs_view import ficha_do_card as _ficha_do_card
     ps.Handler.titulo_do_card = staticmethod(
-        lambda edit: _titulo_do_card(store, edit))
+        lambda edit: _ficha_do_card(store, edit))
 
     DesktopHandler.store = store
     DesktopHandler.worker = worker

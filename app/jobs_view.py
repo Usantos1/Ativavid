@@ -487,6 +487,17 @@ def _formato_do_video(job: dict, edit: Path) -> None:
         job["formatLabel"] = rotulo
 
 
+def job_do_projeto(store: Any, edit_dir: Path) -> dict | None:
+    """O registro do job cujo editDir é `edit_dir` (comparação sem ligar
+    para barra ou caixa), ou None quando o projeto não é um job."""
+    alvo = str(edit_dir).replace("\\", "/").rstrip("/").lower()
+    for j in store.list():
+        ed = str(j.get("editDir") or "").replace("\\", "/").rstrip("/").lower()
+        if ed and ed == alvo:
+            return j
+    return None
+
+
 def titulo_do_card(store: Any, edit_dir: Path) -> str | None:
     """O nome que o CARD do hub mostra para o projeto de `edit_dir`.
 
@@ -495,13 +506,7 @@ def titulo_do_card(store: Any, edit_dir: Path) -> str | None:
     título travado > stem do arquivo final (exceto final/cut genéricos) >
     título resolvido do job. None quando o projeto não é um job.
     """
-    alvo = str(edit_dir).replace("\\", "/").rstrip("/").lower()
-    job = None
-    for j in store.list():
-        ed = str(j.get("editDir") or "").replace("\\", "/").rstrip("/").lower()
-        if ed and ed == alvo:
-            job = j
-            break
+    job = job_do_projeto(store, edit_dir)
     if not job:
         return None
     if job.get("titleLocked") and str(job.get("title") or "").strip():
@@ -515,6 +520,16 @@ def titulo_do_card(store: Any, edit_dir: Path) -> str | None:
         return str(_resolve_job_title(job, edit_dir) or "")[:80] or None
     except Exception:  # noqa: BLE001
         return str(job.get("title") or job.get("name") or "")[:80] or None
+
+
+def ficha_do_card(store: Any, edit_dir: Path) -> dict | None:
+    """{id, title} do card — o editor precisa do id para renomear/aprovar
+    (03/09: "poder renomear o G1·C3·CTA2 quando eu quiser" + checkbox
+    Aprovado que poe o ✅ na frente do nome)."""
+    job = job_do_projeto(store, edit_dir)
+    if not job or not job.get("id"):
+        return None
+    return {"id": str(job["id"]), "title": titulo_do_card(store, edit_dir) or ""}
 
 
 # Cache do card PRONTO. A montagem lê ~13 arquivos por projeto (timing,

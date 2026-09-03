@@ -2519,7 +2519,22 @@ function refreshProjectChrome() {
     if (!meta) return;
     meta.textContent = '';
     if (nomeDoCard) {
-      el('b', 'proj-nome', meta).textContent = nomeDoCard;
+      const b = el('b', 'proj-nome', meta);
+      b.textContent = nomeDoCard;
+      if (S.state && S.state.jobId) {
+        // Renomear e aprovar daqui mesmo (03/09): ele abre o video, aprova
+        // e marca o nome com ✅ na mao — agora e um clique e um checkbox.
+        b.setAttribute('role', 'button');
+        b.title = 'Clique para renomear';
+        b.addEventListener('click', () => { renomearVideoEditado(); });
+        const lab = el('label', 'proj-aprovado', meta);
+        const chk = el('input', '', lab);
+        chk.type = 'checkbox';
+        chk.checked = APROVADO_RE.test(nomeDoCard);
+        chk.title = 'Marca o nome com ✅';
+        lab.appendChild(document.createTextNode(' Aprovado'));
+        chk.addEventListener('change', () => { alternarAprovado(chk.checked); });
+      }
       if (lista.length) meta.appendChild(document.createTextNode(' · '));
     }
     meta.appendChild(document.createTextNode(lista.join(' · ')));
@@ -2531,6 +2546,51 @@ function refreshProjectChrome() {
   } else {
     pn.textContent = file || 'ATIVAVID';
     pintarMeta(bits.slice(1));
+  }
+}
+
+/* Aprovado = o nome comeca com ✅ (o mesmo sinal que ele ja punha na mao
+ * ao aprovar a edicao). Renomear passa pelo /api/jobs/rename do hub, que
+ * trava o titulo — e o card do hub mostra o mesmo nome. */
+const APROVADO_RE = /^\s*✅\s*/u;
+
+async function gravarNomeDoVideo(novo) {
+  const id = S.state && S.state.jobId;
+  const titulo = String(novo || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+  if (!id || !titulo) return false;
+  try {
+    const r = await fetch('/api/jobs/rename', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, title: titulo }),
+    });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok || body.error) throw new Error(body.error || 'não deu para renomear');
+    S.state.jobTitle = titulo;
+    refreshProjectChrome();
+    return true;
+  } catch (e) {
+    toast(`Renomear falhou: ${e.message || e}`, 4500);
+    return false;
+  }
+}
+
+async function renomearVideoEditado() {
+  const atual = nomeDoVideoEditado();
+  const novo = await pedirTexto('Nome do vídeo', atual, 'Salvar');
+  if (novo == null || novo.trim() === atual) return;
+  if (await gravarNomeDoVideo(novo)) toast('✓ Nome atualizado', 2200);
+}
+
+async function alternarAprovado(marcar) {
+  const atual = nomeDoVideoEditado();
+  const limpo = atual.replace(APROVADO_RE, '');
+  const novo = marcar ? `✅ ${limpo}` : limpo;
+  if (novo === atual) return;
+  if (await gravarNomeDoVideo(novo)) {
+    toast(marcar ? '✓ Aprovado — ✅ no nome' : 'Aprovação retirada', 2200);
+  } else {
+    refreshProjectChrome();   // desfaz o checkbox que ficou marcado a toa
   }
 }
 
