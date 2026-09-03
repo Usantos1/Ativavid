@@ -52,6 +52,26 @@ def test_colar_grava_no_destino_e_manda_a_fila():
 def test_o_despachante_liga_as_duas_acoes():
     assert 'act === "copystyle"' in JS and 'act === "pastestyle"' in JS
     assert "copiarEstiloDoCard(" in JS and "colarEstiloNoCard(" in JS
+    # o card vem de state.jobs pelo `id` — `job` NAO existe nesse escopo
+    # ("job is not defined", 03/09: o copiar quebrava antes de copiar)
+    i = JS.index('act === "copystyle"')
+    bloco = JS[i:JS.index('act === "copylegenda"', i)]
+    assert "job ||" not in bloco and "job)" not in bloco
+    assert "state.jobs.find(" in bloco
+
+
+def test_repintar_nao_perde_o_menu_estacionado():
+    """openCardMenu estaciona o menu aberto no body; repintar o card com
+    ele la fora criava o card sem menu e deixava o antigo orfao (lab,
+    03/09: o Colar sumia do destino logo depois do Copiar)."""
+    i = JS.index("async function copiarEstiloDoCard")
+    bloco = JS[i:JS.index("\nasync function colarEstiloNoCard", i)]
+    assert bloco.index("closeCardMenus()") < bloco.index("renderJobs()")
+    j = JS.index("function syncCards")
+    corpo = JS[j:JS.index("\nfunction ", j + 10)]
+    assert corpo.index("closeCardMenus(box)") < corpo.index("const existing")
+    # e o resize nao passa o Event como escopo (TypeError em todo resize)
+    assert 'window.addEventListener("resize", () => closeCardMenus())' in JS
 
 
 def test_a_assinatura_do_card_muda_quando_ha_estilo_copiado():

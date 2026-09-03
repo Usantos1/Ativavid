@@ -862,6 +862,10 @@ async function copiarEstiloDoCard(j) {
     localStorage.setItem(ESTILO_COPIADO_KEY, JSON.stringify({ de, folder: pastaDoProjeto(j), payload }));
   } catch { toast("Não consegui guardar o estilo copiado"); return; }
   toast(`Estilo de "${de}" copiado — nos outros vídeos use "Colar estilo"`, 4500);
+  // O menu de onde veio o clique esta ESTACIONADO no body (openCardMenu);
+  // repintar o card com ele la fora deixava o card novo sem menu (lab,
+  // 03/09). Devolve todos antes de repintar.
+  closeCardMenus();
   renderJobs();
 }
 
@@ -1107,6 +1111,10 @@ function renderInto(boxId, emptyId, jobs, opts) {
 }
 
 function syncCards(box, jobs, opts) {
+  // Menu aberto vive no body (openCardMenu). Um patch com ele la fora
+  // recria o card SEM menu e deixa o antigo orfao — devolve os menus
+  // deste box antes de mexer em qualquer card.
+  closeCardMenus(box);
   const existing = new Map(
     [...box.querySelectorAll("[data-card-id]")].map((el) => [el.dataset.cardId, el])
   );
@@ -3437,9 +3445,11 @@ function wireList() {
           body: JSON.stringify({ id }),
         });
       } else if (act === "copystyle") {
-        await copiarEstiloDoCard(job || state.jobs.find((x) => String(x.id) === String(id)));
+        // so `id` existe neste escopo — `job` nao ("job is not defined",
+        // print de 03/09: o copiar quebrava e o colar nunca acendia)
+        await copiarEstiloDoCard(state.jobs.find((x) => String(x.id) === String(id)));
       } else if (act === "pastestyle") {
-        await colarEstiloNoCard(job || state.jobs.find((x) => String(x.id) === String(id)));
+        await colarEstiloNoCard(state.jobs.find((x) => String(x.id) === String(id)));
       } else if (act === "copylegenda") {
         // Este botao NUNCA teve handler: a cadeia de acoes tratava folder,
         // open-final, retry, reimport, ackapply, cancel, detail e rename — e
@@ -3559,7 +3569,10 @@ function wireList() {
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") closeCardMenus();
   });
-  window.addEventListener("resize", closeCardMenus);
+  // NAO passar a referencia direta: o listener recebe o Event como `scope`
+  // e `$$("[data-menu-host]", event)` estoura (TypeError em todo resize,
+  // visto no laboratorio em 03/09)
+  window.addEventListener("resize", () => closeCardMenus());
   window.addEventListener("scroll", closeCardMenus, true);
 
   const formRename = $("#formRename");

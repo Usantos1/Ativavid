@@ -1,5 +1,16 @@
 # Changelog
 
+## 4.89
+
+- **"Copiar estilo" quebrava antes de copiar** (erro "job is not
+  defined"), e por isso o "Colar estilo" nunca acendia. Corrigido.
+- **O menu "⋯" não some mais depois de copiar.** Repintar um card com o
+  menu aberto deixava o card sem menu — agora os menus fecham antes de
+  qualquer repintura. Fluxo completo (copiar → colar → refazer) provado
+  em ambiente isolado, com o estilo colado idêntico ao da origem.
+- Redimensionar a janela não gera mais um erro escondido ao fechar os
+  menus (defeito antigo).
+
 ## 4.88
 
 - **"Colar estilo" sempre visível no menu.** Ele só aparecia depois de
