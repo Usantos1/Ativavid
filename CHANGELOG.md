@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.84
+
+- **O editor mostra o nome do vídeo editado.** No cabeçalho, além da
+  manchete e de "arquivo · duração · formato", entra em destaque o mesmo
+  nome que o vídeo tem no card ("G3 · C1 · CTA3", por exemplo).
+
 ## 4.83
 
 - **Voltar do vídeo para Concluídos não apaga mais a lista.** A tela

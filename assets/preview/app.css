@@ -4238,3 +4238,7 @@ body > .fx-drop { position: fixed; bottom: auto; }
   color: #fff; font-weight: 900; font-size: 26px; letter-spacing: -0.5px;
   line-height: 1; text-shadow: 0 2px 9px rgba(0, 0, 0, 0.6);
 }
+
+/* Nome do video editado (o nome do card do hub) no cabecalho do editor —
+ * pedido de 03/09. Vai em destaque antes de "arquivo · duracao · formato". */
+.project-meta .proj-nome { color: var(--text, #f2f2f2); font-weight: 700; }

@@ -2511,20 +2511,35 @@ function refreshProjectChrome() {
   if (dur) bits.push(fmtClock(dur));
   const aspect = videoAspectLabel();
   if (aspect) bits.push(aspect);
+  // O NOME DO CARD ("G3 · C1 · CTA3") tambem entra aqui — pedido de 03/09:
+  // "deve mostrar tambem o nome do video editado". E a mesma regra do hub
+  // (displayTitle): o stem do arquivo final, exceto final/cut genericos.
+  const nomeDoCard = nomeDoVideoEditado();
+  const pintarMeta = (lista) => {
+    if (!meta) return;
+    meta.textContent = '';
+    if (nomeDoCard) {
+      el('b', 'proj-nome', meta).textContent = nomeDoCard;
+      if (lista.length) meta.appendChild(document.createTextNode(' · '));
+    }
+    meta.appendChild(document.createTextNode(lista.join(' · ')));
+    meta.classList.toggle('hidden', !nomeDoCard && lista.length === 0);
+  };
   if (title && file && title.toLowerCase() !== file.toLowerCase()) {
     pn.textContent = title;
-    if (meta) {
-      meta.textContent = bits.filter(Boolean).join(' · ');
-      meta.classList.toggle('hidden', bits.filter(Boolean).length === 0);
-    }
+    pintarMeta(bits.filter(Boolean));
   } else {
     pn.textContent = file || 'ATIVAVID';
-    if (meta) {
-      const extra = bits.slice(1);
-      meta.textContent = extra.join(' · ');
-      meta.classList.toggle('hidden', extra.length === 0);
-    }
+    pintarMeta(bits.slice(1));
   }
+}
+
+function nomeDoVideoEditado() {
+  const fin = String((S.state && S.state.finalVideo) || '').trim();
+  if (!fin) return '';
+  const stem = fin.split(/[/\\]/).pop().replace(/\.[^.]+$/, '').trim();
+  if (!stem || /^(final|cut)$/i.test(stem)) return '';
+  return stem.slice(0, 80);
 }
 
 // ---------- data loading ----------
