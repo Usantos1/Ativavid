@@ -3965,6 +3965,16 @@ video.lib-thumb { aspect-ratio: 9 / 16; max-height: 260px; object-fit: contain;
   font-size: 13px;
   letter-spacing: .04em;
 }
+/* A linha de baixo tambem serve na tabela de contas ("0 de 1" / "nenhum
+ * PC entrou com esta conta"): sem esta regra saia colado, "0 de 1nenhum". */
+.access-table .cel-sub {
+  display: block;
+  font-size: 11px;
+  color: var(--dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .admin-tbl .cel-sub {
   display: block;
   font-size: 11px;

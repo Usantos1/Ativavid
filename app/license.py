@@ -576,6 +576,27 @@ def _cache(status: dict[str, Any]) -> dict[str, Any]:
     return status
 
 
+def _acao_inicial(blob: dict[str, Any]) -> str:
+    """'trial' ate o servidor responder sobre o trial deste PC; depois 'status'.
+
+    Desde a 4.94 o trial so nasce com CADASTRO: o primeiro contato sem
+    login volta `signupRequired` e o pedido fica em aberto — a proxima
+    consulta (depois de criar a conta) pergunta 'trial' de novo. Se
+    marcasse `trialAskedAt` na recusa, o cliente se cadastrava e ficava
+    bloqueado para sempre, porque 'status' nunca cria trial.
+    """
+    return "trial" if not blob.get("trialAskedAt") else "status"
+
+
+def _marcar_trial_pedido(remote: dict[str, Any]) -> None:
+    if remote.get("error") or remote.get("signupRequired"):
+        return
+    blob = _load_blob()
+    if not blob.get("trialAskedAt"):
+        blob["trialAskedAt"] = _utc()
+        _save_blob(blob)
+
+
 def entitlement(*, refresh: bool = False) -> dict[str, Any]:
     if not configured():
         out = _unconfigured_status()
@@ -591,7 +612,12 @@ def entitlement(*, refresh: bool = False) -> dict[str, Any]:
         # Nem o cache de 30 minutos vale: os dois casos exigem uma resposta
         # ONLINE para voltar a liberar — e ela ja vem com o bloqueio por
         # maquina aplicado, senao "voltar a liberar" era automatico.
-        return _cache(_veredito("status"))
+        # `blockedAt` tambem gruda na recusa "crie sua conta": por isso a
+        # acao aqui e a inicial, e nao 'status' fixo — senao o cadastro
+        # nunca chegava a pedir o trial.
+        remote = _veredito(_acao_inicial(blob))
+        _marcar_trial_pedido(remote)
+        return _cache(remote)
     if (
         not refresh
         and isinstance(blob.get("cached"), dict)
@@ -639,11 +665,8 @@ def entitlement(*, refresh: bool = False) -> dict[str, Any]:
 
     # 'trial' CRIA trial no servidor. Como ação de rotina, dava 7 dias novos a
     # quem tinha assinatura vencida; agora só no primeiro contato deste device.
-    remote = _veredito("trial" if not blob.get("trialAskedAt") else "status")
-    if not blob.get("trialAskedAt") and not remote.get("error"):
-        blob = _load_blob()
-        blob["trialAskedAt"] = _utc()
-        _save_blob(blob)
+    remote = _veredito(_acao_inicial(blob))
+    _marcar_trial_pedido(remote)
     if remote.get("error") and remote.get("mode") not in ("blocked", "update_required"):
         remote = _veredito("status")
     # O bloqueio por maquina ja veio aplicado por `_veredito` — em TODOS os
@@ -802,6 +825,9 @@ def public_status() -> dict[str, Any]:
         "accountEmail": st.get("accountEmail"),
         "message": msg,
         "error": err,
+        # 4.94: trial so com cadastro — a tela abre "Criar conta" em vez
+        # de "bloqueado".
+        "signupRequired": bool(st.get("signupRequired")),
         # Os DOIS links saem da mesma fonte (`_cfg`, que le a config
         # empacotada). Ate a 4.44 o anual vinha carona no payload do
         # entitlement e o mensal da config: dois caminhos para a mesma

@@ -56,7 +56,10 @@ def test_a_saida_de_quem_ja_pagou_e_a_conta():
     b = _janela()
     assert 'id="btnLicDlgLogin"' in b
     i = JS.index('const btnDlgLogin = $("#btnLicDlgLogin")')
-    assert 'openLoginDialog("login")' in JS[i:i + 300]
+    bloco = JS[i:JS.index("\n  }", i)]
+    # 4.94: o mesmo botao vira "Criar conta gratis" quando o trial exige
+    # cadastro; quem ja pagou continua caindo no login.
+    assert 'openLoginDialog(btnDlgLogin.dataset.modo === "signup" ? "signup" : "login")' in bloco
 
 
 def test_cada_plano_da_janela_abre_o_SEU_link():

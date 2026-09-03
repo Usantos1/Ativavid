@@ -153,6 +153,8 @@ $$;
 -- há conta vinculada nem e-mail na liberação). A mesma coluna que o
 -- registro_de_uso.sql cria — pode rodar os dois em qualquer ordem.
 alter table public.devices add column if not exists email text;
+-- 4.94: o trial nasce com cadastro, e guarda o e-mail de quem cadastrou.
+alter table public.trials add column if not exists email text;
 
 -- Assinatura antiga (3 args) → remove para PostgREST não ambíguo
 drop function if exists public.ativavid_license(text, text, text);
@@ -189,6 +191,7 @@ declare
   v_bound boolean;
   v_email_ok boolean := false;
   v_pending boolean := false;
+  v_signup boolean := false;
 begin
   if p_device_id is null or length(trim(p_device_id)) = 0 then
     return public.ativavid_with_update(
@@ -374,11 +377,17 @@ begin
       select * into v_trial from trials where device_id = p_device_id;
       v_has_trial := found;
 
-      if not v_has_trial and p_action = 'trial' then
-        insert into trials (device_id) values (p_device_id)
+      -- 4.94: TRIAL SÓ COM CADASTRO. "Quero liberar pra usar apenas com
+      -- cadastro os novos usuários" (03/09): sem login, o primeiro contato
+      -- não cria trial e responde `signupRequired` — o app abre "Criar
+      -- conta". Quem já tinha trial (linha existente) segue como antes.
+      -- O e-mail fica na linha do trial: é o que diz de quem é o PC.
+      if not v_has_trial and p_action = 'trial' and v_jwt_uid is not null then
+        insert into trials (device_id, email) values (p_device_id, v_jwt_email)
         returning * into v_trial;
         v_has_trial := true;
       end if;
+      v_signup := (not v_has_trial and v_jwt_uid is null);
 
       if v_has_trial and v_trial.started_at + make_interval(days => v_days) > now() then
         v_left := ceil(
@@ -409,9 +418,13 @@ begin
         v_base := json_build_object(
           'entitled', false,
           'mode', 'blocked',
+          'error', case when v_signup then 'signup_required' else null end,
+          'signupRequired', v_signup,
           'trialDaysLeft', 0,
           'trialDaysTotal', v_days,
           'message', case
+            when v_signup then
+              'Crie sua conta (e-mail e senha) para começar os ' || v_days || ' dias grátis.'
             when v_pending then
               'Seu acesso está liberado, mas ainda não vinculado a esta conta. '
               || 'Peça ao admin para clicar em Liberar de novo para ' || v_jwt_email || '.'

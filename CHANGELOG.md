@@ -1,5 +1,17 @@
 # Changelog
 
+## 4.94
+
+- **Trial só com cadastro.** Quem instala e abre sem conta vê "Crie sua
+  conta para testar 7 dias grátis" com o botão "Criar conta grátis"; o
+  trial nasce no cadastro e guarda o e-mail — o painel passa a saber de
+  quem é cada PC em teste. Quem já estava em trial segue como antes.
+  Precisa rodar de novo `supabase/rpc_license.sql` (sem isso o servidor
+  continua dando trial sem conta).
+- **Contas: "Apagar", não só "Revogar".** Apaga a liberação, o login
+  (e-mail e senha) e o vínculo dos PCs — para e-mail digitado errado.
+- A linha "nenhum PC entrou com esta conta" saía colada no "0 de 1".
+
 ## 4.93
 
 - **Licença: de quem é cada PC.** O painel mostra o e-mail do dono em

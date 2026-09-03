@@ -2189,7 +2189,12 @@ function openLicenseDialog(lic) {
     openUpdateDialog(L);
     return;
   }
-  $("#licDlgTitle").textContent = L.mode === "blocked" ? "Ative o ATIVAVID" : "Licença";
+  // 4.94: sem cadastro nao ha trial. A janela vira um convite ("crie sua
+  // conta") e nao um bloqueio — quem acabou de instalar nao fez nada errado.
+  const cadastro = !!L.signupRequired;
+  $("#licDlgTitle").textContent = cadastro
+    ? `Crie sua conta para testar ${L.trialDaysTotal || 7} dias grátis`
+    : (L.mode === "blocked" ? "Ative o ATIVAVID" : "Licença");
   $("#licDlgHint").textContent = L.message || "Entre com a conta liberada ou escolha um plano.";
   // Plano sem link configurado so levaria a um toast de desculpa; melhor
   // nao existir. Os dois somem juntos? Entao a janela vira so o login.
@@ -2205,7 +2210,11 @@ function openLicenseDialog(lic) {
   }
   // Ja logado nao precisa da saida de login.
   const login = $("#btnLicDlgLogin");
-  if (login) login.hidden = !!state.auth?.loggedIn;
+  if (login) {
+    login.hidden = !!state.auth?.loggedIn;
+    login.textContent = cadastro ? "Criar conta grátis" : "Entrar na minha conta";
+    login.dataset.modo = cadastro ? "signup" : "login";
+  }
   // O codigo do PC ENTRA aqui: e esta janela que abre quando ele esbarra
   // no bloqueio, e e nesse instante que ele precisa dizer quem e.
   mostrarCodigoDoPc(L);
@@ -4173,16 +4182,44 @@ function renderAccessList(data) {
             <td><span class="access-st ${st}">${stLabel}</span></td>
             <td>${until}</td>
             <td title="${pcsTitulo}">${pcs}</td>
-            <td><button type="button" class="ghost-btn access-revoke" data-email="${rawEmail}">Revogar</button></td>
+            <td class="access-acoes"><button type="button" class="ghost-btn access-revoke" data-email="${rawEmail}">Revogar</button>
+              <button type="button" class="ghost-btn preset-del access-delete" data-email="${rawEmail}" title="Apaga a liberação e o login">Apagar</button></td>
           </tr>`;
         }).join("")}
       </tbody>
     </table>`;
   table.querySelectorAll(".access-row").forEach((row) => {
     row.onclick = (ev) => {
-      if (ev.target.closest(".access-revoke")) return;
+      if (ev.target.closest(".access-revoke, .access-delete")) return;
       const email = row.getAttribute("data-email") || "";
       openLicAccountDialog(email);
+    };
+  });
+  // Apagar de verdade: liberacao, vinculo dos PCs e o login. Revogar so
+  // desliga o acesso e deixa a linha — para e-mail digitado errado e lixo.
+  table.querySelectorAll(".access-delete").forEach((btn) => {
+    btn.onclick = async () => {
+      const email = btn.getAttribute("data-email") || "";
+      if (!email) return;
+      const ok = await pedirConfirmacao(
+        `Apagar a conta ${email}?`,
+        "Some a liberação, o login (e-mail e senha) e o vínculo dos PCs. "
+        + "O cliente só volta se você liberar de novo. Não dá para desfazer.",
+        "Apagar", true,
+      );
+      if (!ok) return;
+      try {
+        const data = await api("/api/admin/access", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "delete", email }),
+        });
+        adminOut(data);
+        toast(data.ok ? (data.message || "Conta apagada") : (data.message || "Falha ao apagar"));
+        await loadAccessList();
+      } catch (e) {
+        toast(e.message || "Falha ao apagar");
+      }
     };
   });
   table.querySelectorAll(".access-revoke").forEach((btn) => {
@@ -5040,7 +5077,8 @@ function wireForms() {
     btnDlgLogin.onclick = () => {
       const dlg = $("#dlgLicense");
       if (dlg?.open) dlg.close();
-      openLoginDialog("login");
+      // "Criar conta gratis" (trial so com cadastro) abre direto no cadastro.
+      openLoginDialog(btnDlgLogin.dataset.modo === "signup" ? "signup" : "login");
     };
   }
   // Cada plano abre o SEU link (precos diferentes na Stripe), tanto no

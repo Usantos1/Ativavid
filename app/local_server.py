@@ -2555,6 +2555,9 @@ class StudioHandler(BaseHTTPRequestHandler):
             if action == "revoke":
                 self._json(la.revoke_access(email=str(body.get("email") or "")))
                 return
+            if action == "delete":
+                self._json(la.delete_account(email=str(body.get("email") or "")))
+                return
             if action == "list":
                 self._json(la.list_access())
                 return

@@ -70,8 +70,11 @@ def test_o_trial_so_e_pedido_uma_vez_por_maquina():
     s = (REPO / "app" / "license.py").read_text(encoding="utf-8")
     # `_veredito` e o `_call` + bloqueio por maquina (4.39): a REGRA que
     # este teste guarda e "pedir trial uma vez so", nao o nome da funcao.
-    assert '("trial" if not blob.get("trialAskedAt") else "status")' in s
+    # 4.94: a regra mora em `_acao_inicial` (e a recusa "crie sua conta"
+    # NAO gasta o pedido — test_trial_so_com_cadastro cobre isso).
+    assert 'return "trial" if not blob.get("trialAskedAt") else "status"' in s
     assert 'blob["trialAskedAt"] = _utc()' in s
+    assert 'remote = _veredito(_acao_inicial(blob))' in s
 
 
 def test_o_servidor_da_sete_dias_e_conta_do_inicio():

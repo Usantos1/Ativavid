@@ -389,11 +389,17 @@ def list_aberturas(limit: int = 300) -> dict[str, Any]:
     # abertura, alguma coisa esta errada; se nasceu junto, o PC ficou dias
     # instalado sem ninguem abrir.
     code3, trials = _rest_service(
-        "GET", "trials?select=device_id,started_at&limit=2000")
+        "GET", "trials?select=device_id,started_at,email&limit=2000")
+    if code3 == 400:   # banco sem a coluna `email` (SQL da 4.94)
+        code3, trials = _rest_service(
+            "GET", "trials?select=device_id,started_at&limit=2000")
     inicio_trial: dict[str, str] = {}
+    email_trial: dict[str, str] = {}
     if code3 < 400 and isinstance(trials, list):
         inicio_trial = {str(t.get("device_id")): str(t.get("started_at") or "")
                         for t in trials}
+        email_trial = {str(t.get("device_id")): str(t.get("email") or "")
+                       for t in trials if t.get("email")}
 
     por_maquina: dict[str, dict[str, Any]] = {}
     for ln in linhas:
@@ -448,7 +454,7 @@ def list_aberturas(limit: int = 300) -> dict[str, Any]:
         # que responde "de quem e esse PC?" mesmo sem nenhuma abertura no
         # log — o caso do `win-8372a270…` em 03/09.
         dono = donos.get(did) or {}
-        m["email"] = (m.get("email") or dono.get("email") or "")
+        m["email"] = (m.get("email") or dono.get("email") or email_trial.get(did) or "")
         m["contaEmail"] = dono.get("contaEmail") or ""
         if not m.get("host") and dono.get("host"):
             m["host"] = dono.get("host")
@@ -609,6 +615,93 @@ def create_auth_user(*, email: str, password: str) -> dict[str, Any]:
         }
     except Exception as e:  # noqa: BLE001
         return {"ok": False, "error": "offline", "message": str(e)}
+
+
+def _auth_admin(method: str, path: str) -> tuple[int, Any]:
+    """GET/DELETE na API admin do Auth (service role)."""
+    c = _cfg()
+    if not c["url"] or not c["service"]:
+        return 400, {"error": "service_role_required"}
+    req = request.Request(
+        f"{c['url']}/auth/v1/admin/{path.lstrip('/')}",
+        method=method,
+        headers={"apikey": c["service"], "Authorization": f"Bearer {c['service']}",
+                 "Accept": "application/json"},
+    )
+    try:
+        with request.urlopen(req, timeout=25) as resp:
+            raw = resp.read().decode("utf-8")
+            return resp.status, (json.loads(raw) if raw else None)
+    except error.HTTPError as e:
+        raw = e.read().decode("utf-8", errors="replace")
+        try:
+            return e.code, (json.loads(raw) if raw else {})
+        except json.JSONDecodeError:
+            return e.code, {"message": raw[:300]}
+    except Exception as e:  # noqa: BLE001
+        return 502, {"error": "offline", "message": str(e)}
+
+
+def _auth_user_id(email: str) -> str | None:
+    """Acha o usuario do Auth pelo e-mail (a API admin nao filtra: pagina)."""
+    mail = (email or "").strip().lower()
+    for pagina in range(1, 21):
+        code, data = _auth_admin("GET", f"users?page={pagina}&per_page=200")
+        if code >= 400:
+            return None
+        users = data.get("users") if isinstance(data, dict) else data
+        if not isinstance(users, list) or not users:
+            return None
+        for u in users:
+            if str(u.get("email") or "").strip().lower() == mail:
+                return str(u.get("id") or "") or None
+        if len(users) < 200:
+            return None
+    return None
+
+
+def delete_account(*, email: str) -> dict[str, Any]:
+    """APAGA a conta: liberacao, vinculo dos PCs e o login no Auth.
+
+    "quero apagar esses leandro@ativacrm.com nao apenas revogar" (03/09):
+    revogar deixa a linha na tabela e o login vivo; um e-mail digitado
+    errado nao e um cliente que saiu, e lixo que confunde a lista. Os PCs
+    vinculados perdem so o vinculo com a conta (a maquina continua no
+    servidor, em trial ou liberada por dispositivo).
+    """
+    mail = (email or "").strip().lower()
+    if not mail or "@" not in mail:
+        return {"ok": False, "error": "email_required", "message": "Informe o e-mail."}
+    c = _cfg()
+    if not c["url"] or not c["service"]:
+        return {"ok": False, "error": "service_role_required",
+                "message": "Apagar conta precisa da service role (Licença → service role)."}
+    feito: dict[str, Any] = {"acessos": 0, "pcsDesvinculados": 0, "login": False}
+    code, acessos = _rest_service("GET", f"account_access?select=id&email=eq.{quote(mail, safe='')}")
+    if code >= 400:
+        return {"ok": False, "status": code, "error": acessos}
+    for a in acessos or []:
+        aid = str(a.get("id") or "")
+        if not aid:
+            continue
+        c2, devs = _rest_service("PATCH", f"devices?account_access_id=eq.{aid}",
+                                 {"account_access_id": None})
+        if c2 < 400 and isinstance(devs, list):
+            feito["pcsDesvinculados"] += len(devs)
+    c3, apagados = _rest_service("DELETE", f"account_access?email=eq.{quote(mail, safe='')}")
+    if c3 >= 400:
+        return {"ok": False, "status": c3, "error": apagados}
+    feito["acessos"] = len(apagados) if isinstance(apagados, list) else 0
+    uid = _auth_user_id(mail)
+    if uid:
+        c4, _ = _auth_admin("DELETE", f"users/{uid}")
+        feito["login"] = c4 < 400
+        if c4 >= 400:
+            return {"ok": False, "status": c4, "error": "auth_delete_failed", **feito,
+                    "message": f"Liberação apagada, mas o login de {mail} não saiu do Auth (HTTP {c4})."}
+    feito.update({"ok": True, "email": mail,
+                  "message": f"Conta apagada: {mail}" + (" (login removido)" if feito["login"] else " (não tinha login)")})
+    return feito
 
 
 def create_account_and_grant(
