@@ -36,44 +36,59 @@ alter table public.devices add column if not exists blocked_reason text;
 alter table public.devices add column if not exists host           text;
 alter table public.devices add column if not exists os_user        text;
 
+-- 4.93: o e-mail logado no app vai junto com a abertura. Sem ele o painel
+-- não tinha como dizer DE QUEM era um PC em trial ("esse tem conta de
+-- e-mail e não exibe ali", 03/09).
+alter table public.aberturas add column if not exists email text;
+alter table public.devices   add column if not exists email text;
+
 -- ------------------------------------------------------------- a abertura
 -- Função PRÓPRIA (e não mais uma ação dentro de ativavid_license): duas
--- assinaturas com parâmetros opcionais deixam o PostgREST ambíguo.
+-- assinaturas com parâmetros opcionais deixam o PostgREST ambíguo — por
+-- isso a assinatura antiga (6 argumentos) CAI antes de criar a nova.
+drop function if exists public.ativavid_open(text, text, text, text, text, text);
+
 create or replace function public.ativavid_open(
   p_device_id   text,
   p_app_version text default null,
   p_host        text default null,
   p_user        text default null,
   p_os          text default null,
-  p_licenca     text default null
+  p_licenca     text default null,
+  p_email       text default null
 )
 returns json
 language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  v_email text := lower(nullif(trim(coalesce(p_email, '')), ''));
 begin
   if p_device_id is null or length(trim(p_device_id)) = 0 then
     return json_build_object('ok', false, 'error', 'device_id_required');
   end if;
 
-  insert into public.aberturas (device_id, host, os_user, so, app_version, licenca)
-  values (trim(p_device_id), p_host, p_user, p_os, p_app_version, p_licenca);
+  insert into public.aberturas (device_id, host, os_user, so, app_version, licenca, email)
+  values (trim(p_device_id), p_host, p_user, p_os, p_app_version, p_licenca, v_email);
 
   -- O device pode nem ter licença ainda: é justamente quem baixou e abriu.
-  insert into public.devices (device_id, label, host, os_user, last_seen)
-  values (trim(p_device_id), p_host, p_host, p_user, now())
+  insert into public.devices (device_id, label, host, os_user, email, last_seen)
+  values (trim(p_device_id), p_host, p_host, p_user, v_email, now())
   on conflict (device_id) do update
     set last_seen = now(),
         host      = coalesce(excluded.host, public.devices.host),
-        os_user   = coalesce(excluded.os_user, public.devices.os_user);
+        os_user   = coalesce(excluded.os_user, public.devices.os_user),
+        email     = coalesce(excluded.email, public.devices.email);
 
   return json_build_object('ok', true);
 end;
 $$;
 
-grant execute on function public.ativavid_open(text, text, text, text, text, text)
+grant execute on function public.ativavid_open(text, text, text, text, text, text, text)
   to anon, authenticated;
+
+notify pgrst, 'reload schema';
 
 -- ------------------------------------------------------- o gate do device
 -- Chame isto no INÍCIO do bloco 'status'/'trial' da ativavid_license:

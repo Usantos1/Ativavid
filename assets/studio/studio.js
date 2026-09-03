@@ -1705,6 +1705,7 @@ async function loadAberturas() {
   const visiveis = filtro
     ? linhas.filter((m) => String(m.deviceId || "").toLowerCase().includes(filtro)
         || String(m.host || "").toLowerCase().includes(filtro)
+        || String(m.email || "").toLowerCase().includes(filtro)
         || codigoDoPc(m.deviceId).toLowerCase().includes(filtro))
     : linhas;
   // "30/08/2026, 21:59:13" em cada celula empurrava a tabela para fora da
@@ -1749,8 +1750,12 @@ async function loadAberturas() {
       <th class="col-data">Última</th><th class="col-trial">Trial</th>
       <th class="col-ver">Versão</th><th class="col-acao"></th>
     </tr></thead><tbody>${visiveis.map((m) => {
-      const nome = escapeHtml(m.host || "—");
-      const quem = escapeHtml([m.usuario, m.licenca].filter(Boolean).join(" · ") || "—");
+      // O e-mail (conta vinculada, liberacao ou login na abertura) e o que
+      // responde "de quem e esse PC?" — vem do servidor, mesmo sem
+      // nenhuma abertura no log.
+      const nome = escapeHtml(m.email || m.host || "—");
+      const quem = escapeHtml([m.email ? m.host : null, m.usuario, m.licenca]
+        .filter(Boolean).join(" · ") || "—");
       const acao = m.bloqueado ? "unblock" : "block";
       const rotulo = m.bloqueado ? "Desbloquear" : "Bloquear";
       const classe = m.bloqueado ? "ghost-btn ghost-btn--sm" : "ghost-btn ghost-btn--sm preset-del";
@@ -4149,14 +4154,25 @@ function renderAccessList(data) {
             stRaw === "active" ? "Ativo" : stRaw === "revoked" ? "Revogado" : (stRaw || "—")
           );
           const until = escapeHtml(fmtAccessUntil(r.valid_until));
-          const pcs = escapeHtml(String(r.max_devices ?? "—"));
+          // "PCs" = quantos estao VINCULADOS de fato, sobre o limite. So o
+          // limite ("1") fazia parecer que o PC do cliente ja estava na
+          // conta quando ele nem tinha entrado com o e-mail (03/09).
+          const vinculados = Array.isArray(r.devices) ? r.devices : null;
+          const limite = String(r.max_devices ?? "—");
+          const pcs = vinculados === null
+            ? escapeHtml(limite)
+            : `${vinculados.length} de ${escapeHtml(limite)}`
+              + (vinculados.length
+                ? `<span class="cel-sub">${escapeHtml((r.codigos || vinculados.map(codigoDoPc)).join(", "))}</span>`
+                : `<span class="cel-sub">nenhum PC entrou com esta conta</span>`);
+          const pcsTitulo = vinculados && vinculados.length ? escapeHtml(vinculados.join("\n")) : "";
           const rawEmail = String(r.email || "").replace(/"/g, "&quot;");
           const pending = r.user_id ? "" : " <span class=\"hint\">(sem login ainda)</span>";
           return `<tr class="access-row" data-email="${rawEmail}" title="Abrir para editar">
             <td title="${email}">${email}${pending}</td>
             <td><span class="access-st ${st}">${stLabel}</span></td>
             <td>${until}</td>
-            <td>${pcs}</td>
+            <td title="${pcsTitulo}">${pcs}</td>
             <td><button type="button" class="ghost-btn access-revoke" data-email="${rawEmail}">Revogar</button></td>
           </tr>`;
         }).join("")}
@@ -4254,10 +4270,15 @@ function renderDeviceList(data) {
           if (!r.valid_until) { tom = "revoked"; quando = "sem acesso"; }
           else if (dias !== null && dias <= 0) { tom = "revoked"; quando = `venceu ${quando}`; }
           else if (dias !== null && dias <= 15) { tom = "warn"; quando = `${quando} (${dias}d)`; }
-          const dono = escapeHtml(r.account_email || r.label || "—");
+          // Dono = conta vinculada, senao o e-mail digitado no "Liberar
+          // dispositivo", senao quem estava logado ao abrir (o servidor
+          // junta os tres em `email`). Ate a 4.92 so a conta contava e um
+          // PC liberado pelo ID saia "—" mesmo com e-mail preenchido.
+          const dono = escapeHtml(r.account_email || r.email || r.label || "—");
           const seg = id.replace(/"/g, "&quot;");
+          const cod = escapeHtml(r.codigo || codigoDoPc(id));
           return `<tr class="access-row">
-            <td class="mono" title="${escapeHtml(id)}">${escapeHtml(idCurto)}</td>
+            <td class="mono" title="${escapeHtml(id)}"><strong class="maq-cod">${cod}</strong> <span class="cel-sub">${escapeHtml(idCurto)}</span></td>
             <td>${dono}</td>
             <td><span class="access-st ${tom}">${escapeHtml(quando)}</span></td>
             <td>${escapeHtml(fmtAccessUntil(r.last_seen))}</td>

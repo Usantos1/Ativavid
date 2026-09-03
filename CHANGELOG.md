@@ -1,5 +1,17 @@
 # Changelog
 
+## 4.93
+
+- **Licença: de quem é cada PC.** O painel mostra o e-mail do dono em
+  todas as tabelas (conta vinculada, e-mail da liberação ou quem estava
+  logado ao abrir), a coluna "PCs" das contas passa a dizer quantos PCs
+  entraram de fato ("0 de 1 — nenhum PC entrou com esta conta") e
+  "Liberar dispositivo" / "Bloquear" aceitam o código curto que o cliente
+  lê na tela (8372A270), resolvendo para o ID completo em vez de criar um
+  dispositivo fantasma. O registro de abertura passa a mandar o e-mail
+  logado — para isso, rode de novo `supabase/registro_de_uso.sql` no
+  Supabase (o app funciona sem, só sem essa coluna).
+
 ## 4.92
 
 - **A pasta de entrega tem o nome do vídeo — e ganha o ✅ ao aprovar.**

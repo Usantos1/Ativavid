@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -174,7 +175,127 @@ def list_licenses(limit: int = 50) -> dict[str, Any]:
     return {"ok": True, "licenses": data if isinstance(data, list) else [], "via": "service_role"}
 
 
+def codigo_do_pc(device_id: str) -> str:
+    """O codigo curto que a tela de Licenca mostra ao cliente (`8372A270`
+    para `win-8372a270-ab08-…`). Mesma regra do `codigoDoPc` do studio.js."""
+    cru = str(device_id or "").strip()
+    if not cru:
+        return ""
+    sem_prefixo = re.sub(r"^(win|av)-", "", cru, flags=re.IGNORECASE)
+    bloco = sem_prefixo.split("-")[0] or sem_prefixo
+    return bloco[:8].upper()
+
+
+def _e_id_completo(device_id: str) -> bool:
+    """`win-8372a270-ab08-45ee-a444-eaab6a7705cc` sim; `8372A270` nao."""
+    did = str(device_id or "").strip()
+    return "-" in did and len(did) >= 20
+
+
+def _ids_conhecidos() -> list[str]:
+    """Todo device_id que o servidor ja viu: liberados, em trial ou que
+    so abriram o app."""
+    ids: set[str] = set()
+    for caminho in ("devices?select=device_id&limit=2000",
+                    "trials?select=device_id&limit=2000",
+                    "aberturas?select=device_id&limit=2000"):
+        code, data = _rest_service("GET", caminho)
+        if code < 400 and isinstance(data, list):
+            ids.update(str(r.get("device_id") or "") for r in data)
+    ids.discard("")
+    return sorted(ids)
+
+
+def resolver_device_id(device_id: str) -> dict[str, Any]:
+    """Aceita o CODIGO CURTO que o cliente le na tela e devolve o ID completo.
+
+    Em 03/09 ele digitou `8372A270` no "Liberar dispositivo": o painel
+    mostra esse codigo ao cliente, o cliente manda o codigo, e o campo
+    aceitava qualquer coisa — nasceu um dispositivo fantasma com esse nome,
+    liberado e depois bloqueado, enquanto o PC de verdade
+    (`win-8372a270-ab08-…`) seguia em trial. Um codigo que a propria tela
+    inventou tem de ser aceito pela propria tela.
+
+    Devolve `{"ok": True, "deviceId": <completo>, "resolvido": bool}` ou
+    `{"ok": False, "error", "message"}` quando nao ha exatamente 1 PC.
+    """
+    did = str(device_id or "").strip()
+    if not did:
+        return {"ok": False, "error": "device_id_required",
+                "message": "Informe o ID do dispositivo (o cliente vê em Licença)."}
+    if _e_id_completo(did):
+        return {"ok": True, "deviceId": did, "resolvido": False}
+    alvo = did.upper()
+    iguais = [i for i in _ids_conhecidos() if codigo_do_pc(i) == alvo and _e_id_completo(i)]
+    if len(iguais) == 1:
+        return {"ok": True, "deviceId": iguais[0], "resolvido": True, "codigo": alvo}
+    if not iguais:
+        return {"ok": False, "error": "codigo_desconhecido", "message": (
+            f"Nenhum computador com o código {alvo} apareceu no servidor ainda. "
+            "Peça ao cliente para abrir o ATIVAVID uma vez (ou mandar o ID "
+            "completo, que começa com win-).")}
+    return {"ok": False, "error": "codigo_ambiguo", "message": (
+        f"O código {alvo} bate com {len(iguais)} computadores: "
+        + ", ".join(iguais) + ". Use o ID completo.")}
+
+
+def _donos_por_device() -> dict[str, dict[str, Any]]:
+    """Quem e o dono de cada PC, pelo que o SERVIDOR sabe.
+
+    A conta vinculada (`account_access`) vem primeiro; se nao houver, o
+    e-mail digitado no "Liberar dispositivo" (`licenses.email`). Ate a 4.92
+    o painel so mostrava a conta: um PC liberado pelo ID com e-mail
+    preenchido saia como "Dono —", e a tela de maquinas so sabia o que o
+    log de aberturas contava — que nem e-mail carrega.
+    """
+    base = ("devices?select=device_id,host,os_user,account_access_id,license_id,"
+            "licenses(email),account_access(email)")
+    # `devices.email` (quem estava logado na ultima abertura) so existe com
+    # o SQL da 4.93; sem a coluna o PostgREST responde 400 e a lista sai
+    # sem esse terceiro palpite.
+    code, data = _rest_service("GET", base + ",email&limit=2000")
+    if code == 400:
+        code, data = _rest_service("GET", base + "&limit=2000")
+    donos: dict[str, dict[str, Any]] = {}
+    if code >= 400 or not isinstance(data, list):
+        return donos
+    for r in data:
+        did = str(r.get("device_id") or "")
+        if not did:
+            continue
+        conta = r.get("account_access") or {}
+        lic = r.get("licenses") or {}
+        if isinstance(conta, list):
+            conta = conta[0] if conta else {}
+        if isinstance(lic, list):
+            lic = lic[0] if lic else {}
+        email_conta = str((conta or {}).get("email") or "")
+        email_lic = str((lic or {}).get("email") or "")
+        email_abriu = str(r.get("email") or "")
+        donos[did] = {
+            "email": email_conta or email_lic or email_abriu,
+            "abriuComEmail": email_abriu,
+            "contaEmail": email_conta,
+            "licencaEmail": email_lic,
+            "host": r.get("host"),
+            "usuario": r.get("os_user"),
+            "accountAccessId": r.get("account_access_id"),
+        }
+    return donos
+
+
 def list_devices(license_key: str | None = None, limit: int = 50) -> dict[str, Any]:
+    out = _list_devices_cru(license_key, limit)
+    if out.get("ok"):
+        donos = _donos_por_device()
+        for r in out.get("devices") or []:
+            d = donos.get(str(r.get("device_id") or "")) or {}
+            r["email"] = r.get("account_email") or d.get("email") or ""
+            r["codigo"] = codigo_do_pc(str(r.get("device_id") or ""))
+    return out
+
+
+def _list_devices_cru(license_key: str | None = None, limit: int = 50) -> dict[str, Any]:
     out = _rpc_admin("list_devices", license_key=(license_key or "").strip().upper() or None)
     if out.get("ok") or out.get("error") in ("forbidden", "unauthorized", "login_required", "not_found"):
         return out
@@ -235,9 +356,17 @@ def list_aberturas(limit: int = 300) -> dict[str, Any]:
     limit = max(1, min(int(limit or 300), 1000))
     code, data = _rest_service(
         "GET",
-        "aberturas?select=device_id,host,os_user,so,app_version,licenca,criado_em"
+        "aberturas?select=device_id,host,os_user,so,app_version,licenca,email,criado_em"
         f"&order=criado_em.desc&limit={limit}",
     )
+    if code == 400 and "email" in str(data.get("message") if isinstance(data, dict) else ""):
+        # Banco sem a coluna `email` (SQL da 4.93 ainda nao aplicado):
+        # a tela continua funcionando sem ela.
+        code, data = _rest_service(
+            "GET",
+            "aberturas?select=device_id,host,os_user,so,app_version,licenca,criado_em"
+            f"&order=criado_em.desc&limit={limit}",
+        )
     if code == 404 or (isinstance(data, dict) and "aberturas" in str(data.get("message") or "")):
         return {"ok": False, "error": "sem_tabela", "message": (
             "Falta aplicar o SQL: Supabase → SQL Editor → cole "
@@ -274,7 +403,7 @@ def list_aberturas(limit: int = 300) -> dict[str, Any]:
         m = por_maquina.setdefault(did, {
             "deviceId": did, "aberturas": 0, "ultima": None,
             "host": None, "usuario": None, "so": None, "versao": None,
-            "licenca": None,
+            "licenca": None, "email": None,
         })
         m["aberturas"] += 1
         quando = str(ln.get("criado_em") or "")
@@ -287,6 +416,8 @@ def list_aberturas(limit: int = 300) -> dict[str, Any]:
             m["so"] = ln.get("so")
             m["versao"] = ln.get("app_version")
             m["licenca"] = ln.get("licenca")
+            # Coluna nova (SQL da 4.93); em banco antigo vem ausente.
+            m["email"] = ln.get("email") or m.get("email")
     # Maquina que TEM trial mas nunca registrou abertura existe de verdade:
     # o registro de aberturas so comecou na 4.27, entao todo PC em versao
     # anterior ficava invisivel aqui — dos 3 trials da conta, a tela
@@ -300,6 +431,7 @@ def list_aberturas(limit: int = 300) -> dict[str, Any]:
                 "so": None, "versao": None, "licenca": None,
                 "semRegistro": True,
             }
+    donos = _donos_por_device()
     for did, m in por_maquina.items():
         d = bloq.get(did) or {}
         # `last_seen` do servidor cobre quem nao aparece no log de aberturas:
@@ -312,6 +444,17 @@ def list_aberturas(limit: int = 300) -> dict[str, Any]:
         m["temLicenca"] = bool(d.get("license_id"))
         m["trialInicio"] = inicio_trial.get(did) or None
         m["trialDias"] = _dias_de_trial(m["trialInicio"])
+        # O dono pelo SERVIDOR (conta vinculada ou e-mail da liberacao) e o
+        # que responde "de quem e esse PC?" mesmo sem nenhuma abertura no
+        # log — o caso do `win-8372a270…` em 03/09.
+        dono = donos.get(did) or {}
+        m["email"] = (m.get("email") or dono.get("email") or "")
+        m["contaEmail"] = dono.get("contaEmail") or ""
+        if not m.get("host") and dono.get("host"):
+            m["host"] = dono.get("host")
+        if not m.get("usuario") and dono.get("usuario"):
+            m["usuario"] = dono.get("usuario")
+        m["codigo"] = codigo_do_pc(did)
     ordenado = sorted(por_maquina.values(),
                       key=lambda m: str(m.get("ultima") or ""), reverse=True)
     return {"ok": True, "maquinas": ordenado, "eventos": len(linhas)}
@@ -324,13 +467,14 @@ def block_device(device_id: str, *, block: bool = True,
     O app 4.27+ grava o veredito: depois de bloqueada, ficar offline ou
     atrasar o relogio nao devolve a licenca.
     """
-    did = (device_id or "").strip()
-    if not did:
-        return {"ok": False, "error": "device_id_required"}
     c = _cfg()
     if not c["url"] or not c["service"]:
         return {"ok": False, "error": "admin_not_configured",
                 "message": "Service role necessária."}
+    res = resolver_device_id(device_id)
+    if not res.get("ok"):
+        return res
+    did = str(res["deviceId"])
     code, data = _rest_service("POST", "rpc/ativavid_block_device", {
         "p_device_id": did,
         "p_reason": (reason or "").strip() or None,
@@ -534,7 +678,37 @@ def grant_access(
 
 
 def list_access() -> dict[str, Any]:
-    return _rpc_admin("list_access")
+    """As contas — e QUAIS PCs cada uma tem de verdade.
+
+    A coluna "PCs" mostrava `max_devices` (o limite), e ele leu como "1 PC
+    vinculado". Em 03/09 a conta leandro@ tinha limite 1 e ZERO PCs
+    vinculados: o cliente nunca tinha entrado com o e-mail, e o painel nao
+    tinha como dizer isso.
+    """
+    out = _rpc_admin("list_access")
+    if not out.get("ok"):
+        return out
+    linhas = None
+    for chave in ("access", "rows", "accounts", "items"):
+        if isinstance(out.get(chave), list):
+            linhas = out[chave]
+            break
+    if linhas is None:
+        return out
+    por_conta: dict[str, list[str]] = {}
+    code, devs = _rest_service(
+        "GET", "devices?select=device_id,account_access_id&account_access_id=not.is.null&limit=2000")
+    if code < 400 and isinstance(devs, list):
+        for d in devs:
+            aid = str(d.get("account_access_id") or "")
+            did = str(d.get("device_id") or "")
+            if aid and did:
+                por_conta.setdefault(aid, []).append(did)
+        for r in linhas:
+            ids = por_conta.get(str(r.get("id") or ""), [])
+            r["devices"] = ids
+            r["codigos"] = [codigo_do_pc(i) for i in ids]
+    return out
 
 
 def revoke_access(*, email: str) -> dict[str, Any]:
@@ -556,26 +730,35 @@ def grant_device(
     O cliente lê o ID na tela de Licença e manda; depois de liberar, ele clica
     em Atualizar e já entra.
     """
-    did = (device_id or "").strip()
-    if not did:
-        return {
-            "ok": False,
-            "error": "device_id_required",
-            "message": "Informe o ID do dispositivo (o cliente vê em Licença).",
-        }
-    return _rpc_admin(
+    res = resolver_device_id(device_id)
+    if not res.get("ok"):
+        return res
+    did = str(res["deviceId"])
+    out = _rpc_admin(
         "grant_device",
         device_id=did,
         days=days,
         email=(email or "").strip().lower() or None,
         notes=notes,
     )
+    if out.get("ok") and res.get("resolvido"):
+        out["resolvidoDe"] = res.get("codigo")
+        out["message"] = (f"Código {res.get('codigo')} = {did}. "
+                          + str(out.get("message") or ""))
+    return out
 
 
 def release_device(device_id: str) -> dict[str, Any]:
     did = (device_id or "").strip()
     if not did:
         return {"ok": False, "error": "device_id_required", "message": "Informe o device id."}
+    # Aqui o codigo curto so vale se for de UM PC conhecido; um id que nao
+    # existe em lugar nenhum ainda pode ser apagado pelo nome cru (e assim
+    # que se limpa um dispositivo fantasma como o `8372A270` de 03/09).
+    if not _e_id_completo(did):
+        res = resolver_device_id(did)
+        if res.get("ok"):
+            did = str(res["deviceId"])
     out = _rpc_admin("release_device", device_id=did)
     if out.get("ok") or out.get("error") in ("forbidden", "unauthorized", "login_required"):
         return out

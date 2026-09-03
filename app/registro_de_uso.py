@@ -113,14 +113,24 @@ def _avisar_servidor(linha: dict[str, Any]) -> None:
 
         if not lic.configured():
             return
-        lic._http_rpc({
+        payload = {
             "p_device_id": linha.get("device"),
             "p_app_version": linha.get("versao"),
             "p_host": linha.get("maquina"),
             "p_user": linha.get("usuario"),
             "p_os": linha.get("so"),
             "p_licenca": linha.get("licenca"),
-        }, fn="ativavid_open")
+        }
+        # O e-mail logado vai junto (4.93): sem ele o painel nao tinha como
+        # dizer DE QUEM era um PC em trial — "esse tem conta de e-mail e
+        # nao exibe ali" (03/09). Servidor com a funcao antiga (sem
+        # `p_email`) responde 404 PGRST202; ai manda do jeito antigo.
+        email = str(linha.get("email") or "").strip().lower()
+        if email:
+            code, _ = lic._http_rpc(dict(payload, p_email=email), fn="ativavid_open")
+            if code != 404:
+                return
+        lic._http_rpc(payload, fn="ativavid_open")
     except Exception:  # noqa: BLE001 — nunca atrapalha a abertura
         pass
 

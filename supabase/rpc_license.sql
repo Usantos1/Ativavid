@@ -149,6 +149,11 @@ as $$
   ))::json;
 $$;
 
+-- 4.93: quem está logado em cada PC (o painel mostra como dono quando não
+-- há conta vinculada nem e-mail na liberação). A mesma coluna que o
+-- registro_de_uso.sql cria — pode rodar os dois em qualquer ordem.
+alter table public.devices add column if not exists email text;
+
 -- Assinatura antiga (3 args) → remove para PostgREST não ambíguo
 drop function if exists public.ativavid_license(text, text, text);
 
@@ -243,6 +248,22 @@ begin
       end;
     end if;
     v_email_ok := coalesce(v_email_ok, false);
+
+    -- 4.93: anota QUEM está logado neste PC, em qualquer versão do app.
+    -- Em 03/09 um cliente entrou com leandro@plusmidia… num PC em trial
+    -- e o painel não tinha como saber: a liberação estava em OUTRO e-mail
+    -- e o registro de abertura (que só existe da 4.27 para cima) não
+    -- carregava e-mail. Só atualiza a linha que já existe (não cria
+    -- device para PC em trial); nunca decide acesso.
+    if v_jwt_email is not null then
+      begin
+        update devices set email = v_jwt_email
+        where device_id = p_device_id
+          and email is distinct from v_jwt_email;
+      exception when others then
+        null;
+      end;
+    end if;
 
     -- IDENTIDADE É O user_id DO JWT, NUNCA O E-MAIL.
     --
