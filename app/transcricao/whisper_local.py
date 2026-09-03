@@ -51,6 +51,90 @@ _LOTE = 8
 _CARREGADO: dict[tuple[str, str], Any] = {}
 _TRAVA = threading.Lock()
 
+# A vaga ENTRE PROCESSOS (ver `transcrever`). Arquivo com o PID de quem
+# transcreve; vence sozinho quando o dono morreu ou passou do teto — um
+# processo morto nunca tranca a transcrição de ninguém.
+import os as _os
+import tempfile as _tempfile
+
+VAGA = Path(_tempfile.gettempdir()) / "ativavid-whisper.lock"
+VAGA_VALIDADE_S = 20 * 60      # transcrição mais longa que isso é anomalia
+VAGA_ESPERA_MAX_S = 20 * 60    # depois disso segue sem a vaga (nunca trava)
+
+
+def _pid_vivo(pid: int) -> bool:
+    if pid <= 0 or pid == _os.getpid():
+        return False
+    try:
+        import ctypes
+        if hasattr(ctypes, "windll"):
+            # 0x1000 = PROCESS_QUERY_LIMITED_INFORMATION. So abrir NAO
+            # basta: um processo que ja saiu mas cujo handle o pai ainda
+            # segura abre normalmente — e trancaria a vaga por um morto
+            # (pego pelo proprio teste). STILL_ACTIVE = 259.
+            k32 = ctypes.windll.kernel32
+            h = k32.OpenProcess(0x1000, False, pid)
+            if not h:
+                return False
+            try:
+                codigo = ctypes.c_ulong()
+                ok = k32.GetExitCodeProcess(h, ctypes.byref(codigo))
+                return bool(ok) and codigo.value == 259
+            finally:
+                k32.CloseHandle(h)
+        _os.kill(pid, 0)
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _vaga_ocupada() -> bool:
+    try:
+        if not VAGA.is_file():
+            return False
+        if time.time() - VAGA.stat().st_mtime > VAGA_VALIDADE_S:
+            return False
+        pid = int(VAGA.read_text(encoding="utf-8").strip() or 0)
+        return _pid_vivo(pid)
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _vaga_pegar(progresso: Callable[[float, str], None] | None = None,
+                cancelar: threading.Event | None = None,
+                teto_s: float = VAGA_ESPERA_MAX_S) -> bool:
+    """Espera a vez e escreve o próprio PID. False = desistiu de esperar
+    (teto) e segue sem a vaga — esperar para sempre seria pior que disputar."""
+    t0 = time.time()
+    avisou = 0.0
+    while _vaga_ocupada():
+        if cancelar is not None and cancelar.is_set():
+            return False
+        if time.time() - t0 > teto_s:
+            print("WHISPER_VAGA_TETO seguindo sem a vaga", flush=True)
+            return False
+        if progresso and time.time() - avisou > 5:
+            avisou = time.time()
+            progresso(0.0, "esperando a vez da transcrição…")
+        time.sleep(1.0)
+    try:
+        VAGA.write_text(str(_os.getpid()), encoding="utf-8")
+    except OSError:
+        return False
+    esperou = time.time() - t0
+    if esperou >= 1:
+        print(f"WHISPER_VAGA esperou {esperou:.0f}s", flush=True)
+    return True
+
+
+def _vaga_soltar() -> None:
+    try:
+        if VAGA.is_file() and \
+                VAGA.read_text(encoding="utf-8").strip() == str(_os.getpid()):
+            VAGA.unlink(missing_ok=True)
+    except Exception:  # noqa: BLE001
+        pass
+
 
 def liberar() -> None:
     """Solta o modelo e a VRAM. Chamado quando o render precisa da placa."""
@@ -211,6 +295,30 @@ class MotorWhisperLocal:
             return modelo.transcribe(str(audio), vad_filter=False, **comum)
 
     def transcrever(
+        self,
+        audio: Path,
+        *,
+        idioma: str | None = None,
+        cancelar: threading.Event | None = None,
+        progresso: Callable[[float, str], None] | None = None,
+        fonte_original: Path | None = None,
+    ) -> ResultadoDeTranscricao:
+        # UMA transcrição local por vez NA MÁQUINA. `_TRAVA` só vale dentro
+        # do processo, e cada job é um processo: com 2 jobs em paralelo dois
+        # `medium` (2,66 GB de VRAM cada) disputavam a placa de 4 GB e os
+        # dois rastejavam — vídeos de 21 s parados 45 min em "Ouvindo o que
+        # foi falado" (03/09). Esperar a vez custa segundos; disputar custa
+        # a tarde.
+        pegou = _vaga_pegar(progresso, cancelar)
+        try:
+            return self._transcrever_com_a_vaga(
+                audio, idioma=idioma, cancelar=cancelar, progresso=progresso,
+                fonte_original=fonte_original)
+        finally:
+            if pegou:
+                _vaga_soltar()
+
+    def _transcrever_com_a_vaga(
         self,
         audio: Path,
         *,

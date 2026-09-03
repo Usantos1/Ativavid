@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.86
+
+- **Dois vídeos ao mesmo tempo não travam mais a transcrição.** Com 2
+  jobs em paralelo, dois modelos de transcrição disputavam a placa de
+  vídeo de 4 GB e os dois rastejavam (vídeos de 21 s parados por mais de
+  40 minutos em "Ouvindo o que foi falado"). Agora a transcrição local
+  tem uma vaga na máquina: um vídeo transcreve por vez e o outro espera
+  alguns segundos pela vez dele — o card diz "esperando a vez".
+
 ## 4.85
 
 - **Editor e card mostram o mesmo nome.** O editor mostrava o nome do
