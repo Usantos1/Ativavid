@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.87
+
+- **Copiar e colar estilo entre vídeos.** No menu "⋯" de um vídeo pronto,
+  "Copiar estilo" guarda o estilo dele; nos outros cards aparece "Colar
+  estilo (de …)", que aplica o mesmo estilo e manda o vídeo refazer a
+  parte visual. Bom para alinhar os 27 criativos do Multiplicador a um
+  que ficou do jeito certo.
+
 ## 4.86
 
 - **Dois vídeos ao mesmo tempo não travam mais a transcrição.** Com 2

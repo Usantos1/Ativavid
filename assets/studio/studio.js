@@ -678,7 +678,11 @@ function periodoLabel(j) {
 function cardSig(j, opts) {
   const links = jobLinks(j);
   const qa = j.quickApply || {};
+  // o menu muda quando ha estilo copiado ("Colar estilo (de X)"): sem isto
+  // o card nao repinta depois do copiar
+  const clip = estiloCopiado();
   return [
+    clip ? `clip:${clip.folder}` : "",
     j.id, j.status, j.title || j.name, Math.round(Number(j.progress) || 0), j.hasFinal, j.hasThumb, j.finishedAt, j.finishedAtLabel,
     j.startedAtLabel || "", j.durationSec || "", j.sourceDurationSec || "", j.legenda ? "L" : "",
     j.styleLabel || "",
@@ -817,6 +821,79 @@ function stuckActionsHtml(j, safeId) {
  *  montado uma vez e congelado, "Ver vídeo final" ficava desabilitado para
  *  sempre e "Copiar legenda do post" nunca aparecia depois que a legenda
  *  ficava pronta. */
+/* ---- Copiar / colar estilo entre videos (03/09) ------------------------
+ * O estilo de um projeto vive em <edit>/preview_style.json (o que a aba
+ * Estilo salva) e o "Aplicar" refaz o visual via /api/jobs/requeue-folder.
+ * Copiar = ler esse arquivo do card de origem; colar = gravar o mesmo
+ * payload no destino e manda-lo a fila. A area de transferencia fica no
+ * localStorage para sobreviver a recarga do hub. */
+const ESTILO_COPIADO_KEY = "ativavid.estilo.copiado";
+
+function pastaDoProjeto(j) {
+  return String((j && j.projectDir) || "").split(/[\\/]/).filter(Boolean).pop() || "";
+}
+
+function estiloCopiado() {
+  try {
+    const c = JSON.parse(localStorage.getItem(ESTILO_COPIADO_KEY) || "null");
+    return c && c.payload && c.folder ? c : null;
+  } catch { return null; }
+}
+
+function baseDoProjeto(j) {
+  // jobLinks ja sabe codificar a pasta: /p/<enc>/estilo -> /p/<enc>
+  return String(jobLinks(j).estilo || "").replace(/\/estilo$/, "");
+}
+
+async function copiarEstiloDoCard(j) {
+  const base = baseDoProjeto(j);
+  if (!base) { toast("Não achei a pasta deste vídeo"); return; }
+  let payload = null;
+  try {
+    const r = await fetch(`${base}/media/preview_style.json?v=${Date.now()}`);
+    if (r.ok) payload = await r.json();
+  } catch { /* trata abaixo */ }
+  if (!payload || payload.type !== "style-setup") {
+    toast("Este vídeo ainda não tem um estilo salvo — abra \"Alterar estilo\" nele, salve uma vez e copie de novo.", 6000);
+    return;
+  }
+  const de = displayTitle(j);
+  try {
+    localStorage.setItem(ESTILO_COPIADO_KEY, JSON.stringify({ de, folder: pastaDoProjeto(j), payload }));
+  } catch { toast("Não consegui guardar o estilo copiado"); return; }
+  toast(`Estilo de "${de}" copiado — nos outros vídeos use "Colar estilo"`, 4500);
+  renderJobs();
+}
+
+async function colarEstiloNoCard(j) {
+  const c = estiloCopiado();
+  if (!c) { toast("Nada copiado ainda — use \"Copiar estilo\" num vídeo pronto"); return; }
+  const base = baseDoProjeto(j);
+  const folder = pastaDoProjeto(j);
+  if (!base || !folder) { toast("Não achei a pasta deste vídeo"); return; }
+  try {
+    const s = await fetch(`${base}/api/save`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...c.payload, type: "style-setup" }),
+    });
+    if (!s.ok) throw new Error("não deu para gravar o estilo");
+    const rq = await fetch("/api/jobs/requeue-folder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ folder, extraSources: [] }),
+    });
+    if (!rq.ok) {
+      const body = await rq.json().catch(() => ({}));
+      throw new Error(body.error || "não deu para enviar à fila");
+    }
+    toast(`Estilo de "${c.de}" aplicado — refazendo o visual de "${displayTitle(j)}"`, 4500);
+    refreshJobs().catch(() => {});
+  } catch (e) {
+    toast(`Colar estilo falhou: ${e.message || e}`, 5000);
+  }
+}
+
 function cardMenuHtml(j, opts) {
   const view = opts && opts.view;
   const compact = !!(opts && opts.compact);
@@ -834,6 +911,10 @@ function cardMenuHtml(j, opts) {
         <a role="menuitem" href="${escapeHtml(links.final)}" ${canFinal ? "" : "class=\"disabled\""}>Ver vídeo final</a>
         <a role="menuitem" href="${escapeHtml(links.editor)}">Editar</a>
         <a role="menuitem" href="${escapeHtml(links.estilo)}" data-id="${safeId}">Alterar estilo</a>
+        ${j.status === "done" ? `<button type="button" role="menuitem" data-act="copystyle" data-id="${safeId}">Copiar estilo</button>` : ""}
+        ${estiloCopiado() && estiloCopiado().folder !== pastaDoProjeto(j)
+          ? `<button type="button" role="menuitem" data-act="pastestyle" data-id="${safeId}">Colar estilo (de ${escapeHtml(estiloCopiado().de)})</button>`
+          : ""}
         ${j.status === "done" && j.publicadoLink
           ? `<a role="menuitem" href="${escapeHtml(j.publicadoLink)}" target="_blank" rel="noopener">Ver no Instagram</a>`
           : ""}
@@ -3347,6 +3428,10 @@ function wireList() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ id }),
         });
+      } else if (act === "copystyle") {
+        await copiarEstiloDoCard(job || state.jobs.find((x) => String(x.id) === String(id)));
+      } else if (act === "pastestyle") {
+        await colarEstiloNoCard(job || state.jobs.find((x) => String(x.id) === String(id)));
       } else if (act === "copylegenda") {
         // Este botao NUNCA teve handler: a cadeia de acoes tratava folder,
         // open-final, retry, reimport, ackapply, cancel, detail e rename — e
