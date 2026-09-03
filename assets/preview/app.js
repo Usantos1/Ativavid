@@ -2602,6 +2602,8 @@ async function gravarNomeDoVideo(novo) {
     if (!r.ok || body.error) throw new Error(body.error || 'não deu para renomear');
     S.state.jobTitle = titulo;
     refreshProjectChrome();
+    // a pasta de entrega e renomeada junto; se o Explorer a segurou, avisa
+    if (body.packWarning) toast(`Nome salvo, mas ${body.packWarning}`, 6000);
     return true;
   } catch (e) {
     toast(`Renomear falhou: ${e.message || e}`, 4500);

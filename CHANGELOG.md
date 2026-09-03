@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.92
+
+- **A pasta de entrega tem o nome do vídeo — e ganha o ✅ ao aprovar.**
+  A pasta `publicar/<nome>/` passa a se chamar pelo nome do card
+  ("G1 · C2 · CTA3") nos vídeos com nome fixo; renomear ou marcar
+  "Aprovado" renomeia a pasta junto ("✅ G1 · C2 · CTA3"), sem duplicar
+  nada. Se a pasta estiver aberta no Explorer, o nome muda e a tela avisa
+  para fechar a pasta e aprovar de novo.
+
 ## 4.91
 
 - **Copiar o nome do vídeo (com o ✅).** Botão ⧉ ao lado do nome no

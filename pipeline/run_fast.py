@@ -5231,7 +5231,11 @@ def run(
     try:
         from app.delivery_pack import ensure_delivery_pack
 
-        packed = ensure_delivery_pack(edit_dir, final=final)
+        # O nome do CARD (titulo travado) vem do worker por ambiente: a pasta
+        # de entrega se chama como o card ("✅ G1 · C2 · CTA3"), 03/09
+        packed = ensure_delivery_pack(
+            edit_dir, final=final,
+            stem_override=(os.environ.get("ATIVAVID_PACK_STEM") or "").strip() or None)
         if packed:
             print(f"[pack] {packed}", flush=True)
     except Exception as e:  # noqa: BLE001

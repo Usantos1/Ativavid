@@ -1543,6 +1543,11 @@ class Worker:
                 env["ATIVAVID_ENCODER"] = str(perf.get("encoder") or "libx264")
             env["ATIVAVID_EXTRACT_JOBS"] = str(perf.get("extractJobs") or 1)
             env["ATIVAVID_PARALLEL_JOBS"] = str(self.parallel_jobs)
+            # Nome do CARD para a pasta de entrega (03/09): so quando o
+            # titulo e fixo ("G1 · C2 · CTA3", "✅ ..."); sem isso a pasta
+            # segue a manchete, como sempre
+            if job.get("titleLocked") and str(job.get("title") or "").strip():
+                env["ATIVAVID_PACK_STEM"] = str(job["title"]).strip()[:80]
             env["ATIVAVID_RENDER_SLOTS"] = str(max(1, int(perf.get("renderSlots") or 1)))
             env["ATIVAVID_REMOTION_LOCK"] = str(
                 self.store.root / ".ativavid" / "remotion.lock"
@@ -3369,7 +3374,28 @@ class StudioHandler(BaseHTTPRequestHandler):
                 titleLocked=True,
                 updatedAt=_utc(),
             )
-            self._json({"ok": True, "job": updated})
+            # A PASTA DE ENTREGA acompanha o nome (03/09): aprovar vira
+            # publicar/✅ G1 · C2 · CTA3/. Reaproveita o mover-sem-duplicar
+            # do pack. Pasta aberta no Explorer trava a renomeacao no
+            # Windows: o titulo muda mesmo assim e a tela avisa.
+            pack_aviso = None
+            try:
+                from app.delivery_pack import (
+                    ensure_delivery_pack, read_pack_dir, safe_pack_stem,
+                )
+
+                edit = Path(job.get("editDir") or "")
+                if edit.is_dir() and read_pack_dir(edit) is not None:
+                    novo = ensure_delivery_pack(
+                        edit, final=Path(job["final"]) if job.get("final") else None,
+                        stem_override=title)
+                    if novo is not None and novo.name != safe_pack_stem(title):
+                        pack_aviso = ("a pasta de entrega não foi renomeada — "
+                                      "feche a pasta no Explorer e aprove de novo")
+            except Exception as e:  # noqa: BLE001 — o titulo ja mudou
+                pack_aviso = f"a pasta de entrega não foi renomeada: {str(e)[:80]}"
+            self._json({"ok": True, "job": updated,
+                        **({"packWarning": pack_aviso} if pack_aviso else {})})
             return
 
         if path == "/api/jobs/publicar-instagram":

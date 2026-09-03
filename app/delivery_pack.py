@@ -98,18 +98,35 @@ def read_pack_dir(edit_dir: Path) -> Path | None:
     return cand if cand.is_dir() else None
 
 
+def read_pack_stem(edit_dir: Path) -> str:
+    """O nome de pasta pedido pelo usuário (state.json packStem), ou ""."""
+    state_p = Path(edit_dir) / "state.json"
+    try:
+        return str(json.loads(state_p.read_text(encoding="utf-8-sig")).get("packStem") or "").strip()
+    except (OSError, json.JSONDecodeError, TypeError, AttributeError):
+        return ""
+
+
 def ensure_delivery_pack(
     edit_dir: Path,
     final: Path | None = None,
     *,
     force_cover: bool = False,
+    stem_override: str | None = None,
 ) -> Path | None:
-    """Monta publicar/<nome>/ com o mp4, capa.jpg e legenda.txt."""
+    """Monta publicar/<nome>/ com o mp4, capa.jpg e legenda.txt.
+
+    O nome da pasta: `stem_override` (o nome do CARD — "✅ G1 · C2 · CTA3" —
+    pedido de 03/09: ele nomeia a pasta de entrega assim, e aprovar renomeia
+    a pasta), senão o `packStem` já gravado no state.json, senão o nome do
+    mp4 final (a manchete), como sempre foi.
+    """
     edit = Path(edit_dir)
     video = resolve_final_mp4(edit, final)
     if video is None:
         return None
-    stem = safe_pack_stem(video.stem)
+    pedido = str(stem_override or "").strip() or read_pack_stem(edit)
+    stem = safe_pack_stem(pedido or video.stem)
     dest = pack_dir_for(edit, stem).resolve()
     # O pacote se chama pela MANCHETE, e a manchete muda quando o usuario
     # corrige o texto. Sem mover o pacote anterior, cada correcao deixava uma
@@ -163,6 +180,10 @@ def ensure_delivery_pack(
             state = json.loads(state_p.read_text(encoding="utf-8-sig"))
             if isinstance(state, dict):
                 state["deliveryPack"] = f"../{PACK_PARENT}/{stem}"
+                if str(stem_override or "").strip():
+                    # fica gravado: o proximo pack (refazer, Aplicar) mantem
+                    # o nome do card sem precisar receber de novo
+                    state["packStem"] = str(stem_override).strip()[:80]
                 # Atomico E com registro: um state.json truncado apaga fase,
                 # finalVideo e deliveryPack de uma vez; e a falha engolida
                 # aqui fazia a pasta publicar/ DUPLICAR no proximo rename

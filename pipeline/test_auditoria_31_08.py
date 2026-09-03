@@ -135,7 +135,8 @@ def test_reverter_sem_versao_nao_diz_ok(tmp_path):
 def test_delivery_pack_grava_atomico_e_loga():
     s = (REPO / "app" / "delivery_pack.py").read_text(encoding="utf-8")
     i = s.index('state["deliveryPack"]')
-    bloco = s[i:i + 900]
+    # ate o fim da funcao, nao janela fixa: o packStem (4.92) cresceu o bloco
+    bloco = s[i:s.index(chr(10) + "def ", i + 10)]
     assert "os.replace(tmp, state_p)" in bloco
     assert "[warn] deliveryPack" in bloco
 
