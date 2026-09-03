@@ -3104,8 +3104,16 @@ def build_longform_edit_data(cut: Path, preset: dict, duration: float, fps: floa
         pass
     accent = preset.get("accent") or "#33e0a3"
     copy = preset.get("endCardCopy") or {}
-    name = (copy.get("line1") or "").lstrip("@").split()[0] if copy.get("line1") else "Marca"
-    title = (copy.get("line2") or "ATIVAVID").strip() or "YouTube"
+    # O lower third é a MARCA DO USUÁRIO, nunca a nossa: a versão antiga
+    # pegava a primeira palavra da linha 1 ("Segue @lojaprimecamp" virava
+    # name="Segue") e caía num title chumbado "ATIVAVID" — o app carimbava
+    # o próprio nome no vídeo do cliente ("onde ta esse segue ativavid?",
+    # 02/09). O @handle é o nome; sem @, a linha inteira; sem linha
+    # nenhuma, o lower third nem entra.
+    linha1 = str(copy.get("line1") or "").strip()
+    m_arroba = re.search(r"@[\w.]+", linha1)
+    name = (m_arroba.group(0) if m_arroba else linha1)
+    title = str(copy.get("line2") or "").strip()
     chapters = []
     for r in edl_ranges:
         ch = (r.get("chapter") or "").strip()
@@ -3122,10 +3130,10 @@ def build_longform_edit_data(cut: Path, preset: dict, duration: float, fps: floa
         ]
     lower = [{
         "name": name[:40],
-        "title": title[:60],
+        **({"title": title[:60]} if title else {}),
         "start": min(6.0, max(1.0, duration * 0.08)),
         "dur": 3.5,
-    }]
+    }] if name else []
     return {
         "width": int(exp.get("width") or 1920),
         "height": int(exp.get("height") or 1080),

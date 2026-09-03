@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.81
+
+- **O selo do vídeo longo mostra a SUA marca.** O cartãozinho que entra
+  no começo do vídeo (lower third) pegava só a primeira palavra da sua
+  linha de marca e completava com um nome padrão do sistema — saía
+  "Segue / ATIVAVID" em vez de "@lojaprimecamp". Agora ele usa o seu
+  arroba (ou a linha inteira, se não tiver arroba), a segunda linha só
+  aparece se você a preencheu, e sem marca configurada o selo nem entra.
+
 ## 4.80
 
 - **O vídeo longo agora sai com a legenda queimada.** Antes ela ia só
