@@ -3136,6 +3136,23 @@ function buildInsertsDraft() {
   // band plays a clip (generated b-roll, screen capture). Its own array because
   // the renderer mounts it with a different component; on the timeline it is an
   // image-track element like any other.
+  // Selo (lower third) e cartao de capitulo do LONGFORM: eles so existiam
+  // queimados no video final — "no visual mostra mas em edicao nao mostra"
+  // (02/09). Aqui viram bloco na timeline e cartao vivo no preview da
+  // Edicao. O relogio do longform e o proprio cut, entao os tempos valem
+  // nas duas abas.
+  (d.lowerThirds || []).forEach((it, i) => {
+    list.push({
+      kind: 'lower', label: `Selo — ${it.name || ''}${it.title ? ' · ' + it.title : ''}`,
+      start: +it.start || 0, end: (+it.start || 0) + (+it.dur || 4), ref: i,
+    });
+  });
+  (d.chapters || []).forEach((it, i) => {
+    list.push({
+      kind: 'chapter', label: `Capítulo — ${it.title || ''}`,
+      start: +it.start || 0, end: (+it.start || 0) + (+it.dur || 2.4), ref: i,
+    });
+  });
   (d.splitVideos || []).forEach((it, i) => {
     list.push({
       kind: 'splitvideo',
@@ -3771,6 +3788,9 @@ function desenharMidiaNoPreview() {
   const agora = S.insertsDraft.filter(
     (c) => t >= c.start && t < c.end
     && ((c.kind === 'emoji' && (c.isNew || (c.manual && !naFinal)))
+      // selo/capitulo do longform: queimados no final; na Edicao (cut cru)
+      // o cartao vivo representa o que vai sair
+      || ((c.kind === 'lower' || c.kind === 'chapter') && !naFinal)
       || (c.kind === 'insert'
         && (c.isNew || (c.manual && !naFinal)))));
   // mesma ordem de pintura dos motores: camada primeiro (fileira de baixo
@@ -3785,6 +3805,33 @@ function desenharMidiaNoPreview() {
   box.dataset.chave = box.clientWidth > 40 ? chave : '';
   box.innerHTML = '';
   for (const c of agora) {
+    if (c.kind === 'lower' || c.kind === 'chapter') {
+      // Espelho visual do template/compose do longform: selo embaixo a
+      // esquerda (barra + caixa), capitulo com a linha e o titulo grande.
+      const accent = (S.editData && S.editData.accent) || '#33e0a3';
+      const fonte = S.editData || {};
+      const marg = 0.05 * box.clientWidth;
+      if (c.kind === 'lower') {
+        const it = (fonte.lowerThirds || [])[c.ref] || {};
+        const d = el('div', 'lf-previa-selo', box);
+        d.style.left = `${marg}px`;
+        d.style.bottom = `${marg}px`;
+        d.style.setProperty('--accent', accent);
+        el('span', 'lf-barra', d);
+        const caixa = el('span', 'lf-caixa', d);
+        el('b', '', caixa).textContent = it.name || '';
+        if (it.title) el('i', '', caixa).textContent = it.title;
+      } else {
+        const it = (fonte.chapters || [])[c.ref] || {};
+        const d = el('div', 'lf-previa-capitulo', box);
+        d.style.left = `${marg}px`;
+        d.style.bottom = `${marg * 1.4}px`;
+        d.style.setProperty('--accent', accent);
+        el('span', 'lf-linha', d);
+        el('b', '', d).textContent = it.title || '';
+      }
+      continue;
+    }
     if (c.kind === 'emoji') {
       const d = el('div', 'midia-previa-emoji', box);
       d.style.left = `${(c.x ?? 0.5) * 100}%`;
@@ -5198,7 +5245,8 @@ function renderChips() {
   // Na Edicao o bloco de faixas so aparece quando ha midia posta na mao —
   // sem isso a faixa nasce vazia e come altura da linha do tempo.
   const temManual = S.insertsDraft.some(
-    (c) => c.isNew || c.kind === 'hook' || c.manual);
+    (c) => c.isNew || c.kind === 'hook' || c.manual
+      || c.kind === 'lower' || c.kind === 'chapter');
   insertTracksEl.classList.toggle('hidden', !phase2 && !temManual);
   insertTracksEl.innerHTML = '';
   if (!showCaps) {
@@ -5249,13 +5297,15 @@ function desenharFaixasDeInsert(phase2) {
   // aqui", estando na Edicao).
   const visiveis = soManuais
     ? S.insertsDraft.map((c, i) => ({ c, i }))
-        .filter(({ c }) => c.isNew || c.kind === 'hook' || c.manual)
+        .filter(({ c }) => c.isNew || c.kind === 'hook' || c.manual
+          || c.kind === 'lower' || c.kind === 'chapter')
     : S.insertsDraft.map((c, i) => ({ c, i }));
   if (soManuais && !visiveis.length) return;
 
   // TEXT and IMAGE get their own tracks — a headline and a photo are different
   // kinds of edit, and mixing them on one lane hid the images entirely.
-  const isText = (c) => c.kind === 'hook' || c.kind === 'word' || c.kind === 'emoji';
+  const isText = (c) => c.kind === 'hook' || c.kind === 'word' || c.kind === 'emoji'
+    || c.kind === 'lower' || c.kind === 'chapter';
   const isSfx = (c) => c.kind === 'sfx';
   const groups = [
     // MIDIA primeiro (logo abaixo do video) e ALTA como o filmstrip — a

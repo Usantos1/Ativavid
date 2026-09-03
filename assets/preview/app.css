@@ -4211,3 +4211,30 @@ body > .fx-drop { position: fixed; bottom: auto; }
   color: rgba(255, 255, 255, 0.92);
   text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
 }
+
+/* Selo (lower third) e capitulo do LONGFORM na Edicao — espelho visual do
+ * template/compose: eles so existiam queimados no final ("no visual mostra
+ * mas em edicao nao mostra", 02/09). */
+.lf-previa-selo {
+  position: absolute; display: flex; align-items: stretch; gap: 6px;
+  pointer-events: none; z-index: 4;
+}
+.lf-previa-selo .lf-barra {
+  width: 4px; border-radius: 2px; background: var(--accent, #33e0a3);
+}
+.lf-previa-selo .lf-caixa {
+  display: flex; flex-direction: column; justify-content: center;
+  background: rgba(20, 22, 26, 0.86); border-radius: 6px;
+  padding: 5px 9px; box-shadow: 0 5px 14px rgba(0, 0, 0, 0.4);
+}
+.lf-previa-selo b { color: #fff; font-weight: 900; font-size: 14px; line-height: 1.05; }
+.lf-previa-selo i { color: var(--accent, #33e0a3); font-weight: 600; font-style: normal; font-size: 9px; margin-top: 2px; }
+.lf-previa-capitulo { position: absolute; pointer-events: none; z-index: 4; }
+.lf-previa-capitulo .lf-linha {
+  display: block; height: 3px; width: 44px; border-radius: 2px;
+  background: var(--accent, #33e0a3); margin-bottom: 5px;
+}
+.lf-previa-capitulo b {
+  color: #fff; font-weight: 900; font-size: 26px; letter-spacing: -0.5px;
+  line-height: 1; text-shadow: 0 2px 9px rgba(0, 0, 0, 0.6);
+}

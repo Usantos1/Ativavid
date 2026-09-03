@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.82
+
+- **O selo e o capítulo do vídeo longo aparecem na Edição.** Eles só
+  existiam queimados no vídeo final — na Edição não havia bloco na
+  timeline nem cartão no preview. Agora ambos entram como bloco na faixa
+  de texto e o cartão aparece no preview quando a agulha passa na janela
+  deles (no Visual, com o final pronto, nada desenha em dobro por cima
+  do que já está queimado).
+
 ## 4.81
 
 - **O selo do vídeo longo mostra a SUA marca.** O cartãozinho que entra
