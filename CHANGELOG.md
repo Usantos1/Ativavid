@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.91
+
+- **Copiar o nome do vídeo (com o ✅).** Botão ⧉ ao lado do nome no
+  cabeçalho do editor e "Copiar nome" no menu "⋯" do card — copia o nome
+  completo, do jeito que você usa para nomear a pasta de entrega.
+
 ## 4.90
 
 - **Renomear e aprovar o vídeo direto do editor.** No cabeçalho, o nome

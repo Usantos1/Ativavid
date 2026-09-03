@@ -4250,3 +4250,6 @@ body > .fx-drop { position: fixed; bottom: auto; }
 /* Com nome + Aprovado + arquivo · duracao · formato a linha ficou longa: quebrar
  * em vez de cortar com reticencias (o "Aprovado" saia cortado, 03/09) */
 .project-meta { white-space: normal; text-overflow: clip; }
+/* botao de copiar o nome (com ✅) ao lado do nome do card (03/09) */
+.project-meta .proj-copiar { margin-left: 6px; padding: 0 4px; border: 0; background: transparent; color: var(--text, #f2f2f2); opacity: 0.7; cursor: pointer; font-size: 12px; line-height: 1; }
+.project-meta .proj-copiar:hover { opacity: 1; }

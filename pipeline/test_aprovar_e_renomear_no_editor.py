@@ -57,3 +57,19 @@ def test_o_cabecalho_renomeia_e_aprova():
     assert "S.state.jobId" in corpo, "sem id nao ha o que renomear — controles so com job"
     css = (REPO / "assets" / "preview" / "app.css").read_text(encoding="utf-8")
     assert ".proj-aprovado" in css
+
+
+def test_copiar_o_nome_completo_com_o_emoji():
+    """Ele cria a pasta de entrega com o nome do card, ✅ incluso (03/09):
+    botao ⧉ ao lado do nome no editor e "Copiar nome" no menu do card."""
+    js = (REPO / "assets" / "preview" / "app.js").read_text(encoding="utf-8")
+    assert "async function copiarTextoEditor" in js
+    j = js.index("const pintarMeta = ")
+    corpo = js[j:j + 2200]
+    assert "'proj-copiar'" in corpo and "copiarTextoEditor(nomeDoCard)" in corpo
+    hub = (REPO / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
+    assert 'data-act="copyname"' in hub and 'act === "copyname"' in hub
+    i = hub.index('act === "copyname"')
+    bloco = hub[i:hub.index('act === "copystyle"', i)]
+    assert "displayTitle(" in bloco and "copiarTexto(" in bloco
+    assert "job ||" not in bloco and "job)" not in bloco

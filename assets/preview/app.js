@@ -2535,6 +2535,16 @@ function refreshProjectChrome() {
         lab.appendChild(document.createTextNode(' Aprovado'));
         chk.addEventListener('change', () => { alternarAprovado(chk.checked); });
       }
+      // Copiar o nome COMPLETO (com o ✅): ele cria a pasta de entrega com
+      // esse nome (03/09). Botao proprio — o clique no nome e renomear.
+      const cp = el('button', 'proj-copiar', meta);
+      cp.type = 'button';
+      cp.textContent = '⧉';
+      cp.title = 'Copiar o nome (para nomear a pasta)';
+      cp.addEventListener('click', async () => {
+        const ok = await copiarTextoEditor(nomeDoCard);
+        toast(ok ? `Nome copiado: ${nomeDoCard}` : 'Não consegui copiar o nome', 2600);
+      });
       if (lista.length) meta.appendChild(document.createTextNode(' · '));
     }
     meta.appendChild(document.createTextNode(lista.join(' · ')));
@@ -2553,6 +2563,30 @@ function refreshProjectChrome() {
  * ao aprovar a edicao). Renomear passa pelo /api/jobs/rename do hub, que
  * trava o titulo — e o card do hub mostra o mesmo nome. */
 const APROVADO_RE = /^\s*✅\s*/u;
+
+async function copiarTextoEditor(texto) {
+  const t = String(texto || '');
+  if (!t) return false;
+  try {
+    await navigator.clipboard.writeText(t);
+    return true;
+  } catch { /* segue para o caminho velho */ }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = t;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.top = '0';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    ta.remove();
+    return !!ok;
+  } catch {
+    return false;
+  }
+}
 
 async function gravarNomeDoVideo(novo) {
   const id = S.state && S.state.jobId;

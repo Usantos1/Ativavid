@@ -912,6 +912,7 @@ function cardMenuHtml(j, opts) {
       <div class="pc-menu hidden" data-menu="${menuKey}" role="menu">
         <button type="button" role="menuitem" data-act="folder" data-id="${safeId}">Abrir pasta</button>
         ${j.legenda ? `<button type="button" role="menuitem" data-act="copylegenda" data-id="${safeId}">Copiar legenda do post</button>` : ""}
+        <button type="button" role="menuitem" data-act="copyname" data-id="${safeId}">Copiar nome</button>
         <a role="menuitem" href="${escapeHtml(links.final)}" ${canFinal ? "" : "class=\"disabled\""}>Ver vídeo final</a>
         <a role="menuitem" href="${escapeHtml(links.editor)}">Editar</a>
         <a role="menuitem" href="${escapeHtml(links.estilo)}" data-id="${safeId}">Alterar estilo</a>
@@ -3444,6 +3445,12 @@ function wireList() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ id }),
         });
+      } else if (act === "copyname") {
+        // o nome COMPLETO (com o ✅ de aprovado): ele cria a pasta de
+        // entrega com esse nome (03/09)
+        const jn = state.jobs.find((x) => String(x.id) === String(id));
+        const nome = jn ? displayTitle(jn) : "";
+        toast((await copiarTexto(nome)) ? `Nome copiado: ${nome}` : "Não consegui copiar o nome", 2600);
       } else if (act === "copystyle") {
         // so `id` existe neste escopo — `job` nao ("job is not defined",
         // print de 03/09: o copiar quebrava e o colar nunca acendia)
