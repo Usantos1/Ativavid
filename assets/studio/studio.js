@@ -4791,6 +4791,20 @@ function wireForms() {
       }
     };
   }
+  const chkAuto = $("#entregasAutoChk");
+  if (chkAuto && !chkAuto.dataset.wired) {
+    chkAuto.dataset.wired = "1";
+    chkAuto.addEventListener("change", async () => {
+      try {
+        await api("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ entregasAuto: !!chkAuto.checked }) });
+        toast(chkAuto.checked ? "✓ Cada vídeo pronto vai para Entregas" : "Entregas só pelo botão Reunir");
+      } catch (e) {
+        toast(e.message || "Não consegui salvar");
+        chkAuto.checked = !chkAuto.checked;
+      }
+    });
+  }
   const btnSaveEnt = $("#btnSaveEntregas");
   if (btnSaveEnt && !btnSaveEnt.dataset.wired) {
     btnSaveEnt.dataset.wired = "1";
@@ -5696,6 +5710,7 @@ function applySistemaData(data) {
     $("#entregasRootInput").value = s.entregasRoot || "";
   }
   if ($("#entregasRootHint")) $("#entregasRootHint").textContent = s.entregasRootEfetiva ? `Em uso: ${s.entregasRootEfetiva}` : "";
+  if ($("#entregasAutoChk")) $("#entregasAutoChk").checked = s.entregasAuto !== false;
   if ($("#supabaseUrlInput")) $("#supabaseUrlInput").value = s.supabaseUrl || "";
   if ($("#supabaseAnonInput")) $("#supabaseAnonInput").value = s.supabaseAnonKey || "";
   if ($("#checkoutUrlInput")) $("#checkoutUrlInput").value = s.checkoutUrl || "";
@@ -7304,8 +7319,20 @@ function wireEmpresas() {
       const b = state.brandActive;
       if (!b) return;
       reunir.disabled = true;
-      reunir.textContent = "Reunindo…";
+      reunir.textContent = "Contando…";
       try {
+        // 5.0.13: conta e pesa antes — 291 videos sao varios GB a mais no disco
+        const prev = await api("/api/entregas/reunir", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ brandId: b.id, dryRun: true }) });
+        if (!prev.n) { toast("Nenhum vídeo pronto desta empresa para reunir"); return; }
+        const gb = (Number(prev.bytes || 0) / 1073741824);
+        const peso = gb >= 1 ? `${gb.toFixed(1)} GB` : `${Math.round(Number(prev.bytes || 0) / 1048576)} MB`;
+        const ok = await pedirConfirmacao(
+          `Reunir ${prev.n} vídeo${prev.n === 1 ? "" : "s"} em Entregas/${b.name}?`,
+          `Vai copiar cerca de ${peso} para lá (o que já estiver igual não é copiado de novo). Os projetos não mudam.`,
+          "Reunir", false);
+        if (!ok) return;
+        reunir.textContent = "Reunindo…";
         const r = await api("/api/entregas/reunir", { method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ brandId: b.id }) });
         toast(r.n ? `✓ ${r.n} vídeo${r.n === 1 ? "" : "s"} em Entregas/${b.name}` : "Nenhum vídeo pronto desta empresa para reunir");

@@ -39,6 +39,7 @@ DEFAULTS: dict[str, Any] = {
     "experimentalFfmpegZoom": False,  # zoomCuts+pushIn no extract — off em produção
     "projectsRoot": None,  # None → %USERPROFILE%/ATIVAVID/Projetos
     "entregasRoot": None,  # None → <pai dos Projetos>/Entregas (5.0.6)
+    "entregasAuto": True,  # copiar cada video pronto para Entregas/<Empresa>/ (5.0.13)
     # Motor de música: só a IA local (MusicGen na GPU) compõe — a nuvem
     # (ElevenLabs) saiu do produto em 02/09/2026. A biblioteca de trilhas
     # fecha a fila. Valor antigo gravado ("auto"/"nuvem") é ignorado: o

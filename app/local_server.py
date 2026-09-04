@@ -3183,9 +3183,11 @@ class StudioHandler(BaseHTTPRequestHandler):
             # 5.0.6: pasta de entrega por empresa
             from app.delivery_pack import (
                 espelhar_na_entrega, pasta_de_entrega_da_empresa, read_pack_dir,
+                tamanho_do_pack,
             )
             body = self._read_json() or {}
             bid = str(body.get("brandId") or "").strip()
+            so_contar = bool(body.get("dryRun"))   # 5.0.13: quantos e quanto pesa, antes de copiar
             pasta = pasta_de_entrega_da_empresa(bid, self.projects_root)
             pasta.mkdir(parents=True, exist_ok=True)
             if path == "/api/entregas/abrir":
@@ -3196,6 +3198,7 @@ class StudioHandler(BaseHTTPRequestHandler):
             # reunir: espelha os pacotes que JA existem dos videos desta empresa
             from app.broll_library import marca_do_projeto
             n = 0
+            bytes_total = 0
             for j in self.store.list():
                 edit = Path(j.get("editDir") or "")
                 if not edit.is_dir():
@@ -3205,12 +3208,16 @@ class StudioHandler(BaseHTTPRequestHandler):
                 pack = read_pack_dir(edit)
                 if pack is None:
                     continue
+                if so_contar:
+                    n += 1
+                    bytes_total += tamanho_do_pack(pack)
+                    continue
                 try:
                     if espelhar_na_entrega(edit, pack, projects_root=self.projects_root):
                         n += 1
                 except Exception as e:  # noqa: BLE001
                     print(f"[entrega] {edit}: {e}", flush=True)
-            self._json({"ok": True, "n": n, "path": str(pasta)})
+            self._json({"ok": True, "n": n, "bytes": bytes_total, "path": str(pasta), "dryRun": so_contar})
             return
 
         if path == "/api/library/mover":

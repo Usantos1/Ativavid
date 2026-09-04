@@ -115,3 +115,24 @@ def test_espelho_perdido_em_sem_empresa_e_adotado(monkeypatch, tmp_path):
     esp = dp.espelhar_na_entrega(edit, pack)
     assert (esp / "antigo.txt").exists() and (esp / "Troca de tela.mp4").exists()
     assert not perdido.exists()
+
+
+def test_a_copia_automatica_pode_ser_desligada(monkeypatch, tmp_path):
+    """5.0.13: com entregasAuto=false o pack nasce sem espelho; Reunir continua."""
+    _casa(monkeypatch, tmp_path)
+    from app import settings_store as ss
+    monkeypatch.setattr(ss, "load_settings", lambda: {"entregasAuto": False})
+    proj, edit = _projeto(tmp_path, "prime")
+    pack = dp.ensure_delivery_pack(edit, stem_override="Sem espelho")
+    assert pack is not None and not (tmp_path / "Entregas").exists()
+    assert dp.espelhar_na_entrega(edit, pack) == tmp_path / "Entregas" / "Prime Camp Centro" / "Sem espelho"
+    assert dp.tamanho_do_pack(pack) > 0
+
+
+def test_reunir_conta_antes_de_copiar():
+    i = SERVER.index('so_contar = bool(body.get("dryRun"))')
+    bloco = SERVER[i:i + 1800]
+    assert "bytes_total += tamanho_do_pack(pack)" in bloco and '"bytes": bytes_total' in bloco
+    assert 'body: JSON.stringify({ brandId: b.id, dryRun: true })' in SJS
+    assert "Vai copiar cerca de ${peso}" in SJS
+    assert 'id="entregasAutoChk"' in SHTML and 'JSON.stringify({ entregasAuto: !!chkAuto.checked })' in SJS

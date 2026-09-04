@@ -1,5 +1,12 @@
 # Changelog
 
+## 5.0.13
+
+- **Entregas sem surpresa no disco.** "Reunir vídeos antigos" agora conta e
+  pesa antes: "Reunir 291 vídeos em Entregas/Prime Camp? Vai copiar cerca
+  de 9,4 GB". Em Configurações dá para desligar a cópia automática de cada
+  vídeo pronto (a pasta passa a encher só pelo botão Reunir).
+
 ## 5.0.12
 
 - **Lista vazia por causa da empresa dizia "nenhum vídeo".** Com uma

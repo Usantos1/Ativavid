@@ -204,11 +204,12 @@ def ensure_delivery_pack(
             print(f"[warn] deliveryPack nao gravou em state.json: {e}",
                   flush=True)
     # 5.0.6: espelho em Entregas/<Empresa>/ — nunca derruba o pack
-    try:
-        espelhar_na_entrega(edit, dest,
-                            anterior=(anterior.name if movido and anterior is not None else ""))
-    except Exception as e:  # noqa: BLE001
-        print(f"[warn] entrega por empresa: {e}", flush=True)
+    if entregas_auto():
+        try:
+            espelhar_na_entrega(edit, dest,
+                                anterior=(anterior.name if movido and anterior is not None else ""))
+        except Exception as e:  # noqa: BLE001
+            print(f"[warn] entrega por empresa: {e}", flush=True)
     return dest
 
 
@@ -250,6 +251,25 @@ def nome_da_empresa(brand_id: str | None) -> str:
 
 def pasta_de_entrega_da_empresa(brand_id: str | None, projects_root: Path | None = None) -> Path:
     return entregas_root(projects_root) / safe_pack_stem(nome_da_empresa(brand_id))
+
+
+def entregas_auto() -> bool:
+    """Copiar sozinho cada video pronto (5.0.13). Desligado, so o botao
+    "Reunir" copia — para quem prefere nao dobrar o disco."""
+    try:
+        from app import settings_store as ss
+
+        v = ss.load_settings().get("entregasAuto", True)
+        return bool(v) if v is not None else True
+    except Exception:  # noqa: BLE001
+        return True
+
+
+def tamanho_do_pack(pack_dir: Path) -> int:
+    try:
+        return sum(f.stat().st_size for f in Path(pack_dir).iterdir() if f.is_file())
+    except OSError:
+        return 0
 
 
 def espelhar_na_entrega(edit_dir: Path, pack_dir: Path, *, anterior: str = "",
