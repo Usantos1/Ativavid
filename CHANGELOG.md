@@ -1,5 +1,14 @@
 # Changelog
 
+## 5.0.7
+
+- **O perfil da empresa alimenta toda a IA.** O que você preenche em
+  Empresas → Perfil (o que vende, para quem, cidade, diferenciais, provas,
+  oferta, contato, tom de voz, o que não falar) passa a entrar no
+  planejador do corte, na headline e na legenda do post, não só no
+  Roteiro. A headline deixou de ter "assistência técnica de celulares"
+  fixo no pedido à IA. Quem não preencheu o perfil não muda nada.
+
 ## 5.0.6
 
 - **Pasta de entrega por empresa.** Todo vídeo pronto passa a ser copiado

@@ -170,8 +170,19 @@ def _rhythm_rules(preset: dict) -> str:
     )
 
 
+def _contexto_da_empresa(preset: dict | None) -> str:
+    """Bloco do perfil da empresa (5.0.7) — vazio sem perfil ou sem marca."""
+    try:
+        from app.roteiro import contexto_da_empresa
+
+        return contexto_da_empresa((preset or {}).get("brandId")) or ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def _system_prompt(preset: dict | None = None) -> str:
     extra = _rhythm_rules(preset or {})
+    empresa = _contexto_da_empresa(preset)
     intent = ((preset or {}).get("editingIntent") or "dynamic").lower()
     if intent == "complete":
         role = (
@@ -257,7 +268,9 @@ def _system_prompt(preset: dict | None = None) -> str:
         "(a resposta em máx 5 palavras).\n"
         "- Responda SOMENTE JSON válido (sem markdown, sem prosa).\n\n"
         f"PARÂMETROS DO PRESET:\n{extra}\n"
-        "FORMATO:\n"
+        + (f"{empresa}A headline e o hook devem falar a língua desta empresa e "
+           "do público dela.\n" if empresa else "")
+        + "FORMATO:\n"
         '{"ranges":[{"source":"SRC","start":1.2,"end":4.5,"beat":"HOOK",'
         '"quote":"…","reason":"…"}],"hook":"uma linha","headline":"…",'
         '"headlineAlts":["…","…"],"notes":"opcional"}'
@@ -520,14 +533,19 @@ def headline_apenas(texto_falado: str, preset: dict | None = None) -> dict:
             extra = prompt_rules((preset or {}).get("contentType")) or ""
         except Exception:  # noqa: BLE001
             pass
+        # 5.0.7: a empresa vem do PERFIL (Empresas → Perfil); o texto
+        # fixo "assistência técnica de celulares" servia a uma empresa só.
+        empresa = _contexto_da_empresa(preset)
+        quem = ("para a empresa descrita abaixo" if empresa
+                else "para um negócio local no Brasil")
         messages = [
             {"role": "system", "content": (
-                "Você escreve TÍTULOS de Reels para uma assistência técnica de "
-                "celulares no Brasil. Dado o que foi falado no vídeo, devolva "
-                "APENAS JSON: {\"headline\": \"...\", \"headlineAlts\": "
-                "[\"...\", \"...\"]}. Título com ATÉ 8 palavras, concreto, "
-                "sem clickbait vazio, sem emoji, sem aspas dentro do texto.\n"
-                + extra)},
+                f"Você escreve TÍTULOS de Reels {quem}. Dado o que foi falado "
+                "no vídeo, devolva APENAS JSON: {\"headline\": \"...\", "
+                "\"headlineAlts\": [\"...\", \"...\"]}. Título com ATÉ 8 "
+                "palavras, concreto, sem clickbait vazio, sem emoji, sem aspas "
+                "dentro do texto.\n"
+                + extra + ("\n" + empresa if empresa else ""))},
             {"role": "user", "content": f"Fala do vídeo:\n{texto[:1800]}"},
         ]
         parsed, backend, _bruto = _chamar_e_parsear(messages)

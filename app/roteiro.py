@@ -186,6 +186,31 @@ def _perfil_em_texto(perfil: dict[str, str], empresa_livre: str) -> str:
     return "\n".join(linhas)
 
 
+def contexto_da_empresa(brand_id: str | None) -> str:
+    """O perfil da empresa como bloco de prompt, para QUALQUER IA do app.
+
+    Ate a 5.0.6 so o Roteiro lia o perfil; a headline saia com "para uma
+    assistencia tecnica de celulares" fixo no prompt e a legenda do post
+    nao sabia o que a empresa vende nem o que e proibido falar. Vazio
+    quando o perfil esta vazio (nada muda para quem nao preencheu).
+    """
+    bid = str(brand_id or "").strip()
+    if not bid:
+        return ""
+    try:
+        p = perfil_empresa(bid)
+    except Exception:  # noqa: BLE001 — perfil nunca derruba um render
+        return ""
+    corpo = _perfil_em_texto(p.get("perfil") or {}, str(p.get("empresa") or ""))
+    if not corpo.strip():
+        return ""
+    return (
+        "CONTEXTO DA EMPRESA (escreva para ela; nunca invente preço, prazo, "
+        "número ou promessa que não esteja aqui; respeite 'O que NÃO falar'):\n"
+        f"- Empresa: {p.get('nome') or bid}\n{corpo}\n"
+    )
+
+
 def coletar_falas(projects_root: Path | str, brand_id: str, limite: int = 30) -> list[dict[str, str]]:
     """As falas (transcrição do corte) e legendas dos últimos vídeos DESTA
     marca — `edit/preset-used.json` diz de quem é cada projeto."""

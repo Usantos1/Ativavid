@@ -1994,8 +1994,20 @@ def _llm_polish_legenda(draft: str, *, spoken: str, preset: dict) -> str | None:
     fixas = [t if t.startswith("#") else "#" + t
              for t in re.split(r"[\s,;]+", str(preset.get("postHashtags") or "").strip())
              if t.strip("#").strip()][:12]
+    # 5.0.7: o perfil da empresa (o que vende, para quem, contato, tom,
+    # proibido) entra na legenda — antes so o Roteiro sabia disso
+    empresa = ""
+    try:
+        from app.roteiro import contexto_da_empresa
+
+        empresa = contexto_da_empresa(preset.get("brandId")) or ""
+    except Exception:  # noqa: BLE001
+        empresa = ""
     system = (
         "Você escreve legendas curtas de Reels/TikTok em português do Brasil.\n"
+        + (empresa + "Use o tom de voz da empresa e, se couber, o jeito de "
+           "contato dela no CTA.\n" if empresa else "")
+        + 
         "Responda SOMENTE com o texto final da legenda (sem markdown, sem aspas).\n"
         "Regras: 1ª linha = gancho; 2–4 linhas no máximo no corpo; NÃO cole a "
         "transcrição inteira; corrija erros óbvios de ASR; preserve o CTA da "
