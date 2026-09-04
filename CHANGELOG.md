@@ -1,5 +1,14 @@
 # Changelog
 
+## 5.0.17
+
+- **Onze fontes novas** para legenda e headline, todas de licença aberta:
+  Oswald, Roboto Condensed, Nunito, Rubik, League Spartan, Kanit Black,
+  Barlow Condensed, Bangers, Righteous, Titan One e Luckiest Guy. Junto
+  com as oito de antes, são 19 no menu "Fonte" de Estilos, mais a sua
+  pasta Fontes. Cada uma sai com a mesma altura visível de legenda (o
+  tamanho é corrigido por fonte).
+
 ## 5.0.16
 
 - **Janela de "Inserir imagem / B-roll" em tela cheia.** Buscar online,

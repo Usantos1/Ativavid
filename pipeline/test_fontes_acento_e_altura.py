@@ -150,7 +150,8 @@ def test_normalizar_escreve_nos_knobs_certos():
 
 def test_preview_do_editor_espelha_o_fator():
     js = (REPO / "assets" / "preview" / "app.js").read_text(encoding="utf-8")
-    i = js.index("FONT_ALTURA = { anton: 0.83 }")
+    # 5.0.17: a tabela cresceu (oswald, bangers, kanit, spartan); a anton segue a primeira
+    i = js.index("FONT_ALTURA = { anton: 0.83")
     assert "style !== 'stacked'" in js[i:i + 220]
 
 

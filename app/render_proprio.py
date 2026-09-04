@@ -203,6 +203,19 @@ MARCA_FONTES = {
     "anton":      ("Anton-Regular.ttf", 400),
     "bebas":      ("BebasNeue-Regular.ttf", 400),
     "archivo":    ("ArchivoBlack-Regular.ttf", 400),
+    # 5.0.17: "adicionar mais fontes" — 11 familias abertas (OFL/Apache),
+    # arquivos em assets/fonts-render. Teto = peso maximo que a familia tem.
+    "oswald": ("Oswald[wght].ttf", 700),
+    "robotocond": ("RobotoCondensed[wght].ttf", None),
+    "nunito": ("Nunito[wght].ttf", None),
+    "rubik": ("Rubik[wght].ttf", None),
+    "spartan": ("LeagueSpartan[wght].ttf", None),
+    "kanit": ("Kanit-Black.ttf", 900),
+    "barlow": ("BarlowCondensed-Black.ttf", 900),
+    "bangers": ("Bangers-Regular.ttf", 400),
+    "righteous": ("Righteous-Regular.ttf", 400),
+    "titan": ("TitanOne-Regular.ttf", 400),
+    "luckiest": ("LuckiestGuy-Regular.ttf", 400),
 }
 
 # PencilOutline.tsx — o caminho do traço, já parseado (viewBox 312x150)

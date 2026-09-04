@@ -20,6 +20,18 @@ import {loadFont as loadLora} from '@remotion/google-fonts/Lora';
 import {loadFont as loadAnton} from '@remotion/google-fonts/Anton';
 import {loadFont as loadBebas} from '@remotion/google-fonts/BebasNeue';
 import {loadFont as loadArchivo} from '@remotion/google-fonts/ArchivoBlack';
+// 5.0.17: mais familias (mesmos arquivos do motor proprio em fonts-render)
+import {loadFont as loadOswald} from '@remotion/google-fonts/Oswald';
+import {loadFont as loadRobotoCondensed} from '@remotion/google-fonts/RobotoCondensed';
+import {loadFont as loadNunito} from '@remotion/google-fonts/Nunito';
+import {loadFont as loadRubik} from '@remotion/google-fonts/Rubik';
+import {loadFont as loadLeagueSpartan} from '@remotion/google-fonts/LeagueSpartan';
+import {loadFont as loadKanit} from '@remotion/google-fonts/Kanit';
+import {loadFont as loadBarlowCondensed} from '@remotion/google-fonts/BarlowCondensed';
+import {loadFont as loadBangers} from '@remotion/google-fonts/Bangers';
+import {loadFont as loadRighteous} from '@remotion/google-fonts/Righteous';
+import {loadFont as loadTitanOne} from '@remotion/google-fonts/TitanOne';
+import {loadFont as loadLuckiestGuy} from '@remotion/google-fonts/LuckiestGuy';
 import editData from '../public/edit-data.json';
 
 type Resolved = {family: string; weight?: number};
@@ -80,6 +92,28 @@ function load(id: string): Resolved | null {
       return {family: loadBebas('normal', {weights: ['400']}).fontFamily, weight: 400};
     case 'archivo':
       return {family: loadArchivo('normal', {weights: ['400']}).fontFamily, weight: 400};
+    case 'oswald':
+      return {family: loadOswald('normal', {weights: ['400', '600', '700']}).fontFamily, weight: 700};
+    case 'robotocond':
+      return {family: loadRobotoCondensed('normal', {weights: ['400', '700', '900']}).fontFamily};
+    case 'nunito':
+      return {family: loadNunito('normal', {weights: ['400', '700', '900']}).fontFamily};
+    case 'rubik':
+      return {family: loadRubik('normal', {weights: ['400', '700', '900']}).fontFamily};
+    case 'spartan':
+      return {family: loadLeagueSpartan('normal', {weights: ['400', '700', '900']}).fontFamily};
+    case 'kanit':
+      return {family: loadKanit('normal', {weights: ['900']}).fontFamily, weight: 900};
+    case 'barlow':
+      return {family: loadBarlowCondensed('normal', {weights: ['900']}).fontFamily, weight: 900};
+    case 'bangers':
+      return {family: loadBangers('normal', {weights: ['400']}).fontFamily, weight: 400};
+    case 'righteous':
+      return {family: loadRighteous('normal', {weights: ['400']}).fontFamily, weight: 400};
+    case 'titan':
+      return {family: loadTitanOne('normal', {weights: ['400']}).fontFamily, weight: 400};
+    case 'luckiest':
+      return {family: loadLuckiestGuy('normal', {weights: ['400']}).fontFamily, weight: 400};
     default:
       return null;
   }

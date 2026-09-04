@@ -3267,7 +3267,9 @@ def _apply_caption_geometry(ed: dict, preset: dict) -> None:
 
 # IDs do catálogo de fontes do template (assets/shortform/src/fonts.ts).
 # Valor fora do catálogo é descartado — o template ignoraria e a UI mentiria.
-_FONT_IDS = {"poppins", "inter", "montserrat", "playfair", "lora", "anton", "bebas", "archivo", "arquivo"}
+_FONT_IDS = {"poppins", "inter", "montserrat", "playfair", "lora", "anton", "bebas", "archivo", "arquivo",
+             # 5.0.17
+             "oswald", "robotocond", "nunito", "rubik", "spartan", "kanit", "barlow", "bangers", "righteous", "titan", "luckiest"}
 
 
 def _legenda_comeca_depois(public: Path, segundos: float) -> int:
@@ -3446,7 +3448,8 @@ ALTURA_H_POPPINS = 71     # tinta do "H" da Poppins-Black a 100px (medido)
 # Fator de altura por fonte do catalogo: cap-height medida a 100px contra a
 # Poppins do template. Dentro de +-4% fica 1,0 (nao vale o rearranjo);
 # a Anton e a fora-da-curva — 86px de H, 21% mais alta que todo o resto.
-_FATOR_ALTURA_CATALOGO = {"anton": 0.83}
+# medido com o mesmo "H" de `_fator_de_altura` (04/09); dentro de 4% = 1.0
+_FATOR_ALTURA_CATALOGO = {"anton": 0.83, "oswald": 0.877, "spartan": 1.076, "kanit": 1.092, "bangers": 0.947}
 
 
 def _fator_de_altura(family: str, public) -> float:

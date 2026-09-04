@@ -5701,6 +5701,17 @@ function updateCapOverlay() {
     montserrat: "'Montserrat',sans-serif", playfair: "'Playfair Display',serif",
     lora: "'Lora',serif", anton: "'Anton',sans-serif",
     bebas: "'Bebas Neue',sans-serif", archivo: "'Archivo Black',sans-serif",
+    oswald: "'Oswald',sans-serif",
+    robotocond: "'Roboto Condensed',sans-serif",
+    nunito: "'Nunito',sans-serif",
+    rubik: "'Rubik',sans-serif",
+    spartan: "'League Spartan',sans-serif",
+    kanit: "'Kanit',sans-serif",
+    barlow: "'Barlow Condensed',sans-serif",
+    bangers: "'Bangers',cursive",
+    righteous: "'Righteous',cursive",
+    titan: "'Titan One',cursive",
+    luckiest: "'Luckiest Guy',cursive",
     arquivo: "'BrandLocal','Poppins',sans-serif",
   };
   // posição/tamanho do preset — mesmo mapa do render (_apply_caption_geometry)
@@ -5709,7 +5720,7 @@ function updateCapOverlay() {
   // fator de altura por fonte — espelho de _FATOR_ALTURA_CATALOGO no
   // render: a Anton tem caixa alta 21% maior que as outras no mesmo px, e
   // sem isto o preview mostrava uma legenda maior do que a que sai no video.
-  const FONT_ALTURA = { anton: 0.83 };
+  const FONT_ALTURA = { anton: 0.83, oswald: 0.877, spartan: 1.076, kanit: 1.092, bangers: 0.947 };
   const fatorFonte = (style !== 'stacked' && FONT_ALTURA[S.style.captionFont]) || 1;
   const capScale = ({ p: 0.85, m: 1, g: 1.18 }[S.style.captionSize] || 1) * fatorFonte;
 
