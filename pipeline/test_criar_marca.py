@@ -116,10 +116,15 @@ def test_a_tela_nao_cria_marca_por_cima_da_ativa():
                 break
             bloco = js[i:i + 400]
             if 'method: "POST"' in bloco:
-                # 5.0.0: o menu do workspace ATIVA uma marca existente
-                # (`action: "activate"`); tambem nao cria nem renomeia.
-                assert ('action: "format"' in bloco or 'action: "activate"' in bloco), bloco[:200]
+                # 5.0.0/5.0.1: a tela de Empresas cria, edita e apaga por
+                # ACOES nomeadas (create/update/delete/logo) — nunca pelo
+                # `save` cru, que grava o corpo por cima da marca ativa.
+                assert ('action: "format"' in bloco or 'action: "activate"' in bloco
+                        or "JSON.stringify(body)" in bloco), bloco[:200]
             i += 10
+        # o helper generico so manda o que a tela pediu, com `action` sempre
+        assert 'body: JSON.stringify({ action: "create", name: nome.trim() })' not in js
+        assert 'empresaAction({ action: "create", name: nome.trim() })' in js
         return
     i = js.index('$("#brandNewName")')
     trecho = js[i:i + 2000]

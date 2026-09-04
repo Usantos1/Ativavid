@@ -1,5 +1,20 @@
 # Changelog
 
+## 5.0.1
+
+- **Tela "Empresas" (era "Presets").** Um card por empresa em cima: clicar
+  ativa a empresa (o mesmo que o menu do rodapé). "+ Nova empresa" cria uma
+  do zero. Abaixo, tudo da empresa ativa em blocos com nome claro:
+  **Identidade** (nome, logo, cor de destaque, formato, fontes e cartão
+  final), **Perfil** (o que a IA sabe: veio da tela do Roteiro, que agora só
+  aponta para cá) e **Presets de edição** (os jeitos de cortar dela).
+- **Apagar empresa.** Somem a identidade, o perfil e os presets dela. Os
+  vídeos continuam nos Projetos como "sem empresa" e os roteiros ficam no
+  disco. A última empresa não pode ser apagada.
+- **Logo por empresa.** Clique no quadrado do logo e escolha um PNG, JPG ou
+  WebP de até 3 MB. Aparece no card e no rodapé da barra lateral.
+- Menu do rodapé ganhou "Nova empresa / gerenciar", que abre esta tela.
+
 ## 5.0.0
 
 - **Numeração nova: 5.0.0.** Daqui em diante é maior.menor.correção

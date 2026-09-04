@@ -65,9 +65,12 @@
           <span class="sb-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.2" y="6.5" width="14" height="11" rx="2"/><path d="M6.6 17.5l3.6-4 2.6 2.6 2-2 2.4 3.4"/><path d="M20.8 8.6v8.2a2.6 2.6 0 0 1-2.6 2.6H7.4"/></svg></span>
           <span class="sb-txt">Biblioteca</span>
         </button>
-        <button type="button" class="sb-item" data-view="presets" data-tip="Presets">
-          <span class="sb-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M13.2 2.8 5 13.4h5.4L9.9 21.2 18.4 10.6H13z"/></svg></span>
-          <span class="sb-txt">Presets</span>
+        <!-- 5.0.1: "Presets" virou "Empresas". A empresa e o dono de tudo:
+             identidade, perfil e os presets de edicao dela. O id da tela
+             continua `presets` (links e atalhos salvos). -->
+        <button type="button" class="sb-item" data-view="presets" data-tip="Empresas">
+          <span class="sb-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 20V6.5A1.5 1.5 0 0 1 5.5 5h7A1.5 1.5 0 0 1 14 6.5V20"/><path d="M14 11h4.5A1.5 1.5 0 0 1 20 12.5V20"/><path d="M2.5 20h19"/><path d="M7 9h4M7 12.5h4M7 16h4M17 15h.01M17 18h.01"/></svg></span>
+          <span class="sb-txt">Empresas</span>
         </button>
         <button type="button" class="sb-item" data-view="roteiro" data-tip="Roteiro">
           <span class="sb-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4.5h11l3 3v12H5z"/><path d="M8 10h8M8 13.5h8M8 17h5"/></svg></span>
@@ -109,6 +112,10 @@
           <!-- 5.0.0: workspace por EMPRESA. Trocar aqui filtra Fila,
                Concluidos e Projetos; "Todas" mostra o acervo inteiro. -->
           <div class="ws-marcas" id="wsMarcas" role="group" aria-label="Empresa"></div>
+          <button type="button" class="ws-menu-item ws-menu-item--sub" role="menuitem" data-ws="empresas">
+            <span class="ws-menu-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 4.5v15M4.5 12h15"/></svg></span>
+            <span>Nova empresa / gerenciar</span>
+          </button>
           <div class="ws-menu-sep" role="none"></div>
           <button type="button" class="ws-menu-item" role="menuitem" data-ws="conta">
             <span class="ws-menu-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.6"/><path d="M4.8 20a7.4 7.4 0 0 1 14.4 0"/></svg></span>
@@ -371,7 +378,7 @@
               <div class="rot-topo">
                 <div>
                   <strong id="rotMarcaNome">Marca</strong>
-                  <p class="hint">A IA escreve com os dados desta marca. <button type="button" class="link-btn" id="rotEmpresaAbrir">Dados da empresa</button></p>
+                  <p class="hint">A IA escreve com os dados desta marca. <button type="button" class="link-btn" id="rotEmpresaAbrir" data-view="presets">Dados da empresa</button></p>
                 </div>
                 <div class="rot-opcoes">
                   <label>Estilo <select id="rotEstilo"></select></label>
@@ -381,26 +388,7 @@
                   <label>Gatilho <select id="rotGatilho"></select></label>
                 </div>
               </div>
-              <div class="rot-empresa hidden" id="rotEmpresaBox">
-                <div class="rot-empresa-topo">
-                  <div>
-                    <strong>Perfil da empresa</strong>
-                    <p class="hint">Vale para esta marca. A IA usa tudo isto em cada roteiro.</p>
-                  </div>
-                  <button type="button" class="ghost-btn" id="rotPerfilDosVideos" title="Lê as falas dos seus últimos vídeos desta marca e preenche um rascunho — você corrige e salva">Montar com meus vídeos</button>
-                </div>
-                <p class="hint hidden" id="rotPerfilStatus"></p>
-                <!-- 4.99: campos em vez de texto solto ("pegar do preset ou criar
-                     um perfil?"). O preset so guarda estilo; o negocio mora aqui. -->
-                <div class="rot-perfil-grid" id="rotPerfilGrid"></div>
-                <label class="ia-form">Observações livres
-                  <textarea id="rotEmpresaTexto" rows="2" placeholder="O que mais a IA precisa saber e não coube acima"></textarea>
-                </label>
-                <div class="rot-empresa-acoes">
-                  <button type="button" class="ghost-btn" id="rotEmpresaFechar">Fechar</button>
-                  <button type="button" class="export-btn export-btn--sm" id="rotEmpresaSalvar">Salvar perfil</button>
-                </div>
-              </div>
+              <!-- 5.0.1: o perfil da empresa mora na tela de Empresas. -->
               <div class="rot-msgs" id="rotMsgs">
                 <div class="rot-vazio" id="rotVazio">
                   <h3>Sobre o que é o vídeo?</h3>
@@ -430,52 +418,50 @@
           </div>
         </section>
         <section class="view hidden" id="view-presets" data-view-panel="presets">
-          <div class="lib-bar">
-            <div class="lib-bar-copy">
-              <p class="hint"><strong>Cada preset é um jeito de cortar</strong> —
-                layout, legenda, manchete, ritmo e cores. O marcado como
-                <strong>padrão</strong> é o que a importação usa; "Duplicar"
-                cria outro a partir dele.</p>
-              <p class="hint" id="presetsHint">Carregando…</p>
-            </div>
-            <div class="lib-bar-actions">
-              <!-- O formato morava na tela de Marca e era a unica coisa
-                   dela que nao existia em nenhum outro lugar. -->
-              <label class="preset-fmt">Formato
-                <select id="exportPresetSelect" title="Formato dos vídeos">
-                  <option value="reels">Reels / Shorts</option>
-                  <option value="youtube">YouTube 16:9</option>
-                  <option value="square">Quadrado 1:1</option>
-                  <option value="feed">Feed 4:5</option>
-                </select>
-              </label>
-              <!-- Cria de verdade: pergunta o nome, copia o estilo base e
-                   abre o editor no preset novo. Antes era um `data-view`
-                   que so trocava de tela — "nao funciona" (30/08), e de
-                   fato nao fazia nada do que o nome promete. -->
-              <button type="button" class="export-btn export-btn--sm" id="btnPresetNovo">Criar preset novo</button>
-            </div>
-          </div>
-          <div class="preset-list" id="presetList"></div>
-          <div class="hub-empty hidden" id="presetsEmpty">
-            Nenhum preset ainda. Ajuste o estilo em <strong>Estilos</strong> e salve aqui a combinação.
-          </div>
+          <!-- 5.0.1: EMPRESAS. Um card por empresa em cima (clicar = ativar);
+               abaixo, tudo da empresa ativa em blocos: identidade, perfil
+               (veio do Roteiro) e os presets de edicao. -->
+          <div class="emp-cards" id="empCards"></div>
 
-          <section class="pane-card pane-card--wide">
-            <header class="pane-card-head">
-              <h4>Identidade visual</h4>
-              <p class="hint">Vale para todos os presets. Os três primeiros abrem
-                já na seção certa do editor de estilo; o logo fica na Biblioteca.</p>
+          <section class="pane-card pane-card--wide emp-bloco">
+            <header class="pane-card-head emp-head">
+              <div>
+                <h4><span class="emp-eyebrow">Identidade</span> <span id="empTitulo">Empresa</span></h4>
+                <p class="hint">Nome, logo, cor e formato. Vale para todos os presets desta empresa.</p>
+              </div>
+              <button type="button" class="ghost-btn ghost-btn--sm emp-del" id="empApagar">Apagar empresa</button>
             </header>
-            <!-- `data-ident` diz ao editor ONDE parar. Sem isso os três caíam
-                 no topo do editor, embora o texto acima prometesse a seção
-                 certa. Ver `irParaNoEstilo` no studio.js. -->
+            <div class="emp-ident-row">
+              <div class="emp-logo" id="empLogoBox" title="Clique para escolher o logo (PNG, JPG ou WebP)">
+                <img id="empLogoImg" class="hidden" alt="">
+                <span id="empLogoTxt">Logo</span>
+                <input type="file" id="empLogoInput" accept="image/png,image/jpeg,image/webp" hidden>
+              </div>
+              <div class="emp-campos">
+                <label class="ia-form">Nome da empresa
+                  <input type="text" id="empNome" maxlength="60" placeholder="Ex.: Prime Camp">
+                </label>
+                <div class="emp-linha">
+                  <label class="ia-form emp-cor">Cor de destaque
+                    <span class="emp-cor-wrap"><input type="color" id="empCor" value="#e30004"><code id="empCorVal">#e30004</code></span>
+                  </label>
+                  <label class="ia-form preset-fmt">Formato dos vídeos
+                    <select id="exportPresetSelect" title="Formato dos vídeos">
+                      <option value="reels">Reels / Shorts</option>
+                      <option value="youtube">YouTube 16:9</option>
+                      <option value="square">Quadrado 1:1</option>
+                      <option value="feed">Feed 4:5</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="emp-acoes">
+                  <button type="button" class="export-btn export-btn--sm" id="empSalvar">Salvar identidade</button>
+                  <button type="button" class="ghost-btn ghost-btn--sm hidden" id="empLogoRemover">Tirar logo</button>
+                </div>
+              </div>
+            </div>
+            <!-- `data-ident` diz ao editor ONDE parar (ver `irParaNoEstilo`). -->
             <div class="ident-grid" id="identGrid">
-              <button type="button" class="ident-tile" data-view="estilo" data-ident="accent">
-                <span class="ident-swatch" id="identAccent" aria-hidden="true"></span>
-                <span class="ident-lab">Cor de destaque</span>
-                <span class="ident-val" id="identAccentVal">—</span>
-              </button>
               <button type="button" class="ident-tile" data-view="estilo" data-ident="fontes">
                 <span class="ident-ico" aria-hidden="true">Aa</span>
                 <span class="ident-lab">Fontes</span>
@@ -486,15 +472,42 @@
                 <span class="ident-lab">Cartão final</span>
                 <span class="ident-val" id="identEndCard">—</span>
               </button>
-              <button type="button" class="ident-tile" data-view="biblioteca">
-                <span class="ident-ico" aria-hidden="true">◲</span>
-                <span class="ident-lab">Logo</span>
-                <span class="ident-val">Na biblioteca</span>
-              </button>
+            </div>
+          </section>
+
+          <section class="pane-card pane-card--wide emp-bloco" id="rotEmpresaBox">
+            <header class="pane-card-head emp-head">
+              <div>
+                <h4><span class="emp-eyebrow">Perfil</span> O que a IA sabe desta empresa</h4>
+                <p class="hint">Roteiro, headline e legenda escrevem com estes dados. Quanto mais cheio, mais certeiro.</p>
+              </div>
+              <button type="button" class="ghost-btn ghost-btn--sm" id="rotPerfilDosVideos" title="Lê as falas dos seus últimos vídeos desta empresa e preenche um rascunho — você corrige e salva">Montar com meus vídeos</button>
+            </header>
+            <p class="hint hidden" id="rotPerfilStatus"></p>
+            <div class="rot-perfil-grid" id="rotPerfilGrid"></div>
+            <label class="ia-form">Observações livres
+              <textarea id="rotEmpresaTexto" rows="2" placeholder="O que mais a IA precisa saber e não coube acima"></textarea>
+            </label>
+            <div class="rot-empresa-acoes">
+              <button type="button" class="export-btn export-btn--sm" id="rotEmpresaSalvar">Salvar perfil</button>
+            </div>
+          </section>
+
+          <section class="pane-card pane-card--wide emp-bloco">
+            <header class="pane-card-head emp-head">
+              <div>
+                <h4><span class="emp-eyebrow">Presets de edição</span> Jeitos de cortar desta empresa</h4>
+                <p class="hint">Layout, legenda, manchete, ritmo e cores. O <strong>padrão</strong> é o que a importação usa;
+                  "Duplicar" cria outro a partir dele. <span id="presetsHint">Carregando…</span></p>
+              </div>
+              <button type="button" class="export-btn export-btn--sm" id="btnPresetNovo">Criar preset novo</button>
+            </header>
+            <div class="preset-list" id="presetList"></div>
+            <div class="hub-empty hidden" id="presetsEmpty">
+              Nenhum preset ainda. Ajuste o estilo em <strong>Estilos</strong> e salve aqui a combinação.
             </div>
           </section>
         </section>
-
         <!-- CHAVES + IA -->
         <section class="view hidden" id="view-ia" data-view-panel="ia">
           <div class="keys-shell">

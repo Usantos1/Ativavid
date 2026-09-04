@@ -46,7 +46,8 @@ def test_o_que_ela_tinha_de_proprio_mudou_de_casa():
     bloco = _bloco_dos_presets()
     assert 'id="exportPresetSelect"' in bloco
     assert 'id="identGrid"' in bloco
-    for alvo in ('data-ident="accent"', 'data-ident="fontes"',
+    # 5.0.1: a cor virou campo (`#empCor`); fontes e cartao continuam quadros
+    for alvo in ('id="empCor"', 'data-ident="fontes"',
                  'data-ident="cartao"'):
         assert alvo in bloco, alvo
 

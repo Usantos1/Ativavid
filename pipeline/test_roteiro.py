@@ -206,8 +206,10 @@ def test_sem_videos_da_marca_o_botao_explica(monkeypatch, tmp_path):
 
 
 def test_a_tela_tem_o_formulario_e_o_botao_dos_videos():
+    # 5.0.1: o perfil mora na tela de Empresas (view-presets), nao no Roteiro
     i = HTML.index('id="rotEmpresaBox"')
-    bloco = HTML[i:HTML.index('id="rotMsgs"', i)]
+    bloco = HTML[i:HTML.index('id="btnPresetNovo"', i)]
+    assert HTML.index('id="view-presets"') < i, "dentro da tela de Empresas"
     assert 'id="rotPerfilGrid"' in bloco and 'id="rotPerfilDosVideos"' in bloco and 'id="rotEmpresaTexto"' in bloco
     assert "function rotMontarPerfilForm(" in JS and "function rotLerPerfilForm(" in JS
     assert 'api("/api/roteiro/perfil-dos-videos"' in JS
@@ -297,7 +299,7 @@ def test_a_tela_esta_abaixo_de_presets_com_os_botoes_prontos():
     i = HTML.index('id="view-roteiro"')
     bloco = HTML[i:HTML.index('id="view-presets"', i)]
     for el in ("rotEstilo", "rotDuracao", "rotObjetivo", "rotTom", "rotNicho", "rotTexto",
-               "rotEnviar", "rotChats", "rotNovo", "rotEmpresaTexto", "rotEmpresaSalvar", "rotPensando"):
+               "rotEnviar", "rotChats", "rotNovo", "rotEmpresaAbrir", "rotPensando"):  # perfil: em Empresas (5.0.1)
         assert f'id="{el}"' in bloco, el
     assert bloco.count("data-ideia=") >= 6, "botoes prontos para preencher a ideia"
     assert "rot-dots" in bloco, "animacao enquanto a resposta chega"

@@ -18,6 +18,10 @@ USER_DIR = Path.home() / "ATIVAVID"
 BRANDS_DIR = USER_DIR / "brands"
 ACTIVE_PATH = BRANDS_DIR / "active.json"
 USER_PRESET = USER_DIR / "default-style.json"
+# Logo de cada empresa (5.0.1): brands/logos/<id>.<png|jpg|webp>
+LOGOS_DIR = BRANDS_DIR / "logos"
+LOGO_EXTS = (".png", ".jpg", ".jpeg", ".webp")
+LOGO_MAX_BYTES = 3 * 1024 * 1024
 
 EXPORT_PRESETS = {
     "reels": {
@@ -114,10 +118,16 @@ def list_brands() -> list[dict[str, Any]]:
         except (OSError, json.JSONDecodeError):
             continue
         bid = str(data.get("brandId") or p.stem)
+        logo = logo_path(bid)
         out.append({
             "id": bid,
             "name": data.get("brandName") or bid,
             "active": bid == active,
+            # 5.0.1: a tela de Empresas mostra logo e quantos presets cada uma tem
+            "logoUrl": (f"/api/brands/logo?id={bid}&v={int(logo.stat().st_mtime)}"
+                        if logo else ""),
+            "presetCount": _quantos_presets(bid),
+            "perfilOk": bool(_perfil_preenchido(data)),
             "endCardCopy": data.get("endCardCopy"),
             "accent": data.get("accent"),
             "exportPreset": data.get("exportPreset") or "reels",
@@ -136,6 +146,171 @@ def list_brands() -> list[dict[str, Any]]:
             "exportPreset": "reels",
         })
     return out
+
+
+def _quantos_presets(bid: str) -> int:
+    try:
+        from app.brand_presets import load as load_presets
+        return len(load_presets(bid).get("presets") or [])
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+def _perfil_preenchido(data: dict) -> bool:
+    p = data.get("perfil")
+    if isinstance(p, dict) and any(str(v or "").strip() for v in p.values()):
+        return True
+    return bool(str(data.get("empresa") or "").strip())
+
+
+def logo_path(brand_id: str) -> Path | None:
+    bid = _slug(brand_id)
+    for ext in LOGO_EXTS:
+        p = LOGOS_DIR / f"{bid}{ext}"
+        if p.is_file():
+            return p
+    return None
+
+
+def _cor_valida(v: object) -> str:
+    s = str(v or "").strip()
+    return s if re.fullmatch(r"#[0-9a-fA-F]{6}", s) else ""
+
+
+def _gravar(bid: str, data: dict) -> None:
+    (BRANDS_DIR / f"{bid}.json").write_text(
+        json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def _estilo_semente() -> dict[str, Any]:
+    """O estilo com que uma empresa NOVA nasce: o padrao empacotado.
+
+    Nao copia da marca ativa: o usuario cria "M Camp" para ser diferente da
+    "Prime Camp", e comecar do zero limpo e o que ele espera.
+    """
+    for path in (PKG_BRANDS / "padrao.json", PREVIEW / "default-style.json"):
+        try:
+            return json.loads(path.read_text(encoding="utf-8-sig"))
+        except (OSError, json.JSONDecodeError):
+            continue
+    return {"exportPreset": "reels", "endCardCopy": {"line1": "", "line2": ""}}
+
+
+def create_brand(name: str, accent: str = "") -> dict[str, Any]:
+    """Empresa nova (5.0.1). Nome obrigatorio; slug que nao atropela outra."""
+    ensure_brands_dir()
+    nome = " ".join(str(name or "").split())[:60]
+    if not nome:
+        raise ValueError("Dê um nome para a empresa")
+    base = _slug(nome)
+    bid = _slug_livre(base, nome)
+    if (BRANDS_DIR / f"{bid}.json").exists():
+        raise ValueError("Já existe uma empresa com este nome")
+    data = {k: v for k, v in _estilo_semente().items()
+            if k not in ("brandId", "brandName", "empresa", "perfil")}
+    data["brandId"] = bid
+    data["brandName"] = nome
+    data["exportPreset"] = data.get("exportPreset") or "reels"
+    cor = _cor_valida(accent)
+    if cor:
+        data["accent"] = cor
+    _gravar(bid, data)
+    return {"id": bid, "name": nome, "accent": data.get("accent")}
+
+
+def update_brand(brand_id: str, fields: dict[str, Any]) -> dict[str, Any]:
+    """Renomear / trocar a cor SEM tocar no resto do arquivo (5.0.1).
+
+    `save_brand` grava o corpo inteiro; por ele a tela teria de mandar o
+    estilo base, o cartao e o perfil de volta, e qualquer campo esquecido
+    sumiria (o mesmo motivo de `set_export_preset` existir).
+    """
+    ensure_brands_dir()
+    bid = _slug(brand_id)
+    path = BRANDS_DIR / f"{bid}.json"
+    if not path.exists():
+        raise ValueError("marca não encontrada")
+    data = json.loads(path.read_text(encoding="utf-8-sig"))
+    if "name" in fields or "brandName" in fields:
+        nome = " ".join(str(fields.get("name") or fields.get("brandName") or "").split())[:60]
+        if not nome:
+            raise ValueError("Dê um nome para a empresa")
+        data["brandName"] = nome
+    if "accent" in fields:
+        cor = _cor_valida(fields.get("accent"))
+        if cor:
+            data["accent"] = cor
+        else:
+            data.pop("accent", None)
+    data["brandId"] = bid
+    _gravar(bid, data)
+    if bid == get_active_id():
+        write_user_preset(data)
+    return {"id": bid, "name": data.get("brandName") or bid, "accent": data.get("accent")}
+
+
+def delete_brand(brand_id: str) -> dict[str, Any]:
+    """Apaga a empresa, o logo e os presets dela (5.0.1).
+
+    Os VIDEOS ficam: o card so deixa de ter empresa e passa a aparecer em
+    todos os workspaces. Os roteiros gravados tambem ficam no disco
+    (~/ATIVAVID/roteiros/<id>): texto que ele escreveu nao se apaga por
+    tabela. A ultima empresa nao pode ser apagada.
+    """
+    ensure_brands_dir()
+    bid = _slug(brand_id)
+    path = BRANDS_DIR / f"{bid}.json"
+    if not path.exists():
+        raise ValueError("marca não encontrada")
+    restantes = [p.stem for p in BRANDS_DIR.glob("*.json")
+                 if p.name != "active.json" and p.stem != bid]
+    if not restantes:
+        raise ValueError("Esta é a única empresa — crie outra antes de apagar")
+    path.unlink()
+    logo = logo_path(bid)
+    if logo:
+        logo.unlink(missing_ok=True)
+    try:
+        from app.brand_presets import _path as presets_path
+        presets_path(bid).unlink(missing_ok=True)
+    except Exception:  # noqa: BLE001
+        pass
+    nova_ativa = ""
+    if get_active_id() == bid:
+        nova_ativa = "padrao" if "padrao" in restantes else sorted(restantes)[0]
+        activate_brand(nova_ativa)
+    return {"ok": True, "removed": bid, "activeId": nova_ativa or get_active_id()}
+
+
+def set_logo(brand_id: str, data_url: str) -> dict[str, Any]:
+    """Logo da empresa a partir de um data: URL (a tela le o arquivo)."""
+    import base64
+
+    ensure_brands_dir()
+    bid = _slug(brand_id)
+    if not (BRANDS_DIR / f"{bid}.json").exists():
+        raise ValueError("marca não encontrada")
+    m = re.match(r"data:image/(png|jpeg|jpg|webp);base64,(.+)$", str(data_url or ""), re.S)
+    if not m:
+        raise ValueError("Use uma imagem PNG, JPG ou WebP")
+    ext = {"png": ".png", "jpeg": ".jpg", "jpg": ".jpg", "webp": ".webp"}[m.group(1)]
+    try:
+        raw = base64.b64decode(m.group(2), validate=False)
+    except Exception as e:  # noqa: BLE001
+        raise ValueError("Imagem inválida") from e
+    if not raw or len(raw) > LOGO_MAX_BYTES:
+        raise ValueError("A imagem precisa ter até 3 MB")
+    LOGOS_DIR.mkdir(parents=True, exist_ok=True)
+    remove_logo(bid)
+    (LOGOS_DIR / f"{bid}{ext}").write_bytes(raw)
+    return {"ok": True, "id": bid}
+
+
+def remove_logo(brand_id: str) -> dict[str, Any]:
+    bid = _slug(brand_id)
+    for ext in LOGO_EXTS:
+        (LOGOS_DIR / f"{bid}{ext}").unlink(missing_ok=True)
+    return {"ok": True, "id": bid}
 
 
 def get_active_id() -> str:

@@ -278,6 +278,7 @@ class DesktopHandler(ps.Handler):
             "/api/headline-anchors",
             "/api/library",
             "/api/library/file",
+            "/api/brands/logo",
             "/api/license",
             "/api/auth",
             "/api/admin/licenses",

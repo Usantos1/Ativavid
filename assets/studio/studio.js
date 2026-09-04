@@ -53,7 +53,7 @@ const VIEW_COPY = {
   projetos: ["Projetos", "Todo trabalho que ainda pode ser reaberto, revisado ou refeito."],
   estilo: ["Estilos", "Como os vídeos da sua marca normalmente devem parecer."],
   biblioteca: ["Biblioteca", "Arquivos reutilizáveis que a IA pode usar nos vídeos."],
-  presets: ["Presets", "Como seus vídeos são cortados, e a identidade que vale para todos."],
+  presets: ["Empresas", "Cada empresa tem identidade, perfil e presets de edição próprios. Clique numa para trabalhar nela."],
   roteiro: ["Roteiro", "A IA escreve o que gravar: ganchos que param o scroll, roteiro por blocos, CTA e legenda."],
   ia: ["IA", "A inteligência que corta, escreve e legenda — sessão do navegador e modelo."],
   integracoes: ["Integrações", "Serviços externos que o pipeline chama: transcrição, voz e b-roll."],
@@ -61,7 +61,7 @@ const VIEW_COPY = {
   sistema: ["Configurações", "Máquina, pastas, atualizações e diagnóstico."],
   // aliases antigos → redirecionados em setView (links salvos continuam abrindo)
   keys: ["IA", "Sessão do navegador e chaves de API."],
-  marca: ["Presets", "Como seus vídeos são cortados, e a identidade que vale para todos."],
+  marca: ["Empresas", "Cada empresa tem identidade, perfil e presets de edição próprios."],
   doutor: ["Configurações", "Desempenho e pastas."],
 };
 
@@ -347,7 +347,7 @@ function setView(name) {
   if (name === "biblioteca") loadLibraryUi().catch(() => {});
   if (name === "roteiro") loadRoteiroUi().catch((e) => toast(e.message));
   if (name === "presets") {
-    loadPresetsUi().catch(() => {});
+    loadEmpresaUi().catch(() => {});
     // A identidade e o formato moram aqui desde a 4.19 — quem preenche os
     // dois e `loadBrandsUi`, que antes so rodava ao abrir a tela de Marca.
     loadBrandsUi().catch(() => {});
@@ -4061,6 +4061,25 @@ function wireGaveta() {
   });
 }
 
+/* Trocar a empresa ativa: presets, estilos, roteiro e o filtro do
+ * workspace seguem juntos. Usado pelo menu do rodape e pelos cards da
+ * tela de Empresas. */
+async function ativarEmpresa(id) {
+  try {
+    if (!state.brandActive || state.brandActive.id !== id) {
+      await api("/api/brands", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "activate", id }) });
+    }
+    setWsMarca("ativa");
+    await loadBrandsUi();
+    loadImportPresets().catch(() => {});
+    if (state.view === "presets") loadEmpresaUi().catch(() => {});
+    toast(`Empresa ativa: ${nomeDaMarca(id)}`);
+  } catch (err) {
+    toast(err.message || "Não consegui trocar a empresa");
+  }
+}
+
 /* Lista de empresas no menu do workspace (5.0.0). */
 function renderWsMarcas() {
   const box = $("#wsMarcas");
@@ -4112,19 +4131,7 @@ function wireWorkspaceMenu() {
         toast("Mostrando todas as empresas");
         return;
       }
-      try {
-        // trocar a empresa = ativar a marca (presets, estilos e roteiro seguem)
-        if (!state.brandActive || state.brandActive.id !== id) {
-          await api("/api/brands", { method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "activate", id }) });
-        }
-        setWsMarca("ativa");
-        await loadBrandsUi();
-        loadImportPresets().catch(() => {});
-        toast(`Workspace: ${nomeDaMarca(id)}`);
-      } catch (err) {
-        toast(err.message || "Não consegui trocar a empresa");
-      }
+      await ativarEmpresa(id);
       return;
     }
     const item = e.target.closest("[data-ws]");
@@ -4139,6 +4146,7 @@ function wireWorkspaceMenu() {
       return;
     }
     if (acao === "licenca") return setView("licenca");
+    if (acao === "empresas") return setView("presets");
     if (acao === "updates") {
       try {
         const res = await api("/api/update/check");
@@ -5885,6 +5893,8 @@ async function loadBrandsUi() {
   renderWsMarcas();
   renderWorkspaceCard();
   renderJobs();
+  renderEmpresaCards();
+  preencherEmpresaForm(active);
   if ($("#exportPresetSelect") && active) {
     $("#exportPresetSelect").value = active.exportPreset || "reels";
   }
@@ -6490,6 +6500,189 @@ function libListaAudio(itens, aba, notas, ordem) {
  * Presets. O backend (/api/brand-presets) já fazia criar/renomear/duplicar/
  * apagar/definir padrão — só era alcançável pelo seletor da tela de importar.
  */
+/* ---- Tela de Empresas (5.0.1) ------------------------------------------
+ * Um card por empresa; clicar ativa. O resto da tela e SEMPRE da empresa
+ * ativa: identidade (nome, logo, cor, formato), perfil (o que a IA sabe)
+ * e os presets de edicao dela. */
+function renderEmpresaCards() {
+  const box = $("#empCards");
+  if (!box) return;
+  const brands = state.brands || [];
+  const ativa = state.brandActive && state.brandActive.id;
+  const cards = brands.map((b) => {
+    const on = b.id === ativa;
+    const n = state.jobs.filter((x) => x.brandId === b.id).length;
+    const logo = b.logoUrl
+      ? `<img class="emp-card-logo" src="${escapeHtml(b.logoUrl)}" alt="">`
+      : `<span class="emp-card-ini" style="--emp-tint:${escapeHtml(b.accent || "")}">${escapeHtml(initialsFromName(b.name || b.id))}</span>`;
+    return `<button type="button" class="emp-card${on ? " on" : ""}" data-emp="${escapeHtml(b.id)}" title="${on ? "Empresa ativa" : "Clique para trabalhar nesta empresa"}">
+      ${logo}
+      <span class="emp-card-nome">${escapeHtml(b.name || b.id)}</span>
+      <span class="emp-card-meta">${n} vídeo${n === 1 ? "" : "s"} · ${b.presetCount || 0} preset${b.presetCount === 1 ? "" : "s"}${b.perfilOk ? "" : " · sem perfil"}</span>
+      ${on ? `<span class="emp-card-tag">ativa</span>` : ""}
+    </button>`;
+  });
+  cards.push(`<button type="button" class="emp-card emp-card--nova" id="empNova">
+    <span class="emp-card-ini">+</span>
+    <span class="emp-card-nome">Nova empresa</span>
+    <span class="emp-card-meta">Identidade, perfil e presets próprios</span>
+  </button>`);
+  box.innerHTML = cards.join("");
+}
+
+function preencherEmpresaForm(b) {
+  const marca = b || {};
+  if ($("#empTitulo")) $("#empTitulo").textContent = marca.name || "Empresa";
+  if ($("#empNome")) $("#empNome").value = marca.name || "";
+  const cor = /^#[0-9a-f]{6}$/i.test(String(marca.accent || "")) ? marca.accent : "#e30004";
+  if ($("#empCor")) $("#empCor").value = cor;
+  if ($("#empCorVal")) $("#empCorVal").textContent = cor;
+  const img = $("#empLogoImg");
+  const txt = $("#empLogoTxt");
+  const tirar = $("#empLogoRemover");
+  const logo = marca.logoUrl || "";
+  if (img) { img.classList.toggle("hidden", !logo); if (logo) img.src = logo; }
+  if (txt) txt.classList.toggle("hidden", !!logo);
+  if (tirar) tirar.classList.toggle("hidden", !logo);
+  const del = $("#empApagar");
+  if (del) del.disabled = (state.brands || []).length <= 1;
+}
+
+async function loadEmpresaPerfil() {
+  const grid = $("#rotPerfilGrid");
+  if (!grid) return;
+  try {
+    const emp = await api("/api/roteiro/empresa");
+    rotMontarPerfilForm(emp);
+    if ($("#rotEmpresaTexto")) $("#rotEmpresaTexto").value = emp.empresa || "";
+    if (state.roteiro && state.roteiro.pack) state.roteiro.pack.empresa = emp;
+  } catch {
+    grid.innerHTML = `<p class="hint">Não consegui ler o perfil da empresa.</p>`;
+  }
+}
+
+async function loadEmpresaUi() {
+  await Promise.all([loadPresetsUi(), loadEmpresaPerfil()]);
+}
+
+async function empresaAction(body) {
+  return api("/api/brands", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body) });
+}
+
+function wireEmpresas() {
+  const cards = $("#empCards");
+  if (cards && !cards.dataset.wired) {
+    cards.dataset.wired = "1";
+    cards.addEventListener("click", async (e) => {
+      if (e.target.closest("#empNova")) {
+        const nome = await pedirTexto("Nome da empresa nova", "", "Criar");
+        if (!nome || !nome.trim()) return;
+        try {
+          const r = await empresaAction({ action: "create", name: nome.trim() });
+          setWsMarca("ativa");
+          await loadBrandsUi();
+          await loadEmpresaUi();
+          loadImportPresets().catch(() => {});
+          toast(`✓ ${r.brand.name} criada e ativa — preencha a identidade e o perfil`);
+          $("#empNome")?.focus();
+        } catch (err) {
+          toast(err.message || "Não consegui criar a empresa");
+        }
+        return;
+      }
+      const card = e.target.closest("[data-emp]");
+      if (!card) return;
+      if (state.brandActive && state.brandActive.id === card.dataset.emp) return;
+      await ativarEmpresa(card.dataset.emp);
+    });
+  }
+  const cor = $("#empCor");
+  if (cor && !cor.dataset.wired) {
+    cor.dataset.wired = "1";
+    cor.addEventListener("input", () => { if ($("#empCorVal")) $("#empCorVal").textContent = cor.value; });
+  }
+  const salvar = $("#empSalvar");
+  if (salvar && !salvar.dataset.wired) {
+    salvar.dataset.wired = "1";
+    salvar.onclick = async () => {
+      const id = state.brandActive && state.brandActive.id;
+      if (!id) return;
+      try {
+        await empresaAction({ action: "update", id, name: $("#empNome")?.value || "", accent: $("#empCor")?.value || "" });
+        await loadBrandsUi();
+        loadImportPresets().catch(() => {});
+        toast("✓ Identidade salva");
+      } catch (err) {
+        toast(err.message || "Não consegui salvar");
+      }
+    };
+  }
+  const apagar = $("#empApagar");
+  if (apagar && !apagar.dataset.wired) {
+    apagar.dataset.wired = "1";
+    apagar.onclick = async () => {
+      const b = state.brandActive;
+      if (!b) return;
+      const n = state.jobs.filter((x) => x.brandId === b.id).length;
+      const ok = await pedirConfirmacao(
+        `Apagar a empresa "${b.name}"?`,
+        `Somem a identidade, o perfil e os ${b.presetCount || 0} preset(s) dela. `
+          + `Os ${n} vídeo(s) continuam nos Projetos, como "sem empresa". Os roteiros ficam no disco.`,
+        "Apagar", true);
+      if (!ok) return;
+      try {
+        await empresaAction({ action: "delete", id: b.id });
+        await loadBrandsUi();
+        await loadEmpresaUi();
+        loadImportPresets().catch(() => {});
+        toast(`Empresa apagada — agora a ativa é ${nomeDaMarca(state.brandActive && state.brandActive.id)}`);
+      } catch (err) {
+        toast(err.message || "Não consegui apagar");
+      }
+    };
+  }
+  const logoBox = $("#empLogoBox");
+  const logoIn = $("#empLogoInput");
+  if (logoBox && logoIn && !logoBox.dataset.wired) {
+    logoBox.dataset.wired = "1";
+    logoBox.addEventListener("click", () => logoIn.click());
+    logoIn.addEventListener("change", () => {
+      const f = logoIn.files && logoIn.files[0];
+      logoIn.value = "";
+      const id = state.brandActive && state.brandActive.id;
+      if (!f || !id) return;
+      if (f.size > 3 * 1024 * 1024) { toast("A imagem precisa ter até 3 MB"); return; }
+      const rd = new FileReader();
+      rd.onload = async () => {
+        try {
+          await empresaAction({ action: "logo", id, dataUrl: String(rd.result || "") });
+          await loadBrandsUi();
+          toast("✓ Logo salvo");
+        } catch (err) {
+          toast(err.message || "Não consegui salvar o logo");
+        }
+      };
+      rd.readAsDataURL(f);
+    });
+  }
+  const tirar = $("#empLogoRemover");
+  if (tirar && !tirar.dataset.wired) {
+    tirar.dataset.wired = "1";
+    tirar.onclick = async () => {
+      const id = state.brandActive && state.brandActive.id;
+      if (!id) return;
+      try {
+        await empresaAction({ action: "logo_remove", id });
+        await loadBrandsUi();
+        toast("Logo removido");
+      } catch (err) {
+        toast(err.message || "Não consegui tirar o logo");
+      }
+    };
+  }
+}
+
 async function loadPresetsUi() {
   const lista = $("#presetList");
   if (!lista) return;
@@ -7139,6 +7332,7 @@ async function boot() {
   wireGaveta();
   wirePresets();
   wireIdentidade();
+  wireEmpresas();
   wireBiblioteca();
   wireTheme();
   await wireTitlebar();
@@ -7290,7 +7484,6 @@ async function loadRoteiroUi() {
   // deixa o aviso aceso ate preencher (o 1o teste real saiu com "o usuario
   // ainda nao descreveu a empresa" no prompt).
   rotMarcarFalta(pack.empresa || {});
-  if (rotPerfilVazio(pack.empresa || {}) && !state.roteiro.chats.length) $("#rotEmpresaBox")?.classList.remove("hidden");
   if (state.roteiro.chatId) await rotAbrir(state.roteiro.chatId);
   else rotRenderMsgs(null);
 }
@@ -7305,7 +7498,8 @@ function rotMarcarFalta(emp) {
   const link = $("#rotEmpresaAbrir");
   if (!link) return;
   link.classList.toggle("rot-falta", falta);
-  link.textContent = falta ? "Preencher o perfil da empresa (recomendado)" : "Perfil da empresa";
+  // 5.0.1: o perfil mora em Empresas; o link so leva ate la
+  link.textContent = falta ? "Preencher o perfil da empresa (recomendado)" : "Ver o perfil da empresa";
 }
 
 /* Perfil com campos (4.99): um textarea curto por campo, rotulo e exemplo
@@ -7527,17 +7721,18 @@ function wireRoteiro() {
     const r = e.target.closest("[data-refazer]");
     if (r) rotEnviar("Me dê outra versão, com ganchos diferentes e a mesma estrutura.");
   });
-  $("#rotEmpresaAbrir")?.addEventListener("click", () => $("#rotEmpresaBox")?.classList.toggle("hidden"));
-  $("#rotEmpresaFechar")?.addEventListener("click", () => $("#rotEmpresaBox")?.classList.add("hidden"));
+  $("#rotEmpresaAbrir")?.addEventListener("click", () => setView("presets"));
+  // 5.0.1: o formulario mora na tela de Empresas e grava na empresa ATIVA
   $("#rotEmpresaSalvar")?.addEventListener("click", async () => {
     try {
+      const bid = (state.brandActive && state.brandActive.id) || state.roteiro.brandId;
       const r = await api("/api/roteiro/empresa", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ brandId: state.roteiro.brandId, perfil: rotLerPerfilForm(),
+        body: JSON.stringify({ brandId: bid, perfil: rotLerPerfilForm(),
           texto: $("#rotEmpresaTexto")?.value || "" }) });
       toast(`✓ Perfil de ${r.nome} salvo — a IA passa a usar`);
-      $("#rotEmpresaBox")?.classList.add("hidden");
       if (state.roteiro.pack) state.roteiro.pack.empresa = r;
       rotMarcarFalta(r);
+      loadBrandsUi().catch(() => {});
     } catch (e) {
       toast(e.message || "Não salvei o perfil");
     }
@@ -7551,7 +7746,7 @@ function wireRoteiro() {
     if (st) { st.hidden = false; st.classList.remove("hidden"); st.textContent = "Lendo as falas dos seus últimos vídeos…"; }
     try {
       const r = await api("/api/roteiro/perfil-dos-videos", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ brandId: state.roteiro.brandId }) });
+        body: JSON.stringify({ brandId: (state.brandActive && state.brandActive.id) || state.roteiro.brandId }) });
       const atual = rotLerPerfilForm();
       document.querySelectorAll("#rotPerfilGrid [data-perfil]").forEach((ta) => {
         const k = ta.dataset.perfil;

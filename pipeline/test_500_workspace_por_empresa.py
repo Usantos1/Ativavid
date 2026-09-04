@@ -72,8 +72,10 @@ def test_o_menu_do_workspace_lista_as_empresas_e_troca_a_marca():
     assert 'item("__all__", "Todas as empresas"' in SJS
     k = SJS.index('const marca = e.target.closest("[data-ws-marca]");')
     bloco = SJS[k:k + 1400]
-    assert 'JSON.stringify({ action: "activate", id })' in bloco, "trocar empresa = ativar a marca"
-    assert "await loadBrandsUi();" in bloco
+    assert "await ativarEmpresa(id);" in bloco, "trocar empresa = ativar a marca"
+    f = SJS.index("async function ativarEmpresa(id)")
+    fn = SJS[f:SJS.index("function renderWsMarcas", f)]
+    assert 'JSON.stringify({ action: "activate", id })' in fn and "await loadBrandsUi();" in fn
     assert 'setWsMarca("all");' in bloco
     assert "if (abrir) renderWsMarcas();" in SJS, "contagens frescas ao abrir"
 

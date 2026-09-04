@@ -72,8 +72,9 @@ def test_a_tela_de_presets_diz_o_que_e_um_preset():
     texto NAO pode voltar a ensinar a separacao — ela nao existe mais.
     """
     i = HTML.index('id="view-presets"')
-    bloco = HTML[i:i + 2000]
-    assert "Cada preset é um jeito de cortar" in bloco
+    bloco = HTML[i:HTML.index('id="view-ia"', i)]   # 5.0.1: presets sao o 3o bloco da tela
+    assert "Jeitos de cortar desta empresa" in bloco
+    assert "Layout, legenda, manchete, ritmo e cores" in bloco
     assert "Criar preset novo" in bloco
     assert "<strong>Marca</strong> é quem" not in bloco
     assert "uma marca tem vários presets" not in bloco
@@ -102,7 +103,7 @@ def test_o_texto_diz_como_criar_outro():
     fusao de 4.19 ela virou paragrafo fixo, e o texto de baixo so conta.
     """
     i = HTML.index('id="view-presets"')
-    bloco = HTML[i:i + 2000]
+    bloco = HTML[i:HTML.index('id="view-ia"', i)]
     assert "Duplicar" in bloco
     assert "padrão</strong> é o que a importação usa" in bloco
 

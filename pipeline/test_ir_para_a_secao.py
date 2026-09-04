@@ -53,7 +53,8 @@ def test_cada_quadro_diz_para_onde_vai():
     grid = html[html.index('id="identGrid"'):]
     grid = grid[:grid.index("</div>")]
     tiles = re.findall(r'<button[^>]*class="ident-tile"[^>]*>', grid)
-    assert len(tiles) >= 3, tiles
+    # 5.0.1: cor e logo viraram campos da Identidade; sobram fontes e cartao
+    assert len(tiles) >= 2, tiles
     sem_destino = [t for t in tiles if 'data-view="estilo"' in t and "data-ident=" not in t]
     assert not sem_destino, ("quadro que abre o editor sem dizer onde parar", sem_destino)
 
@@ -138,12 +139,13 @@ def test_o_realce_existe_e_respeita_quem_pediu_menos_movimento():
 
 
 def test_o_texto_da_tela_nao_promete_o_que_o_logo_nao_faz():
-    """O quadro do Logo vai para a Biblioteca, não para o editor de estilo."""
+    """O logo nao abre o editor de estilo: desde a 5.0.1 ele e um campo da
+    propria Identidade (clicar no quadrado escolhe o arquivo)."""
     html = HUB_HTML.read_text(encoding="utf-8")
     grid = html[html.index('id="identGrid"'):]
     grid = grid[:grid.index("</div>")]
-    logo = [t for t in re.findall(r"<button[^>]*>", grid) if "biblioteca" in t]
-    assert logo, "o quadro do Logo deixou de apontar para a Biblioteca"
-    hint = html[html.index("Identidade visual"):html.index('id="identGrid"')]
-    assert "Estes itens vivem no editor de estilo da marca" not in hint, (
+    assert "Logo" not in grid, "o logo voltou a ser um quadro que abre o editor"
+    bloco = html[html.index('id="view-presets"'):html.index('id="identGrid"')]
+    assert 'id="empLogoInput"' in bloco and 'id="empLogoBox"' in bloco
+    assert "Estes itens vivem no editor de estilo da marca" not in bloco, (
         "o texto voltou a dizer que TODOS abrem no editor de estilo")

@@ -2260,6 +2260,16 @@ class StudioHandler(BaseHTTPRequestHandler):
             from app.broll_library import list_assets
             self._json(list_assets(self.projects_root))
             return
+        if path == "/api/brands/logo":
+            from app.brand_kits import logo_path
+            qs = parse_qs(urlparse(self.path).query)
+            alvo = logo_path((qs.get("id") or [""])[0])
+            if not alvo:
+                self._json({"error": "sem logo"}, 404)
+                return
+            self._file(alvo)
+            return
+
         if path == "/api/library/file":
             from app.broll_library import library_root
             from urllib.parse import unquote
@@ -3080,7 +3090,8 @@ class StudioHandler(BaseHTTPRequestHandler):
 
         if path == "/api/brands":
             from app.brand_kits import (
-                activate_brand, save_brand, set_export_preset,
+                activate_brand, create_brand, delete_brand, remove_logo,
+                save_brand, set_export_preset, set_logo, update_brand,
             )
             body = self._read_json() or {}
             action = (body.get("action") or "save").strip().lower()
@@ -3090,6 +3101,22 @@ class StudioHandler(BaseHTTPRequestHandler):
                         str(body.get("exportPreset") or "")))
                 elif action == "activate":
                     self._json(activate_brand(str(body.get("id") or "")))
+                # 5.0.1: a tela de Empresas cria, edita e apaga por aqui
+                elif action == "create":
+                    criada = create_brand(str(body.get("name") or ""),
+                                          str(body.get("accent") or ""))
+                    activate_brand(criada["id"])
+                    self._json({"ok": True, "brand": criada})
+                elif action == "update":
+                    self._json({"ok": True, "brand": update_brand(
+                        str(body.get("id") or ""), body)})
+                elif action == "delete":
+                    self._json(delete_brand(str(body.get("id") or "")))
+                elif action == "logo":
+                    self._json(set_logo(str(body.get("id") or ""),
+                                        str(body.get("dataUrl") or "")))
+                elif action == "logo_remove":
+                    self._json(remove_logo(str(body.get("id") or "")))
                 else:
                     saved = save_brand(body)
                     if body.get("activate"):
