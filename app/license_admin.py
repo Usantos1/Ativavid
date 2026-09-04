@@ -239,6 +239,51 @@ def resolver_device_id(device_id: str) -> dict[str, Any]:
         + ", ".join(iguais) + ". Use o ID completo.")}
 
 
+def _plano_da_maquina(m: dict[str, Any], dono: dict[str, Any]) -> dict[str, Any]:
+    """O STATUS de uma maquina, na ordem em que o admin quer saber.
+
+    A coluna antiga respondia so "quanto trial sobra", e para quem ja tinha
+    pago um ano dizia "acabou" — o trial tinha acabado mesmo, mas era a
+    pergunta errada. Aqui: bloqueado > licenca (com o plano deduzido da
+    validade, porque a tabela nao guarda "mensal"/"anual") > trial em curso
+    > trial acabado > nada.
+    """
+    from datetime import datetime, timezone
+
+    def _dt(s: Any):
+        try:
+            return datetime.fromisoformat(str(s).replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            return None
+
+    if m.get("bloqueado"):
+        return {"tipo": "bloqueado", "rotulo": "bloqueado", "ate": None}
+    ate = _dt(dono.get("validoAte"))
+    inicio = _dt(dono.get("liberadoEm"))
+    if ate is not None:
+        agora = datetime.now(timezone.utc)
+        if ate < agora:
+            return {"tipo": "vencido", "rotulo": "vencido",
+                    "ate": ate.date().isoformat()}
+        dias = (ate - inicio).days if inicio else None
+        if dias is not None and dias >= 300:
+            nome = "anual"
+        elif dias is not None and 25 <= dias <= 40:
+            nome = "mensal"
+        elif dias is not None:
+            nome = f"{dias} dias"
+        else:
+            nome = "licenciado"
+        return {"tipo": "licenca", "rotulo": nome, "ate": ate.date().isoformat()}
+    td = m.get("trialDias")
+    if td is not None and td > 0:
+        return {"tipo": "trial", "rotulo": f"trial · {td} dia{'s' if td != 1 else ''}",
+                "ate": None}
+    if td is not None:
+        return {"tipo": "trial_fim", "rotulo": "trial acabou", "ate": None}
+    return {"tipo": "nada", "rotulo": "—", "ate": None}
+
+
 def _donos_por_device() -> dict[str, dict[str, Any]]:
     """Quem e o dono de cada PC, pelo que o SERVIDOR sabe.
 
@@ -248,8 +293,13 @@ def _donos_por_device() -> dict[str, dict[str, Any]]:
     preenchido saia como "Dono —", e a tela de maquinas so sabia o que o
     log de aberturas contava — que nem e-mail carrega.
     """
+    # `valid_until`/`created_at` da conta e da licenca vem junto: e deles
+    # que sai o STATUS da maquina (trial, mensal, anual, vencido). A coluna
+    # antiga so sabia falar de trial — e dizia "acabou" para quem pagou um
+    # ano (print de 04/09).
     base = ("devices?select=device_id,host,os_user,account_access_id,license_id,"
-            "licenses(email),account_access(email)")
+            "licenses(email,valid_until,created_at),"
+            "account_access(email,valid_until,created_at,notes)")
     # `devices.email` (quem estava logado na ultima abertura) so existe com
     # o SQL da 4.93; sem a coluna o PostgREST responde 400 e a lista sai
     # sem esse terceiro palpite.
@@ -272,6 +322,9 @@ def _donos_por_device() -> dict[str, dict[str, Any]]:
         email_conta = str((conta or {}).get("email") or "")
         email_lic = str((lic or {}).get("email") or "")
         email_abriu = str(r.get("email") or "")
+        # A liberacao que VALE para esta maquina: a conta vinculada primeiro,
+        # senao a licenca por chave. As duas trazem validade e inicio.
+        vinculo = (conta or {}) if (conta or {}).get("valid_until") else (lic or {})
         donos[did] = {
             "email": email_conta or email_lic or email_abriu,
             "abriuComEmail": email_abriu,
@@ -280,6 +333,9 @@ def _donos_por_device() -> dict[str, dict[str, Any]]:
             "host": r.get("host"),
             "usuario": r.get("os_user"),
             "accountAccessId": r.get("account_access_id"),
+            "validoAte": str(vinculo.get("valid_until") or "") or None,
+            "liberadoEm": str(vinculo.get("created_at") or "") or None,
+            "nota": str((conta or {}).get("notes") or "") or None,
         }
     return donos
 
@@ -450,6 +506,9 @@ def list_aberturas(limit: int = 300) -> dict[str, Any]:
         m["temLicenca"] = bool(d.get("license_id"))
         m["trialInicio"] = inicio_trial.get(did) or None
         m["trialDias"] = _dias_de_trial(m["trialInicio"])
+        dono0 = donos.get(did) or {}
+        m["validoAte"] = dono0.get("validoAte")
+        m["plano"] = _plano_da_maquina(m, dono0)
         # O dono pelo SERVIDOR (conta vinculada ou e-mail da liberacao) e o
         # que responde "de quem e esse PC?" mesmo sem nenhuma abertura no
         # log — o caso do `win-8372a270…` em 03/09.

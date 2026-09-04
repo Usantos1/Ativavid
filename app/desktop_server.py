@@ -662,6 +662,19 @@ def build_server(projects_root: Path, port: int) -> tuple[ThreadingHTTPServer, s
 
     srv = QuietThreadingHTTPServer(("127.0.0.1", port), DesktopHandler)
     url = f"http://127.0.0.1:{port}/"
+    # O registro de abertura mora AQUI, e nao no main(): o app instalado
+    # entra por app/launcher.py, que chama build_server() direto e nunca
+    # passa pelo main(). Resultado, medido em 04/09 no painel de Licenca:
+    # nenhum cliente tinha UMA abertura registrada, versao "—" em todos, e
+    # as "30 aberturas" da maquina do dono vinham de outra entrada que passa
+    # pelo main() (servidores de laboratorio/dev) — nao do app dele. O recurso da 4.27 nunca
+    # chegou a funcionar no app de verdade.
+    try:
+        from app.registro_de_uso import registrar_abertura
+
+        registrar_abertura()
+    except Exception:  # noqa: BLE001 — registro de uso nao segura o boot
+        pass
     return srv, url
 
 
@@ -677,16 +690,8 @@ def main() -> None:
     ap.add_argument("--port", type=int, default=4850)
     args = ap.parse_args()
 
-    # Uma linha por abertura, em ~/ATIVAVID/aberturas.jsonl, e um aviso ao
-    # servidor quando ele souber receber. Em segundo plano: registro de uso
-    # nao vale um app que demora a abrir.
-    try:
-        from app.registro_de_uso import registrar_abertura
-
-        registrar_abertura()
-    except Exception:  # noqa: BLE001
-        pass
-
+    # O registro de abertura fica dentro de build_server(): e por la que o
+    # app instalado (launcher) tambem passa.
     srv, url = build_server(args.projects_root, args.port)
     print(f"ATIVAVID Desktop -> {url}", flush=True)
     print(f"Projetos: {args.projects_root.resolve()}", flush=True)

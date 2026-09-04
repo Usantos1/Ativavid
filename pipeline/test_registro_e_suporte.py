@@ -76,12 +76,24 @@ def test_o_aviso_nao_sai_sem_supabase_configurado(monkeypatch):
 
 
 def test_o_app_registra_ao_abrir():
+    """5.0.32: o registro mora em `build_server()`, nao no `main()`.
+
+    Esta guarda exigia a chamada no `main()` — e o `main()` e justamente o
+    que o app INSTALADO nunca roda: ele entra por `app/launcher.py`, que
+    chama `build_server()` direto. Cinco semanas com a guarda verde e nenhum
+    cliente registrado (painel de Licenca, 04/09). A guarda passava porque
+    media o lugar errado.
+    """
     src = (REPO / "app" / "desktop_server.py").read_text(encoding="utf-8")
-    i = src.index("def main() -> None:")
-    bloco = src[i:i + 1200]
-    assert "registrar_abertura()" in bloco
-    # antes de servir, e em segundo plano
-    assert bloco.index("registrar_abertura()") < bloco.index("serve_forever")
+    i = src.index("def build_server(")
+    fim = src.index("\ndef main(", i)
+    bloco = src[i:fim]
+    assert "registrar_abertura()" in bloco, "saiu do caminho que o launcher usa"
+    # antes de devolver o servidor (e portanto antes de qualquer serve_forever)
+    assert bloco.index("registrar_abertura()") < bloco.rindex("return srv, url")
+    launcher = (REPO / "app" / "launcher.py").read_text(encoding="utf-8")
+    assert "ds.build_server(" in launcher, "o launcher deixou de passar pelo build_server"
+    # e em segundo plano
     assert "threading.Thread" in (REPO / "app" / "registro_de_uso.py").read_text(
         encoding="utf-8")
 

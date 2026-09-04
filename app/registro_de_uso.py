@@ -139,8 +139,11 @@ def _avisar_servidor(linha: dict[str, Any]) -> None:
         email = str(linha.get("email") or "").strip().lower()
         if email:
             code, _ = lic._http_rpc(dict(payload, p_email=email), fn="ativavid_open")
-            if code != 404:
+            if 200 <= code < 300:
                 return
+            # Qualquer outra resposta cai no jeito antigo: so o 404 (RPC sem
+            # `p_email`) era tratado, e um JWT vencido (401) numa maquina
+            # bloqueada perdia a abertura em silencio.
         lic._http_rpc(payload, fn="ativavid_open")
     except Exception:  # noqa: BLE001 — nunca atrapalha a abertura
         pass

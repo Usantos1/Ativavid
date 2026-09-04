@@ -99,9 +99,18 @@ def test_maquina_licenciada_nao_mostra_trial(monkeypatch):
 
 
 def test_a_tela_mostra_as_duas_datas():
+    """5.0.32: a coluna "Trial" virou "Status".
+
+    A antiga so sabia falar de trial e dizia "acabou" para quem pagou um
+    ano (print de 04/09). O plano agora vem decidido do servidor em
+    `m.plano`; o inicio do trial continua na tela, mas so nas linhas em
+    trial. A 1a abertura continua ao lado, para ler "instalado ha dias e
+    ainda em trial".
+    """
     i = JS.index("async function loadAberturas()")
     bloco = JS[i:JS.index("\nfunction wireAberturas", i)]
-    for coluna in ("1ª abertura", "Trial"):
-        assert f"<th>{coluna}</th>" in bloco or coluna in bloco, coluna
-    assert "m.trialDias" in bloco and "m.trialInicio" in bloco
+    for coluna in ("1ª abertura", "Status"):
+        assert coluna in bloco, coluna
+    assert "Trial</th>" not in bloco, "a coluna antiga voltou"
+    assert "m.plano" in bloco and "m.trialInicio" in bloco
     assert "quando(m.primeira)" in bloco

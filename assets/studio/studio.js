@@ -1834,11 +1834,19 @@ async function loadAberturas() {
   // O trial comeca no PRIMEIRO CONTATO com o servidor, nao na instalacao.
   // Ver "1a abertura" e "Trial" lado a lado e o que responde "esse PC esta
   // instalado ha dias e ainda mostra 4 dias".
-  const trial = (m) => {
-    if (m.trialDias == null) return m.temLicenca ? "licenciado" : "—";
-    if (m.trialDias <= 0) return `<span class="lic-tag-bloq">acabou</span>`;
-    return `${m.trialDias} dia${m.trialDias === 1 ? "" : "s"}`
+  // STATUS, nao "quanto trial sobra": quem pagou um ano via "acabou" na
+  // coluna de trial (print de 04/09). O servidor ja decide o plano.
+  const status = (m) => {
+    const p = m.plano || {};
+    if (p.tipo === "bloqueado") return `<span class="lic-tag-bloq">bloqueado</span>`;
+    if (p.tipo === "vencido") return `<span class="lic-tag-bloq">vencido</span>`
+      + `<span class="cel-sub">em ${dia(p.ate)}</span>`;
+    if (p.tipo === "licenca") return `<span class="lic-tag-ok">${escapeHtml(p.rotulo)}</span>`
+      + `<span class="cel-sub">até ${dia(p.ate)}</span>`;
+    if (p.tipo === "trial") return `${escapeHtml(p.rotulo)}`
       + `<span class="cel-sub">desde ${dia(m.trialInicio)}</span>`;
+    if (p.tipo === "trial_fim") return `<span class="lic-tag-bloq">trial acabou</span>`;
+    return "—";
   };
   if (!visiveis.length) {
     tabela.innerHTML = `<p class="hint" style="padding:14px">Nenhum computador `
@@ -1848,7 +1856,7 @@ async function loadAberturas() {
   tabela.innerHTML = `<table class="admin-tbl"><thead><tr>
       <th class="col-maq">Máquina</th><th class="col-quem">Quem</th>
       <th class="col-n">Aberturas</th><th class="col-data">1ª abertura</th>
-      <th class="col-data">Última</th><th class="col-trial">Trial</th>
+      <th class="col-data">Última</th><th class="col-trial">Status</th>
       <th class="col-ver">Versão</th><th class="col-acao"></th>
     </tr></thead><tbody>${visiveis.map((m) => {
       // O e-mail (conta vinculada, liberacao ou login na abertura) e o que
@@ -1871,7 +1879,7 @@ async function loadAberturas() {
         <td class="col-n">${m.aberturas || 0}</td>
         <td class="col-data">${quando(m.primeira)}</td>
         <td class="col-data">${quando(m.ultima)}</td>
-        <td class="col-trial">${trial(m)}</td>
+        <td class="col-trial">${status(m)}</td>
         <td class="col-ver">${escapeHtml(m.versao || "—")}</td>
         <td class="col-acao"><button type="button" class="${classe}" data-bloq="${acao}"
              data-dev="${id}">${rotulo}</button></td>

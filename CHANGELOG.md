@@ -1,5 +1,21 @@
 # Changelog
 
+## 5.0.32
+
+- **O registro de aberturas nunca funcionou no app instalado.** No painel de
+  Licença todos os clientes apareciam com 0 aberturas e versão "—". O único
+  lugar que registrava a abertura era um caminho que o app instalado não
+  usa; as 30 aberturas da máquina do dono vinham de outra entrada. Agora o
+  registro acontece na subida do servidor, por onde toda entrada passa —
+  o painel passa a mostrar a versão real de cada cliente a partir da
+  próxima abertura.
+- **Coluna "Status" no lugar de "Trial".** A antiga só sabia falar de trial
+  e dizia "acabou" para quem pagou um ano. Agora mostra bloqueado, vencido,
+  anual, mensal (deduzido da validade, com a data), trial em curso ou trial
+  acabado — nessa ordem.
+- O aviso de abertura ao servidor não desiste mais no primeiro erro: um
+  login vencido numa máquina bloqueada perdia a abertura em silêncio.
+
 ## 5.0.31
 
 - **O painel de administrador de licenças abria na máquina de um cliente.**
