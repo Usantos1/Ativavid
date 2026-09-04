@@ -337,11 +337,22 @@ def _detect_machine_inner(
         encoders = _ffmpeg_encoders() if ff_ok else set()
         gpus = _gpu_windows()
 
-    nvidia = any("nvidia" in (g.get("name") or "").lower() for g in gpus) or ("h264_nvenc" in encoders)
-    qsv = "h264_qsv" in encoders or any("intel" in (g.get("name") or "").lower() for g in gpus)
-    amf = "h264_amf" in encoders or any(
-        x in (g.get("name") or "").lower() for g in gpus for x in ("amd", "radeon")
-    )
+    # QUEM MANDA E A PLACA, nao a lista do ffmpeg. `ffmpeg -encoders` diz o
+    # que foi COMPILADO, e a build que o app usa traz nvenc, qsv E amf em
+    # qualquer maquina (medido em 04/09). Com `or "h264_nvenc" in encoders`
+    # o Diagnostico de uma maquina so com Intel UHD anunciava "Aceleracao de
+    # video: h264_nvenc - Modo gpu" enquanto o perfil, no mesmo painel, dizia
+    # `encoder=libx264`. Os dois cartoes se contradizendo na mesma tela foi o
+    # que fez o usuario perguntar.
+    #
+    # A lista de encoders so decide quando NAO HA lista de placas (a consulta
+    # ao Windows falhou): ai o palpite antigo e melhor que nada.
+    nomes = " ".join((g.get("name") or "") for g in gpus).lower()
+    sem_placas = not gpus
+    nvidia = ("nvidia" in nomes) or (sem_placas and "h264_nvenc" in encoders)
+    qsv = ("intel" in nomes) or (sem_placas and "h264_qsv" in encoders)
+    amf = (("amd" in nomes or "radeon" in nomes)
+           or (sem_placas and "h264_amf" in encoders))
 
     prefer = "libx264"
     if nvidia and "h264_nvenc" in encoders:

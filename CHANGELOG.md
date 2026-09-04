@@ -1,5 +1,15 @@
 # Changelog
 
+## 5.0.28
+
+- **O Diagnóstico anunciava uma aceleração de vídeo que a máquina não tem.**
+  Num PC só com Intel UHD ele dizia "Aceleração de vídeo: h264_nvenc · Modo
+  gpu" e, dois cartões adiante, "encoder=libx264" — os dois na mesma tela.
+  A causa: `ffmpeg -encoders` lista o que foi compilado, não o que a placa
+  aceita, e a build do app traz nvenc, qsv e amf em qualquer computador.
+  Agora quem decide é a placa instalada; a lista do ffmpeg só volta a valer
+  quando o Windows não responde qual é a placa.
+
 ## 5.0.27
 
 - **O cliente via — e podia trocar — o backend do aplicativo.** Em
