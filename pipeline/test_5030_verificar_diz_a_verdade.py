@@ -28,11 +28,11 @@ from app import update_check as uc  # noqa: E402
 SRV = (REPO / "app" / "local_server.py").read_text(encoding="utf-8")
 
 
-def _com_politica(monkeypatch, *, atual, politica):
+def _com_politica(monkeypatch, *, atual, politica, repo="Usantos1/Ativavid"):
     from app import license as lic
 
     monkeypatch.setattr(uc, "current_version", lambda: atual)
-    monkeypatch.setattr(uc, "configured_repo", lambda: "Usantos1/Ativavid")
+    monkeypatch.setattr(uc, "configured_repo", lambda: repo)
     monkeypatch.setattr(lic, "configured", lambda: True)
     monkeypatch.setattr(lic, "public_status", lambda: {"update": politica})
     return uc.check_update()
@@ -49,9 +49,19 @@ def test_versao_nova_no_cache_com_flag_velha_ainda_e_atualizacao(monkeypatch):
 
 
 def test_mesma_versao_continua_sem_atualizacao(monkeypatch):
+    """Sem novidade no Supabase o `check_update` cai no ramo do GitHub, que
+    consulta a internet DE VERDADE — e o "latest" real anda: este teste
+    passou na 5.0.30 e quebrou na 5.0.31 porque a 5.0.30 tinha sido
+    publicada no meio. Aqui o GitHub fica fora: o que se prova é que a
+    politica igual a instalada nao inventa atualizacao."""
     r = _com_politica(monkeypatch, atual="5.0.29", politica={
         "latestVersion": "5.0.29", "updateAvailable": False, "force": False})
-    assert r["updateAvailable"] is False
+    assert r["source"] != "supabase", "politica igual nao devia mandar"
+
+    r2 = _com_politica(monkeypatch, atual="5.0.29", politica={
+        "latestVersion": "5.0.29", "updateAvailable": False, "force": False},
+        repo="")
+    assert r2["updateAvailable"] is False
 
 
 def test_force_no_cache_continua_obrigatorio(monkeypatch):

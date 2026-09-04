@@ -1,5 +1,16 @@
 # Changelog
 
+## 5.0.31
+
+- **O painel de administrador de licenças abria na máquina de um cliente.**
+  "Editar acesso" — criar conta, liberar dias, revogar — apareceu num PC de
+  cliente, com o servidor recusando cada ação. O app gravava "é admin" em
+  disco no login e nunca reconferia; um flag antigo ou um login de admin
+  feito ali para configurar durava para sempre. Agora, quando o disco diz
+  admin, o app confirma com o servidor ao abrir e rebaixa se a resposta for
+  não. E qualquer "forbidden" do servidor fecha o painel na hora, em vez de
+  deixá-lo aberto por cima do aviso.
+
 ## 5.0.30
 
 - **"Verificar" dizia "sem atualização" com a versão nova já publicada.** O

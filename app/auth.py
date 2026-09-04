@@ -426,14 +426,50 @@ def ensure_session() -> dict[str, Any]:
     if exp and exp < now - _STALE_GRACE_S and not blob.get("refresh_token"):
         clear_session()
         return {"ok": True, "loggedIn": False, "isAdmin": False, "email": None}
+    is_admin = bool(blob.get("is_admin"))
+    if is_admin:
+        # "Admin" gravado em disco nao vale sozinho. O flag e escrito no
+        # login e ficava ali para sempre — inclusive quando veio de uma
+        # versao antiga que promovia quem nao era, ou de um login de admin
+        # feito na maquina do cliente para configurar. Print de 04/09: a
+        # tela "Editar acesso" (criar conta, liberar dias, revogar) aberta
+        # num PC de cliente, com o servidor respondendo "forbidden". O
+        # servidor estava certo; a tela acreditava no disco.
+        #
+        # Reconfere no RPC. So REBAIXA com resposta definitiva — sem rede
+        # o cache fica, e a rota de admin continua recusando de qualquer
+        # jeito.
+        is_admin = _reconferir_admin(blob)
     return {
         "ok": True,
         "loggedIn": True,
-        "isAdmin": bool(blob.get("is_admin")),
+        "isAdmin": is_admin,
         "email": blob.get("email"),
         "expiresAt": exp or None,
         "remember": True,
     }
+
+
+def _reconferir_admin(blob: dict[str, Any]) -> bool:
+    """True so se o servidor confirmar AGORA. Falha de rede mantem o cache."""
+    try:
+        adm = check_admin(force=True)
+    except Exception:  # noqa: BLE001
+        return True
+    if not adm.get("loggedIn"):
+        return True
+    definitivo = bool(adm.get("admin")) or adm.get("rpcStatus") in (401, 403) \
+        or (adm.get("rpcStatus") is None and adm.get("ok"))
+    if not definitivo:
+        return True
+    if not adm.get("admin"):
+        with _REFRESH_LOCK:
+            b = _load()
+            if b.get("access_token"):
+                b["is_admin"] = False
+                _save(b)
+        return False
+    return True
 
 
 def check_admin(*, force: bool = False) -> dict[str, Any]:

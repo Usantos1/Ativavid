@@ -246,6 +246,19 @@ async function api(path, opts) {
     else openLicenseDialog(data.license);
     throw new Error(mensagemDeBloqueio(data));
   }
+  if (res.status === 403 && data.error === "forbidden") {
+    // O servidor disse que esta sessao NAO e admin. Ate a 5.0.31 a tela
+    // guardava o `isAdmin` de quando abriu e deixava o painel de contas
+    // (criar, liberar dias, revogar) aberto por cima do "forbidden" — print
+    // de um PC de cliente em 04/09. Rebaixa aqui, no unico lugar por onde
+    // toda resposta passa, e o painel some.
+    if (state.auth && state.auth.isAdmin) {
+      state.auth = { ...state.auth, isAdmin: false };
+      try { syncLicenseChrome(); } catch { /* a tela pode nem estar montada */ }
+      try { applyAccountChrome(state.auth); } catch { /* idem */ }
+    }
+    throw new Error(data.message || "Login de admin necessário.");
+  }
   if (!res.ok) throw new Error(data.error || res.statusText);
   return data;
 }
