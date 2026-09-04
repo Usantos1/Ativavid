@@ -54,6 +54,17 @@ def dados_da_maquina() -> dict[str, Any]:
         chave = str(st.get("licenseKeyHint") or "")
     except Exception:  # noqa: BLE001
         modo, email, chave = "", "", ""
+    if not email:
+        # 5.0.15: `accountEmail` so vem para quem esta liberado POR CONTA.
+        # Quem entrou e esta em trial, bloqueado ou com chave abria o app
+        # todo dia com email vazio (o proprio dono aparecia como "—" nas
+        # aberturas de 04/09). O e-mail logado vale para o registro.
+        try:
+            from app import auth as au
+
+            email = str(au._load().get("email") or "").strip().lower()
+        except Exception:  # noqa: BLE001
+            email = ""
     try:
         maquina = socket.gethostname()
     except OSError:

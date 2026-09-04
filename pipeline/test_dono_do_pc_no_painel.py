@@ -313,3 +313,22 @@ def test_o_dialogo_avisa_que_o_codigo_curto_serve():
     i = HTML.index('id="adminDeviceForm"')
     bloco = HTML[i:i + 1500]
     assert "código curto" in bloco and "8372A270" in bloco
+
+
+
+def test_a_abertura_leva_o_email_logado_mesmo_sem_licenca_por_conta(monkeypatch):
+    """5.0.15: trial/bloqueado/chave abriam com e-mail vazio; o logado vale."""
+    from app import registro_de_uso as ru
+    from app import license as lic
+    from app import auth as au
+    monkeypatch.setattr(lic, "entitlement", lambda refresh=False: {"mode": "trial", "entitled": True})
+    monkeypatch.setattr(lic, "device_id", lambda: "win-teste")
+    monkeypatch.setattr(lic, "_app_version", lambda: "5.0.15")
+    monkeypatch.setattr(au, "_load", lambda: {"email": "Vitor@PrimeCamp.com", "access_token": "x"})
+    d = ru.dados_da_maquina()
+    assert d["email"] == "vitor@primecamp.com"
+    monkeypatch.setattr(lic, "entitlement", lambda refresh=False: {"mode": "account", "entitled": True, "accountEmail": "dono@x.com"})
+    assert ru.dados_da_maquina()["email"] == "dono@x.com", "a conta liberada continua mandando"
+    monkeypatch.setattr(au, "_load", lambda: {})
+    monkeypatch.setattr(lic, "entitlement", lambda refresh=False: {"mode": "blocked"})
+    assert ru.dados_da_maquina()["email"] == ""

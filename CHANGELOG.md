@@ -1,5 +1,13 @@
 # Changelog
 
+## 5.0.15
+
+- **Painel do admin: o e-mail de quem abriu o app.** O registro de abertura
+  só levava o e-mail de quem já estava liberado por conta. Quem entrou e
+  está em teste, bloqueado ou com chave aparecia como "—". Agora o e-mail
+  logado vai junto em toda abertura, e o PC ganha dono no painel na
+  primeira vez que a pessoa abre o app depois de criar a conta.
+
 ## 5.0.14
 
 - **Renomear a empresa renomeia a pasta de Entregas.** Antes a pasta velha
