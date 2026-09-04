@@ -2692,8 +2692,14 @@ body.house-style .help-fab {
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  width: min(1180px, calc(100vw - 40px));
-  padding: 14px 16px 16px;
+  /* 5.0.16: "essa janela pode ser literalmente maior" — ocupa a tela
+     quase toda; a grade de resultados cresce com ela (flex) em vez de
+     parar em 64vh. */
+  width: min(1760px, calc(100vw - 32px));
+  height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+  padding: 16px 20px 18px;
   background: var(--overlay-bg);
   backdrop-filter: blur(14px);
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.6);
@@ -2727,20 +2733,26 @@ body.house-style .help-fab {
   flex: 1 1 auto;
   min-width: 0;
   font-family: inherit;
-  font-size: 13px;
+  font-size: 16px;
   color: var(--text);
   background: var(--well-bg);
   border: 1px solid var(--stroke);
-  border-radius: 10px;
-  padding: 9px 12px;
+  border-radius: 12px;
+  padding: 13px 16px;
   outline: none;
 }
+.img-modal .img-search-row .btn { font-size: 14px; padding: 11px 18px; }
+.img-modal .img-tab, .img-modal .img-fonte, .img-modal .img-subtab { font-size: 13px; padding: 8px 14px; }
+.img-modal .help-title { font-size: 17px; }
+.img-modal .img-hint { margin-top: 10px; font-size: 13px; }
 #imgQuery:focus { border-color: rgba(255, 119, 19, 0.5); }
 .img-results {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 10px;
-  max-height: 64vh;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  align-content: start;
+  gap: 12px;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   scrollbar-width: thin;
 }

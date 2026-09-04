@@ -72,8 +72,11 @@ def test_marca_e_preset_a_vista_no_importar():
 
 # ------------------------------------------------------ midia no editor
 def test_modal_maior_com_abas_da_biblioteca():
-    assert "width: min(1180px, calc(100vw - 40px));" in PCSS
-    assert "max-height: 64vh;" in PCSS
+    # 5.0.16: a janela ocupa a tela ("pode ser literalmente maior")
+    assert "width: min(1760px, calc(100vw - 32px));" in PCSS
+    assert "height: calc(100vh - 32px);" in PCSS
+    i = PCSS.index(".img-results {")
+    assert "flex: 1 1 auto;" in PCSS[i:i + 400] and "max-height: 64vh" not in PCSS[i:i + 400]
     for k in ("image", "clip", "sfx", "track"):
         assert f'data-libkind="{k}"' in PHTML, k
     assert "function kindDoItem(" in PJS and "function setLibKind(" in PJS

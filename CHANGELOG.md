@@ -1,5 +1,12 @@
 # Changelog
 
+## 5.0.16
+
+- **Janela de "Inserir imagem / B-roll" em tela cheia.** Buscar online,
+  Biblioteca e Emoji abrem ocupando a tela quase toda: campo de busca
+  maior, mais miniaturas por linha e a grade cresce com a janela em vez de
+  parar em dois terços da altura.
+
 ## 5.0.15
 
 - **Painel do admin: o e-mail de quem abriu o app.** O registro de abertura
