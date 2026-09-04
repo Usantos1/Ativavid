@@ -80,7 +80,8 @@ def test_a_assinatura_do_vazio_inclui_o_termo():
     "empty" e a mensagem ficaria com a busca anterior."""
     i = JS.index("function renderInto(")
     bloco = JS[i:i + 2000]
-    assert "const sigVazio = termo ? `empty:${termo}` : \"empty\";" in bloco
+    # 5.0.12: o vazio por FILTRO DE EMPRESA tambem entra na assinatura
+    assert "const sigVazio = termo ? `empty:${termo}` : (escondidos ? `empty:emp:${escondidos}:${state.brandActive.id}` : \"empty\");" in bloco
     assert 'box.dataset.cardSig = sigVazio;' in bloco
 
 

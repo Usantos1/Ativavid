@@ -1099,6 +1099,18 @@ function openCardMenu(btn) {
   menu.style.left = `${Math.round(left)}px`;
 }
 
+/* Quantos videos a EMPRESA ATIVA esconde nesta lista (5.0.12). Vazio por
+ * filtro de empresa nao e vazio por falta de video: com "Uander" ativa e
+ * 291 videos na Prime Camp, o Inicio dizia "seus videos aparecem aqui
+ * assim que o primeiro ficar pronto". */
+function escondidosPorEmpresa(view) {
+  if (state.wsMarca === "all" || !(state.brandActive && state.brandActive.id)) return 0;
+  const outros = (state.jobs || []).filter((x) => !jobNaMarca(x));
+  if (view === "fila") return outros.filter(jobInFila).length;
+  if (view === "done") return outros.filter((x) => x.status === "done").length;
+  return outros.length;
+}
+
 function renderInto(boxId, emptyId, jobs, opts) {
   const _vazio = emptyId ? $(`#${emptyId}`) : null;
   // o texto de fabrica ('Nenhum video pronto ainda.') so existe no
@@ -1115,7 +1127,8 @@ function renderInto(boxId, emptyId, jobs, opts) {
     // pronto ainda" para quem tem 183 e a tela mentindo. (Defeito que a
     // propria busca criou, na 3.94.)
     const termo = String((opts && opts.busca) || "").trim();
-    const sigVazio = termo ? `empty:${termo}` : "empty";
+    const escondidos = termo ? 0 : escondidosPorEmpresa(String((opts && opts.view) || ""));
+    const sigVazio = termo ? `empty:${termo}` : (escondidos ? `empty:emp:${escondidos}:${state.brandActive.id}` : "empty");
     if (box.dataset.cardSig === sigVazio) return;
     closeCardMenus(box);
     box.innerHTML = "";
@@ -1133,6 +1146,10 @@ function renderInto(boxId, emptyId, jobs, opts) {
         // pronto" para quem tem 250 e mentir por 2s a cada volta do preview
         // (02/09).
         empty.textContent = "Carregando os vídeos…";
+      } else if (escondidos) {
+        empty.innerHTML = `Nenhum vídeo de <strong></strong> aqui.
+          <button type="button" class="ghost-btn ghost-btn--sm" data-ver-todas>Ver todas as empresas (${escondidos})</button>`;
+        empty.querySelector("strong").textContent = state.brandActive.name || state.brandActive.id;
       } else if (empty.dataset.textoOriginal) {
         empty.textContent = empty.dataset.textoOriginal;
       }
@@ -5524,6 +5541,12 @@ async function refazerProjeto(pasta) {
 /* "Limpar a busca" no vazio: sem isto o usuario tem de achar o campo de
  * novo, e o campo esta fora da lista que ele esta olhando. */
 document.addEventListener("click", (e) => {
+  const todas = e.target.closest("[data-ver-todas]");
+  if (todas) {
+    setWsMarca("all");
+    renderWsMarcas(); renderWorkspaceCard(); renderJobs();
+    return;
+  }
   const b = e.target.closest("[data-limpar-busca]");
   if (!b) return;
   const view = b.dataset.limparBusca;

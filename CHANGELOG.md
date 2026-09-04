@@ -1,5 +1,12 @@
 # Changelog
 
+## 5.0.12
+
+- **Lista vazia por causa da empresa dizia "nenhum vídeo".** Com uma
+  empresa sem vídeos ativa (ex.: Uander) e centenas na outra, Início, Fila,
+  Concluídos e Projetos diziam que não havia vídeo nenhum. Agora dizem
+  "Nenhum vídeo de Uander aqui" com o botão "Ver todas as empresas (291)".
+
 ## 5.0.11
 
 - **"Comece por aqui" para quem acabou de instalar.** Sem nenhum vídeo, o

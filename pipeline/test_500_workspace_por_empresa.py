@@ -85,3 +85,15 @@ def test_em_todas_as_empresas_o_card_diz_de_quem_e():
     i = SJS.index("function cardSig(j, opts)")
     assert "_ws," in SJS[i:i + 700], "o chip entra na assinatura do card, senao nao repinta ao trocar"
     assert 'const nome = state.wsMarca === "all" ? "Todas as empresas"' in SJS
+
+
+def test_vazio_por_empresa_diz_isso_e_oferece_ver_todas():
+    """5.0.12: com "Uander" ativa e 291 videos na Prime Camp, o Inicio dizia
+    "seus videos aparecem aqui assim que o primeiro ficar pronto"."""
+    assert "function escondidosPorEmpresa(view)" in SJS
+    i = SJS.index("function renderInto(boxId, emptyId, jobs, opts)")
+    bloco = SJS[i:i + 3000]
+    assert "} else if (escondidos) {" in bloco and "data-ver-todas" in bloco
+    assert 'if (view === "fila") return outros.filter(jobInFila).length;' in SJS
+    k = SJS.index('const todas = e.target.closest("[data-ver-todas]");')
+    assert 'setWsMarca("all");' in SJS[k:k + 200]
