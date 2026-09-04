@@ -57,6 +57,20 @@ def test_o_prompt_leva_a_empresa_o_cartao_e_o_formato(monkeypatch, tmp_path):
     assert "TAREFA DE TEXTO" in s, "o Gemini web recusa 'tarefa de video' (4.76)"
 
 
+def test_cartao_vazio_na_marca_vem_do_preset_ativo(monkeypatch, tmp_path):
+    """A marca dele tem endCardCopy vazio; o 'Segue @lojaprimecamp' mora no
+    preset ativo. A 1a conversa real saiu com '(sem cartao)'."""
+    _casa(monkeypatch, tmp_path)
+    (tmp_path / "brands" / "prime-camp.json").write_text(json.dumps({
+        "brandId": "prime-camp", "brandName": "Prime Camp",
+        "endCardCopy": {"line1": "", "line2": ""}}), encoding="utf-8")
+    from app import brand_presets as bp
+    monkeypatch.setattr(bp, "get_active", lambda bid: {"id": "novo", "style": {"endCardCopy": {"line1": "Segue @lojaprimecamp", "line2": ""}}})
+    p = rt.perfil_empresa("prime-camp")
+    assert p["cartao"] == ["Segue @lojaprimecamp", ""]
+    assert "Segue @lojaprimecamp" in rt.montar_system(p, {})
+
+
 def test_sem_dados_da_empresa_o_prompt_diz_isso(monkeypatch, tmp_path):
     _casa(monkeypatch, tmp_path)
     s = rt.montar_system(rt.perfil_empresa("prime-camp"), {})
@@ -222,3 +236,7 @@ def test_o_js_liga_a_tela_e_copia():
     assert "navigator.clipboard.writeText" in JS[JS.index("async function rotCopiar("):]
     assert 'Enter" && !e.shiftKey' in w
     assert "@keyframes rotdot" in CSS
+    # so as mensagens rolam: lista e caixa de digitar paradas (03/09)
+    assert "body.view-roteiro-on .ws-body { overflow: hidden; }" in CSS
+    assert "#view-roteiro .rot-msgs { flex: 1; min-height: 160px; overflow: auto; }" in CSS
+    assert 'document.body.classList.toggle("view-roteiro-on", name === "roteiro")' in JS

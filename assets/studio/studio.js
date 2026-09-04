@@ -327,6 +327,7 @@ function setView(name) {
   $("#wsTitle").textContent = title;
   $("#wsSub").textContent = sub;
   document.body.classList.toggle("view-estilo-on", name === "estilo");
+  document.body.classList.toggle("view-roteiro-on", name === "roteiro");
   if (name === "ia") loadLlm().catch(() => {});
   if (name === "integracoes") refreshHealth().catch(() => {});
   if (name === "licenca") loadLicenca().catch((e) => toast(e.message));
@@ -7189,8 +7190,16 @@ async function loadRoteiroUi() {
   if ($("#rotEmpresaTexto") && pack.empresa) $("#rotEmpresaTexto").value = pack.empresa.empresa || "";
   rotPreencherSelects(pack);
   rotRenderLista();
-  // Sem "sobre a empresa", a IA escreve no escuro: abre a caixa na primeira vez.
-  if (pack.empresa && !pack.empresa.empresa && !state.roteiro.chats.length) $("#rotEmpresaBox")?.classList.remove("hidden");
+  // Sem "sobre a empresa", a IA escreve no escuro: abre a caixa na primeira
+  // vez e deixa o aviso aceso ate preencher (o 1o teste real saiu com
+  // "o usuario ainda nao descreveu a empresa" no prompt).
+  const falta = !!(pack.empresa && !pack.empresa.empresa);
+  const link = $("#rotEmpresaAbrir");
+  if (link) {
+    link.classList.toggle("rot-falta", falta);
+    link.textContent = falta ? "Preencher dados da empresa (recomendado)" : "Dados da empresa";
+  }
+  if (falta && !state.roteiro.chats.length) $("#rotEmpresaBox")?.classList.remove("hidden");
   if (state.roteiro.chatId) await rotAbrir(state.roteiro.chatId);
   else rotRenderMsgs(null);
 }
@@ -7400,6 +7409,9 @@ function wireRoteiro() {
         body: JSON.stringify({ brandId: state.roteiro.brandId, texto: $("#rotEmpresaTexto")?.value || "" }) });
       toast(`✓ Dados de ${r.nome} salvos — a IA passa a usar`);
       $("#rotEmpresaBox")?.classList.add("hidden");
+      if (state.roteiro.pack && state.roteiro.pack.empresa) state.roteiro.pack.empresa.empresa = r.empresa || "";
+      const l = $("#rotEmpresaAbrir");
+      if (l) { l.classList.toggle("rot-falta", !r.empresa); l.textContent = r.empresa ? "Dados da empresa" : "Preencher dados da empresa (recomendado)"; }
     } catch (e) {
       toast(e.message || "Não salvei os dados");
     }

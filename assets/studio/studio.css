@@ -4149,3 +4149,15 @@ video.lib-thumb { aspect-ratio: 9 / 16; max-height: 260px; object-fit: contain;
 .rot-composer textarea { resize: vertical; min-height: 44px; }
 .rot-composer-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; }
 @media (max-width: 900px) { .rot-shell { grid-template-columns: 1fr; } .rot-lista { border-right: 0; padding-right: 0; } }
+.link-btn.rot-falta { color: var(--accent); font-weight: 700; }
+/* A tela NAO rola inteira: a lista e a caixa de digitar ficam paradas e so
+ * as mensagens rolam ("este sidebar ali nao pode rolar, nem a caixa de
+ * input", 03/09). O `.ws-body` tem altura definida; a view ocupa 100%. */
+body.view-roteiro-on .ws-body { overflow: hidden; }
+#view-roteiro { display: flex; flex-direction: column; height: 100%; min-height: 100%; overflow: hidden; gap: 0; box-sizing: border-box; }
+#view-roteiro .rot-shell { flex: 1; min-height: 0; height: auto; }
+#view-roteiro .rot-lista { min-height: 0; overflow: hidden; }
+#view-roteiro .rot-chats { flex: 1; min-height: 0; overflow: auto; }
+#view-roteiro .rot-main { min-height: 0; }
+#view-roteiro .rot-msgs { flex: 1; min-height: 160px; overflow: auto; }
+#view-roteiro .rot-composer { flex: 0 0 auto; }

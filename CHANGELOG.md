@@ -1,5 +1,16 @@
 # Changelog
 
+## 4.98
+
+- **Roteiro: o cartão final entra no prompt mesmo quando a marca não o
+  tem.** A Prime Camp guarda o "Segue @lojaprimecamp" no preset, não na
+  marca, e o primeiro roteiro real saiu com "(sem cartão)". Agora o
+  preset ativo cobre. E enquanto os dados da empresa não forem
+  preenchidos, o link "Preencher dados da empresa (recomendado)" fica
+  aceso.
+- **Roteiro: a lista e a caixa de digitar ficam paradas.** Só as
+  mensagens rolam; a tela inteira não vai mais para cima.
+
 ## 4.97
 
 - **Roteiro: a IA escreve o que gravar.** Tela nova abaixo de Presets, em

@@ -77,17 +77,35 @@ def perfil_empresa(brand_id: str | None) -> dict[str, Any]:
     """O que a IA precisa saber da marca: nome, cartão final e o texto livre
     'sobre a empresa' que o usuário escreve na tela do Roteiro."""
     data = load_brand(brand_id)
-    copy = data.get("endCardCopy") or {}
+    bid = str(data.get("brandId") or brand_id or "padrao")
+    copy = _cartao(data.get("endCardCopy"))
+    if not any(copy):
+        # A marca dele (loja-teste / Prime Camp) tem o cartao VAZIO; quem
+        # guarda o "Segue @lojaprimecamp" e o preset ativo. O prompt saiu
+        # com "(sem cartao)" na primeira conversa real (03/09).
+        try:
+            from app.brand_presets import get_active
+
+            ativo = get_active(bid) or {}
+            copy = _cartao((ativo.get("style") or ativo).get("endCardCopy"))
+        except Exception:  # noqa: BLE001
+            pass
+    return {
+        "brandId": bid,
+        "nome": str(data.get("brandName") or "Minha empresa"),
+        "cartao": copy,
+        "empresa": str(data.get("empresa") or ""),
+    }
+
+
+def _cartao(copy: Any) -> list[str]:
     if isinstance(copy, list):
         copy = {"line1": copy[0] if copy else "", "line2": copy[1] if len(copy) > 1 else ""}
     elif isinstance(copy, str):
         copy = {"line1": copy, "line2": ""}
-    return {
-        "brandId": str(data.get("brandId") or brand_id or "padrao"),
-        "nome": str(data.get("brandName") or "Minha empresa"),
-        "cartao": [str((copy or {}).get("line1") or ""), str((copy or {}).get("line2") or "")],
-        "empresa": str(data.get("empresa") or ""),
-    }
+    elif not isinstance(copy, dict):
+        copy = {}
+    return [str(copy.get("line1") or "").strip(), str(copy.get("line2") or "").strip()]
 
 
 def salvar_empresa(brand_id: str | None, texto: str) -> dict[str, Any]:
