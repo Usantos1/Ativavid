@@ -1,5 +1,21 @@
 # Changelog
 
+## 4.97
+
+- **Roteiro: a IA escreve o que gravar.** Tela nova abaixo de Presets, em
+  formato de conversa. Você escolhe estilo (venda, viral, educativo, erro
+  comum, bastidor, prova, promoção, humor), duração, objetivo e tom,
+  escreve sobre o que é o vídeo (ou parte de um dos atalhos) e recebe
+  ganchos que param o scroll, o roteiro por blocos com tempo, CTA, texto
+  na tela e a legenda do post — limpo, sem markdown, para ler e gravar.
+  A IA usa os dados da empresa ("Dados da empresa", salvo na marca) e o
+  cartão final. Os roteiros ficam guardados neste computador, por marca;
+  dá para copiar o roteiro, só os ganchos, ou pedir outra versão. Mesma
+  IA do corte (sessão do navegador, Groq de reserva), sem chave nova.
+- **Freepik mostra mais imagens.** A busca trazia só fotos em pé (9:16),
+  por isso "vinham poucas". Agora as em pé vêm primeiro e o resto do
+  banco completa a lista, até 24 por busca.
+
 ## 4.96
 
 - **Freepik (Magnific) como banco de imagens e vídeos.** No "Buscar

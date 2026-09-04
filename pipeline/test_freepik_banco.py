@@ -85,7 +85,26 @@ def test_a_busca_de_fotos_usa_o_host_novo_e_a_chave_no_cabecalho(monkeypatch):
     assert c["params"]["filters[orientation][portrait]"] == 1
     assert out == [{"id": 396648207, "title": "Capinha", "thumb": "https://img.freepik.com/a.jpg",
                     "credit": "savandreameta", "creditUrl": "https://www.freepik.com/x",
-                    "premium": True, "kind": "image"}]
+                    "premium": True, "orientation": "", "kind": "image"}]
+
+
+def test_poucas_em_pe_completa_com_as_outras_orientacoes(monkeypatch):
+    """"por que ele dá apenas estas imagens por api?" (03/09): o filtro de
+    retrato escondia o resto do banco. Retrato primeiro, depois o resto."""
+    chamadas = []
+    deitada = dict(FOTO, id=2, image={"type": "photo", "orientation": "horizontal",
+                                      "source": {"url": "https://img.freepik.com/b.jpg"}})
+    def resp():
+        n = len(chamadas)
+        return _Resp(200, {"data": [FOTO] if n == 1 else [FOTO, deitada]})
+    _servidor(monkeypatch, [("https://api.magnific.com/v1/resources", resp)], chamadas)
+    out = fs.search("celular", "K", 12, "portrait")
+    assert len(chamadas) == 2
+    assert chamadas[0]["params"]["filters[orientation][portrait]"] == 1
+    assert "filters[orientation][portrait]" not in chamadas[1]["params"], "a 2a busca e sem filtro"
+    assert chamadas[1]["params"]["limit"] == 11, "so o que falta"
+    assert [o["id"] for o in out] == [396648207, 2], "sem repetir a que ja veio"
+    assert out[1]["orientation"] == "horizontal"
 
 
 def test_sem_o_host_novo_cai_para_o_antigo_com_o_cabecalho_antigo(monkeypatch):
@@ -182,8 +201,8 @@ def test_o_picker_do_editor_busca_e_baixa_pela_freepik():
     assert 'source=qs.get("source", [""])[0]' in PREVIEW
     i = PREVIEW.index("def _images_search_freepik(")
     bloco = PREVIEW[i:PREVIEW.index("\n    def _images_pick(", i)]
-    assert "freepik_search.search_videos(query, key, 12" in bloco
-    assert "freepik_search.search(query, key, 12" in bloco
+    assert "freepik_search.search_videos(query, key, 18" in bloco
+    assert "freepik_search.search(query, key, 24" in bloco
     assert 'if not rid.isdigit()' in bloco, "o download e por ID; URL do cliente nao entra"
     assert 'public" / "freepik"' in bloco
     assert 'freepik_search.download_video(rid, key, dest)' in bloco

@@ -69,6 +69,10 @@
           <span class="sb-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M13.2 2.8 5 13.4h5.4L9.9 21.2 18.4 10.6H13z"/></svg></span>
           <span class="sb-txt">Presets</span>
         </button>
+        <button type="button" class="sb-item" data-view="roteiro" data-tip="Roteiro">
+          <span class="sb-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4.5h11l3 3v12H5z"/><path d="M8 10h8M8 13.5h8M8 17h5"/></svg></span>
+          <span class="sb-txt">Roteiro</span>
+        </button>
 
         <p class="sb-label">Automação</p>
         <button type="button" class="sb-item" data-view="ia" data-tip="IA">
@@ -351,6 +355,63 @@
              nomes (Prime Camp, Uander, Prime Camp [Centro]) — a mesma
              identidade criada duas vezes, em duas telas. A marca continua
              no disco guardando o estilo base; deixou de ser uma tela. -->
+        <!-- Roteiro de gravacao (4.97): chat com a IA que conhece a empresa. -->
+        <section class="view hidden" id="view-roteiro" data-view-panel="roteiro">
+          <div class="rot-shell">
+            <aside class="rot-lista">
+              <button type="button" class="export-btn export-btn--sm rot-novo" id="rotNovo">+ Novo roteiro</button>
+              <p class="hint rot-lista-hint" id="rotListaHint">Seus roteiros ficam guardados neste computador.</p>
+              <div class="rot-chats" id="rotChats"></div>
+            </aside>
+            <div class="rot-main">
+              <div class="rot-topo">
+                <div>
+                  <strong id="rotMarcaNome">Marca</strong>
+                  <p class="hint">A IA escreve com os dados desta marca. <button type="button" class="link-btn" id="rotEmpresaAbrir">Dados da empresa</button></p>
+                </div>
+                <div class="rot-opcoes">
+                  <label>Estilo <select id="rotEstilo"></select></label>
+                  <label>Duração <select id="rotDuracao"></select></label>
+                  <label>Objetivo <select id="rotObjetivo"></select></label>
+                  <label>Tom <select id="rotTom"></select></label>
+                </div>
+              </div>
+              <div class="rot-empresa hidden" id="rotEmpresaBox">
+                <label class="ia-form">Sobre a empresa (o que vende, para quem, cidade, diferenciais, preços que pode citar, o que NÃO falar)
+                  <textarea id="rotEmpresaTexto" rows="5" placeholder="Ex.: Assistência técnica de celulares em Campinas, 900 avaliações no Google. Troca de tela em 40 min, garantia de 90 dias. Público: quem quebrou a tela e tem pressa. Não falar de preço fechado."></textarea>
+                </label>
+                <div class="rot-empresa-acoes">
+                  <button type="button" class="ghost-btn" id="rotEmpresaFechar">Fechar</button>
+                  <button type="button" class="export-btn export-btn--sm" id="rotEmpresaSalvar">Salvar dados da empresa</button>
+                </div>
+              </div>
+              <div class="rot-msgs" id="rotMsgs">
+                <div class="rot-vazio" id="rotVazio">
+                  <h3>Sobre o que é o vídeo?</h3>
+                  <p class="hint">Escreva a ideia em uma frase, ou comece por um destes:</p>
+                  <div class="rot-atalhos" id="rotAtalhos">
+                    <button type="button" data-ideia="A maior dor do meu cliente antes de me procurar é ">Dor do cliente</button>
+                    <button type="button" data-ideia="Um erro que quase todo mundo comete com ">Erro comum</button>
+                    <button type="button" data-ideia="Antes e depois de um serviço que fiz hoje: ">Antes e depois</button>
+                    <button type="button" data-ideia="Um bastidor do meu dia a dia: ">Bastidor</button>
+                    <button type="button" data-ideia="Promoção desta semana: ">Promoção</button>
+                    <button type="button" data-ideia="Mito ou verdade: ">Mito ou verdade</button>
+                    <button type="button" data-ideia="Me dê só 5 ganchos fortes para um vídeo sobre ">Só ganchos</button>
+                  </div>
+                </div>
+              </div>
+              <div class="rot-pensando hidden" id="rotPensando"><span class="rot-dots"><i></i><i></i><i></i></span><span id="rotPensandoTxt">Pensando nos ganchos…</span></div>
+              <div class="rot-composer">
+                <input type="text" id="rotNicho" placeholder="Nicho / público (opcional) — ex.: donos de iPhone em Campinas" autocomplete="off">
+                <div class="rot-composer-row">
+                  <textarea id="rotTexto" rows="2" placeholder="Sobre o que é o vídeo? Ex.: troca de tela de iPhone em 40 minutos, com garantia"></textarea>
+                  <button type="button" class="export-btn" id="rotEnviar">Criar roteiro</button>
+                </div>
+                <p class="hint">Enter envia · Shift+Enter quebra linha · a resposta vem limpa para ler e gravar</p>
+              </div>
+            </div>
+          </div>
+        </section>
         <section class="view hidden" id="view-presets" data-view-panel="presets">
           <div class="lib-bar">
             <div class="lib-bar-copy">

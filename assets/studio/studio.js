@@ -54,6 +54,7 @@ const VIEW_COPY = {
   estilo: ["Estilos", "Como os vídeos da sua marca normalmente devem parecer."],
   biblioteca: ["Biblioteca", "Arquivos reutilizáveis que a IA pode usar nos vídeos."],
   presets: ["Presets", "Como seus vídeos são cortados, e a identidade que vale para todos."],
+  roteiro: ["Roteiro", "A IA escreve o que gravar: ganchos que param o scroll, roteiro por blocos, CTA e legenda."],
   ia: ["IA", "A inteligência que corta, escreve e legenda — sessão do navegador e modelo."],
   integracoes: ["Integrações", "Serviços externos que o pipeline chama: transcrição, voz e b-roll."],
   licenca: ["Licença", "Status da assinatura e contas."],
@@ -343,6 +344,7 @@ function setView(name) {
     avisarEspaco().catch(() => {});
   }
   if (name === "biblioteca") loadLibraryUi().catch(() => {});
+  if (name === "roteiro") loadRoteiroUi().catch((e) => toast(e.message));
   if (name === "presets") {
     loadPresetsUi().catch(() => {});
     // A identidade e o formato moram aqui desde a 4.19 — quem preenche os
@@ -7134,3 +7136,272 @@ async function boot() {
 }
 
 boot();
+
+/* ======================================================================
+ * Roteiro de gravacao (4.97): chat com a IA que conhece a empresa.
+ * A rede e a mesma do corte (sessao do navegador -> Groq). A memoria dos
+ * chats e local, por marca (/api/roteiro/*). A resposta vem limpa (sem
+ * markdown) para ler e gravar; os botoes copiam o roteiro ou so os ganchos.
+ * ====================================================================== */
+const ROT_OPCOES_KEY = "ativavid.roteiro.opcoes";
+const ROT_FRASES = [
+  "Pensando nos ganchos…", "Lendo os dados da empresa…", "Cortando o que não para o scroll…",
+  "Escrevendo como se fala…", "Ajustando o tempo de cada bloco…", "Fechando o CTA…",
+];
+state.roteiro = { brandId: null, chatId: null, chatAtual: null, chats: [], enviando: false, pack: null };
+
+function rotOpcoes() {
+  return {
+    estilo: $("#rotEstilo")?.value || "venda",
+    duracao: Number($("#rotDuracao")?.value || 30),
+    objetivo: $("#rotObjetivo")?.value || "vendas",
+    tom: $("#rotTom")?.value || "direto",
+    nicho: ($("#rotNicho")?.value || "").trim(),
+  };
+}
+
+function rotGuardarOpcoes() {
+  try { localStorage.setItem(ROT_OPCOES_KEY, JSON.stringify(rotOpcoes())); } catch { /* ignore */ }
+}
+
+function rotPreencherSelects(pack) {
+  const opt = (v, t, sel) => `<option value="${escapeHtml(String(v))}"${sel ? " selected" : ""}>${escapeHtml(t)}</option>`;
+  let salvo = {};
+  try { salvo = JSON.parse(localStorage.getItem(ROT_OPCOES_KEY) || "{}") || {}; } catch { salvo = {}; }
+  const e = $("#rotEstilo");
+  if (e) e.innerHTML = (pack.estilos || []).map((x) => opt(x.id, x.nome, x.id === (salvo.estilo || "venda"))).join("");
+  const d = $("#rotDuracao");
+  if (d) d.innerHTML = (pack.duracoes || [15, 30, 45, 60, 90]).map((x) => opt(x, `${x} s`, Number(x) === Number(salvo.duracao || 30))).join("");
+  const o = $("#rotObjetivo");
+  if (o) o.innerHTML = Object.entries(pack.objetivos || {}).map(([k, v]) => opt(k, v, k === (salvo.objetivo || "vendas"))).join("");
+  const t = $("#rotTom");
+  if (t) t.innerHTML = Object.entries(pack.tons || {}).map(([k, v]) => opt(k, v, k === (salvo.tom || "direto"))).join("");
+  if ($("#rotNicho") && salvo.nicho && !$("#rotNicho").value) $("#rotNicho").value = salvo.nicho;
+}
+
+async function loadRoteiroUi() {
+  wireRoteiro();
+  const pack = await api("/api/roteiro/chats");
+  state.roteiro.pack = pack;
+  state.roteiro.brandId = pack.brandId;
+  state.roteiro.chats = pack.chats || [];
+  if ($("#rotMarcaNome")) $("#rotMarcaNome").textContent = (pack.empresa && pack.empresa.nome) || "Marca";
+  if ($("#rotEmpresaTexto") && pack.empresa) $("#rotEmpresaTexto").value = pack.empresa.empresa || "";
+  rotPreencherSelects(pack);
+  rotRenderLista();
+  // Sem "sobre a empresa", a IA escreve no escuro: abre a caixa na primeira vez.
+  if (pack.empresa && !pack.empresa.empresa && !state.roteiro.chats.length) $("#rotEmpresaBox")?.classList.remove("hidden");
+  if (state.roteiro.chatId) await rotAbrir(state.roteiro.chatId);
+  else rotRenderMsgs(null);
+}
+
+function rotRenderLista() {
+  const box = $("#rotChats");
+  if (!box) return;
+  const chats = state.roteiro.chats || [];
+  if (!chats.length) {
+    box.innerHTML = `<p class="hint">Nenhum roteiro ainda.</p>`;
+    return;
+  }
+  box.innerHTML = chats.map((c) => `
+    <div class="rot-chat${c.id === state.roteiro.chatId ? " on" : ""}">
+      <button type="button" class="rot-chat-abrir" data-id="${escapeHtml(c.id)}" title="${escapeHtml(c.titulo)}">
+        <span class="rot-chat-titulo">${escapeHtml(c.titulo)}</span>
+        <span class="rot-chat-sub">${escapeHtml(fmtAccessUntil(c.atualizadoEm))} · ${Math.floor((c.mensagens || 0) / 2)} resposta(s)</span>
+      </button>
+      <button type="button" class="rot-chat-x" data-apagar="${escapeHtml(c.id)}" title="Apagar">×</button>
+    </div>`).join("");
+}
+
+function rotRenderMsgs(chat) {
+  const box = $("#rotMsgs");
+  if (!box) return;
+  const vazio = $("#rotVazio");
+  const msgs = (chat && chat.mensagens) || [];
+  box.querySelectorAll(".rot-msg").forEach((m) => m.remove());
+  if (vazio) vazio.classList.toggle("hidden", msgs.length > 0);
+  msgs.forEach((m, i) => {
+    const el = document.createElement("div");
+    el.className = `rot-msg rot-${m.role === "user" ? "eu" : "ia"}`;
+    const texto = document.createElement("pre");
+    texto.className = "rot-txt";
+    texto.textContent = m.content || "";
+    el.appendChild(texto);
+    if (m.role === "assistant") {
+      const acoes = document.createElement("div");
+      acoes.className = "rot-acoes";
+      acoes.innerHTML = `<button type="button" class="ghost-btn ghost-btn--sm" data-copiar="${i}">Copiar roteiro</button>
+        <button type="button" class="ghost-btn ghost-btn--sm" data-copiar-ganchos="${i}">Copiar ganchos</button>
+        <button type="button" class="ghost-btn ghost-btn--sm" data-refazer="${i}">Outra versão</button>
+        <span class="hint">${m.backend === "groq" ? "via Groq" : "via sessão"}</span>`;
+      el.appendChild(acoes);
+    }
+    box.appendChild(el);
+  });
+  box.scrollTop = box.scrollHeight;
+}
+
+const ROT_SECOES = ["GANCHOS", "ROTEIRO PARA GRAVAR", "CTA", "TEXTO NA TELA", "LEGENDA DO POST"];
+function rotCabecalho(linha) {
+  const cab = linha.trim().toUpperCase().replace(/:$/, "");
+  return ROT_SECOES.find((s) => cab === s || cab.startsWith(s + " ") || cab.startsWith(s + "(")) || null;
+}
+function rotSecao(texto, nome) {
+  const out = [];
+  let dentro = false;
+  for (const ln of String(texto || "").split("\n")) {
+    const cab = rotCabecalho(ln);
+    if (cab !== null) { if (dentro) break; dentro = cab === nome; continue; }
+    if (dentro) out.push(ln);
+  }
+  return out.join("\n").trim();
+}
+
+async function rotCopiar(texto, rotulo) {
+  try {
+    await navigator.clipboard.writeText(texto);
+    toast(`✓ ${rotulo} copiado`);
+  } catch {
+    toast("Não consegui copiar — selecione o texto e use Ctrl+C", 3500);
+  }
+}
+
+async function rotAbrir(id) {
+  try {
+    const r = await api(`/api/roteiro/chat?id=${encodeURIComponent(id)}&brandId=${encodeURIComponent(state.roteiro.brandId || "")}`);
+    state.roteiro.chatId = id;
+    state.roteiro.chatAtual = r.chat;
+    if (r.chat && r.chat.opcoes) {
+      for (const [k, el] of [["estilo", "#rotEstilo"], ["duracao", "#rotDuracao"], ["objetivo", "#rotObjetivo"], ["tom", "#rotTom"]]) {
+        if (r.chat.opcoes[k] != null && $(el)) $(el).value = String(r.chat.opcoes[k]);
+      }
+      if ($("#rotNicho")) $("#rotNicho").value = r.chat.opcoes.nicho || "";
+    }
+    rotRenderLista();
+    rotRenderMsgs(r.chat);
+  } catch (e) {
+    toast(e.message || "Não abri o roteiro");
+  }
+}
+
+function rotPensando(ligar) {
+  const box = $("#rotPensando");
+  if (!box) return;
+  box.classList.toggle("hidden", !ligar);
+  clearInterval(state.roteiro._timer);
+  if (ligar) {
+    let i = 0;
+    const txt = $("#rotPensandoTxt");
+    if (txt) txt.textContent = ROT_FRASES[0];
+    state.roteiro._timer = setInterval(() => {
+      i = (i + 1) % ROT_FRASES.length;
+      if (txt) txt.textContent = ROT_FRASES[i];
+    }, 2200);
+  }
+}
+
+async function rotEnviar(mensagemForcada) {
+  if (state.roteiro.enviando) return;
+  const ta = $("#rotTexto");
+  const mensagem = (mensagemForcada || (ta && ta.value) || "").trim();
+  if (!mensagem) { toast("Escreva sobre o que é o vídeo"); ta?.focus(); return; }
+  state.roteiro.enviando = true;
+  rotGuardarOpcoes();
+  const btn = $("#rotEnviar");
+  if (btn) btn.disabled = true;
+  // a pergunta aparece na hora; a resposta chega com a animacao rodando
+  const atual = state.roteiro.chatAtual || { mensagens: [] };
+  const otimista = { ...atual, mensagens: [...(atual.mensagens || []), { role: "user", content: mensagem }] };
+  rotRenderMsgs(otimista);
+  rotPensando(true);
+  if (ta && !mensagemForcada) ta.value = "";
+  try {
+    const r = await api("/api/roteiro/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        brandId: state.roteiro.brandId, id: state.roteiro.chatId,
+        mensagem, opcoes: rotOpcoes(),
+      }),
+    });
+    state.roteiro.chatId = r.chat.id;
+    state.roteiro.chatAtual = r.chat;
+    const lista = await api(`/api/roteiro/chats?brandId=${encodeURIComponent(state.roteiro.brandId || "")}`);
+    state.roteiro.chats = lista.chats || [];
+    rotRenderLista();
+    rotRenderMsgs(r.chat);
+  } catch (e) {
+    rotRenderMsgs(state.roteiro.chatAtual || null);
+    if (ta && !mensagemForcada && !ta.value) ta.value = mensagem;
+    toast(e.message || "A IA não respondeu", 6000);
+  } finally {
+    rotPensando(false);
+    state.roteiro.enviando = false;
+    if (btn) btn.disabled = false;
+  }
+}
+
+function wireRoteiro() {
+  const view = $("#view-roteiro");
+  if (!view || view.dataset.wired) return;
+  view.dataset.wired = "1";
+  $("#rotNovo")?.addEventListener("click", () => {
+    state.roteiro.chatId = null;
+    state.roteiro.chatAtual = null;
+    rotRenderLista();
+    rotRenderMsgs(null);
+    $("#rotTexto")?.focus();
+  });
+  $("#rotEnviar")?.addEventListener("click", () => rotEnviar());
+  $("#rotTexto")?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); rotEnviar(); }
+  });
+  ["#rotEstilo", "#rotDuracao", "#rotObjetivo", "#rotTom"].forEach((id) => $(id)?.addEventListener("change", rotGuardarOpcoes));
+  $("#rotAtalhos")?.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-ideia]");
+    if (!b) return;
+    const ta = $("#rotTexto");
+    if (ta) { ta.value = b.dataset.ideia; ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+  });
+  $("#rotChats")?.addEventListener("click", async (e) => {
+    const x = e.target.closest("[data-apagar]");
+    if (x) {
+      const id = x.dataset.apagar;
+      const ok = await pedirConfirmacao("Apagar este roteiro?", "Some deste computador. Não dá para desfazer.", "Apagar", true);
+      if (!ok) return;
+      await api("/api/roteiro/apagar", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ brandId: state.roteiro.brandId, id }) });
+      if (state.roteiro.chatId === id) { state.roteiro.chatId = null; state.roteiro.chatAtual = null; rotRenderMsgs(null); }
+      state.roteiro.chats = state.roteiro.chats.filter((c) => c.id !== id);
+      rotRenderLista();
+      return;
+    }
+    const a = e.target.closest("[data-id]");
+    if (a) rotAbrir(a.dataset.id);
+  });
+  $("#rotMsgs")?.addEventListener("click", (e) => {
+    const msgs = (state.roteiro.chatAtual && state.roteiro.chatAtual.mensagens) || [];
+    const c = e.target.closest("[data-copiar]");
+    if (c) { rotCopiar(msgs[Number(c.dataset.copiar)]?.content || "", "Roteiro"); return; }
+    const g = e.target.closest("[data-copiar-ganchos]");
+    if (g) {
+      const txt = msgs[Number(g.dataset.copiarGanchos)]?.content || "";
+      rotCopiar(rotSecao(txt, "GANCHOS") || txt, "Ganchos");
+      return;
+    }
+    const r = e.target.closest("[data-refazer]");
+    if (r) rotEnviar("Me dê outra versão, com ganchos diferentes e a mesma estrutura.");
+  });
+  $("#rotEmpresaAbrir")?.addEventListener("click", () => $("#rotEmpresaBox")?.classList.toggle("hidden"));
+  $("#rotEmpresaFechar")?.addEventListener("click", () => $("#rotEmpresaBox")?.classList.add("hidden"));
+  $("#rotEmpresaSalvar")?.addEventListener("click", async () => {
+    try {
+      const r = await api("/api/roteiro/empresa", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ brandId: state.roteiro.brandId, texto: $("#rotEmpresaTexto")?.value || "" }) });
+      toast(`✓ Dados de ${r.nome} salvos — a IA passa a usar`);
+      $("#rotEmpresaBox")?.classList.add("hidden");
+    } catch (e) {
+      toast(e.message || "Não salvei os dados");
+    }
+  });
+}

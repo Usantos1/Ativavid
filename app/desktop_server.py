@@ -270,6 +270,9 @@ class DesktopHandler(ps.Handler):
             "/api/musica/motor",
             "/api/brands",
             "/api/brand-presets",
+            "/api/roteiro/chats",
+            "/api/roteiro/chat",
+            "/api/roteiro/empresa",
             "/api/fontes",
             "/api/content-types",
             "/api/headline-anchors",
@@ -525,6 +528,10 @@ class DesktopHandler(ps.Handler):
             "/api/jobs/append-cta",
             "/api/jobs/delete",
             "/api/multiplicador",
+            "/api/roteiro/chat",
+            "/api/roteiro/empresa",
+            "/api/roteiro/apagar",
+            "/api/roteiro/renomear",
         ):
             return self._studio_post()
 

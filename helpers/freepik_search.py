@@ -95,30 +95,45 @@ def _get(path: str, api_key: str, params: dict[str, Any] | None = None) -> dict:
 def search(query: str, api_key: str, count: int = 12,
            orientation: str | None = "portrait") -> list[dict]:
     """Fotos (não vetor/PSD). Devolve itens já no formato do picker:
-    {id, title, thumb, credit, creditUrl, premium, kind:"image"}."""
-    params: dict[str, Any] = {
-        "term": query, "limit": max(1, min(int(count), 100)), "page": 1,
-        "order": "relevance", "filters[content_type][photo]": 1,
-    }
-    if orientation:
-        params[f"filters[orientation][{orientation}]"] = 1
-    data = _get("/v1/resources", api_key, params)
+    {id, title, thumb, credit, creditUrl, premium, orientation, kind:"image"}.
+
+    A orientação pedida vem PRIMEIRO; se sobrar vaga, completa com as
+    outras. "Por que a API dá só 7 imagens?" (03/09): o filtro de retrato
+    escondia o resto do banco — o site mostra tudo.
+    """
     out: list[dict] = []
-    for it in data.get("data") or []:
-        img = it.get("image") or {}
-        src = (img.get("source") or {}).get("url")
-        if not src:
-            continue
-        lic = [str(x.get("type") or "") for x in (it.get("licenses") or [])]
-        out.append({
-            "id": it.get("id"),
-            "title": it.get("title") or "",
-            "thumb": src,
-            "credit": ((it.get("author") or {}).get("name") or "Freepik").strip(),
-            "creditUrl": it.get("url") or "",
-            "premium": "premium" in lic and "freemium" not in lic,
-            "kind": "image",
-        })
+    vistos: set = set()
+    passos = [orientation, None] if orientation else [None]
+    for ori in passos:
+        faltam = max(1, min(int(count), 100)) - len(out)
+        if faltam <= 0:
+            break
+        params: dict[str, Any] = {
+            "term": query, "limit": faltam, "page": 1,
+            "order": "relevance", "filters[content_type][photo]": 1,
+        }
+        if ori:
+            params[f"filters[orientation][{ori}]"] = 1
+        data = _get("/v1/resources", api_key, params)
+        for it in data.get("data") or []:
+            if it.get("id") in vistos:
+                continue
+            img = it.get("image") or {}
+            src = (img.get("source") or {}).get("url")
+            if not src:
+                continue
+            vistos.add(it.get("id"))
+            lic = [str(x.get("type") or "") for x in (it.get("licenses") or [])]
+            out.append({
+                "id": it.get("id"),
+                "title": it.get("title") or "",
+                "thumb": src,
+                "credit": ((it.get("author") or {}).get("name") or "Freepik").strip(),
+                "creditUrl": it.get("url") or "",
+                "premium": "premium" in lic and "freemium" not in lic,
+                "orientation": str(img.get("orientation") or ""),
+                "kind": "image",
+            })
     return out
 
 

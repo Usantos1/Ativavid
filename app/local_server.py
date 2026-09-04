@@ -2220,6 +2220,33 @@ class StudioHandler(BaseHTTPRequestHandler):
             result["githubRepo"] = result.get("githubRepo") or s.get("githubRepo") or ""
             self._json(result)
             return
+        if path == "/api/roteiro/chats" or path == "/api/roteiro/chat" or path == "/api/roteiro/empresa":
+            # Roteiro de gravacao (4.97): memoria local por marca.
+            from app import roteiro
+            from app.brand_kits import get_active_id
+
+            q = parse_qs(urlparse(self.path).query)
+            bid = (q.get("brandId") or [""])[0].strip() or get_active_id()
+            if path == "/api/roteiro/chats":
+                self._json({"ok": True, "brandId": bid, "chats": roteiro.listar(bid),
+                            "estilos": [{"id": e["id"], "nome": e["nome"]} for e in roteiro.ESTILOS],
+                            "duracoes": list(roteiro.DURACOES),
+                            "objetivos": roteiro.OBJETIVOS, "tons": roteiro.TONS,
+                            "empresa": roteiro.perfil_empresa(bid)})
+                return
+            if path == "/api/roteiro/empresa":
+                self._json({"ok": True, **roteiro.perfil_empresa(bid)})
+                return
+            cid = (q.get("id") or [""])[0].strip()
+            try:
+                chat = roteiro.carregar(bid, cid)
+            except ValueError:
+                chat = None
+            if not chat:
+                self._json({"ok": False, "error": "roteiro não encontrado"}, 404)
+                return
+            self._json({"ok": True, "chat": chat})
+            return
         if path == "/api/brands":
             from app.brand_kits import list_brands, list_export_presets, get_active_id
             self._json({
@@ -2998,6 +3025,45 @@ class StudioHandler(BaseHTTPRequestHandler):
                 self._json({"ok": True, **pack})
             except ValueError as e:
                 self._json({"ok": False, "error": str(e)}, 400)
+            return
+
+        if (path == "/api/roteiro/chat" or path == "/api/roteiro/empresa"
+                or path == "/api/roteiro/apagar" or path == "/api/roteiro/renomear"):
+            # Roteiro de gravacao (4.97). A IA e a mesma do corte (sessao ->
+            # Groq); a memoria fica em %USERPROFILE%/ATIVAVID/roteiros.
+            from app import license as lic
+            from app import roteiro
+            from app.brand_kits import get_active_id
+
+            st = lic.entitlement()
+            if not st.get("entitled"):
+                self._json({"error": lic.deny_reason(st), "license": lic.public_status()}, 403)
+                return
+            body = self._read_json() or {}
+            bid = str(body.get("brandId") or "").strip() or get_active_id()
+            try:
+                if path == "/api/roteiro/empresa":
+                    self._json({"ok": True, **roteiro.salvar_empresa(bid, str(body.get("texto") or ""))})
+                    return
+                if path == "/api/roteiro/apagar":
+                    self._json({"ok": roteiro.apagar(bid, str(body.get("id") or ""))})
+                    return
+                if path == "/api/roteiro/renomear":
+                    chat = roteiro.renomear(bid, str(body.get("id") or ""), str(body.get("titulo") or ""))
+                    self._json({"ok": bool(chat), "chat": chat})
+                    return
+                out = roteiro.responder(
+                    bid, str(body.get("mensagem") or ""),
+                    chat_id=str(body.get("id") or "") or None,
+                    opcoes=body.get("opcoes") if isinstance(body.get("opcoes"), dict) else None,
+                )
+                self._json(out)
+            except ValueError as e:
+                self._json({"ok": False, "error": str(e)}, 400)
+            except RuntimeError as e:
+                from app.llm_session import friendly_llm_error
+
+                self._json({"ok": False, "error": friendly_llm_error(e)}, 502)
             return
 
         if path == "/api/brands":

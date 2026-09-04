@@ -1486,9 +1486,10 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             if kind == "video":
-                itens = freepik_search.search_videos(query, key, 12, "portrait")
+                itens = freepik_search.search_videos(query, key, 18, "portrait")
             else:
-                itens = freepik_search.search(query, key, 12, "portrait")
+                # 24 e nao 12: o banco da Freepik e grande e a pessoa compara
+                itens = freepik_search.search(query, key, 24, "portrait")
         except Exception as e:  # noqa: BLE001
             self._json({"ok": False, "error": str(e)}, 502)
             return
