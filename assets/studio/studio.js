@@ -5892,11 +5892,21 @@ async function pintarMotorMusica() {
     btn.classList.add("hidden");
     barra?.classList.add("hidden");
   } else {
+    // O que faria o download MORRER no meio, dito ANTES do clique: 4,8 GB
+    // de espera para terminar em erro e pior que nao oferecer (5.0.26).
+    const falta = !d.uv
+      ? "falta o `uv`, que monta o ambiente — reinstale o ATIVAVID"
+      : (d.livreGb && d.livreGb < (d.precisaGb || 7))
+        ? `só há ${String(d.livreGb).replace(".", ",")} GB livres no disco do motor `
+          + `(precisa de uns ${d.precisaGb || 7}) — use "Liberar espaço"`
+        : "";
     linha.textContent = d.erro
       ? `A instalação falhou: ${d.erro}`
-      : `IA local não instalada — são ${gb} GB, baixados uma vez só.`;
+      : falta
+        ? `IA local não instalada — ${falta}.`
+        : `IA local não instalada — são ${gb} GB, baixados uma vez só.`;
     btn.textContent = "Instalar IA local";
-    btn.classList.remove("hidden");
+    btn.classList.toggle("hidden", !!falta);
     btn.disabled = false;
     barra?.classList.add("hidden");
   }
@@ -5926,7 +5936,28 @@ function acompanharMotorMusica() {
   }, 3000);
 }
 
+/* O bloco do Supabase e SO do admin (5.0.27).
+ *
+ * Ele, com o print da tela de um cliente: "Cliente nao pode ver isso".
+ * Estavam ali a URL do backend, a anon key e o link de checkout — os tres
+ * editaveis. Trocar qualquer um quebra o app daquela maquina.
+ *
+ * O HTML nasce `hidden`: se esta funcao nao rodar (erro antes dela), o
+ * cliente continua sem ver. Mostrar e que exige ser admin. */
+function ajustarAvancadoParaOPerfil() {
+  const admin = !!(state.auth && state.auth.isAdmin);
+  const bloco = $("#sysBackendCfg");
+  if (bloco) bloco.hidden = !admin;
+  const sub = $("#sysSupportSub");
+  if (sub) {
+    sub.textContent = admin
+      ? "Supabase, reinstalar e teste de desempenho — só se precisar"
+      : "Reinstalar e teste de desempenho — só se precisar";
+  }
+}
+
 async function loadSistema() {
+  ajustarAvancadoParaOPerfil();
   const hint = $("#sysMachineHint");
   if (hint) hint.textContent = "Detectando…";
   try {

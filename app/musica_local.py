@@ -187,8 +187,22 @@ def estado(raiz_projetos: Path | None = None) -> dict:
         except OSError:
             gb = 0.0
     tem, nome = gpu_do_motor()
+    # Quanto ha no disco ONDE o motor vai morar. O download sao 4,8 GB e o
+    # venv fica descompactado ao lado; comecar sem folga e gastar a espera
+    # do cliente para terminar num erro. Na maquina do cliente (04/09) o
+    # motor cai em C:, ao lado dos Projetos dele.
+    livre_gb = 0.0
+    try:
+        base = pasta if pasta.exists() else pasta.parent
+        while not base.exists() and base != base.parent:
+            base = base.parent
+        livre_gb = round(shutil.disk_usage(str(base)).free / (1024 ** 3), 1)
+    except (OSError, ValueError):
+        livre_gb = 0.0
     return {
         "instalado": pronto,
+        "livreGb": livre_gb,
+        "precisaGb": 7,
         "incompleta": instalacao_incompleta(raiz_projetos),
         "pasta": str(pasta),
         "gpu": tem,

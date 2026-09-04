@@ -1059,6 +1059,22 @@ def _resolver_presets(pack: dict, brand_id: str) -> None:
         p["resolved"] = {k: v for k, v in cheio.items() if k not in fora}
 
 
+# O que aponta o app para um backend: trocar qualquer um destes quebra a
+# licenca daquela maquina.
+CAMPOS_DO_BACKEND = ("supabaseUrl", "supabaseAnonKey", "checkoutUrl")
+
+
+def _e_admin() -> bool:
+    """Sessao de administrador? Erro ao checar conta como NAO — a guarda
+    fecha, nao abre."""
+    try:
+        from app import auth as au
+
+        return bool((au.ensure_session() or {}).get("isAdmin"))
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def load_preset() -> dict:
     shipped = _shipped_preset()
     if USER_PRESET_PATH.exists():
@@ -2585,6 +2601,15 @@ class StudioHandler(BaseHTTPRequestHandler):
         if path == "/api/settings":
             from app.settings_store import public_settings, save_settings
             body = self._read_json() or {}
+            # O apontamento do backend e do ADMIN. Esconder o bloco na tela
+            # (5.0.27) resolve o que se VE; a rota tambem precisa recusar,
+            # senao continua a um POST de distancia de quebrar a licenca da
+            # maquina — e o dono dela nem saberia por que parou.
+            proibido = [k for k in CAMPOS_DO_BACKEND if k in body]
+            if proibido and not _e_admin():
+                self._json({"ok": False,
+                            "error": "Só o administrador muda o backend."}, 403)
+                return
             try:
                 save_settings(body)
                 self._json({"ok": True, "settings": public_settings()})

@@ -431,11 +431,40 @@ def checar_pecas_opcionais() -> None:
             "parou.", acao="instalar_musica",
             acao_texto="Continuar instalacao")
     else:
-        diz(AVISO, "IA local de musica nao instalada",
-            f"Sao {gb} GB, baixados uma vez so"
-            + (f". Placa encontrada: {placa}." if placa else ".")
-            + " Sem ela a trilha vem da sua Biblioteca.",
+        # O que faria o download FALHAR depois do clique. Oferecer um botao
+        # que morre no meio e pior que nao oferecer nada: o cliente espera
+        # gigabytes e recebe um erro.
+        falta = _o_que_falta_para_baixar(est)
+        detalhe = (f"Sao {gb} GB, baixados uma vez so"
+                   + (f". Placa encontrada: {placa}." if placa else ".")
+                   + " Sem ela a trilha vem da sua Biblioteca.")
+        if falta:
+            diz(AVISO, "IA local de musica nao instalada",
+                detalhe + " " + falta[0], falta[1])
+            return
+        diz(AVISO, "IA local de musica nao instalada", detalhe,
             acao="instalar_musica", acao_texto="Instalar aqui")
+
+
+def _o_que_falta_para_baixar(est: dict) -> tuple[str, str] | None:
+    """(o que esta faltando, como resolver) — ou None se da para baixar."""
+    if not est.get("uv"):
+        return ("Falta o `uv`, que monta o ambiente do motor.",
+                "Reinstale o ATIVAVID: o instalador traz o uv junto.")
+    # ~4,8 GB de download + o venv descompactado; 7 GB e o piso sem susto
+    try:
+        alvo = Path(str(est.get("pasta") or ""))
+        base = alvo if alvo.exists() else alvo.parent
+        while not base.exists() and base != base.parent:
+            base = base.parent
+        livre = shutil.disk_usage(str(base)).free / (1024 ** 3)
+    except (OSError, ValueError):
+        return None
+    if livre < 7:
+        return (f"So ha {livre:.1f} GB livres em {alvo.drive or alvo}.",
+                "Libere uns 7 GB nesse disco (Configuracoes > Liberar espaco) "
+                "e cheque de novo.")
+    return None
 
 
 def main() -> int:

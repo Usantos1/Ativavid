@@ -105,3 +105,31 @@ def test_a_nvidia_e_achada_mesmo_listada_depois_da_integrada(monkeypatch):
     assert tem is True
     assert nome == "NVIDIA GeForce RTX 3050 Laptop GPU", (
         "a tela diria o nome da placa integrada")
+
+
+def test_o_estado_diz_quanto_espaco_ha_no_disco_do_motor(tmp_path, monkeypatch):
+    """5.0.26: 4,8 GB de espera para terminar em erro é pior que não
+    oferecer. O cartão precisa saber ANTES do clique."""
+    monkeypatch.setattr(m, "pasta_motor", lambda raiz=None: tmp_path / "MotorMusica")
+    monkeypatch.setattr(m, "instalado", lambda raiz=None: False)
+    e = m.estado()
+    assert e["livreGb"] > 0, "sem a medida o cartão não tem como avisar"
+    assert e["precisaGb"] == 7
+
+
+def test_o_espaco_e_medido_na_pasta_que_existe(tmp_path, monkeypatch):
+    """A pasta do motor ainda NÃO existe antes de instalar — medir nela
+    daria erro e a resposta viraria zero, escondendo o botão sem motivo."""
+    fundo = tmp_path / "a" / "b" / "c" / "MotorMusica"
+    monkeypatch.setattr(m, "pasta_motor", lambda raiz=None: fundo)
+    monkeypatch.setattr(m, "instalado", lambda raiz=None: False)
+    assert m.estado()["livreGb"] > 0
+
+
+def test_o_cartao_esconde_o_botao_quando_o_download_morreria():
+    js = (REPO / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
+    i = js.index("IA local não instalada — são ${gb} GB")
+    bloco = js[i - 900:i + 400]
+    assert "d.livreGb" in bloco and "d.precisaGb" in bloco
+    assert "!d.uv" in bloco, "sem o uv o download morre no primeiro passo"
+    assert 'btn.classList.toggle("hidden", !!falta)' in bloco

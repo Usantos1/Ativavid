@@ -1086,11 +1086,16 @@
                 <span>Avançado</span>
                 <!-- O Diagnóstico saiu daqui e virou card; o subtítulo ainda o
                      prometia, mandando procurar dentro do que não tem mais. -->
-                <span class="sys-support-sub">Supabase e teste de desempenho — só se precisar</span>
+                <span class="sys-support-sub" id="sysSupportSub">Reinstalar e teste de desempenho — só se precisar</span>
               </summary>
               <div class="sys-support-body">
                 <div class="sys-adv-grid">
-                  <div>
+                  <!-- SO PARA ADMIN. Um cliente via aqui a URL do Supabase, a
+                       anon key e o link de checkout — e podia trocar os tres,
+                       quebrando o proprio app. Print da maquina de um cliente
+                       em 04/09. O `hidden` e o estado de PARTIDA: quem nao e
+                       admin nunca ve, mesmo se o JS falhar. -->
+                  <div id="sysBackendCfg" hidden>
                     <h4>Backend (Supabase)</h4>
                     <label class="ia-form">Supabase URL
                       <input type="url" id="supabaseUrlInput" placeholder="https://xxxx.supabase.co">

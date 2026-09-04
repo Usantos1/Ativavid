@@ -38,7 +38,7 @@ def _itens(monkeypatch, estado):
 
 
 BASE = {"instalado": False, "incompleta": False, "gpu": True, "gpuNome": "",
-        "mbTotal": 4800, "gb": 0.0, "pasta": "X:/MotorMusica"}
+        "mbTotal": 4800, "gb": 0.0, "pasta": "X:/MotorMusica", "uv": True}
 
 
 def test_instalada_aparece_como_ok_e_sem_botao(monkeypatch):
@@ -96,3 +96,31 @@ def test_a_tela_desenha_o_botao_e_chama_a_rota_certa():
     assert '"/api/musica/motor"' in corpo, "o botão não instala nada"
     assert 'action: "instalar"' in corpo
     assert "acompanharMotorMusica()" in corpo, "sem progresso, parece travado"
+
+
+def test_sem_uv_avisa_em_vez_de_oferecer_um_download_que_morre(monkeypatch):
+    """Oferecer um botão que falha no meio é pior que não oferecer: o
+    cliente espera gigabytes e recebe um erro."""
+    it = _itens(monkeypatch, {**BASE, "uv": False})[0]
+    assert not it["acao"]
+    assert "uv" in it["detalhe"]
+    assert "Reinstale" in it["solucao"]
+
+
+def test_disco_cheio_avisa_antes_do_clique(monkeypatch):
+    import helpers.doutor as dt
+
+    monkeypatch.setattr(dt.shutil, "disk_usage",
+                        lambda p: type("U", (), {"free": 3 * 1024 ** 3})())
+    it = _itens(monkeypatch, {**BASE, "uv": True, "pasta": str(REPO)})[0]
+    assert not it["acao"], "ofereceria 4,8 GB num disco com 3"
+    assert "3.0 GB livres" in it["detalhe"]
+
+
+def test_com_tudo_no_lugar_o_botao_aparece(monkeypatch):
+    import helpers.doutor as dt
+
+    monkeypatch.setattr(dt.shutil, "disk_usage",
+                        lambda p: type("U", (), {"free": 40 * 1024 ** 3})())
+    it = _itens(monkeypatch, {**BASE, "uv": True, "pasta": str(REPO)})[0]
+    assert it["acao"] == "instalar_musica"

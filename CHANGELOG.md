@@ -1,5 +1,26 @@
 # Changelog
 
+## 5.0.27
+
+- **O cliente via — e podia trocar — o backend do aplicativo.** Em
+  Configurações → Avançado estavam a URL do Supabase, a anon key e o link de
+  checkout, os três editáveis. Trocar qualquer um deles quebra a licença
+  daquela máquina, e o dono nem saberia por quê. Agora o bloco é só do
+  administrador: nasce escondido no HTML (JS que falha não expõe nada) e a
+  rota que salva recusa esses três campos sem uma sessão de administrador.
+  O resto do Avançado — reinstalar e teste de desempenho — continua para
+  todo mundo.
+
+## 5.0.26
+
+- **O botão de instalar a IA local não aparece quando o download morreria no
+  meio.** Antes de oferecer os 4,8 GB, o app confere se o `uv` está no lugar
+  e se há uns 7 GB livres no disco onde o motor vai morar — que é o disco
+  dos seus Projetos, não necessariamente o C:. Faltando um dos dois, o
+  cartão diz o que falta e como resolver, em vez de começar um download que
+  trava depois de vários minutos. Vale nos dois lugares que oferecem a
+  instalação: Configurações → Música dos vídeos e o Diagnóstico.
+
 ## 5.0.25
 
 - **Quatro estilos de MANCHETE novos.** Os oito estilos novos do dia anterior
