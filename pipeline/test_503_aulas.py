@@ -37,6 +37,8 @@ def test_o_id_sai_de_qualquer_link_do_youtube():
 # ----------------------------------------------------------- listar
 def test_listar_baixa_do_servidor_e_guarda_o_cache(monkeypatch, tmp_path):
     monkeypatch.setattr(aulas, "CACHE", tmp_path / "aulas.json")
+    # sem ir ao YouTube buscar minutagem (5.0.5) durante o teste
+    monkeypatch.setattr(aulas, "_duracao_youtube", lambda yid: None)
     monkeypatch.setattr(aulas, "_rpc", lambda payload, fn: (200, [
         {"id": "1", "titulo": "Primeiro vídeo", "youtubeId": "dQw4w9WgXcQ", "secao": "Começando", "ordem": 10},
         {"id": "2", "titulo": "Quebrada", "youtubeId": "nao-e-id", "secao": "x"},
@@ -111,7 +113,8 @@ def test_a_tela_tem_lista_player_e_bloco_do_admin():
         assert f'id="{k}"' in bloco, k
     assert 'aulas: ["Aulas",' in SJS
     assert 'if (name === "aulas") loadAulasUi()' in SJS
-    assert "https://www.youtube-nocookie.com/embed/" in SJS
+    # 5.0.5: o embed passou a vir pela API IFrame (player proprio por cima)
+    assert "https://www.youtube.com/iframe_api" in SJS and 'new YT.Player("aulasYt"' in SJS
     assert '$("#aulasAdmin")?.classList.toggle("hidden", !admin);' in SJS
     assert 'aulaAdmin({\n          action: "upsert", id, titulo:' in SJS
     assert 'aulaAdmin({ action: "delete", id })' in SJS

@@ -267,6 +267,18 @@ begin
         null;
       end;
     end if;
+    -- 5.0.5: PC que so tem TRIAL (sem linha em devices) tambem ganha o
+    -- e-mail: o painel do admin mostrava "—" para quem acabou de criar a
+    -- conta com o trial vencido (vitor@primecamp.com, 04/09).
+    if v_jwt_email is not null then
+      begin
+        update trials set email = v_jwt_email
+        where device_id = p_device_id
+          and email is distinct from v_jwt_email;
+      exception when others then
+        null;
+      end;
+    end if;
 
     -- IDENTIDADE É O user_id DO JWT, NUNCA O E-MAIL.
     --

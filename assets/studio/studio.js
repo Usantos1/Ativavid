@@ -348,6 +348,7 @@ function setView(name) {
   if (name === "biblioteca") loadLibraryUi().catch(() => {});
   if (name === "roteiro") loadRoteiroUi().catch((e) => toast(e.message));
   if (name === "aulas") loadAulasUi().catch((e) => toast(e.message));
+  else aulasPausar();   // "saiu da aba de aulas pausa o video"
   if (name === "presets") {
     loadEmpresaUi().catch(() => {});
     // A identidade e o formato moram aqui desde a 4.19 — quem preenche os
@@ -1970,10 +1971,16 @@ function renderLicense(lic) {
     title = `Assinatura ativa até ${until}`;
     badgeText = "Ativa";
     tone = "ok";
-  } else if (mode === "open" || !lic.configured) {
+  } else if (mode === "open") {
     title = "Modo aberto — licença não exigida neste PC.";
     badgeText = "Aberto";
     tone = "neutral";
+  } else if (!lic.configured) {
+    // Instalacao sem a config embutida (ou resposta sem o campo): dizer
+    // "modo aberto" aqui era mentira num PC que esta BLOQUEADO.
+    title = lic.message || "Esta instalação está sem a configuração de licença. Reinstale o ATIVAVID pelo instalador oficial.";
+    badgeText = "Sem config";
+    tone = "bad";
   } else if (mode === "error") {
     title = lic.message || lic.error || "Não foi possível verificar a licença.";
     badgeText = "Erro";
@@ -6551,7 +6558,85 @@ function libListaAudio(itens, aba, notas, ordem) {
 /* ---- Aulas (5.0.3) -----------------------------------------------------
  * Central de ajuda: a lista vem do Supabase (o admin gere na propria
  * tela), o video toca num embed do YouTube. Sem rede, a ultima lista. */
-state.aulas = { lista: [], atualId: "", origem: "" };
+state.aulas = { lista: [], atualId: "", origem: "", player: null, timer: null, tentativas: 0,
+                feitas: new Set(), vel: 1, cc: false, menu: false };
+const AULAS_FEITAS_KEY = "ativavid.aulas.feitas";
+try { state.aulas.feitas = new Set(JSON.parse(localStorage.getItem(AULAS_FEITAS_KEY) || "[]")); } catch { /* ignore */ }
+try { state.aulas.vel = Number(localStorage.getItem("ativavid.aulas.vel") || 1) || 1; } catch { /* ignore */ }
+
+function aulasPausar() {
+  const p = state.aulas.player;
+  try { if (p && p.pauseVideo && p.getPlayerState && p.getPlayerState() === 1) p.pauseVideo(); } catch { /* ignore */ }
+}
+
+function aulaConcluida(id) { return state.aulas.feitas.has(id); }
+function aulaMarcar(id, feita) {
+  if (!id) return;
+  if (feita) state.aulas.feitas.add(id); else state.aulas.feitas.delete(id);
+  try { localStorage.setItem(AULAS_FEITAS_KEY, JSON.stringify([...state.aulas.feitas])); } catch { /* ignore */ }
+  renderAulas();
+  aulaMostrarSobre(aulaAtual());
+}
+
+/* m:ss ou h:mm:ss, para a minutagem das aulas. */
+function fmtRelogio(seg) {
+  const t = Math.max(0, Math.round(Number(seg) || 0));
+  const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
+  return h ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}` : `${m}:${String(s).padStart(2, "0")}`;
+}
+
+/* A descricao como TEXTO ARRUMADO: paragrafos por linha em branco e
+ * itens de lista quando a linha (ou o trecho) comeca com ✅ ✔ • - *.
+ * Ele colou a descricao do YouTube inteira numa linha so, com um ✅ por
+ * item — a tela mostrava um bloco corrido ("legenda fica uma merda"). */
+function descricaoHtml(texto) {
+  const t = String(texto || "").replace(/\r/g, "").trim();
+  if (!t) return "";
+  const MARCA = /(?:^|\s)(?=[✅✔☑️•▪️➡️➜→\-\*]\s?)/u;
+  const blocos = [];
+  for (const par of t.split(/\n{2,}/)) {
+    const linhas = par.split("\n").map((l) => l.trim()).filter(Boolean);
+    let itens = [];
+    const paragrafo = [];
+    const flush = () => {
+      if (paragrafo.length) { blocos.push(`<p>${paragrafo.map(escapeHtml).join("<br>")}</p>`); paragrafo.length = 0; }
+      if (itens.length) { blocos.push(`<ul>${itens.map((i) => `<li>${escapeHtml(i)}</li>`).join("")}</ul>`); itens = []; }
+    };
+    for (const linha of linhas) {
+      // varios itens numa linha so ("✅ a ✅ b ✅ c") viram varios <li>
+      const partes = linha.split(MARCA).map((p) => p.trim()).filter(Boolean);
+      const ehLista = partes.length > 1 || /^[✅✔☑️•▪️➡️➜→\-\*]\s?/u.test(linha);
+      if (ehLista) {
+        // o texto antes do primeiro marcador e paragrafo, nao item
+        if (!/^[✅✔☑️•▪️➡️➜→\-\*]/u.test(partes[0])) paragrafo.push(partes.shift());
+        if (paragrafo.length) { blocos.push(`<p>${paragrafo.map(escapeHtml).join("<br>")}</p>`); paragrafo.length = 0; }
+        for (const p of partes) itens.push(p.replace(/^[✅✔☑️•▪️➡️➜→\-\*]\s?/u, ""));
+      } else {
+        if (itens.length) { blocos.push(`<ul>${itens.map((i) => `<li>${escapeHtml(i)}</li>`).join("")}</ul>`); itens = []; }
+        paragrafo.push(linha);
+      }
+    }
+    flush();
+  }
+  return blocos.join("");
+}
+
+/* API IFrame do YouTube, carregada uma vez. null = sem rede. */
+let _ytApiPromise = null;
+function ytApi() {
+  if (_ytApiPromise) return _ytApiPromise;
+  _ytApiPromise = new Promise((resolve) => {
+    if (window.YT && window.YT.Player) { resolve(window.YT); return; }
+    const antes = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => { if (antes) antes(); resolve(window.YT); };
+    const s = document.createElement("script");
+    s.src = "https://www.youtube.com/iframe_api";
+    s.onerror = () => { _ytApiPromise = null; resolve(null); };
+    document.head.appendChild(s);
+    setTimeout(() => resolve(window.YT && window.YT.Player ? window.YT : null), 8000);
+  });
+  return _ytApiPromise;
+}
 
 function aulaAtual() {
   return (state.aulas.lista || []).find((a) => a.id === state.aulas.atualId) || null;
@@ -6575,6 +6660,27 @@ async function loadAulasUi() {
   if (state.aulas.atualId && !aulaAtual()) state.aulas.atualId = state.aulas.lista.length ? state.aulas.lista[0].id : "";
   renderAulas();
   abrirAula(state.aulas.atualId, { semRolar: true });
+  // minutagem: o servidor busca em segundo plano o que ainda nao tem
+  const faltam = (state.aulas.lista || []).some((a) => !a.duracaoSeg);
+  if (faltam && state.aulas.tentativas < 3) {
+    state.aulas.tentativas += 1;
+    setTimeout(() => { if (state.view === "aulas") atualizarMinutagem().catch(() => {}); }, 4000);
+  } else if (!faltam) state.aulas.tentativas = 0;
+}
+
+async function atualizarMinutagem() {
+  const r = await api("/api/aulas");
+  const mapa = new Map((r.aulas || []).map((a) => [a.id, a.duracaoSeg || 0]));
+  let mudou = false;
+  for (const a of state.aulas.lista || []) {
+    const d = mapa.get(a.id) || 0;
+    if (d && d !== a.duracaoSeg) { a.duracaoSeg = d; mudou = true; }
+  }
+  if (mudou) { renderAulas(); aulaMostrarSobre(aulaAtual()); }
+  if ((state.aulas.lista || []).some((a) => !a.duracaoSeg) && state.aulas.tentativas < 3) {
+    state.aulas.tentativas += 1;
+    setTimeout(() => { if (state.view === "aulas") atualizarMinutagem().catch(() => {}); }, 6000);
+  }
 }
 
 function renderAulas() {
@@ -6584,11 +6690,15 @@ function renderAulas() {
   const lista = state.aulas.lista || [];
   const admin = !!(state.auth && state.auth.isAdmin);
   if (hint) {
+    const total = lista.reduce((s, a) => s + (a.duracaoSeg || 0), 0);
+    const feitas = lista.filter((a) => aulaConcluida(a.id)).length;
+    const totalTxt = (total ? ` · ${Math.max(1, Math.round(total / 60))} min no total` : "")
+      + (feitas ? ` · ${feitas} concluída${feitas === 1 ? "" : "s"}` : "");
     hint.textContent = !lista.length
       ? (admin ? "Nenhuma aula ainda. Cadastre a primeira ao lado." : "As aulas ainda estão sendo gravadas. Volte em breve.")
       : (state.aulas.origem === "cache"
-        ? `${lista.length} aula(s) · sem internet, mostrando a última lista baixada`
-        : `${lista.length} aula(s)`);
+        ? `${lista.length} aula${lista.length === 1 ? "" : "s"}${totalTxt} · sem internet, mostrando a última lista baixada`
+        : `${lista.length} aula${lista.length === 1 ? "" : "s"}${totalTxt}`);
   }
   // datalist de secoes para o admin
   const dl = $("#aulasSecoes");
@@ -6602,46 +6712,169 @@ function renderAulas() {
     <div class="aulas-secao">
       <p class="aulas-secao-nome">${escapeHtml(secao)}</p>
       ${aulas.map((a, i) => `
-        <button type="button" class="aula-item${a.id === state.aulas.atualId ? " on" : ""}" data-aula="${escapeHtml(a.id)}">
+        <button type="button" class="aula-item${a.id === state.aulas.atualId ? " on" : ""}${aulaConcluida(a.id) ? " feita" : ""}" data-aula="${escapeHtml(a.id)}">
           <img class="aula-thumb" src="https://i.ytimg.com/vi/${escapeHtml(a.youtubeId)}/mqdefault.jpg" alt="" loading="lazy">
-          <span class="aula-txt"><span class="aula-n">${i + 1}</span><span class="aula-titulo">${escapeHtml(a.titulo)}</span></span>
+          <span class="aula-txt"><span class="aula-n">${aulaConcluida(a.id) ? "✓" : i + 1}</span><span class="aula-titulo">${escapeHtml(a.titulo)}</span>${a.duracaoSeg ? `<span class="aula-dur">${fmtRelogio(a.duracaoSeg)}</span>` : ""}</span>
         </button>`).join("")}
     </div>`).join("");
+}
+
+function aulaMostrarSobre(a) {
+  const btn = $("#aulaConcluir");
+  if (btn) {
+    btn.classList.toggle("hidden", !a);
+    const feita = !!(a && aulaConcluida(a.id));
+    btn.classList.toggle("on", feita);
+    btn.textContent = feita ? "✓ Concluída (desfazer)" : "✓ Concluir aula";
+  }
+  if ($("#aulaTitulo")) $("#aulaTitulo").textContent = a ? a.titulo : "";
+  if ($("#aulaDur")) $("#aulaDur").textContent = a && a.duracaoSeg ? fmtRelogio(a.duracaoSeg) : "";
+  const desc = $("#aulaDescricao");
+  if (desc) desc.innerHTML = a ? descricaoHtml(a.descricao) : "";
 }
 
 function abrirAula(id, opts) {
   const a = (state.aulas.lista || []).find((x) => x.id === id) || null;
   state.aulas.atualId = a ? a.id : "";
-  const player = $("#aulasPlayer");
+  const box = $("#aulasPlayer");
   const vazio = $("#aulasVazio");
-  if (player) {
-    // Troca o iframe inteiro: mudar so o src deixava o video anterior
-    // tocando por um instante no WebView.
-    for (const f of player.querySelectorAll("iframe")) f.remove();
-    if (a) {
-      const f = document.createElement("iframe");
-      f.className = "aulas-iframe";
-      f.src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(a.youtubeId)}?rel=0&modestbranding=1`;
-      f.title = a.titulo;
-      f.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen";
-      f.setAttribute("allowfullscreen", "");
-      f.referrerPolicy = "strict-origin-when-cross-origin";
-      player.appendChild(f);
-    }
-    if (vazio) vazio.classList.toggle("hidden", !!a);
-  }
-  if ($("#aulaTitulo")) $("#aulaTitulo").textContent = a ? a.titulo : "";
-  if ($("#aulaDescricao")) $("#aulaDescricao").textContent = a ? a.descricao : "";
-  const link = $("#aulaAbrir");
-  if (link) {
-    link.classList.toggle("hidden", !a);
-    if (a) link.href = `https://www.youtube.com/watch?v=${encodeURIComponent(a.youtubeId)}`;
-  }
+  if (vazio) vazio.classList.toggle("hidden", !!a);
+  if (box) { box.classList.remove("playing", "ended"); box.classList.toggle("has-video", !!a); }
+  $("#aulasFim")?.classList.add("hidden");
+  aulaPlayerTempo(0, a ? a.duracaoSeg : 0);
+  aulaMostrarSobre(a);
   for (const b of document.querySelectorAll("#aulasItens .aula-item")) {
     b.classList.toggle("on", b.dataset.aula === state.aulas.atualId);
   }
+  if (a) aulaCarregarVideo(a, !!(opts && opts.tocar)).catch(() => {});
   if (a && state.auth && state.auth.isAdmin) aulaPreencherForm(a);
   if (a && !(opts && opts.semRolar)) $("#aulasPlayer")?.scrollIntoView({ block: "nearest" });
+}
+
+/* O embed do YouTube por baixo da capa. `controls=0` tira a barra do
+ * YouTube (com o logo que leva para o site); o que sobra por cima do
+ * video (titulo, canal, "Assista no YouTube", cards do fim) fica
+ * VISIVEL mas nao clicavel: a capa engole o clique e faz play/pause. */
+async function aulaCarregarVideo(a, tocar) {
+  const erro = $("#aulasErro");
+  const YT = await ytApi();
+  if (!YT) {
+    if (erro) {
+      erro.classList.remove("hidden");
+      erro.innerHTML = `Sem conexão com o YouTube agora. <a href="https://www.youtube.com/watch?v=${encodeURIComponent(a.youtubeId)}" target="_blank" rel="noopener">Abrir a aula no navegador</a>`;
+    }
+    return;
+  }
+  if (erro) erro.classList.add("hidden");
+  if (state.aulas.atualId !== a.id) return;   // trocou de aula enquanto a API carregava
+  const vars = { controls: 0, rel: 0, modestbranding: 1, iv_load_policy: 3, fs: 0, playsinline: 1,
+                 disablekb: 1, origin: location.origin };
+  if (!state.aulas.player) {
+    state.aulas.player = new YT.Player("aulasYt", {
+      videoId: a.youtubeId, playerVars: vars,
+      events: {
+        onReady: () => {
+          aulaAplicarPrefs();
+          aulaPlayerTempo(0, aulaPlayerDuracao());
+          if (tocar) state.aulas.player.playVideo();
+        },
+        onStateChange: (e) => aulaEstado(e.data),
+        onError: () => {
+          if (erro) {
+            erro.classList.remove("hidden");
+            erro.textContent = "Este vídeo não permite ser exibido dentro do app. No YouTube Studio, libere a incorporação (Detalhes → Mostrar mais → Permitir incorporação).";
+          }
+        },
+      },
+    });
+    return;
+  }
+  const p = state.aulas.player;
+  if (!p.cueVideoById) return;
+  if (tocar) p.loadVideoById(a.youtubeId); else p.cueVideoById(a.youtubeId);
+  aulaAplicarPrefs();
+}
+
+/* Legenda do YouTube DESLIGADA por padrao (ele pediu) e a velocidade que a
+ * pessoa escolheu. Vale a cada video: o YouTube religa a legenda quando o
+ * usuario tem isso salvo na conta. */
+function aulaAplicarPrefs() {
+  const p = state.aulas.player;
+  if (!p) return;
+  try {
+    if (state.aulas.cc) p.loadModule("captions"); else { p.unloadModule("captions"); p.unloadModule("cc"); }
+  } catch { /* ignore */ }
+  try { p.setPlaybackRate(state.aulas.vel || 1); } catch { /* ignore */ }
+  for (const b of document.querySelectorAll("#aulasVel [data-vel]")) b.classList.toggle("on", Number(b.dataset.vel) === (state.aulas.vel || 1));
+  for (const b of document.querySelectorAll("#aulasCc [data-cc]")) b.classList.toggle("on", (b.dataset.cc === "1") === !!state.aulas.cc);
+}
+
+function aulaPlayerDuracao() {
+  const p = state.aulas.player;
+  try { return (p && p.getDuration && p.getDuration()) || (aulaAtual() || {}).duracaoSeg || 0; } catch { return 0; }
+}
+
+function aulaPlayerTempo(atual, total) {
+  const t = $("#aulasTempo");
+  if (t) t.textContent = `${fmtRelogio(atual)} / ${fmtRelogio(total)}`;
+  const fill = $("#aulasBarraFill");
+  if (fill) fill.style.width = total ? `${Math.min(100, (atual / total) * 100)}%` : "0%";
+}
+
+function aulaEstado(st) {
+  const box = $("#aulasPlayer");
+  const YTS = (window.YT && window.YT.PlayerState) || { PLAYING: 1, PAUSED: 2, ENDED: 0 };
+  const tocando = st === YTS.PLAYING;
+  if (box) {
+    box.classList.toggle("playing", tocando);
+    box.classList.toggle("ended", st === YTS.ENDED);
+  }
+  $("#aulasFim")?.classList.toggle("hidden", st !== YTS.ENDED);
+  if (st === YTS.ENDED && state.aulas.atualId && !aulaConcluida(state.aulas.atualId)) aulaMarcar(state.aulas.atualId, true);
+  if (state.aulas.timer) { clearInterval(state.aulas.timer); state.aulas.timer = null; }
+  if (tocando) {
+    aulaAplicarPrefs();
+    state.aulas.timer = setInterval(() => {
+      const p = state.aulas.player;
+      try { aulaPlayerTempo(p.getCurrentTime(), aulaPlayerDuracao()); } catch { /* ignore */ }
+    }, 500);
+  } else {
+    const p = state.aulas.player;
+    try { aulaPlayerTempo(st === YTS.ENDED ? aulaPlayerDuracao() : p.getCurrentTime(), aulaPlayerDuracao()); } catch { /* ignore */ }
+  }
+  // duracao lida do proprio player entra na lista na hora
+  const a = aulaAtual();
+  const d = aulaPlayerDuracao();
+  if (a && d && !a.duracaoSeg) { a.duracaoSeg = Math.round(d); renderAulas(); aulaMostrarSobre(a); }
+}
+
+function aulaToggle() {
+  const p = state.aulas.player;
+  if (!p || !p.getPlayerState) return;
+  const YTS = window.YT.PlayerState;
+  const st = p.getPlayerState();
+  if (st === YTS.PLAYING) p.pauseVideo();
+  else { $("#aulasFim")?.classList.add("hidden"); p.playVideo(); }
+}
+
+function aulaProxima() {
+  const lista = state.aulas.lista || [];
+  const i = lista.findIndex((x) => x.id === state.aulas.atualId);
+  const prox = lista[i + 1];
+  if (prox) abrirAula(prox.id, { tocar: true }); else toast("Esta é a última aula");
+}
+
+function aulaAnterior() {
+  const lista = state.aulas.lista || [];
+  const i = lista.findIndex((x) => x.id === state.aulas.atualId);
+  const ant = lista[i - 1];
+  if (ant) abrirAula(ant.id, { tocar: true }); else toast("Esta é a primeira aula");
+}
+
+function aulaMenu(abrir) {
+  state.aulas.menu = abrir == null ? !state.aulas.menu : !!abrir;
+  $("#aulasMenu")?.classList.toggle("hidden", !state.aulas.menu);
+  $("#aulasEngren")?.classList.toggle("on", state.aulas.menu);
 }
 
 function aulaPreencherForm(a) {
@@ -6668,7 +6901,70 @@ function wireAulas() {
     itens.dataset.wired = "1";
     itens.addEventListener("click", (e) => {
       const b = e.target.closest("[data-aula]");
-      if (b) abrirAula(b.dataset.aula);
+      if (b) abrirAula(b.dataset.aula, { tocar: true });
+    });
+  }
+  const capa = $("#aulasCapa");
+  if (capa && !capa.dataset.wired) {
+    capa.dataset.wired = "1";
+    // clique no video = play/pause; os botoes da barra tratam o proprio
+    capa.addEventListener("click", (e) => {
+      if (e.target.closest("#aulasCtl") || e.target.closest("#aulasFim") || e.target.closest("#aulasMenu")) return;
+      if (state.aulas.menu) { aulaMenu(false); return; }
+      aulaToggle();
+    });
+    $("#aulasAnterior")?.addEventListener("click", aulaAnterior);
+    $("#aulasEngren")?.addEventListener("click", () => aulaMenu());
+    $("#aulasVel")?.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-vel]");
+      if (!b) return;
+      state.aulas.vel = Number(b.dataset.vel) || 1;
+      try { localStorage.setItem("ativavid.aulas.vel", String(state.aulas.vel)); } catch { /* ignore */ }
+      aulaAplicarPrefs();
+    });
+    $("#aulasCc")?.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-cc]");
+      if (!b) return;
+      state.aulas.cc = b.dataset.cc === "1";
+      aulaAplicarPrefs();
+    });
+    $("#aulasConcluirFim")?.addEventListener("click", () => { aulaMarcar(state.aulas.atualId, true); aulaProxima(); });
+    $("#aulaConcluir")?.addEventListener("click", () => {
+      const id = state.aulas.atualId;
+      if (!id) return;
+      const feita = !aulaConcluida(id);
+      aulaMarcar(id, feita);
+      if (feita) toast("✓ Aula concluída");
+    });
+    $("#aulasPlay")?.addEventListener("click", aulaToggle);
+    $("#aulasPlayBig")?.addEventListener("click", (e) => { e.stopPropagation(); aulaToggle(); });
+    $("#aulasDeNovo")?.addEventListener("click", () => { const p = state.aulas.player; if (p) { p.seekTo(0, true); p.playVideo(); } });
+    $("#aulasProxima")?.addEventListener("click", aulaProxima);
+    $("#aulasBarra")?.addEventListener("click", (e) => {
+      const p = state.aulas.player;
+      const r = e.currentTarget.getBoundingClientRect();
+      const frac = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+      const d = aulaPlayerDuracao();
+      if (p && d) { p.seekTo(frac * d, true); aulaPlayerTempo(frac * d, d); }
+    });
+    $("#aulasMudo")?.addEventListener("click", (e) => {
+      const p = state.aulas.player;
+      if (!p || !p.isMuted) return;
+      if (p.isMuted()) p.unMute(); else p.mute();
+      e.currentTarget.classList.toggle("muted", p.isMuted());
+    });
+    $("#aulasTela")?.addEventListener("click", () => {
+      const box = $("#aulasPlayer");
+      if (!box) return;
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      else box.requestFullscreen().catch(() => {});
+    });
+    $("#aulasPlayer")?.addEventListener("keydown", (e) => {
+      if (e.key === " " || e.key === "k") { e.preventDefault(); aulaToggle(); }
+      const p = state.aulas.player;
+      if (!p || !p.getCurrentTime) return;
+      if (e.key === "ArrowRight") p.seekTo(p.getCurrentTime() + 10, true);
+      if (e.key === "ArrowLeft") p.seekTo(Math.max(0, p.getCurrentTime() - 10), true);
     });
   }
   const nova = $("#aulaNova");

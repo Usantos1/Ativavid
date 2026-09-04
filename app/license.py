@@ -597,6 +597,24 @@ def _marcar_trial_pedido(remote: dict[str, Any]) -> None:
         _save_blob(blob)
 
 
+def _carimbar(status: dict[str, Any]) -> dict[str, Any]:
+    """Os campos que TODA resposta de `entitlement` leva.
+
+    O caminho do bloqueio grudado devolvia o veredito cru, sem
+    `configured`, `deviceId` nem `checkoutUrl`. A tela lia
+    `configured=false` e escrevia "Modo aberto — licença não exigida"
+    num PC bloqueado, sem os planos, sem o modal e sem o código do
+    computador para mandar ao suporte (caso do vitor@primecamp.com,
+    04/09: trial vencido + conta recém-criada).
+    """
+    status["ok"] = True
+    status["deviceId"] = device_id()
+    status["checkoutUrl"] = _cfg()["checkout"] or None
+    status["configured"] = True
+    status["appVersion"] = _app_version()
+    return status
+
+
 def entitlement(*, refresh: bool = False) -> dict[str, Any]:
     if not configured():
         out = _unconfigured_status()
@@ -617,7 +635,7 @@ def entitlement(*, refresh: bool = False) -> dict[str, Any]:
         # nunca chegava a pedir o trial.
         remote = _veredito(_acao_inicial(blob))
         _marcar_trial_pedido(remote)
-        return _cache(remote)
+        return _carimbar(_cache(remote))
     if (
         not refresh
         and isinstance(blob.get("cached"), dict)

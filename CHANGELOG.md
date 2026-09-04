@@ -1,5 +1,31 @@
 # Changelog
 
+## 5.0.5
+
+- **Aulas: player próprio, sem links do YouTube.** O vídeo toca dentro do
+  app com controles nossos (tocar/pausar, barra de progresso, tempo, som,
+  tela cheia, setas para pular 10 s). Título, canal e "Assista no YouTube"
+  do embed deixaram de ser clicáveis; ao acabar aparece "Próxima aula".
+- **Minutagem.** Cada aula mostra a duração na lista e ao lado do título,
+  e o cabeçalho soma o total. O app descobre a duração sozinho.
+- **Descrição legível.** Quebras de linha viram parágrafos e os itens com
+  ✅ (ou • e -) viram lista, mesmo quando colados numa linha só.
+- **Engrenagem, anterior/próxima e concluir.** A engrenagem do player tem
+  velocidade (0,5× a 2×, lembrada) e a legenda do YouTube, que vem sempre
+  desligada. Botões de aula anterior e próxima na barra. "Concluir aula"
+  marca com ✓ na lista (e ao terminar o vídeo marca sozinho); o cabeçalho
+  conta as concluídas. A qualidade fica automática: o embed do YouTube não
+  aceita mais escolher.
+- Sair da aba Aulas pausa o vídeo. A lista das aulas fica parada enquanto a
+  página rola e, com muitas aulas, rola por dentro.
+- **Licença: PC bloqueado dizia "Modo aberto".** Quem estava com o bloqueio
+  gravado (trial vencido, ou a recusa "crie sua conta") via o texto errado,
+  sem os planos, sem o modal e sem o código do computador. Agora a tela
+  mostra o motivo real, os planos para assinar e o código para mandar ao
+  suporte. No servidor, o e-mail da conta passa a aparecer no painel do
+  admin também para PC que só teve trial (rode o
+  `RODAR-NO-SUPABASE-email-no-trial.sql`).
+
 ## 5.0.4
 
 - **Copiar presets de uma empresa para outra.** Na tela Empresas, cada

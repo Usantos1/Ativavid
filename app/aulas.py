@@ -9,11 +9,22 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib import request
 
 CACHE = Path.home() / "ATIVAVID" / "aulas.json"
+
+# Minutagem (5.0.5): o YouTube nao da a duracao pelo embed antes de tocar,
+# e o admin nao vai digitar. A pagina do video traz `lengthSeconds`; le
+# uma vez por video e guarda no cache. Em thread: /api/aulas responde na
+# hora e a tela pede de novo em seguida.
+_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+       "(KHTML, like Gecko) Chrome/124.0 Safari/537.36")
+_DUR_LOCK = threading.Lock()
+_DUR_EM_ANDAMENTO = False
 
 _ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
 _URL = re.compile(r"(?:v=|youtu\.be/|/shorts/|/embed/|/live/|/v/)([A-Za-z0-9_-]{11})")
@@ -66,15 +77,98 @@ def _ler_cache() -> dict[str, Any] | None:
         return None
 
 
-def _gravar_cache(aulas: list[dict[str, Any]]) -> None:
+def _gravar_cache(aulas: list[dict[str, Any]] | None = None,
+                  duracoes: dict[str, int] | None = None) -> None:
+    """Grava a lista e/ou as duracoes SEM apagar o que ja estava."""
     try:
+        atual = _ler_cache() or {}
+        if aulas is not None:
+            atual["aulas"] = aulas
+            atual["fetchedAt"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        if duracoes:
+            d = dict(atual.get("duracoes") or {})
+            d.update({k: int(v) for k, v in duracoes.items() if v})
+            atual["duracoes"] = d
         CACHE.parent.mkdir(parents=True, exist_ok=True)
-        CACHE.write_text(json.dumps({
-            "aulas": aulas,
-            "fetchedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        CACHE.write_text(json.dumps(atual, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     except OSError:
         pass
+
+
+def _duracoes_conhecidas() -> dict[str, int]:
+    c = _ler_cache() or {}
+    d = c.get("duracoes") or {}
+    out: dict[str, int] = {}
+    if isinstance(d, dict):
+        for k, v in d.items():
+            try:
+                if int(v) > 0:
+                    out[str(k)] = int(v)
+            except (TypeError, ValueError):
+                continue
+    return out
+
+
+def _baixar_html(url: str) -> str:
+    req = request.Request(url, headers={"User-Agent": _UA, "Accept-Language": "pt-BR,pt;q=0.9"})
+    with request.urlopen(req, timeout=10) as r:
+        return r.read(2_000_000).decode("utf-8", "replace")
+
+
+def duracao_no_html(html: str) -> int | None:
+    m = re.search(r'"lengthSeconds"\s*:\s*"(\d+)"', html or "")
+    if m:
+        return int(m.group(1))
+    m = re.search(r'"approxDurationMs"\s*:\s*"(\d+)"', html or "")
+    if m:
+        return max(1, round(int(m.group(1)) / 1000))
+    return None
+
+
+def _duracao_youtube(yid: str) -> int | None:
+    try:
+        return duracao_no_html(_baixar_html(f"https://www.youtube.com/watch?v={yid}&hl=pt"))
+    except Exception:  # noqa: BLE001 — sem rede, sem minutagem por enquanto
+        return None
+
+
+def _completar_duracoes(ids: list[str]) -> None:
+    global _DUR_EM_ANDAMENTO
+    try:
+        achadas: dict[str, int] = {}
+        for yid in ids:
+            d = _duracao_youtube(yid)
+            if d:
+                achadas[yid] = d
+        if achadas:
+            _gravar_cache(duracoes=achadas)
+    finally:
+        with _DUR_LOCK:
+            _DUR_EM_ANDAMENTO = False
+
+
+def _com_duracoes(aulas: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
+    """Poe `duracaoSeg` em cada aula; dispara a busca do que falta."""
+    global _DUR_EM_ANDAMENTO
+    conhecidas = _duracoes_conhecidas()
+    faltam: list[str] = []
+    for a in aulas:
+        d = conhecidas.get(a["youtubeId"])
+        a["duracaoSeg"] = d or 0
+        if not d and a["youtubeId"] not in faltam:
+            faltam.append(a["youtubeId"])
+    disparar = False
+    if faltam:
+        with _DUR_LOCK:
+            if not _DUR_EM_ANDAMENTO:
+                _DUR_EM_ANDAMENTO = True
+                disparar = True
+    # fora do lock: a thread devolve o lock no `finally`, e um start que
+    # rodasse na hora (teste) travava esperando o proprio lock
+    if disparar:
+        threading.Thread(target=_completar_duracoes, args=(faltam,),
+                         daemon=True, name="aulas-duracao").start()
+    return aulas, len(faltam)
 
 
 def listar() -> dict[str, Any]:
@@ -83,13 +177,15 @@ def listar() -> dict[str, Any]:
     if code == 200 and isinstance(data, list):
         aulas = [x for x in (_limpa(a) for a in data) if x]
         _gravar_cache(aulas)
-        return {"ok": True, "aulas": aulas, "origem": "servidor"}
+        aulas, pendentes = _com_duracoes(aulas)
+        return {"ok": True, "aulas": aulas, "origem": "servidor", "duracoesPendentes": pendentes}
     erro = ""
     if isinstance(data, dict):
         erro = str(data.get("message") or data.get("error") or data.get("msg") or "")
     cache = _ler_cache()
     if cache and isinstance(cache.get("aulas"), list):
         aulas = [x for x in (_limpa(a) for a in cache["aulas"]) if x]
+        aulas, _ = _com_duracoes(aulas)
         return {"ok": True, "aulas": aulas, "origem": "cache",
                 "fetchedAt": cache.get("fetchedAt") or "", "erro": erro}
     return {"ok": True, "aulas": [], "origem": "vazio", "erro": erro, "http": code}
@@ -134,4 +230,5 @@ def admin(action: str, **campos: Any) -> dict[str, Any]:
                 "message": str(data.get("message") or "O servidor recusou.")}
     aulas = [x for x in (_limpa(a) for a in (data.get("aulas") or [])) if x]
     _gravar_cache([a for a in aulas if a.get("ativo", True)])
-    return {"ok": True, "id": data.get("id"), "aulas": aulas}
+    aulas, pendentes = _com_duracoes(aulas)
+    return {"ok": True, "id": data.get("id"), "aulas": aulas, "duracoesPendentes": pendentes}

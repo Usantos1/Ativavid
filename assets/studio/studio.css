@@ -4267,8 +4267,11 @@ body.view-roteiro-on .ws-body { overflow: hidden; }
 
 /* ---- Aulas (5.0.3) ---- */
 .aulas-shell { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 18px; align-items: start; }
-.aulas-lista { display: flex; flex-direction: column; gap: 10px; border-right: 1px solid var(--line); padding-right: 14px; }
-.aulas-itens { display: flex; flex-direction: column; gap: 12px; max-height: calc(100vh - 190px); overflow: auto; }
+/* a lista fica PARADA enquanto a pagina rola; com muitas aulas, rola por
+ * dentro (`.ws-body` e quem rola a tela). */
+.aulas-lista { display: flex; flex-direction: column; gap: 10px; border-right: 1px solid var(--line); padding-right: 14px;
+  position: sticky; top: 0; align-self: start; max-height: calc(100vh - 130px); min-height: 0; }
+.aulas-itens { display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding-right: 2px; }
 .aulas-secao { display: grid; gap: 4px; }
 .aulas-secao-nome { margin: 4px 0 2px; font-size: 10.5px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); }
 .aula-item {
@@ -4278,16 +4281,64 @@ body.view-roteiro-on .ws-body { overflow: hidden; }
 }
 .aula-item:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
 .aula-item.on { background: color-mix(in srgb, var(--accent) 12%, transparent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+.aula-item.feita .aula-n { color: #35c76b; }
+.aula-item.feita .aula-titulo { color: var(--muted); }
 .aula-thumb { width: 72px; height: 40px; border-radius: 6px; object-fit: cover; background: #000; flex: 0 0 auto; }
 .aula-txt { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
 .aula-n { font-size: 11px; font-weight: 800; color: var(--dim); flex: 0 0 auto; }
 .aula-titulo { font-size: 13px; font-weight: 650; line-height: 1.25; }
 .aulas-main { display: grid; gap: 12px; }
-.aulas-player { position: relative; width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: 14px; overflow: hidden; border: 1px solid var(--hairline); }
-.aulas-iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.aulas-player { position: relative; width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: 14px; overflow: hidden; border: 1px solid var(--hairline); outline: none; }
+.aulas-player:focus-visible { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 60%, transparent); }
+.aulas-player:fullscreen { border-radius: 0; border: 0; }
+.aulas-yt-wrap { position: absolute; inset: 0; }
+.aulas-yt-wrap iframe, #aulasYt { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+/* a capa: engole todo clique do embed; cursor de "toca" */
+.aulas-capa { position: absolute; inset: 0; cursor: pointer; display: none; }
+.aulas-player.has-video .aulas-capa { display: block; }
+.aulas-play-big {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 84px; height: 84px; border-radius: 50%; border: 0; cursor: pointer;
+  background: color-mix(in srgb, var(--accent) 92%, #000); color: #fff;
+  display: grid; place-items: center; box-shadow: 0 10px 30px rgba(0,0,0,.45);
+  transition: transform .12s, opacity .15s;
+}
+.aulas-play-big svg { width: 40px; height: 40px; fill: currentColor; margin-left: 4px; }
+.aulas-play-big:hover { transform: translate(-50%, -50%) scale(1.06); }
+.aulas-player.playing .aulas-play-big, .aulas-player.ended .aulas-play-big { opacity: 0; pointer-events: none; }
+.aulas-fim { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 10px; background: rgba(0,0,0,.55); }
+.aulas-ctl {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+  background: linear-gradient(transparent, rgba(0,0,0,.75)); color: #fff;
+  opacity: 0; transition: opacity .18s; cursor: default;
+}
+.aulas-player:hover .aulas-ctl, .aulas-player:not(.playing) .aulas-ctl, .aulas-player:focus-within .aulas-ctl { opacity: 1; }
+.aulas-btn { width: 34px; height: 34px; border: 0; border-radius: 8px; background: transparent; color: #fff; cursor: pointer; display: grid; place-items: center; }
+.aulas-btn:hover { background: rgba(255,255,255,.14); }
+.aulas-btn svg { width: 20px; height: 20px; fill: currentColor; stroke: currentColor; stroke-width: 0; }
+#aulasTela svg, .aulas-btn .ico-ondas { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.aulas-player.playing .ico-play, .aulas-player:not(.playing) .ico-pause { display: none; }
+#aulasMudo.muted .ico-ondas { display: none; }
+.aulas-tempo { font-size: 12.5px; font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 92px; }
+.aulas-barra { flex: 1; height: 6px; border-radius: 999px; background: rgba(255,255,255,.28); cursor: pointer; position: relative; }
+.aulas-barra:hover { height: 8px; }
+.aulas-barra-fill { height: 100%; width: 0; border-radius: 999px; background: var(--accent); }
 .aulas-vazio { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 14px; }
-.aulas-sobre { display: grid; gap: 4px; }
+.aulas-erro { position: absolute; left: 12px; right: 12px; bottom: 12px; padding: 10px 12px; border-radius: 10px; background: rgba(0,0,0,.8); color: #fff; font-size: 13px; }
+.aulas-erro a { color: #fff; }
+.aulas-sobre { display: grid; gap: 6px; }
+.aulas-sobre-topo { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
 .aulas-titulo { margin: 0; font-size: 18px; font-weight: 800; }
+.aulas-dur-total { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.aula-dur { font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; margin-left: auto; padding-left: 8px; flex: 0 0 auto; }
+.aula-txt { flex: 1; }
+/* descricao arrumada: paragrafos e lista, largura de leitura */
+.aulas-desc { max-width: 78ch; font-size: 14px; line-height: 1.55; color: var(--text); }
+.aulas-desc p { margin: 0 0 8px; }
+.aulas-desc ul { margin: 0 0 10px; padding-left: 0; list-style: none; display: grid; gap: 4px; }
+.aulas-desc li { position: relative; padding-left: 20px; }
+.aulas-desc li::before { content: ""; position: absolute; left: 0; top: .55em; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); }
 .aulas-admin { margin-top: 8px; }
 .aulas-form { display: grid; gap: 10px; }
 @media (max-width: 900px) {
@@ -4295,3 +4346,20 @@ body.view-roteiro-on .ws-body { overflow: hidden; }
   .aulas-lista { border-right: 0; padding-right: 0; }
   .aulas-itens { max-height: none; }
 }
+
+/* engrenagem, concluir, anterior/proxima (5.0.5) */
+.aulas-menu {
+  position: absolute; right: 12px; bottom: 58px; z-index: 2; min-width: 250px; max-width: 320px;
+  padding: 10px 12px; border-radius: 12px; background: rgba(20,20,24,.96); color: #fff;
+  border: 1px solid rgba(255,255,255,.12); box-shadow: 0 12px 30px rgba(0,0,0,.5); cursor: default;
+}
+.aulas-menu-tit { margin: 6px 0 4px; font-size: 10.5px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: rgba(255,255,255,.6); }
+.aulas-menu-tit:first-child { margin-top: 0; }
+.aulas-menu-linha { display: flex; gap: 4px; flex-wrap: wrap; }
+.aulas-menu-linha button { border: 1px solid rgba(255,255,255,.16); background: transparent; color: #fff; font: inherit; font-size: 12px; padding: 4px 9px; border-radius: 999px; cursor: pointer; }
+.aulas-menu-linha button:hover { background: rgba(255,255,255,.12); }
+.aulas-menu-linha button.on { background: var(--accent); border-color: transparent; font-weight: 700; }
+.aulas-menu-nota { margin: 0; font-size: 12px; color: rgba(255,255,255,.7); line-height: 1.4; }
+#aulasEngren.on { background: rgba(255,255,255,.18); }
+.aulas-concluir { margin-left: auto; }
+.aulas-concluir.on { color: #35c76b; border-color: #35c76b; }

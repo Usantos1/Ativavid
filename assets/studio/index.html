@@ -526,13 +526,78 @@
               <div class="aulas-itens" id="aulasItens"></div>
             </aside>
             <div class="aulas-main">
-              <div class="aulas-player" id="aulasPlayer">
+              <!-- 5.0.5: player PROPRIO por cima do embed. O YouTube fica
+                   embaixo (API IFrame, controls=0) e a capa bloqueia todo
+                   clique nele: titulo, canal, "Assista no YouTube", cards.
+                   Os controles (play, tempo, barra, som, tela cheia) sao
+                   nossos. -->
+              <div class="aulas-player" id="aulasPlayer" tabindex="0">
+                <div class="aulas-yt-wrap"><div id="aulasYt"></div></div>
+                <div class="aulas-capa" id="aulasCapa">
+                  <button type="button" class="aulas-play-big" id="aulasPlayBig" aria-label="Tocar">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg>
+                  </button>
+                  <div class="aulas-fim hidden" id="aulasFim">
+                    <button type="button" class="ghost-btn" id="aulasDeNovo">Assistir de novo</button>
+                    <button type="button" class="export-btn" id="aulasConcluirFim">✓ Concluir e ir para a próxima</button>
+                  </div>
+                  <!-- engrenagem: velocidade e legenda. Qualidade fica com o
+                       YouTube: o embed nao aceita mais escolher (a API
+                       ignora setPlaybackQuality desde 2019). -->
+                  <div class="aulas-menu hidden" id="aulasMenu">
+                    <p class="aulas-menu-tit">Velocidade</p>
+                    <div class="aulas-menu-linha" id="aulasVel">
+                      <button type="button" data-vel="0.5">0,5×</button>
+                      <button type="button" data-vel="0.75">0,75×</button>
+                      <button type="button" data-vel="1" class="on">1×</button>
+                      <button type="button" data-vel="1.25">1,25×</button>
+                      <button type="button" data-vel="1.5">1,5×</button>
+                      <button type="button" data-vel="2">2×</button>
+                    </div>
+                    <p class="aulas-menu-tit">Legenda do YouTube</p>
+                    <div class="aulas-menu-linha" id="aulasCc">
+                      <button type="button" data-cc="0" class="on">Desligada</button>
+                      <button type="button" data-cc="1">Ligada</button>
+                    </div>
+                    <p class="aulas-menu-tit">Qualidade</p>
+                    <p class="aulas-menu-nota">Automática: o YouTube escolhe pela sua internet e pelo tamanho da janela (tela cheia pede a maior).</p>
+                  </div>
+                  <div class="aulas-ctl" id="aulasCtl">
+                    <button type="button" class="aulas-btn" id="aulasAnterior" aria-label="Aula anterior" title="Aula anterior">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h2.5v14H6zM18 5.5v13L9.5 12z"/></svg>
+                    </button>
+                    <button type="button" class="aulas-btn" id="aulasPlay" aria-label="Tocar / pausar">
+                      <svg class="ico-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg>
+                      <svg class="ico-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>
+                    </button>
+                    <button type="button" class="aulas-btn" id="aulasProxima" aria-label="Próxima aula" title="Próxima aula">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 5H18v14h-2.5zM6 5.5v13l8.5-6.5z"/></svg>
+                    </button>
+                    <span class="aulas-tempo" id="aulasTempo">0:00 / 0:00</span>
+                    <div class="aulas-barra" id="aulasBarra" role="slider" aria-label="Posição">
+                      <div class="aulas-barra-fill" id="aulasBarraFill"></div>
+                    </div>
+                    <button type="button" class="aulas-btn" id="aulasMudo" aria-label="Som">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5v5h3.5L12 18V6L7.5 9.5z"/><path class="ico-ondas" d="M15.5 9a4 4 0 0 1 0 6M17.8 6.5a7.5 7.5 0 0 1 0 11"/></svg>
+                    </button>
+                    <button type="button" class="aulas-btn" id="aulasEngren" aria-label="Velocidade e legenda" title="Velocidade e legenda">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>
+                    </button>
+                    <button type="button" class="aulas-btn" id="aulasTela" aria-label="Tela cheia">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg>
+                    </button>
+                  </div>
+                </div>
                 <div class="aulas-vazio" id="aulasVazio">Escolha uma aula ao lado.</div>
+                <div class="aulas-erro hidden" id="aulasErro"></div>
               </div>
               <div class="aulas-sobre">
-                <h3 id="aulaTitulo" class="aulas-titulo"></h3>
-                <p class="hint" id="aulaDescricao"></p>
-                <p class="hint"><a id="aulaAbrir" class="hidden" href="#" target="_blank" rel="noopener">Abrir no YouTube</a></p>
+                <div class="aulas-sobre-topo">
+                  <h3 id="aulaTitulo" class="aulas-titulo"></h3>
+                  <span class="aulas-dur-total" id="aulaDur"></span>
+                  <button type="button" class="ghost-btn ghost-btn--sm aulas-concluir" id="aulaConcluir">✓ Concluir aula</button>
+                </div>
+                <div class="aulas-desc" id="aulaDescricao"></div>
               </div>
               <section class="pane-card aulas-admin hidden" id="aulasAdmin">
                 <header class="pane-card-head emp-head">
