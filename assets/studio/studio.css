@@ -4174,3 +4174,11 @@ body.view-roteiro-on .ws-body { overflow: hidden; }
 .import-marca-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .import-marca .import-adv { margin-top: 6px; }
 .import-marca .import-adv summary { cursor: pointer; font-size: 12px; }
+
+/* workspace por empresa (5.0.0) */
+.ws-marcas { display: grid; gap: 2px; }
+.ws-menu-sub { margin: 4px 10px 2px; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); font-weight: 700; }
+.ws-marca .ws-marca-dot { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--dim); display: inline-block; margin-right: 8px; }
+.ws-marca.on .ws-marca-dot { background: var(--accent); border-color: var(--accent); }
+.ws-marca.on { font-weight: 700; }
+.ws-marca-n { margin-left: auto; font-size: 11px; color: var(--dim); padding-left: 10px; }

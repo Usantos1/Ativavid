@@ -116,7 +116,9 @@ def test_a_tela_nao_cria_marca_por_cima_da_ativa():
                 break
             bloco = js[i:i + 400]
             if 'method: "POST"' in bloco:
-                assert 'action: "format"' in bloco, bloco[:200]
+                # 5.0.0: o menu do workspace ATIVA uma marca existente
+                # (`action: "activate"`); tambem nao cria nem renomeia.
+                assert ('action: "format"' in bloco or 'action: "activate"' in bloco), bloco[:200]
             i += 10
         return
     i = js.index('$("#brandNewName")')

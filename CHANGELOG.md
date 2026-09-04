@@ -1,5 +1,17 @@
 # Changelog
 
+## 5.0.0
+
+- **Numeração nova: 5.0.0.** Daqui em diante é maior.menor.correção
+  (5.0.1, 5.1.0…). Começa em 5 porque 4.1.1 seria lida como mais antiga
+  que 4.101 pelo atualizador.
+- **Workspace por empresa.** O card no rodapé da barra lateral abre a lista
+  de empresas (marcas): escolher uma filtra Fila, Concluídos, Projetos e a
+  tela inicial para os vídeos dela, e troca a marca ativa (presets, estilos
+  e roteiro seguem junto). "Todas as empresas" mostra o acervo inteiro, com
+  o nome da empresa em cada card. Cada vídeo sabe de quem é pelo preset
+  usado ou pela importação; vídeo sem empresa aparece em todos.
+
 ## 4.101
 
 - **Roteiro mais viral e mais vendedor.** O prompt ganhou a regra "viral

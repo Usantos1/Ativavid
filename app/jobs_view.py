@@ -604,10 +604,32 @@ def _CACHE_PRONTOS_LIMPAR(vivos: set[str]) -> None:
         _CACHE_PRONTOS.pop(k, None)
 
 
+def _marca_do_projeto(j: dict, edit: Path) -> str:
+    """De qual EMPRESA (marca) e este video — workspace por empresa (5.0.0).
+
+    O job nao guardava isso; quem sabe e o projeto: `preset-used.json`
+    (gravado no render) e, antes do render, `job_intent.json` (gravado na
+    importacao). Vazio = "sem empresa" (aparece em todos os workspaces).
+    """
+    bid = str(j.get("brandId") or "").strip()
+    if bid:
+        return bid
+    for nome in ("preset-used.json", "job_intent.json"):
+        try:
+            d = json.loads((edit / nome).read_text(encoding="utf-8-sig"))
+            bid = str((d or {}).get("brandId") or "").strip()
+            if bid:
+                return bid
+        except (OSError, json.JSONDecodeError, AttributeError):
+            continue
+    return ""
+
+
 def _montar_card(j: dict, edit: Path, com_links: bool, STAGE_LABELS, enrich_job_display,
                  medir_duracao_em_fundo, resolve_delivery_mp4, store) -> None:
     """O card de UM job (a parte cara: leituras de arquivo)."""
     if True:
+        j["brandId"] = _marca_do_projeto(j, edit)
         j["hasCut"] = (edit / "cut.mp4").exists()
         j["hasFinal"] = resolve_delivery_mp4(edit) is not None
         j["hasThumb"] = (edit / "thumb.jpg").exists()

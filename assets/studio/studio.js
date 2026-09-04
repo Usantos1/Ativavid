@@ -470,14 +470,37 @@ function byRecency(a, b) {
   return jobRecency(b) - jobRecency(a) || String(b.id).localeCompare(String(a.id));
 }
 
+/* Workspace por EMPRESA (5.0.0): "ativa" = so os videos da marca ativa
+ * (o card do rodape); "all" = todas. Video sem marca (projeto antigo, nunca
+ * renderizado) aparece em todos, para nao sumir de lugar nenhum. */
+const WS_MARCA_KEY = "ativavid.wsMarca";
+state.wsMarca = (() => { try { return localStorage.getItem(WS_MARCA_KEY) || "ativa"; } catch { return "ativa"; } })();
+function setWsMarca(modo) {
+  state.wsMarca = modo === "all" ? "all" : "ativa";
+  try { localStorage.setItem(WS_MARCA_KEY, state.wsMarca); } catch { /* ignore */ }
+}
+function jobNaMarca(j) {
+  if (state.wsMarca === "all") return true;
+  const ativa = state.brandActive && state.brandActive.id;
+  if (!ativa) return true;
+  return !j.brandId || j.brandId === ativa;
+}
+function nomeDaMarca(id) {
+  const b = (state.brands || []).find((x) => x.id === id);
+  return b ? (b.name || b.id) : (id || "");
+}
+function jobsDoWorkspace() {
+  return state.jobs.filter(jobNaMarca);
+}
+
 function filterJobs(kind) {
   if (kind === "fila") {
-    return state.jobs.filter(jobInFila);
+    return jobsDoWorkspace().filter(jobInFila);
   }
   if (kind === "done") {
     // Busca tambem aqui: sao 183 videos prontos, e sem ela a unica
     // forma de achar um era rolar a lista.
-    return state.jobs.filter((j) => j.status === "done")
+    return jobsDoWorkspace().filter((j) => j.status === "done")
       .filter((j) => casaBusca(j, state.doneBusca))
       .sort(byRecency);
   }
@@ -485,7 +508,7 @@ function filterJobs(kind) {
     // Projetos é o acervo: TODO trabalho que ainda existe em disco, em
     // qualquer estado. A Fila e os Concluídos são recortes disto.
     const f = state.projFilter || "todos";
-    return state.jobs
+    return jobsDoWorkspace()
       .filter((j) => {
         if (f === "ativos") return jobInFila(j) && j.status !== "error";
         if (f === "prontos") return j.status === "done";
@@ -495,7 +518,7 @@ function filterJobs(kind) {
       .filter((j) => casaBusca(j, state.projBusca))
       .sort(byRecency);
   }
-  return [...state.jobs].sort(byRecency).slice(0, 8);
+  return [...jobsDoWorkspace()].sort(byRecency).slice(0, 8);
 }
 
 /* O que o usuario procura e o que ele LE no cartao: o titulo. A busca
@@ -679,12 +702,15 @@ function periodoLabel(j) {
 }
 
 function cardSig(j, opts) {
+  // o modo do workspace entra na assinatura: o chip da marca depende dele
+  const _ws = `${state.wsMarca}:${j.brandId || ""}`;
   const links = jobLinks(j);
   const qa = j.quickApply || {};
   // o menu muda quando ha estilo copiado ("Colar estilo (de X)"): sem isto
   // o card nao repinta depois do copiar
   const clip = estiloCopiado();
   return [
+    _ws,
     clip ? `clip:${clip.folder}` : "",
     j.id, j.status, j.title || j.name, Math.round(Number(j.progress) || 0), j.hasFinal, j.hasThumb, j.finishedAt, j.finishedAtLabel,
     j.startedAtLabel || "", j.durationSec || "", j.sourceDurationSec || "", j.legenda ? "L" : "",
@@ -963,6 +989,8 @@ function cardHtml(j, opts) {
   // sobre o trabalho do corte, que e o que o app faz.
   const dur = j.durationLabel || duracoesLabel(j);
   const metaBits = [dur, fmt].filter(Boolean);
+  // Em "Todas as empresas" cada card diz de quem e (5.0.0).
+  if (state.wsMarca === "all" && j.brandId) metaBits.unshift(nomeDaMarca(j.brandId));
   // No card PRONTO a ficha substitui a linha de meta, a mensagem e o periodo.
   const pronto = j.status === "done" && !applyBusy(j);
   const copy = queueCopy(j, view);
@@ -1373,7 +1401,7 @@ function renderJobs() {
     a[j.status] = (a[j.status] || 0) + 1;
     return a;
   }, {});
-  setCount("#countProjetos", state.jobs.length);
+  setCount("#countProjetos", jobsDoWorkspace().length);
   const meta = $("#queueMeta");
   if (meta) {
     const workView = ["import", "fila", "done", "projetos"].includes(state.view);
@@ -3966,7 +3994,7 @@ function renderWorkspaceCard() {
   const btn = $("#btnWorkspace");
   if (!btn) return;
   const marca = state.brandActive || {};
-  const nome = marca.name || "Meu workspace";
+  const nome = state.wsMarca === "all" ? "Todas as empresas" : (marca.name || "Meu workspace");
   const plano = workspacePlanMeta(state.license);
   const nameEl = $("#wsName");
   const planEl = $("#wsPlan");
@@ -4033,6 +4061,25 @@ function wireGaveta() {
   });
 }
 
+/* Lista de empresas no menu do workspace (5.0.0). */
+function renderWsMarcas() {
+  const box = $("#wsMarcas");
+  if (!box) return;
+  const brands = state.brands || [];
+  const ativa = state.brandActive && state.brandActive.id;
+  const item = (id, nome, on, extra) => `
+    <button type="button" class="ws-menu-item ws-marca${on ? " on" : ""}" role="menuitemradio" aria-checked="${on ? "true" : "false"}" data-ws-marca="${escapeHtml(id)}">
+      <span class="ws-marca-dot" aria-hidden="true"></span><span>${escapeHtml(nome)}</span>${extra || ""}
+    </button>`;
+  const todas = state.wsMarca === "all";
+  box.innerHTML = `<p class="ws-menu-sub">Empresa</p>`
+    + item("__all__", "Todas as empresas", todas, `<span class="ws-marca-n">${state.jobs.length}</span>`)
+    + brands.map((b) => {
+      const n = state.jobs.filter((j) => !j.brandId || j.brandId === b.id).length;
+      return item(b.id, b.name || b.id, !todas && b.id === ativa, `<span class="ws-marca-n">${n}</span>`);
+    }).join("");
+}
+
 function closeWorkspaceMenu() {
   const menu = $("#wsMenu");
   const btn = $("#btnWorkspace");
@@ -4050,10 +4097,36 @@ function wireWorkspaceMenu() {
     // Recolhido, o card vira só o avatar — abrir o menu ali é a única
     // forma de chegar em conta/licença sem expandir o sidebar.
     const abrir = menu.classList.contains("hidden");
+    if (abrir) renderWsMarcas(); // contagens por empresa sempre frescas
     menu.classList.toggle("hidden", !abrir);
     btn.setAttribute("aria-expanded", abrir ? "true" : "false");
   });
   menu.addEventListener("click", async (e) => {
+    const marca = e.target.closest("[data-ws-marca]");
+    if (marca) {
+      e.stopPropagation();
+      const id = marca.dataset.wsMarca;
+      if (id === "__all__") {
+        setWsMarca("all");
+        renderWsMarcas(); renderWorkspaceCard(); renderJobs();
+        toast("Mostrando todas as empresas");
+        return;
+      }
+      try {
+        // trocar a empresa = ativar a marca (presets, estilos e roteiro seguem)
+        if (!state.brandActive || state.brandActive.id !== id) {
+          await api("/api/brands", { method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "activate", id }) });
+        }
+        setWsMarca("ativa");
+        await loadBrandsUi();
+        loadImportPresets().catch(() => {});
+        toast(`Workspace: ${nomeDaMarca(id)}`);
+      } catch (err) {
+        toast(err.message || "Não consegui trocar a empresa");
+      }
+      return;
+    }
     const item = e.target.closest("[data-ws]");
     if (!item) return;
     e.stopPropagation();
@@ -5808,7 +5881,10 @@ async function loadBrandsUi() {
   const brands = data.brands || [];
   const active = brands.find((b) => b.active) || brands[0];
   state.brandActive = active || null;
+  state.brands = brands;
+  renderWsMarcas();
   renderWorkspaceCard();
+  renderJobs();
   if ($("#exportPresetSelect") && active) {
     $("#exportPresetSelect").value = active.exportPreset || "reels";
   }
