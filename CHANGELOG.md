@@ -1,5 +1,16 @@
 # Changelog
 
+## 5.0.29
+
+- **Botão para baixar as trilhas e os efeitos prontos.** Em Configurações →
+  Música dos vídeos agora há "Baixar trilhas e efeitos": 596 arquivos (376
+  trilhas + 219 efeitos), 370 MB, uma vez só. Resolve as máquinas sem placa
+  NVIDIA, onde a IA local não roda e a pasta de trilhas nascia vazia — o
+  vídeo saía sem música nenhuma e não havia o que fazer na tela.
+- **Nada do que você já tem é sobrescrito.** Quem já tem a Biblioteca cheia
+  recebe só o que falta, e o botão diz quantos arquivos entraram. Baixar
+  duas vezes não duplica nada.
+
 ## 5.0.28
 
 - **O Diagnóstico anunciava uma aceleração de vídeo que a máquina não tem.**

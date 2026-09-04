@@ -2255,6 +2255,11 @@ class StudioHandler(BaseHTTPRequestHandler):
                 pass
             self._json({"recovered": jobs, "ids": [j["id"] for j in jobs]})
             return
+        if path == "/api/biblioteca/pacote":
+            from app import biblioteca_pacote as bpk
+
+            self._json({"ok": True, **bpk.estado(self.projects_root)})
+            return
         if path == "/api/musica/motor":
             self._json(_musica_estado_completo(self.projects_root))
             return
@@ -3034,6 +3039,16 @@ class StudioHandler(BaseHTTPRequestHandler):
                 self._json({"ok": False, "error": friendly_llm_error(e), "needsSession": True}, 502)
             return
 
+        if path == "/api/biblioteca/pacote":
+            from app import biblioteca_pacote as bpk
+
+            body = self._read_json() or {}
+            if str(body.get("action") or "") == "baixar":
+                self._json({"ok": True, **bpk.instalar_em_fundo(self.projects_root),
+                            **bpk.estado(self.projects_root)})
+            else:
+                self._json({"ok": True, **bpk.estado(self.projects_root)})
+            return
         if path == "/api/musica/motor":
             body = self._read_json() or {}
             if str(body.get("action") or "instalar") == "instalar":

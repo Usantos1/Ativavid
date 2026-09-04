@@ -4712,6 +4712,24 @@ function wireForms() {
       }
     };
   }
+  const btnPacote = $("#btnBaixarPacote");
+  if (btnPacote && !btnPacote.dataset.wired) {
+    btnPacote.dataset.wired = "1";
+    btnPacote.onclick = async () => {
+      btnPacote.disabled = true;
+      try {
+        await api("/api/biblioteca/pacote", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "baixar" }),
+        });
+        toast("Baixando trilhas e efeitos — pode deixar rodando", 6000);
+        acompanharPacote();
+      } catch (e) {
+        toast(e.message || "Não deu para começar o download");
+        btnPacote.disabled = false;
+      }
+    };
+  }
   const btnHwBench = $("#btnHwBench");
   if (btnHwBench) {
     btnHwBench.onclick = async () => {
@@ -5913,6 +5931,77 @@ async function pintarMotorMusica() {
   return d;
 }
 
+/* O pacote de trilhas e efeitos (5.0.29).
+ *
+ * A IA local so roda em placa NVIDIA. Sem ela o plano B sempre foi "deixe
+ * MP3s em Biblioteca/Trilhas" — uma pasta que nasce VAZIA, entao o video
+ * saia sem trilha nenhuma e ninguem sabia o que fazer. Aqui o acervo do
+ * dono do app desce de uma vez, com barra, e nada do usuario e
+ * sobrescrito. */
+async function pintarPacoteBiblioteca() {
+  const linha = $("#pacoteEstado");
+  const btn = $("#btnBaixarPacote");
+  const barra = $("#pacoteBarra");
+  if (!linha || !btn) return null;
+  let d = {};
+  try {
+    d = await api("/api/biblioteca/pacote");
+  } catch {
+    return null;      // como o motor: nao apaga o texto no meio do download
+  }
+  const gb = ((d.mbTotal || 370) / 1000).toFixed(2).replace(".", ",");
+  if (d.rodando || d.estado === "baixando" || d.estado === "instalando") {
+    const pct = d.total ? Math.round((d.baixado / d.total) * 100) : 0;
+    linha.textContent = d.estado === "instalando"
+      ? "Descompactando na sua Biblioteca…"
+      : `Baixando o pacote… ${pct}%`;
+    btn.classList.add("hidden");
+    if (barra) {
+      barra.classList.remove("hidden");
+      const span = barra.querySelector("span");
+      if (span) span.style.width = `${pct}%`;
+    }
+  } else if (d.estado === "erro" && d.erro) {
+    linha.textContent = `O download falhou: ${d.erro}`;
+    btn.textContent = "Tentar de novo";
+    btn.classList.remove("hidden");
+    btn.disabled = false;
+    barra?.classList.add("hidden");
+  } else {
+    const quantos = d.arquivos || 0;
+    linha.textContent = d.estado === "pronto" && d.novos
+      ? `✓ ${d.novos} arquivo(s) novos na sua Biblioteca (${quantos} no total).`
+      : `Sua Biblioteca tem ${quantos} som(ns). O pacote traz trilhas e `
+        + `efeitos prontos (${gb} GB, uma vez só).`;
+    // Sem URL o pacote ainda nao foi publicado: botao que erra nao aparece.
+    btn.classList.toggle("hidden", !d.url);
+    btn.textContent = quantos > 0 ? "Completar com o pacote" : "Baixar trilhas e efeitos";
+    btn.disabled = false;
+    barra?.classList.add("hidden");
+  }
+  return d;
+}
+
+function acompanharPacote() {
+  clearInterval(acompanharPacote._t);
+  let falhas = 0;
+  acompanharPacote._t = setInterval(async () => {
+    const d = await pintarPacoteBiblioteca();
+    if (!d) {
+      if (++falhas < 5) return;
+      clearInterval(acompanharPacote._t);
+      return;
+    }
+    falhas = 0;
+    if (!d.rodando && d.estado !== "baixando" && d.estado !== "instalando") {
+      clearInterval(acompanharPacote._t);
+      if (d.estado === "pronto") {
+        toast(`Biblioteca completa — ${d.novos || 0} arquivo(s) novos`, 6000);
+      }
+    }
+  }, 2000);
+}
+
 /** Enquanto baixa, pergunta o progresso — a instalacao leva minutos. */
 function acompanharMotorMusica() {
   clearInterval(acompanharMotorMusica._t);
@@ -5958,6 +6047,7 @@ function ajustarAvancadoParaOPerfil() {
 
 async function loadSistema() {
   ajustarAvancadoParaOPerfil();
+  pintarPacoteBiblioteca().catch(() => {});
   const hint = $("#sysMachineHint");
   if (hint) hint.textContent = "Detectando…";
   try {
