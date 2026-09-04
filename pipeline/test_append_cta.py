@@ -37,14 +37,17 @@ def test_dest_cta_unique_and_key():
         assert source_key_from_stem(a.stem) == "cta_Loja_Centro"
 
 
-def test_write_rejects_photo():
+def test_write_accepts_photo_and_rejects_the_rest():
+    """Desde a 4.101 a FOTO entra (vira clipe de 5 s na trilha principal);
+    o que continua fora e documento, audio etc."""
     with tempfile.TemporaryDirectory() as raw:
+        assert write_cta_file(Path(raw), "foto.jpg", b"abc").suffix == ".jpg"
         try:
-            write_cta_file(Path(raw), "foto.jpg", b"abc")
+            write_cta_file(Path(raw), "doc.pdf", b"abc")
         except ValueError as e:
             assert "MP4" in str(e) or "MOV" in str(e)
         else:
-            raise AssertionError("foto não deveria entrar")
+            raise AssertionError("pdf não deveria entrar")
 
 
 def test_merge_stays_inside_project():

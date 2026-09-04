@@ -2232,6 +2232,7 @@ class StudioHandler(BaseHTTPRequestHandler):
                             "estilos": [{"id": e["id"], "nome": e["nome"]} for e in roteiro.ESTILOS],
                             "duracoes": list(roteiro.DURACOES),
                             "objetivos": roteiro.OBJETIVOS, "tons": roteiro.TONS,
+                            "gatilhos": roteiro.GATILHOS,
                             "empresa": roteiro.perfil_empresa(bid)})
                 return
             if path == "/api/roteiro/empresa":

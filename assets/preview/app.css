@@ -2692,7 +2692,7 @@ body.house-style .help-fab {
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  width: min(720px, calc(100vw - 40px));
+  width: min(1180px, calc(100vw - 40px));
   padding: 14px 16px 16px;
   background: var(--overlay-bg);
   backdrop-filter: blur(14px);
@@ -2738,9 +2738,9 @@ body.house-style .help-fab {
 #imgQuery:focus { border-color: rgba(255, 119, 19, 0.5); }
 .img-results {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-  gap: 8px;
-  max-height: 46vh;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+  max-height: 64vh;
   overflow-y: auto;
   scrollbar-width: thin;
 }
@@ -4260,3 +4260,16 @@ body > .fx-drop { position: fixed; bottom: auto; }
 .img-fonte.active { color: #fff; border-color: var(--orange, #ff6a00); background: rgba(255, 106, 0, .12); }
 .img-card .img-selo { position: absolute; left: 6px; top: 6px; font-size: 11px; font-weight: 700; color: #fff; background: rgba(0, 0, 0, .65); border-radius: 6px; padding: 2px 6px; }
 .img-card .img-selo-premium { left: auto; right: 6px; background: rgba(255, 106, 0, .85); }
+
+/* 4.101: biblioteca por tipo, e a trilha escolhida pela timeline */
+.img-subtabs { display: flex; gap: 6px; flex-wrap: wrap; margin: -4px 0 10px; }
+.img-subtab { font: inherit; font-size: 12px; font-weight: 600; color: var(--muted, #9aa3ad); background: transparent; border: 1px solid var(--line, #2a2f3a); border-radius: 999px; padding: 5px 10px; cursor: pointer; }
+.img-subtab.active { color: #fff; border-color: var(--orange, #ff6a00); background: rgba(255, 106, 0, .12); }
+.img-card.trilha-card { aspect-ratio: auto; min-height: 84px; display: flex; flex-direction: column; justify-content: center; gap: 6px; padding: 10px; }
+.img-card.trilha-card .img-credit { position: static; font-size: 12px; white-space: normal; }
+.img-card.trilha-card .img-ouvir { position: static; }
+.chip.music { cursor: pointer; }
+.chip.music:hover { filter: brightness(1.15); }
+.music-menu { position: fixed; z-index: 140; display: grid; gap: 4px; padding: 6px; background: var(--overlay-bg); border: 1px solid var(--stroke); border-radius: 10px; box-shadow: 0 12px 30px rgba(0,0,0,.45); }
+.music-menu button { font: inherit; font-size: 13px; text-align: left; color: var(--text, #eee); background: transparent; border: 0; padding: 7px 10px; border-radius: 7px; cursor: pointer; }
+.music-menu button:hover { background: rgba(255,255,255,.08); }

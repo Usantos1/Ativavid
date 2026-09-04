@@ -4169,3 +4169,8 @@ body.view-roteiro-on .ws-body { overflow: hidden; }
 .rot-perfil-campo textarea { width: 100%; font: inherit; font-size: 13px; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 8px; resize: vertical; min-height: 52px; }
 @media (max-width: 1100px) { .rot-perfil-grid { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 700px) { .rot-perfil-grid { grid-template-columns: 1fr; } }
+
+/* importar: marca e preset a vista (4.101) */
+.import-marca-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.import-marca .import-adv { margin-top: 6px; }
+.import-marca .import-adv summary { cursor: pointer; font-size: 12px; }

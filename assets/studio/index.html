@@ -374,6 +374,7 @@
                   <label>Duração <select id="rotDuracao"></select></label>
                   <label>Objetivo <select id="rotObjetivo"></select></label>
                   <label>Tom <select id="rotTom"></select></label>
+                  <label>Gatilho <select id="rotGatilho"></select></label>
                 </div>
               </div>
               <div class="rot-empresa hidden" id="rotEmpresaBox">
@@ -408,6 +409,7 @@
                     <button type="button" data-ideia="Promoção desta semana: ">Promoção</button>
                     <button type="button" data-ideia="Mito ou verdade: ">Mito ou verdade</button>
                     <button type="button" data-ideia="Me dê só 5 ganchos fortes para um vídeo sobre ">Só ganchos</button>
+                    <button type="button" data-ideia="Me dê 6 ÂNGULOS diferentes de vídeo sobre ">Explorar ângulos</button>
                   </div>
                 </div>
               </div>
@@ -1035,15 +1037,25 @@
         </select>
       </label>
     </div>
-    <details class="import-block import-adv">
-      <summary><h4>Estilo</h4><span class="muted">padrão da marca</span></summary>
+    <!-- 4.101: marca e preset A VISTA. Ficavam dentro de um "Estilo" fechado
+         e ele refazia o video para aplicar o preset ("as vezes tenho que
+         refazer o video pra ele aplicar o preset", 03/09). -->
+    <div class="import-block import-marca">
+      <div class="import-marca-row">
+        <label class="import-field">Marca
+          <select id="importBrandSelect"></select>
+        </label>
+        <label class="import-field">Preset (como o vídeo vai ficar)
+          <select id="importPresetSelect"></select>
+        </label>
+      </div>
       <p class="hint" id="importPresetHint">Usar: padrão da marca</p>
-      <label class="import-field">Preset desta marca
-        <select id="importPresetSelect"></select>
-      </label>
-      <label class="import-chk"><input type="checkbox" id="useBrandStyle" checked> Usar padrão da marca</label>
-      <button type="button" class="ghost-btn" id="btnImportStyle">Alterar para este vídeo</button>
-    </details>
+      <details class="import-adv">
+        <summary><span class="muted">Ajustar o estilo só deste vídeo</span></summary>
+        <label class="import-chk"><input type="checkbox" id="useBrandStyle" checked> Usar padrão da marca</label>
+        <button type="button" class="ghost-btn" id="btnImportStyle">Alterar para este vídeo</button>
+      </details>
+    </div>
     <label class="import-chk" id="mergeTakesWrap">
       <input type="checkbox" id="mergeTakes">
       <span><strong>Juntar arquivos em um único vídeo</strong><br><span class="muted">Use quando gravou o mesmo conteúdo em vários takes. Desmarcado: cada arquivo vira um job.</span></span>

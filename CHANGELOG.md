@@ -1,5 +1,26 @@
 # Changelog
 
+## 4.101
+
+- **Roteiro mais viral e mais vendedor.** O prompt ganhou a regra "viral
+  que vende": gatilhos mentais de propósito (curiosidade, dor, prova
+  social, escassez real, autoridade, contraste, identificação, erro
+  comum), cada gancho marcado com o gatilho usado, retenção gancho →
+  tensão → entrega → CTA, e proibição de inventar número, prazo ou
+  promessa. Seletor "Gatilho" na tela, atalho "Explorar ângulos" (6
+  ângulos com gancho pronto) e a seção "Por que para o scroll" na resposta.
+- **Marca e preset à vista na importação.** Saíram de dentro de "Estilo"
+  para o topo do "Editar com IA": escolha a marca e o preset antes de
+  importar, sem refazer depois.
+- **Mídia no editor.** O modal "Inserir imagem / B-roll" ficou bem maior; a
+  Biblioteca tem abas Imagens, Vídeos, Sons e Trilhas; e a **trilha** agora
+  se troca pela linha do tempo: clique nela para trocar (pela Biblioteca),
+  ajustar o volume ou remover. A escolha vale no Aplicar e sobrevive ao
+  Refazer.
+- **Imagem na trilha principal.** O "Importar" da linha do tempo aceita
+  JPG, PNG e WEBP: a imagem vira um trecho de 5 s no tamanho do vídeo e
+  entra onde a agulha está.
+
 ## 4.100
 
 - **Tempo exato da headline, em segundos, por preset.** Em Estilo, ao lado

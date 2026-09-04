@@ -611,7 +611,7 @@
       <span id="coverIcon"></span><span>Capa</span>
     </button>
     <button id="btnImage" class="btn icon" title="Buscar e inserir uma imagem na agulha"></button>
-    <button id="btnAppendCta" class="btn cover-btn" title="Importar um vídeo para a linha do tempo — ele entra onde a agulha está">
+    <button id="btnAppendCta" class="btn cover-btn" title="Importar um vídeo ou uma imagem para a linha do tempo — entra onde a agulha está (imagem vira um trecho de 5 s)">
       <span id="appendCtaIcon"></span><span>Importar</span>
     </button>
     <div class="protect-wrap" id="protectWrap">
@@ -625,7 +625,7 @@
         <button type="button" data-protect="clear" role="menuitem">Desproteger trecho</button>
       </div>
     </div>
-    <input id="appendCtaFile" type="file" accept="video/mp4,video/quicktime,video/x-m4v,.mp4,.mov,.m4v" hidden>
+    <input id="appendCtaFile" type="file" accept="video/mp4,video/quicktime,video/x-m4v,.mp4,.mov,.m4v,image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" hidden>
     <div class="spacer"></div>
     <span class="transport-divider"></span>
     <button id="btnZoomOut" class="btn ghost small" title="Afastar (Ctrl + scroll também funciona)">−</button>
@@ -850,6 +850,13 @@
     </div>
   </div>
   <div id="imgLibraryPane" class="hidden">
+    <!-- 4.101: a biblioteca separada por tipo -->
+    <div class="img-subtabs" role="tablist" aria-label="Tipo de arquivo">
+      <button type="button" class="img-subtab active" data-libkind="image">Imagens</button>
+      <button type="button" class="img-subtab" data-libkind="clip">Vídeos</button>
+      <button type="button" class="img-subtab" data-libkind="sfx">Sons</button>
+      <button type="button" class="img-subtab" data-libkind="track">Trilhas</button>
+    </div>
     <div class="img-search-row">
       <button id="imgLibRefresh" class="btn ghost small">Atualizar</button>
       <label class="btn primary small img-upload-label">

@@ -60,6 +60,18 @@ OBJETIVOS = {
     "autoridade": "construir autoridade e confiança",
     "alcance": "alcance máximo: ser visto e compartilhado",
 }
+GATILHOS: dict[str, str] = {
+    "auto": "a IA escolhe o gatilho que mais serve ao tema",
+    "curiosidade": "curiosidade / loop aberto (promete algo e só entrega no fim)",
+    "dor": "dor específica (o problema que o cliente sente hoje)",
+    "prova": "prova social (número, avaliação, caso real do perfil)",
+    "escassez": "escassez / urgência real (prazo, vagas, oferta que acaba)",
+    "autoridade": "autoridade (quem faz isso todo dia explicando)",
+    "contraste": "contraste / antes e depois",
+    "identificacao": "identificação ('se você…', o público se vê)",
+    "erro": "erro que todo mundo comete (e a correção)",
+}
+
 TONS = {
     "direto": "direto, sem rodeio",
     "descontraido": "descontraído, com leveza",
@@ -291,6 +303,8 @@ def montar_system(perfil: dict[str, Any], opcoes: dict[str, Any] | None = None) 
     dur = min(DURACOES, key=lambda d: abs(d - dur))
     objetivo = OBJETIVOS.get(str(o.get("objetivo") or ""), OBJETIVOS["vendas"])
     tom = TONS.get(str(o.get("tom") or ""), TONS["direto"])
+    gat_id = str(o.get("gatilho") or "auto")
+    gatilho = GATILHOS.get(gat_id, GATILHOS["auto"])
     cartao = " / ".join(x for x in perfil.get("cartao") or [] if x)
     empresa = _perfil_em_texto(perfil.get("perfil") or {}, perfil.get("empresa") or "")
     if empresa:
@@ -308,12 +322,27 @@ def montar_system(perfil: dict[str, Any], opcoes: dict[str, Any] | None = None) 
         f"CARTÃO FINAL DOS VÍDEOS (o que aparece no fim): {cartao or '(sem cartão)'}\n\n"
         f"ESTILO DO VÍDEO: {estilo['nome']} — {estilo['regra']}\n"
         f"DURAÇÃO ALVO: {dur} segundos (cerca de {int(dur * 2.3)} palavras faladas no total).\n"
-        f"OBJETIVO: {objetivo}.\nTOM: {tom}.\n\n"
+        f"OBJETIVO: {objetivo}.\nTOM: {tom}.\n"
+        f"GATILHO PRINCIPAL: {gatilho}.\n\n"
+        "VIRAL QUE VENDE (a regra do jogo):\n"
+        "- o vídeo precisa PARAR o scroll e TRAZER cliente — humor sozinho não serve; "
+        "piada só entra se carregar a oferta ou a dor;\n"
+        "- seja ESPECÍFICO desta empresa: use os dados do perfil (serviço, cidade, prova, "
+        "diferencial, oferta) em vez de frases que serviriam para qualquer negócio; "
+        "número real do perfil vale mais que adjetivo;\n"
+        "- retenção: gancho → promessa/tensão (o que a pessoa ganha ou perde) → entrega "
+        "concreta → CTA. Um loop aberto no gancho fecha só no último bloco;\n"
+        "- use os gatilhos mentais de propósito: curiosidade, dor específica, prova social, "
+        "escassez/urgência REAL (nunca inventada), autoridade, contraste antes/depois, "
+        "identificação, erro comum. Cada gancho usa um gatilho diferente;\n"
+        "- proibido inventar preço, prazo, número ou promessa que não esteja no perfil "
+        "ou no pedido; proibido promessa de cura/ganho garantido.\n\n"
         "REGRAS DO GANCHO (os 2 primeiros segundos decidem tudo):\n"
         "- fale do público, não da empresa; frase curta; concreta; que gere curiosidade, medo de perder, "
         "identificação ou contradição; nada de 'oi gente', nada de apresentação;\n"
         "- proibido começar com 'você sabia'; proibido pergunta genérica;\n"
-        "- cada gancho com no máximo 12 palavras.\n\n"
+        "- cada gancho com no máximo 12 palavras, e ao lado, entre colchetes, o gatilho usado. "
+        "Ex.: 1. Seu iPhone quebrou e você não pode ficar sem ele hoje. [dor]\n\n"
         "REGRAS DO TEXTO: linguagem falada, frases curtas, sem jargão, sem emoji, sem markdown "
         "(nada de asteriscos, cerquilhas ou listas com hífen), sem aspas em volta das falas. "
         "Números por extenso quando forem falados. Nomes de produto e preço só se o usuário deu.\n\n"
@@ -326,8 +355,11 @@ def montar_system(perfil: dict[str, Any], opcoes: dict[str, Any] | None = None) 
         "CTA\nA frase final, uma linha, ligada ao cartão final da empresa.\n\n"
         "TEXTO NA TELA\nA headline de até 7 palavras para aparecer escrita no vídeo.\n\n"
         "LEGENDA DO POST\nDuas ou três linhas de legenda e, na última linha, 4 a 6 hashtags.\n\n"
+        "POR QUE PARA O SCROLL\nUma linha: o gatilho do gancho 1 e o que faz a pessoa ficar até o fim.\n\n"
         "Se o usuário pedir ajuste, devolva o roteiro INTEIRO de novo no mesmo formato, "
-        "não só o trecho mudado. Se ele pedir só ganchos, devolva só a seção GANCHOS com 5 opções."
+        "não só o trecho mudado. Se ele pedir só ganchos, devolva só a seção GANCHOS com 5 opções. "
+        "Se ele pedir ÂNGULOS, devolva só a seção ÂNGULOS com 6 itens, um por linha: "
+        "nome do ângulo — gatilho — gancho pronto (até 12 palavras)."
     )
 
 
@@ -547,7 +579,8 @@ def _limpar(texto: str) -> str:
     return t.strip()
 
 
-SECOES = ("GANCHOS", "ROTEIRO PARA GRAVAR", "CTA", "TEXTO NA TELA", "LEGENDA DO POST")
+SECOES = ("GANCHOS", "ROTEIRO PARA GRAVAR", "CTA", "TEXTO NA TELA", "LEGENDA DO POST",
+          "POR QUE PARA O SCROLL", "ÂNGULOS", "ANGULOS")
 
 
 def _e_cabecalho(linha: str) -> str | None:

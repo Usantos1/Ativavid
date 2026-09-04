@@ -7,6 +7,12 @@ import subprocess
 from pathlib import Path
 
 VIDEO_EXT = {".mp4", ".mov", ".m4v", ".mkv", ".webm"}
+# 4.101: imagem na trilha PRINCIPAL ("ele so deixa adicionar video, e seria
+# interessante permitir imagem na principal em vez de ser somente em
+# camada"). A imagem vira um clipe mudo de N segundos no tamanho do
+# projeto e segue o caminho de sempre.
+IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp"}
+IMAGE_CLIP_SEC = 5.0
 
 
 def source_key_from_stem(stem: str, used: set[str] | None = None) -> str:
@@ -23,8 +29,8 @@ def source_key_from_stem(stem: str, used: set[str] | None = None) -> str:
 
 def dest_cta_path(project_dir: Path, filename: str) -> Path:
     ext = Path(filename).suffix.lower()
-    if ext not in VIDEO_EXT:
-        raise ValueError("Escolha um MP4 ou MOV")
+    if ext not in VIDEO_EXT and ext not in IMAGE_EXT:
+        raise ValueError("Escolha um MP4, MOV ou uma imagem (JPG, PNG, WEBP)")
     stem = re.sub(r"[^A-Za-z0-9_]+", "_", Path(filename).stem).strip("_") or "video"
     stem = stem[:36]
     base = f"cta_{stem}"
@@ -77,6 +83,54 @@ def merge_source_paths(
         seen.add(key)
         out.append(str(resolved))
     return out
+
+
+def _ffmpeg() -> str:
+    try:
+        from app.ffmpeg_tools import ffmpeg_bin
+
+        return ffmpeg_bin()
+    except Exception:
+        return "ffmpeg"
+
+
+def _tamanho_do_projeto(project_dir: Path) -> tuple[int, int]:
+    """Largura x altura do video do projeto (edit-data); 1080x1920 se nao houver."""
+    try:
+        import json
+
+        ed = json.loads((project_dir / "edit" / "remotion" / "public" / "edit-data.json")
+                        .read_text(encoding="utf-8-sig"))
+        w, h = int(ed.get("width") or 0), int(ed.get("height") or 0)
+        if w > 0 and h > 0:
+            return w, h
+    except (OSError, ValueError, TypeError):
+        pass
+    return 1080, 1920
+
+
+def image_to_clip(src: Path, dest: Path, *, width: int, height: int,
+                  seconds: float = IMAGE_CLIP_SEC, fps: int = 30) -> Path:
+    """Imagem → mp4 mudo de `seconds` (encaixa no quadro, sem cortar; barras
+    escuras se a proporcao for outra). Faixa de audio silenciosa para a
+    concatenacao com os takes de verdade nao perder o audio."""
+    dest = Path(dest)
+    vf = (f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
+          f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=black,format=yuv420p")
+    cmd = [
+        _ffmpeg(), "-y", "-hide_banner", "-loglevel", "error",
+        "-loop", "1", "-framerate", str(fps), "-i", str(src),
+        "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
+        "-t", f"{float(seconds):.2f}", "-vf", vf, "-r", str(fps),
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+        "-c:a", "aac", "-b:a", "96k", "-shortest", "-movflags", "+faststart",
+        str(dest),
+    ]
+    r = subprocess.run(cmd, capture_output=True, check=False, timeout=180, **_hide())
+    if r.returncode != 0 or not dest.exists():
+        raise ValueError("Não consegui transformar a imagem em vídeo: "
+                         + (r.stderr or b"").decode("utf-8", "replace")[-200:])
+    return dest
 
 
 def _ffprobe() -> str:
@@ -168,6 +222,24 @@ def append_cta(
         dest = write_cta_file(project_dir, filename, data)
     else:
         raise ValueError("nenhum arquivo")
+    if dest.suffix.lower() in IMAGE_EXT:
+        # imagem na trilha principal: vira um clipe mudo de 5 s (4.101)
+        w, h = _tamanho_do_projeto(project_dir)
+        clipe = dest.with_suffix(".mp4")
+        n = 2
+        while clipe.exists():
+            clipe = dest.with_name(f"{dest.stem}_{n}.mp4")
+            n += 1
+        try:
+            image_to_clip(dest, clipe, width=w, height=h,
+                          seconds=float(duration_hint or IMAGE_CLIP_SEC) or IMAGE_CLIP_SEC)
+        finally:
+            try:
+                dest.unlink()
+            except OSError:
+                pass
+        dest = clipe
+        duration_hint = None
     info = probe_clip(dest)
     dur = float(info.get("duration") or 0.0)
     if dur < 0.4:

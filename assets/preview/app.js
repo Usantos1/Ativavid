@@ -5501,9 +5501,11 @@ function desenharFaixasDeInsert(phase2) {
     }
   }
 
-  // soundtrack → its own read-only track, one chip spanning the whole video
+  // soundtrack → its own track, one chip spanning the whole video. Desde a
+  // 4.101 o chip abre um menu (trocar / volume / remover) — antes clicar
+  // nele nao fazia nada e a trilha da IA nao tinha como ser trocada.
   const st = S.editData && S.editData.soundtrack;
-  if (st && st.enabled) {
+  if (st && (st.enabled || st.manual === false || S.editData)) {
     const trk = el('div', 'track', insertTracksEl);
     el('span', 'tl-chip olive', el('div', 'track-label', trk)).innerHTML = ICON.music;
     const lane = el('div', 'lane', trk);
@@ -5511,10 +5513,16 @@ function desenharFaixasDeInsert(phase2) {
     const dur = S.editData.durationSec || S.videoDuration || draftTotal();
     chip.style.left = '0px';
     chip.style.width = `${Math.max(dur * S.pps, 10)}px`;
-    const name = (st.file || 'trilha.mp3').split('/').pop();
-    const vol = st.volume != null ? `  ·  vol ${st.volume}` : '';
-    chip.textContent = `${name}${vol}`;
-    chip.title = chip.textContent;
+    if (st.enabled) {
+      const name = st.label || (st.file || 'trilha.mp3').split('/').pop();
+      const vol = st.volume != null ? `  ·  vol ${st.volume}` : '';
+      chip.textContent = `${name}${vol}`;
+    } else {
+      chip.textContent = 'sem trilha — clique para escolher uma';
+      chip.style.opacity = '.55';
+    }
+    chip.title = 'Trocar, ajustar o volume ou remover a trilha';
+    chip.addEventListener('click', (e) => { e.stopPropagation(); abrirMenuTrilha(e.clientX, e.clientY); });
   }
 }
 
@@ -6764,9 +6772,10 @@ async function appendCtaFromFile(file) {
   }
   const btn = $('btnAppendCta');
   if (btn) btn.disabled = true;
-  toast('Importando o vídeo…', 1600);
+  const ehImagem = /^image\//.test(file.type || '') || /\.(jpe?g|png|webp)$/i.test(file.name || '');
+  toast(ehImagem ? 'Transformando a imagem num trecho de 5 s…' : 'Importando o vídeo…', 1600);
   try {
-    const duration = await probeLocalDuration(file);
+    const duration = ehImagem ? 5 : await probeLocalDuration(file);
     const localPath = String(file.path || '').trim();
     const url = BASE ? `${BASE}/api/append-cta` : '/api/jobs/append-cta';
     let res;
@@ -7159,8 +7168,31 @@ function pushEmoji(ch) {
   scheduleAutosave();
 }
 
+/* Aba da biblioteca (4.101): imagem, video, som ou trilha. Guardada para
+ * quem sempre vai no mesmo tipo. */
+let LIB_KIND = 'image';
+try { LIB_KIND = localStorage.getItem('ativavid.libKind') || 'image'; } catch { /* ignore */ }
+function setLibKind(kind) {
+  LIB_KIND = ['image', 'clip', 'sfx', 'track'].includes(kind) ? kind : 'image';
+  try { localStorage.setItem('ativavid.libKind', LIB_KIND); } catch { /* ignore */ }
+  document.querySelectorAll('.img-subtab').forEach((b) => b.classList.toggle('active', b.dataset.libkind === LIB_KIND));
+  const hint = $('imgHint');
+  if (hint && IMG_TAB === 'library') hint.textContent = {
+    image: 'Clique numa imagem para inserir na agulha.',
+    clip: 'Clique num vídeo para inserir na agulha, por cima do principal.',
+    sfx: 'Ouça antes (▶) e clique para pôr o efeito na agulha.',
+    track: 'Escolha a trilha de fundo do vídeo inteiro — troca a atual.',
+  }[LIB_KIND];
+}
+document.querySelectorAll('.img-subtab').forEach((b) => b.addEventListener('click', () => { setLibKind(b.dataset.libkind); loadLibraryResults(); }));
+function kindDoItem(it) {
+  if (it.kind === 'clip' || it.kind === 'sfx' || it.kind === 'track') return it.kind;
+  return 'image';
+}
+
 async function loadLibraryResults() {
   const box = $('imgResults');
+  setLibKind(LIB_KIND);
   box.innerHTML = '<div class="img-empty">carregando biblioteca…</div>';
   let data;
   try {
@@ -7169,16 +7201,32 @@ async function loadLibraryResults() {
     box.innerHTML = '<div class="img-empty">falha ao listar biblioteca</div>';
     return;
   }
-  const items = data.items || [];
+  const items = (data.items || []).filter((it) => kindDoItem(it) === LIB_KIND);
   if (!items.length) {
-    box.innerHTML = '<div class="img-empty">Biblioteca vazia — use Enviar arquivo ou abra a pasta</div>';
+    box.innerHTML = `<div class="img-empty">${{
+      image: 'Nenhuma imagem na biblioteca — use Enviar arquivo ou abra a pasta',
+      clip: 'Nenhum vídeo na biblioteca — use Enviar arquivo ou abra a pasta',
+      sfx: 'Nenhum efeito sonoro na biblioteca — a pasta Efeitos está vazia',
+      track: 'Nenhuma trilha na biblioteca — ponha músicas na pasta Trilhas',
+    }[LIB_KIND]}</div>`;
     return;
   }
   box.innerHTML = '';
   items.forEach((it) => {
-    // Trilha e musica de FUNDO, de minutos: um bloco dela na agulha nao e
-    // um efeito. Ela se escolhe no estilo, nao aqui.
-    if (it.kind === 'track') return;
+    if (it.kind === 'track') {
+      // Trilha de FUNDO: substitui a do video inteiro (4.101). Antes nem
+      // aparecia aqui; a trilha so vinha da IA e nao dava para trocar.
+      const card = el('button', 'img-card trilha-card', box);
+      card.innerHTML = `<div class="img-clip-ph som">♫</div>`
+        + `<button type="button" class="img-ouvir" title="Ouvir">▶</button>`
+        + `<span class="img-credit">${it.name}</span>`;
+      card.querySelector('.img-ouvir').addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        ouvirSom(`/api/library/file?rel=${encodeURIComponent(it.rel)}`, ev.currentTarget);
+      });
+      card.addEventListener('click', () => usarComoTrilha(it));
+      return;
+    }
     const card = el('button', 'img-card', box);
     const thumb = `/api/library/file?rel=${encodeURIComponent(it.rel)}`;
     if (it.kind === 'clip') {
@@ -7236,6 +7284,77 @@ function ouvirSom(url, botao) {
     toast('Não consegui tocar esse som', 2400);
   });
   _somOuvindo = a;
+}
+
+/* Trilha de fundo pela timeline (4.101): copia a musica da biblioteca para
+ * o public/ do projeto e aponta soundtrack.file para ela. O render (rapido
+ * e completo) le soundtrack.file de edit-data — nao precisa de nada novo
+ * do lado do motor. */
+async function usarComoTrilha(it) {
+  toast('Colocando a trilha…', 1200);
+  const folder = projectFolder();
+  let data;
+  try {
+    data = await (await fetch('/api/library/use', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: it.path, folder }),
+    })).json();
+  } catch {
+    toast('Falha ao copiar a trilha', 3000);
+    return;
+  }
+  if (!data.ok && !data.src) { toast(data.error || 'Falha', 3000); return; }
+  definirTrilha(data.src || data.ref, it.name, it.path);
+  toggleImgPicker(false);
+}
+
+function definirTrilha(src, nome, libraryPath) {
+  if (!S.editData) return;
+  pushHistory();
+  const st = S.editData.soundtrack || {};
+  S.editData.soundtrack = {
+    ...st, enabled: !!src, file: src || st.file || 'trilha.mp3',
+    volume: st.volume != null ? st.volume : 0.12,
+    // marca de escolha humana: o pipeline nao troca por outra da IA, e o
+    // caminho na Biblioteca faz a escolha sobreviver ao refazer
+    manual: !!src, label: nome || '', libraryPath: src ? (libraryPath || '') : '',
+  };
+  S.editData.soundtrackDirty = true;
+  renderAll(); refreshHeader();
+  scheduleAutosave();
+  toast(src ? `✓ Trilha: ${nome || src.split('/').pop()} — Salvar e Aplicar para ouvir no vídeo` : '✓ Trilha removida — Salvar e Aplicar', 4200);
+}
+
+function abrirMenuTrilha(x, y) {
+  document.querySelectorAll('.music-menu').forEach((m) => m.remove());
+  const menu = el('div', 'music-menu', document.body);
+  menu.style.left = `${Math.min(x, innerWidth - 240)}px`;
+  menu.style.top = `${Math.min(y, innerHeight - 160)}px`;
+  const st = (S.editData && S.editData.soundtrack) || {};
+  const vol = Number(st.volume != null ? st.volume : 0.12);
+  menu.innerHTML = `
+    <button type="button" data-act="trocar">Trocar trilha (biblioteca)</button>
+    <button type="button" data-act="mais">Volume + (${vol.toFixed(2)})</button>
+    <button type="button" data-act="menos">Volume −</button>
+    <button type="button" data-act="remover">Remover trilha</button>`;
+  menu.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-act]');
+    if (!b) return;
+    const act = b.dataset.act;
+    menu.remove();
+    if (act === 'trocar') { toggleImgPicker(true); setImgTab('library'); setLibKind('track'); loadLibraryResults(); return; }
+    if (act === 'remover') { definirTrilha('', ''); return; }
+    if (act === 'mais' || act === 'menos') {
+      pushHistory();
+      const s = S.editData.soundtrack || {};
+      const v = Math.max(0.02, Math.min(1, +(Number(s.volume != null ? s.volume : 0.12) + (act === 'mais' ? 0.04 : -0.04)).toFixed(2)));
+      S.editData.soundtrack = { ...s, volume: v };
+      renderAll(); scheduleAutosave();
+      toast(`Volume da trilha: ${v.toFixed(2)}`, 1600);
+    }
+  });
+  setTimeout(() => document.addEventListener('click', (e) => { if (!e.target.closest('.music-menu')) menu.remove(); }, { once: true }), 0);
 }
 
 async function pickLibraryAsset(it) {

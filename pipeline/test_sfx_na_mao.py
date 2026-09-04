@@ -42,16 +42,19 @@ def test_imagem_e_clipe_continuam_na_library(tmp_path):
 def test_o_seletor_mostra_som_sem_miniatura():
     """Um `<img>` de mp3 é um cartão quebrado — o usuário via um retângulo
     vazio e não sabia que aquilo era um som."""
-    assert "it.kind === 'sfx'" in JS
-    i = JS.index("it.kind === 'sfx'")
+    assert "} else if (it.kind === 'sfx') {" in JS
+    i = JS.index("} else if (it.kind === 'sfx') {")
     assert "img-clip-ph som" in JS[i:i + 200]
 
 
 def test_trilha_nao_entra_como_efeito():
     """Trilha é música de fundo, de minutos: um bloco dela na agulha não é
     um efeito."""
-    i = JS.index("if (it.kind === 'track') return;")
-    assert i > 0
+    # 4.101: a trilha APARECE na aba Trilhas, mas vira trilha de FUNDO do
+    # video (usarComoTrilha), nunca um bloco de efeito na agulha.
+    i = JS.index("if (it.kind === 'track') {")
+    bloco = JS[i:i + 900]
+    assert "usarComoTrilha(it)" in bloco and "pushSfxFromRef" not in bloco
 
 
 def test_o_efeito_vira_bloco_de_efeito_e_nao_de_imagem():

@@ -4320,7 +4320,28 @@ def run(
         except OSError:
             pass
         reuso = False
-        if (trilha_antiga.is_file()
+        # 4.101: trilha ESCOLHIDA pelo usuario na linha do tempo (Biblioteca)
+        # vence a geracao — e continua valendo no refazer, porque o caminho
+        # dela na Biblioteca fica no edit-data anterior.
+        try:
+            _ed_ant = json.loads((edit_dir / "remotion" / "public" / "edit-data.json")
+                                 .read_text(encoding="utf-8-sig"))
+            _st_ant = _ed_ant.get("soundtrack") or {}
+            _lib = Path(str(_st_ant.get("libraryPath") or ""))
+            if _st_ant.get("manual") and _st_ant.get("enabled") and _lib.is_file():
+                shutil.copy2(_lib, music_tmp)
+                reuso = True
+                _music_via["manual"] = {
+                    "manual": True, "libraryPath": str(_lib),
+                    "label": str(_st_ant.get("label") or _lib.name),
+                    "volume": _st_ant.get("volume"),
+                }
+                _RENDER_META["musicaFonte"] = f"escolhida: {_lib.name}"
+                print(f"[7/9] trilha ESCOLHIDA pelo usuario na timeline: "
+                      f"{_lib.name} (sem gerar)", flush=True)
+        except Exception:  # noqa: BLE001 — sem edit-data anterior, segue
+            pass
+        if (not reuso and trilha_antiga.is_file()
                 and trilha_antiga.stat().st_size > 100_000
                 and vibe_antigo == music_vibe.strip()):
             try:
@@ -4942,6 +4963,11 @@ def run(
                     trilha, _ct_arq, edit_dir.parents[1],
                     "mg" if _fonte_atual.startswith("motor:") else "ia")
             edit_data["soundtrack"]["enabled"] = True
+            if _music_via.get("manual"):
+                _m = dict(_music_via["manual"])
+                if _m.get("volume") is None:
+                    _m.pop("volume", None)
+                edit_data["soundtrack"].update(_m)
             (public / "edit-data.json").write_text(
                 json.dumps(edit_data, indent=2, ensure_ascii=False), encoding="utf-8"
             )

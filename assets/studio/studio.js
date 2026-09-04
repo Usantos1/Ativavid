@@ -2289,7 +2289,7 @@ function collectImportIntent() {
     // mudar num refazer replaneja o corte.
     rhythm: $("#importRhythm")?.value || null,
     speechClean: $("#importSpeechClean")?.value || null,
-    brandId: state.brandActive?.id || null,
+    brandId: ($("#importBrandSelect")?.value) || state.brandActive?.id || null,
     brandPresetId: $("#importPresetSelect")?.value || null,
     sourceDurationSec: state.pendingDuration || null,
   };
@@ -5725,12 +5725,28 @@ async function loadSistema() {
   await loadBrandsUi().catch(() => {});
 }
 
-async function loadImportPresets() {
+async function loadImportPresets(brandId) {
   const sel = $("#importPresetSelect");
   const hint = $("#importPresetHint");
   if (!sel) return;
+  // Marca a vista (4.101): a lista de marcas entra uma vez; trocar recarrega
+  // os presets daquela marca — o mesmo desenho do Multiplicador.
+  const bsel = $("#importBrandSelect");
+  if (bsel && !bsel.dataset.wired) {
+    bsel.dataset.wired = "1";
+    try {
+      const data = await api("/api/brands");
+      const brands = data.brands || [];
+      const active = brands.find((b) => b.active) || brands[0];
+      bsel.innerHTML = brands.map((b) =>
+        `<option value="${escapeHtml(b.id)}" ${active && b.id === active.id ? "selected" : ""}>${escapeHtml(b.name || b.id)}</option>`
+      ).join("") || `<option value="">Padrão</option>`;
+      bsel.onchange = () => loadImportPresets(bsel.value).catch(() => {});
+    } catch { /* sem marcas: segue com a ativa */ }
+  }
+  const bid = brandId || (bsel && bsel.value) || "";
   try {
-    const pack = await api("/api/brand-presets");
+    const pack = await api(bid ? `/api/brand-presets?brandId=${encodeURIComponent(bid)}` : "/api/brand-presets");
     const presets = pack.presets || [];
     const activeId = pack.activeId || (pack.active && pack.active.id);
     sel.innerHTML = presets.map((p) =>
@@ -7157,6 +7173,7 @@ function rotOpcoes() {
     duracao: Number($("#rotDuracao")?.value || 30),
     objetivo: $("#rotObjetivo")?.value || "vendas",
     tom: $("#rotTom")?.value || "direto",
+    gatilho: $("#rotGatilho")?.value || "auto",
     nicho: ($("#rotNicho")?.value || "").trim(),
   };
 }
@@ -7177,6 +7194,8 @@ function rotPreencherSelects(pack) {
   if (o) o.innerHTML = Object.entries(pack.objetivos || {}).map(([k, v]) => opt(k, v, k === (salvo.objetivo || "vendas"))).join("");
   const t = $("#rotTom");
   if (t) t.innerHTML = Object.entries(pack.tons || {}).map(([k, v]) => opt(k, v, k === (salvo.tom || "direto"))).join("");
+  const g = $("#rotGatilho");
+  if (g) g.innerHTML = Object.entries(pack.gatilhos || {}).map(([k, v]) => opt(k, v, k === (salvo.gatilho || "auto"))).join("");
   if ($("#rotNicho") && salvo.nicho && !$("#rotNicho").value) $("#rotNicho").value = salvo.nicho;
 }
 
@@ -7281,7 +7300,7 @@ function rotRenderMsgs(chat) {
   box.scrollTop = box.scrollHeight;
 }
 
-const ROT_SECOES = ["GANCHOS", "ROTEIRO PARA GRAVAR", "CTA", "TEXTO NA TELA", "LEGENDA DO POST"];
+const ROT_SECOES = ["GANCHOS", "ROTEIRO PARA GRAVAR", "CTA", "TEXTO NA TELA", "LEGENDA DO POST", "POR QUE PARA O SCROLL", "ÂNGULOS", "ANGULOS"];
 function rotCabecalho(linha) {
   const cab = linha.trim().toUpperCase().replace(/:$/, "");
   return ROT_SECOES.find((s) => cab === s || cab.startsWith(s + " ") || cab.startsWith(s + "(")) || null;
@@ -7312,7 +7331,7 @@ async function rotAbrir(id) {
     state.roteiro.chatId = id;
     state.roteiro.chatAtual = r.chat;
     if (r.chat && r.chat.opcoes) {
-      for (const [k, el] of [["estilo", "#rotEstilo"], ["duracao", "#rotDuracao"], ["objetivo", "#rotObjetivo"], ["tom", "#rotTom"]]) {
+      for (const [k, el] of [["estilo", "#rotEstilo"], ["duracao", "#rotDuracao"], ["objetivo", "#rotObjetivo"], ["tom", "#rotTom"], ["gatilho", "#rotGatilho"]]) {
         if (r.chat.opcoes[k] != null && $(el)) $(el).value = String(r.chat.opcoes[k]);
       }
       if ($("#rotNicho")) $("#rotNicho").value = r.chat.opcoes.nicho || "";
@@ -7396,7 +7415,7 @@ function wireRoteiro() {
   $("#rotTexto")?.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); rotEnviar(); }
   });
-  ["#rotEstilo", "#rotDuracao", "#rotObjetivo", "#rotTom"].forEach((id) => $(id)?.addEventListener("change", rotGuardarOpcoes));
+  ["#rotEstilo", "#rotDuracao", "#rotObjetivo", "#rotTom", "#rotGatilho"].forEach((id) => $(id)?.addEventListener("change", rotGuardarOpcoes));
   $("#rotAtalhos")?.addEventListener("click", (e) => {
     const b = e.target.closest("[data-ideia]");
     if (!b) return;
