@@ -324,6 +324,10 @@ const STYLE_CATALOG = {
     {id: 'degrade', name: 'Degradê', stat: 'degrade'},
     {id: 'bandeira', name: 'Bandeira', stat: 'bandeira'},
     {id: 'maquina', name: 'Máquina de escrever', stat: 'maquina'},
+    {id: 'pilula', name: 'Pílula', stat: 'pilula'},
+    {id: 'etiqueta', name: 'Etiqueta', stat: 'etiqueta'},
+    {id: 'fitadegrade', name: 'Fita degradê', stat: 'fitadegrade'},
+    {id: 'marcador', name: 'Marca-texto', stat: 'marcador'},
     // opts out of burned captions (captions.enabled:false) — same reasoning.
     {id: 'nenhuma', name: 'Nenhuma', none: true},
   ],
@@ -833,17 +837,35 @@ const STATIC_VARIANTS = {
   degrade: {family: "'Poppins',sans-serif", weight: 800, size: 78, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: -2, maxW: 800, modo: 'degrade'},
   bandeira: {family: "'Poppins',sans-serif", weight: 800, size: 62, maxWords: 4, lines: 1, sx: 1, sy: 1, tracking: 0, maxW: 760, modo: 'bandeira'},
   maquina: {family: "'Inter',sans-serif", weight: 600, size: 56, maxWords: 8, lines: 2, sx: 1, sy: 1, tracking: 1, maxW: 840, modo: 'maquina'},
+  pilula: {family: "'Poppins',sans-serif", weight: 800, size: 66, maxWords: 4, lines: 1, sx: 1, sy: 1, tracking: 0, maxW: 720, modo: 'pilula'},
+  etiqueta: {family: "'Inter',sans-serif", weight: 600, size: 52, maxWords: 8, lines: 2, sx: 1, sy: 1, tracking: 0, maxW: 780, modo: 'etiqueta'},
+  fitadegrade: {family: "'Poppins',sans-serif", weight: 800, size: 62, maxWords: 4, lines: 1, sx: 1, sy: 1, tracking: 0, maxW: 760, modo: 'fitadegrade'},
+  marcador: {family: "'Poppins',sans-serif", weight: 800, size: 74, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: -1, maxW: 800, modo: 'marcador'},
 };
 // os mesmos padroes do SimpleCaptions.tsx / render_proprio
 const NEON_PADRAO = '#4de1ff';
 const DEGRADE_PADRAO = '#ff6a00';
 const BANDEIRA_PADRAO = '#ff6a00';
+const ETIQUETA_FUNDO = 'rgba(11,13,16,0.86)';
+const ETIQUETA_BARRA = 10;
+const FITA_ESCURO = 0.55;
+const MARCADOR_PADRAO = '#ffd400';
+const MARCADOR_TOPO = 26;
+const MARCADOR_BASE = 96;
+function escurecer(hex, f) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim());
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  const rgb = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => Math.round(v * f));
+  return `rgb(${rgb.join(',')})`;
+}
 
 // Quem desenha em CAIXA ALTA — muda a MEDIDA das linhas, entao esta lista
 // tem de ser a mesma nos tres motores (SimpleCaptions.tsx e render_proprio).
-const CAP_MAIUSCULA = new Set(['metal', 'moldura', 'eco', 'degrade', 'bandeira']);
+const CAP_MAIUSCULA = new Set(['metal', 'moldura', 'eco', 'degrade', 'bandeira', 'fitadegrade']);
 const CAP_LH = {metal: 1.1, vidro: 1.16, traco: 1.16, moldura: 1.2, eco: 1.14,
-                neon: 1.16, degrade: 1.14, bandeira: 1.2, maquina: 1.3};
+                neon: 1.16, degrade: 1.14, bandeira: 1.2, maquina: 1.3,
+                pilula: 1.2, etiqueta: 1.25, fitadegrade: 1.2, marcador: 1.16};
 // Os MESMOS numeros do render_proprio (VIDRO_OPACO/VIDRO_FIO/METAL_OPACO).
 const VIDRO_OPACO = 0.32;
 const VIDRO_FIO = 0.92;
@@ -1022,6 +1044,51 @@ function buildStaticDemo(host, id) {
         cima.style.webkitTextFillColor = 'transparent';
         for (const alvo of [baixo, cima]) {
           for (const ln of lines) el('div', '', alvo).textContent = t(ln);
+        }
+        return box;
+      }
+      if (V.modo === 'pilula' || V.modo === 'fitadegrade') {
+        const fundo = cor || (V.modo === 'pilula' ? '#ffffff' : BANDEIRA_PADRAO);
+        box.style.display = 'flex';
+        box.style.flexDirection = 'column';
+        box.style.alignItems = 'center';
+        box.style.padding = `${V.size * 0.30 * s}px ${V.size * 0.55 * s}px`;
+        if (V.modo === 'pilula') {
+          box.style.background = fundo;
+          box.style.borderRadius = '9999px';
+        } else {
+          box.style.backgroundImage = `linear-gradient(180deg, ${fundo} 0%, ${escurecer(fundo, FITA_ESCURO)} 100%)`;
+          box.style.borderRadius = `${V.size * 0.14 * s}px`;
+        }
+        box.style.color = inkOn(fundo);
+        box.style.boxShadow = `0 ${6 * s}px ${15 * s}px rgba(0,0,0,0.45)`;
+        for (const ln of lines) el('div', '', box).textContent = t(ln);
+        return box;
+      }
+      if (V.modo === 'etiqueta') {
+        box.style.display = 'flex';
+        box.style.flexDirection = 'column';
+        box.style.alignItems = 'center';
+        box.style.padding = `${V.size * 0.34 * s}px ${V.size * 0.55 * s}px`;
+        box.style.background = ETIQUETA_FUNDO;
+        box.style.borderLeft = `${ETIQUETA_BARRA * s}px solid ${cor || '#ffffff'}`;
+        box.style.borderRadius = `${6 * s}px`;
+        box.style.color = '#ffffff';
+        box.style.boxShadow = `0 ${8 * s}px ${18 * s}px rgba(0,0,0,0.45)`;
+        for (const ln of lines) el('div', '', box).textContent = t(ln);
+        return box;
+      }
+      if (V.modo === 'marcador') {
+        const faixa = S.style.emphasisAccent || MARCADOR_PADRAO;
+        const pad = V.size * 0.16 * s;
+        for (const ln of lines) {
+          const b = el('div', '', box);
+          b.style.padding = `0 ${pad}px`;
+          b.style.backgroundImage = `linear-gradient(180deg, transparent 0 ${MARCADOR_TOPO}%, `
+            + `${faixa} ${MARCADOR_TOPO}% ${MARCADOR_BASE}%, transparent ${MARCADOR_BASE}% 100%)`;
+          b.style.color = inkOn(faixa);
+          b.style.textShadow = `0 ${2 * s}px ${7 * s}px rgba(0,0,0,0.35)`;
+          b.textContent = t(ln);
         }
         return box;
       }
@@ -3666,8 +3733,9 @@ const capAccentUsed = () => S.style.captions !== 'nenhuma';
 // cromado e feito (o degrade sai dela), no `traco` e no `eco` ela pinta o
 // texto, na `moldura` a linha e o texto, no `vidro` o texto.
 const CAP_BASE_STYLES = ['karaoke', 'simples', 'serifada', 'classica', 'bloco', 'recorte', 'bolha',
-  'metal', 'vidro', 'traco', 'moldura', 'eco', 'neon', 'degrade', 'bandeira', 'maquina'];
-const CAP_EMPH_STYLES = ['stacked', 'scatter', 'impacto'];
+  'metal', 'vidro', 'traco', 'moldura', 'eco', 'neon', 'degrade', 'bandeira', 'maquina',
+  'pilula', 'etiqueta', 'fitadegrade'];
+const CAP_EMPH_STYLES = ['stacked', 'scatter', 'impacto', 'marcador'];
 const CAP_CIRCLE_STYLES = ['stacked'];
 const legendaAccentUsed = () => capAccentUsed() && CAP_BASE_STYLES.includes(S.style.captions);
 const emphasisAccentUsed = () => capAccentUsed() && CAP_EMPH_STYLES.includes(S.style.captions);

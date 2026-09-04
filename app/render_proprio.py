@@ -2884,14 +2884,20 @@ class Renderizador:
         "degrade":  ("Poppins-ExtraBold.ttf", None, 78, 3, 1, 1.0, 1.0, -2, 430, 800, "degrade"),
         "bandeira": ("Poppins-ExtraBold.ttf", None, 62, 4, 1, 1.0, 1.0, 0, 430, 760, "bandeira"),
         "maquina":  ("Inter[opsz,wght].ttf", "SemiBold", 56, 8, 2, 1.0, 1.0, 1, 430, 840, "maquina"),
+        # --- os quatro de fundo colorido (04/09) -------------------------
+        "pilula":   ("Poppins-ExtraBold.ttf", None, 66, 4, 1, 1.0, 1.0, 0, 430, 720, "pilula"),
+        "etiqueta": ("Inter[opsz,wght].ttf", "SemiBold", 52, 8, 2, 1.0, 1.0, 0, 430, 780, "etiqueta"),
+        "fitadegrade": ("Poppins-ExtraBold.ttf", None, 62, 4, 1, 1.0, 1.0, 0, 430, 760, "fitadegrade"),
+        "marcador": ("Poppins-ExtraBold.ttf", None, 74, 3, 1, 1.0, 1.0, -1, 430, 800, "marcador"),
     }
     # Modos que desenham em CAIXA ALTA. Isso muda a MEDIDA das linhas, entao
     # os tres motores tem de concordar sobre quem esta nesta lista.
-    SIMPLE_MAIUSCULA = ("sticker", "metal", "moldura", "eco", "degrade", "bandeira")
+    SIMPLE_MAIUSCULA = ("sticker", "metal", "moldura", "eco", "degrade",
+                        "bandeira", "fitadegrade")
     # Modos com um painel em volta do cue INTEIRO (e nao por linha, como o
     # bloco): a caixa e uma so para as duas linhas. O `vidro` saiu daqui —
     # ele virou uma LETRA de vidro, nao uma caixa atras da letra.
-    SIMPLE_PAINEL = ("moldura", "bandeira")
+    SIMPLE_PAINEL = ("moldura", "bandeira", "pilula", "etiqueta", "fitadegrade")
     # Peso que cada variante estatica tem no template (`capWeight(base.weight)`
     # em SimpleCaptions.tsx:218). Aqui ele fica implicito no ARQUIVO —
     # `Poppins-SemiBold.ttf` E o 600 — entao, quando a fonte da marca
@@ -2900,12 +2906,22 @@ class Renderizador:
                    "bloco": 800, "recorte_simple": 800,
                    "metal": 800, "vidro": 600, "traco": 800,
                    "moldura": 600, "eco": 800,
-                   "neon": 800, "degrade": 800, "bandeira": 800, "maquina": 600}
+                   "neon": 800, "degrade": 800, "bandeira": 800, "maquina": 600,
+                   "pilula": 800, "etiqueta": 600, "fitadegrade": 800,
+                   "marcador": 800}
     # Os MESMOS padroes do SimpleCaptions.tsx (NEON_PADRAO etc.)
     NEON_PADRAO = "#4de1ff"
     DEGRADE_PADRAO = "#ff6a00"
     BANDEIRA_PADRAO = "#ff6a00"
     BANDEIRA_SKEW = 8.0
+    # os quatro de fundo colorido — os MESMOS numeros do SimpleCaptions.tsx
+    ETIQUETA_FUNDO = "#0b0d10"
+    ETIQUETA_OPACO = 0.86
+    ETIQUETA_BARRA = 10
+    FITA_ESCURO = 0.55
+    MARCADOR_PADRAO = "#ffd400"
+    MARCADOR_TOPO = 0.26
+    MARCADOR_BASE = 0.96
 
     @staticmethod
     def velocidade_maquina(dur_f: int, n_chars: int) -> float:
@@ -3385,7 +3401,8 @@ class Renderizador:
         lh = {"bloco": 1.06, "sticker": 1.16, "metal": 1.10, "vidro": 1.16,
               "traco": 1.16, "moldura": 1.20, "eco": 1.14,
               "neon": 1.16, "degrade": 1.14, "bandeira": 1.20,
-              "maquina": 1.30}.get(modo, 1.18)
+              "maquina": 1.30, "pilula": 1.20, "etiqueta": 1.25,
+              "fitadegrade": 1.20, "marcador": 1.16}.get(modo, 1.18)
         for ci, cue in enumerate(cues):
             ini_f = int(round(cue[0]["startMs"] / 1000 * self.fps))
             nxt = cues[ci + 1] if ci + 1 < len(cues) else None
@@ -3475,6 +3492,12 @@ class Renderizador:
                         int((self.w - cw) / 2) - folga, int(y) - folga,
                         rgb, alpha, sombra, inicio_f=-1, enter=1, sobe=0.0))
                     y += ch + gap_l
+                    continue
+
+                if modo == "marcador":
+                    leg.palavras.append(self._marca_texto(
+                        m, cor_emj, tam, alt_l, y, caps_cfg, asc, desc))
+                    y += alt_l * sq_y + gap_l
                     continue
 
                 pad_m = np.zeros((h_m + 2 * folga, w_m + 2 * folga),
@@ -3689,6 +3712,136 @@ class Renderizador:
         self._pintar_emoji(rgb, cor_emj, folga)
         return rgb, alpha, self._sombra_de(pad_m, [(0, 10, 26, 0.45)], k=0.5)
 
+    @staticmethod
+    def _escurecer(cor, f: float):
+        """A cor multiplicada por `f` — o pe do degrade da fita."""
+        import numpy as np
+        return np.clip(np.asarray(cor, dtype=np.float32) * float(f), 0, 255)
+
+    def _marca_texto(self, m, cor_emj, tam, alt_l, y, caps_cfg, asc, desc):
+        """Faixa de marca-texto ATRAS da letra (uma por linha).
+
+        A listra cobre de 26% a 96% da caixa de linha: o topo das maiusculas
+        fica de fora, que e o que faz parecer caneta marca-texto. A cor e a
+        de ENFASE (amarela por padrao), como a caixa do `impacto`.
+        """
+        import numpy as np
+
+        h_m, w_m = m.shape
+        faixa = caps_cfg.get("emphasisAccent") or self.MARCADOR_PADRAO
+        cor_f = self._cor(faixa)
+        cor_t = self._cor(self._tinta_na_caixa(faixa))
+        pad = round(tam * 0.16)
+        folga = 48
+        alt_cx = int(round(alt_l))
+        L = w_m + 2 * pad + 2 * folga
+        A = alt_cx + 2 * folga
+        alpha = np.zeros((A, L), dtype=np.float32)
+        rgb = np.broadcast_to(cor_f, (A, L, 3)).copy()
+        t0 = folga + int(round(alt_cx * self.MARCADOR_TOPO))
+        t1 = folga + int(round(alt_cx * self.MARCADOR_BASE))
+        alpha[t0:t1, folga:L - folga] = 1.0
+        tx = folga + pad
+        ty = folga + int((alt_l - (asc + desc)) / 2)
+        hh = min(h_m, A - ty)
+        ww = min(w_m, L - tx)
+        if hh > 0 and ww > 0:
+            sub = m[:hh, :ww]
+            rgb[ty:ty + hh, tx:tx + ww] = (
+                rgb[ty:ty + hh, tx:tx + ww] * (1 - sub[..., None])
+                + cor_t * sub[..., None])
+            alpha[ty:ty + hh, tx:tx + ww] = np.maximum(
+                alpha[ty:ty + hh, tx:tx + ww], sub)
+            self._pintar_emoji(rgb, cor_emj, tx, ty)
+        # text-shadow 0 4px 14px .35, do GLIFO (nao da faixa)
+        glifo = np.zeros((A, L), dtype=np.float32)
+        if hh > 0 and ww > 0:
+            glifo[ty:ty + hh, tx:tx + ww] = m[:hh, :ww]
+        sombra = self._sombra_de(glifo, [(0, 4, 14, 0.35)], k=0.5)
+        x0 = int((self.w - (w_m + 2 * pad)) / 2) - folga
+        return Palavra(x0, int(y) - folga, rgb, alpha, sombra,
+                       inicio_f=-1, enter=1, sobe=0.0)
+
+    def _painel_colorido(self, modo, masks, w_txt, h_txt, alt_l, gap, tam,
+                         bottom, accent, folga):
+        """Pilula, Etiqueta e Fita degrade: UM painel em volta do cue.
+
+        Os tres sao a mesma peca com fundo diferente — capsula lisa, painel
+        escuro com barra na borda esquerda, e faixa com degrade vertical.
+        """
+        import numpy as np
+
+        pad_x = round(tam * 0.55)
+        pad_y = round(tam * (0.34 if modo == "etiqueta" else 0.30))
+        barra = self.ETIQUETA_BARRA if modo == "etiqueta" else 0
+        cw = int(w_txt + 2 * pad_x + barra)
+        ch = int(h_txt + 2 * pad_y)
+        raio = (ch // 2 if modo == "pilula"
+                else 6 if modo == "etiqueta" else round(tam * 0.14))
+        L, A = cw + 2 * folga, ch + 2 * folga
+
+        cheio = Image.new("L", (L, A), 0)
+        ImageDraw.Draw(cheio).rounded_rectangle(
+            [folga, folga, folga + cw, folga + ch], radius=raio, fill=255)
+        a_cheio = np.asarray(cheio, dtype=np.float32) / 255.0
+
+        if modo == "etiqueta":
+            base = self._cor(self.ETIQUETA_FUNDO)
+            rgb = np.broadcast_to(base, (A, L, 3)).copy()
+            alpha = a_cheio * self.ETIQUETA_OPACO
+            # a barra e OPACA e fica por cima do fundo, como o `border-left`
+            cor_b = self._cor(accent or "#ffffff")
+            a_barra = np.zeros_like(a_cheio)
+            a_barra[:, folga:folga + barra] = a_cheio[:, folga:folga + barra]
+            rgb = rgb * (1 - a_barra[..., None]) + cor_b * a_barra[..., None]
+            alpha = np.maximum(alpha, a_barra)
+            cor_txt = self._cor("#ffffff")
+        elif modo == "fitadegrade":
+            topo = self._cor(accent or "#ff6a00")
+            pe = self._escurecer(topo, self.FITA_ESCURO)
+            tt = np.linspace(0.0, 1.0, ch, dtype=np.float32)[:, None]
+            faixa = (topo[None, :] * (1.0 - tt) + pe[None, :] * tt).astype(np.float32)
+            rgb = np.zeros((A, L, 3), dtype=np.float32)
+            rgb[folga:folga + ch, :, :] = faixa[:, None, :]
+            rgb[:folga] = faixa[0]
+            rgb[folga + ch:] = faixa[-1]
+            alpha = a_cheio
+            cor_txt = self._cor(self._tinta_na_caixa(accent or "#ff6a00"))
+        else:                                   # pilula
+            fundo = accent or "#ffffff"
+            rgb = np.broadcast_to(self._cor(fundo), (A, L, 3)).copy()
+            alpha = a_cheio
+            cor_txt = self._cor(self._tinta_na_caixa(fundo))
+
+        y = folga + pad_y
+        for m, cor_emj in masks:
+            h_m, w_m = m.shape
+            # centrado no espaco DEPOIS da barra (o `border-left` do CSS
+            # encolhe a caixa de conteudo)
+            x = folga + barra + int((cw - barra - w_m) / 2)
+            ty = int(y + (alt_l - h_m) / 2)
+            hh = min(h_m, A - ty)
+            ww = min(w_m, L - x)
+            if hh > 0 and ww > 0:
+                sub = m[:hh, :ww]
+                rgb[ty:ty + hh, x:x + ww] = (
+                    rgb[ty:ty + hh, x:x + ww] * (1 - sub[..., None])
+                    + cor_txt * sub[..., None])
+                alpha[ty:ty + hh, x:x + ww] = np.maximum(
+                    alpha[ty:ty + hh, x:x + ww], sub)
+                self._pintar_emoji(rgb, cor_emj, x, ty)
+            y += alt_l + gap
+
+        # box-shadow de cada um: (deslocamento y, raio, alfa)
+        dy, raio_s = {"etiqueta": (16, 36), "fitadegrade": (14, 32)}.get(
+            modo, (12, 30))
+        sombra = self._sombra_de(a_cheio, [(0, dy, raio_s, 0.45)],
+                                 k=0.5, caixa=True)
+        x0 = int((self.w - cw) / 2) - folga
+        y0 = int(self.h - bottom - ch) - folga
+        return Palavra(x0, y0, rgb, alpha, sombra, inicio_f=-1, enter=1,
+                       sobe=0.0)
+
     def _bandeira(self, masks, w_txt, h_txt, alt_l, gap, tam, bottom, accent,
                   folga):
         """Fita inclinada na cor da marca com o texto dentro (bandeira).
@@ -3806,6 +3959,9 @@ class Renderizador:
         if modo == "bandeira":
             return self._bandeira(masks, w_txt, h_txt, alt_l, gap, tam,
                                   bottom, accent, folga)
+        if modo in ("pilula", "etiqueta", "fitadegrade"):
+            return self._painel_colorido(modo, masks, w_txt, h_txt, alt_l,
+                                         gap, tam, bottom, accent, folga)
         pad_x = round(tam * (0.62 if modo == "vidro" else 0.72))
         pad_y = round(tam * (0.44 if modo == "vidro" else 0.40))
         cw = int(w_txt + 2 * pad_x)

@@ -55,12 +55,13 @@ type Variant = {
   // Os cinco de 30/08. `modo` decide o RAMO de desenho; `bloco`/`sticker`
   // continuam como flags proprias porque ja estavam no contrato.
   modo?: 'metal' | 'vidro' | 'traco' | 'moldura' | 'eco'
-    | 'neon' | 'degrade' | 'bandeira' | 'maquina';
+    | 'neon' | 'degrade' | 'bandeira' | 'maquina'
+    | 'pilula' | 'etiqueta' | 'fitadegrade' | 'marcador';
 };
 
 // Quem desenha em CAIXA ALTA. Muda a MEDIDA das linhas, entao os tres
 // motores (este, o render_proprio e a previa) tem de concordar.
-const MAIUSCULA = new Set(['metal', 'moldura', 'eco', 'degrade', 'bandeira']);
+const MAIUSCULA = new Set(['metal', 'moldura', 'eco', 'degrade', 'bandeira', 'fitadegrade']);
 
 // Opacidades do Vidro e do Metálico — os MESMOS números do render_proprio
 // (VIDRO_OPACO / VIDRO_FIO / METAL_OPACO). Um 0,32 que vira 0,30 aqui sai
@@ -183,6 +184,27 @@ export const SIMPLE_VARIANTS: Record<string, Variant> = {
     squeeze: 1, squeezeY: 1, tracking: 1, bottom: 430, maxW: 840,
     modo: 'maquina',
   },
+  // ---- os quatro de fundo colorido (04/09) -------------------------------
+  pilula: {
+    family: POPPINS, weight: 800, size: 66, maxWords: 4, lines: 1,
+    squeeze: 1, squeezeY: 1, tracking: 0, bottom: 430, maxW: 720,
+    modo: 'pilula',
+  },
+  etiqueta: {
+    family: INTER, weight: 600, size: 52, maxWords: 8, lines: 2,
+    squeeze: 1, squeezeY: 1, tracking: 0, bottom: 430, maxW: 780,
+    modo: 'etiqueta',
+  },
+  fitadegrade: {
+    family: POPPINS, weight: 800, size: 62, maxWords: 4, lines: 1,
+    squeeze: 1, squeezeY: 1, tracking: 0, bottom: 430, maxW: 760,
+    modo: 'fitadegrade',
+  },
+  marcador: {
+    family: POPPINS, weight: 800, size: 74, maxWords: 3, lines: 1,
+    squeeze: 1, squeezeY: 1, tracking: -1, bottom: 430, maxW: 800,
+    modo: 'marcador',
+  },
 };
 
 // Neon: cor do brilho quando a marca nao escolheu; degrade/bandeira: a
@@ -191,6 +213,14 @@ const NEON_PADRAO = '#4de1ff';
 const DEGRADE_PADRAO = '#ff6a00';
 const BANDEIRA_PADRAO = '#ff6a00';
 const BANDEIRA_SKEW = 8;      // graus; o motor proprio usa tan(8deg)
+// Os quatro de fundo colorido. A barra da etiqueta e a faixa do marca-texto
+// tem medidas fixas — os tres motores leem ESTES numeros.
+const ETIQUETA_FUNDO = 'rgba(11,13,16,0.86)';
+const ETIQUETA_BARRA = 10;    // px da barra colorida na borda esquerda
+const FITA_ESCURO = 0.55;     // fator da cor no PE do degrade da fita
+const MARCADOR_PADRAO = '#ffd400';
+const MARCADOR_TOPO = 26;     // % da caixa de linha em que a faixa comeca
+const MARCADOR_BASE = 96;     // % em que ela termina
 // Maquina de escrever: uma letra a cada VEL quadros, no maximo 2 quadros por
 // letra, e o cue inteiro digitado em 55% do tempo dele.
 export function velocidadeMaquina(durFrames: number, nChars: number): number {
@@ -235,6 +265,17 @@ function contornoCss(r: number, cor: string): string[] {
  * invisible. Relative luminance (sRGB coefficients) is the cheap correct test;
  * the 0.6 threshold sits above mid-grey because white text on a mid tone reads
  * worse than black does. */
+/* A cor multiplicada por `f` (0-1): o pe do degrade da fita. Mesma conta do
+ * `_escurecer` no motor proprio. */
+function escurecer(hex: string, f: number): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  const rgb = [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+    .map((v) => Math.round(v * f));
+  return `rgb(${rgb.join(',')})`;
+}
+
 function inkOn(bg: string): string {
   const m = /^#?([0-9a-f]{6})$/i.exec(bg.trim());
   if (!m) return '#fff';
@@ -385,6 +426,7 @@ export const SimpleCaptions: React.FC<{variant: string}> = ({variant}) => {
     const LH: Record<string, number> = {
       metal: 1.1, vidro: 1.16, traco: 1.16, moldura: 1.2, eco: 1.14,
       neon: 1.16, degrade: 1.14, bandeira: 1.2, maquina: 1.3,
+      pilula: 1.2, etiqueta: 1.25, fitadegrade: 1.2, marcador: 1.16,
     };
     const tipo = {
       fontFamily: V.family,
@@ -499,6 +541,115 @@ export const SimpleCaptions: React.FC<{variant: string}> = ({variant}) => {
             >
               {corpo}
             </div>
+          </div>
+        </AbsoluteFill>
+      );
+    }
+
+    if (V.modo === 'pilula') {
+      // Capsula: raio = metade da altura, entao as pontas sao semicirculos.
+      const fundo = C.accent ?? '#ffffff';
+      const padX = Math.round(V.size * 0.55);
+      const padY = Math.round(V.size * 0.30);
+      return (
+        <AbsoluteFill style={fora}>
+          <div
+            style={{
+              ...tipo,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              padding: `${padY}px ${padX}px`,
+              background: fundo,
+              color: inkOn(fundo),
+              borderRadius: 9999,
+              boxShadow: '0 12px 30px rgba(0,0,0,0.45)',
+            }}
+          >
+            {lines.map((ln, i) => <div key={i}>{txt(ln)}</div>)}
+          </div>
+        </AbsoluteFill>
+      );
+    }
+
+    if (V.modo === 'etiqueta') {
+      // Painel escuro com uma barra da cor da marca na borda esquerda.
+      const barra = C.accent ?? '#ffffff';
+      const padX = Math.round(V.size * 0.55);
+      const padY = Math.round(V.size * 0.34);
+      return (
+        <AbsoluteFill style={fora}>
+          <div
+            style={{
+              ...tipo,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              padding: `${padY}px ${padX}px`,
+              background: ETIQUETA_FUNDO,
+              borderLeft: `${ETIQUETA_BARRA}px solid ${barra}`,
+              borderRadius: 6,
+              color: '#ffffff',
+              boxShadow: '0 16px 36px rgba(0,0,0,0.45)',
+            }}
+          >
+            {lines.map((ln, i) => <div key={i}>{txt(ln)}</div>)}
+          </div>
+        </AbsoluteFill>
+      );
+    }
+
+    if (V.modo === 'fitadegrade') {
+      // A fita da bandeira, sem inclinacao e com o fundo em degrade.
+      const topo = C.accent ?? '#ff6a00';
+      const padX = Math.round(V.size * 0.55);
+      const padY = Math.round(V.size * 0.30);
+      return (
+        <AbsoluteFill style={fora}>
+          <div
+            style={{
+              ...tipo,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              padding: `${padY}px ${padX}px`,
+              backgroundImage: `linear-gradient(180deg, ${topo} 0%, ${escurecer(topo, FITA_ESCURO)} 100%)`,
+              color: inkOn(topo),
+              borderRadius: Math.round(V.size * 0.14),
+              boxShadow: '0 14px 32px rgba(0,0,0,0.45)',
+            }}
+          >
+            {lines.map((ln, i) => <div key={i}>{txt(ln)}</div>)}
+          </div>
+        </AbsoluteFill>
+      );
+    }
+
+    if (V.modo === 'marcador') {
+      // Faixa de marca-texto ATRAS da letra: uma listra que cobre de 26% a
+      // 96% da caixa de linha, entao o topo das maiusculas fica de fora —
+      // e o que faz parecer caneta marca-texto, e nao uma lapide.
+      const faixa = C.emphasisAccent || MARCADOR_PADRAO;
+      const pad = Math.round(V.size * 0.16);
+      const listra = `linear-gradient(180deg, transparent 0 ${MARCADOR_TOPO}%, `
+        + `${faixa} ${MARCADOR_TOPO}% ${MARCADOR_BASE}%, transparent ${MARCADOR_BASE}% 100%)`;
+      return (
+        <AbsoluteFill style={fora}>
+          <div style={{display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
+            {lines.map((ln, i) => (
+              <div
+                key={i}
+                style={{
+                  ...tipo,
+                  padding: `0 ${pad}px`,
+                  backgroundImage: listra,
+                  color: inkOn(faixa),
+                  textShadow: '0 4px 14px rgba(0,0,0,0.35)',
+                }}
+              >
+                {txt(ln)}
+              </div>
+            ))}
           </div>
         </AbsoluteFill>
       );

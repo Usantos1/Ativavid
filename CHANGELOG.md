@@ -1,5 +1,14 @@
 # Changelog
 
+## 5.0.19
+
+- **Mais quatro legendas de fundo colorido**, na linha da Bandeira:
+  **Pílula** (cápsula na cor da empresa), **Etiqueta** (painel escuro com
+  uma barra colorida na lateral), **Fita degradê** (faixa reta com o fundo
+  em degradê) e **Marca-texto** (faixa de caneta marca-texto atrás da
+  frase, amarela por padrão, que usa a cor de ênfase). São 23 estilos.
+  Todos conferidos quadro a quadro contra o motor de referência.
+
 ## 5.0.18
 
 - **Quatro estilos de legenda novos**, no menu Estilo de legenda:

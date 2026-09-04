@@ -7444,6 +7444,7 @@ const NOME_DO_ESTILO = {
     bloco: "Bloco", metal: "Metálico", vidro: "Vidro",
     traco: "Contorno fino", moldura: "Moldura", eco: "Eco",
     neon: "Neon", degrade: "Degradê", bandeira: "Bandeira", maquina: "Máquina de escrever",
+    pilula: "Pílula", etiqueta: "Etiqueta", fitadegrade: "Fita degradê", marcador: "Marca-texto",
   },
   manchete: {
     outline: "Contorno", card: "Cartão", realce: "Realce", misto: "Misto",

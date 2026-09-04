@@ -58,10 +58,18 @@ def test_a_medida_bate_nos_tres():
 
 
 def test_a_caixa_alta_e_a_entrelinha_batem():
-    for lista in ('SIMPLE_MAIUSCULA = ("sticker", "metal", "moldura", "eco", "degrade", "bandeira")',):
-        assert lista in PY
-    assert "const MAIUSCULA = new Set(['metal', 'moldura', 'eco', 'degrade', 'bandeira']);" in TSX
-    assert "const CAP_MAIUSCULA = new Set(['metal', 'moldura', 'eco', 'degrade', 'bandeira']);" in PJS
+    """Quem desenha em CAIXA ALTA muda a MEDIDA das linhas: os tres motores
+    tem de concordar sobre a lista (por pertencimento — ela cresce a cada
+    estilo novo)."""
+    from app.render_proprio import Renderizador
+    tsx_set = TSX.split("const MAIUSCULA = new Set([")[1].split("]);")[0]
+    pjs_set = PJS.split("const CAP_MAIUSCULA = new Set([")[1].split("]);")[0]
+    for e in ("degrade", "bandeira"):
+        assert e in Renderizador.SIMPLE_MAIUSCULA, e
+        assert f"'{e}'" in tsx_set and f"'{e}'" in pjs_set, e
+    for e in ("neon", "maquina"):
+        assert e not in Renderizador.SIMPLE_MAIUSCULA, e
+        assert f"'{e}'" not in tsx_set and f"'{e}'" not in pjs_set, e
     for e, lh in (("neon", 1.16), ("degrade", 1.14), ("bandeira", 1.2), ("maquina", 1.3)):
         assert f'"{e}": {lh}' in PY.replace("1.20", "1.2").replace("1.30", "1.3"), e
         assert f"{e}: {lh}" in TSX and f"{e}: {lh}" in PJS, e

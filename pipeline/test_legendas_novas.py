@@ -53,10 +53,18 @@ def test_o_motor_rapido_aceita_os_cinco():
 def test_a_caixa_alta_e_a_mesma_nos_tres():
     """Caixa alta muda a MEDIDA das linhas: se os motores discordarem, a
     quebra de linha sai diferente e as legendas não casam mais."""
-    # 5.0.18: degrade e bandeira tambem sao caixa alta
-    assert 'SIMPLE_MAIUSCULA = ("sticker", "metal", "moldura", "eco", "degrade", "bandeira")' in PY
-    assert "const MAIUSCULA = new Set(['metal', 'moldura', 'eco', 'degrade', 'bandeira']);" in TSX
-    assert "const CAP_MAIUSCULA = new Set(['metal', 'moldura', 'eco', 'degrade', 'bandeira']);" in JS
+    # Por PERTENCIMENTO, nao pelo literal: a lista cresce a cada estilo novo
+    # (5.0.18 e 5.0.19 ja a mudaram duas vezes), e o que importa e que os
+    # cinco de 30/08 estejam do mesmo lado nos tres motores.
+    from app.render_proprio import Renderizador
+    tsx_set = TSX.split("const MAIUSCULA = new Set([")[1].split("]);")[0]
+    js_set = JS.split("const CAP_MAIUSCULA = new Set([")[1].split("]);")[0]
+    for e in ("metal", "moldura", "eco"):
+        assert e in Renderizador.SIMPLE_MAIUSCULA, e
+        assert f"'{e}'" in tsx_set and f"'{e}'" in js_set, e
+    for e in ("vidro", "traco"):
+        assert e not in Renderizador.SIMPLE_MAIUSCULA, e
+        assert f"'{e}'" not in tsx_set and f"'{e}'" not in js_set, e
 
 
 def test_o_tamanho_e_a_medida_batem():
@@ -123,7 +131,10 @@ def test_o_vidro_e_a_letra_e_nao_uma_caixa_atras_dela():
     """"apenas o estilo da fonte é tipo de vidro, com uma certa
     transparência, nao aquele fundo escroto" (30/08). A primeira versão era
     um PAINEL de vidro fumado — uma caixa, não uma letra de vidro."""
-    assert 'SIMPLE_PAINEL = ("moldura", "bandeira")' in PY      # o vidro saiu daqui; a bandeira (5.0.18) e painel
+    # o vidro saiu do PAINEL (virou letra de vidro); moldura continua nele
+    from app.render_proprio import Renderizador as _R
+    assert "vidro" not in _R.SIMPLE_PAINEL
+    assert "moldura" in _R.SIMPLE_PAINEL
     assert "VIDRO_OPACO = 0.32" in PY and "VIDRO_FIO = 0.92" in PY
     for fonte in (TSX, JS):
         assert "VIDRO_OPACO = 0.32;" in fonte
