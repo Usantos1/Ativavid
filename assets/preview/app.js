@@ -6459,21 +6459,15 @@ panel.addEventListener('pointerdown', (e) => {
     // few px of real movement, so a plain click keeps working exactly as
     // before. See deleteClipRange().
     //
-    // A AGULHA VAI JUNTO. Depois de um corte os takes cobrem a faixa
-    // inteira, e como este ramo saia sem mexer no tempo so restava a regua
-    // (uma tira de ~14px) para posicionar a agulha — "fiz um corte e nao
-    // consigo arrastar a agulha pra cortar mais" (27/08). Cortar precisa da
-    // agulha DENTRO do take, entao clicar no take e exatamente onde ela
-    // deve ir.
-    // O fantasma do take removido ocupa pixels mas dura ZERO no rascunho:
-    // os pixels dele ja pertencem, em tempo, ao take SEGUINTE. Levar a
-    // agulha para la jogaria a reproducao varios segundos a frente de quem
-    // so queria selecionar o fantasma para restaurar.
+    // A AGULHA NAO VAI MAIS JUNTO (04/09). Ela andava ao clicar no take
+    // desde 27/08, quando a regua era uma tira de ~14px e nao dava para
+    // posicionar a agulha depois de um corte. O preco disso era clicar num
+    // take, numa imagem ou numa legenda e ver a reproducao pular: "se eu
+    // clicar em cima de um video nao e pra mover a agulha... a agulha deve
+    // ser movida so na linha da minutagem". A regua ficou mais alta e
+    // continua na MESMA coluna de tempo do take, entao posicionar para
+    // cortar e um clique logo acima.
     const iClip = +clip.dataset.i;
-    if (!(S.draft[iClip] && S.draft[iClip].removed)) {
-      seekDraft((e.clientX - timelineEl.getBoundingClientRect().left
-                 - LABEL_W) / S.pps);
-    }
     drag = { type: 'clip-range', i: iClip, x0: e.clientX, x1: e.clientX, moved: false };
     try { panel.setPointerCapture(e.pointerId); } catch (err) { /* synthetic/touch */ }
     e.preventDefault();
@@ -6487,7 +6481,14 @@ panel.addEventListener('pointerdown', (e) => {
     renderClips();
     return;
   }
-  // background / ruler → scrub
+  // SO A MINUTAGEM ARRASTA A AGULHA (04/09). Antes, todo pointerdown que
+  // nao casasse com um ramo acima caia aqui: clicar num audio, numa imagem
+  // ou no fundo de uma faixa movia a agulha. Pior, o `setPointerCapture`
+  // daqui retargeta o CLIQUE seguinte para o painel — era isso que engolia
+  // o clique do chip da TRILHA, e o menu de trocar trilha nunca abria
+  // ("nao da pra clicar na trilha sonora pra adicionar outra"). A mesma
+  // armadilha ja tinha mordido o `.track-label`, guardado la em cima.
+  if (!e.target.closest('.ruler-track')) return;
   const rect = timelineEl.getBoundingClientRect();
   const t = (e.clientX - rect.left - LABEL_W) / S.pps;
   drag = { type: 'scrub' };

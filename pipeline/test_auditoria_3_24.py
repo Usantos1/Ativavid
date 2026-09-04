@@ -217,13 +217,16 @@ def test_a_timeline_nao_rola_sozinha_durante_um_arrasto():
 
 def test_clique_no_take_removido_nao_teleporta_a_agulha():
     """O fantasma ocupa pixels mas dura zero: os pixels dele já pertencem,
-    em tempo, ao take seguinte."""
+    em tempo, ao take seguinte.
+
+    Desde 04/09 o CLIQUE no take nao move a agulha de jeito nenhum (só a
+    minutagem move), entao o fantasma nao tem como teleportar nada. O que
+    sobra guardado aqui e o ARRASTO de intervalo, que ainda leva a agulha
+    e por isso ainda precisa pular o take removido."""
     js = (RAIZ / "assets" / "preview" / "app.js").read_text(encoding="utf-8")
     i = js.index("if (clip && S.tab === 1) {")
     corpo = js[i:js.index("return;", i)]
-    assert "removed" in corpo and "seekDraft" in corpo
-    assert corpo.index("removed") < corpo.index("seekDraft("), \
-        "o seek acontece antes de checar se o take foi removido"
+    assert "seekDraft" not in corpo, "o clique no take voltou a mover a agulha"
     j = js.index("} else if (drag.type === 'clip-range') {")
     assert "removed" in js[j:j + 500]
 

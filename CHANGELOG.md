@@ -1,5 +1,17 @@
 # Changelog
 
+## 5.0.21
+
+- **A trilha sonora voltou a ser clicável.** O menu de trocar, ajustar o
+  volume e remover a trilha existia desde a 4.101, mas o clique nunca
+  chegava nele: a faixa da trilha estava com os cliques desligados no
+  estilo da tela. Agora clicar nela abre o menu.
+- **A agulha só anda pela minutagem.** Clicar num vídeo, num áudio, numa
+  imagem ou numa legenda não move mais a agulha — antes qualquer clique na
+  linha do tempo a puxava, inclusive o que era só para selecionar. A régua
+  ficou mais alta e com o cursor de arrastar; arrastar um intervalo por
+  cima dos takes continua levando a agulha junto.
+
 ## 5.0.20
 
 - **Marca-texto: a faixa cortava a letra.** Ela cobria só o miolo da

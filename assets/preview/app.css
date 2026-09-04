@@ -936,7 +936,17 @@ input[type="range"]::-webkit-slider-thumb {
   overflow: hidden;
 }
 .lane.tall { height: 58px; }
-.ruler-lane { height: 26px; background: transparent; border: none; overflow: hidden; }
+/* A regua e a UNICA coisa que arrasta a agulha (04/09), entao ela precisa
+   ser facil de acertar: mais alta que os 26px de antes e com o cursor de
+   arrastar. */
+.ruler-lane {
+  height: 34px;
+  background: transparent;
+  border: none;
+  overflow: hidden;
+  cursor: ew-resize;
+}
+.ruler-lane:hover { background: rgba(255, 255, 255, 0.035); }
 .ruler-track { margin-bottom: 2px; }
 
 canvas { display: block; }
@@ -1115,7 +1125,12 @@ canvas { display: block; }
   background: repeating-linear-gradient(-45deg, rgba(168, 194, 43, 0.14) 0 10px, rgba(168, 194, 43, 0.22) 10px 20px);
   border: 1px solid rgba(168, 194, 43, 0.5);
   color: #d3e87a;
-  pointer-events: none;
+  /* CLICAVEL. Nasceu com `pointer-events: none` (a faixa era so um aviso
+     de que havia trilha), e quando a 4.101 pos o menu de trocar/volume/
+     remover no chip ninguem tirou o `none` — o clique nunca chegava no
+     ouvinte e o menu nunca abriu: "nao da pra clicar na trilha sonora pra
+     adicionar outra" (04/09). O teste da 4.101 olhava so o JS. */
+  pointer-events: auto;
   letter-spacing: 0.3px;
 }
 .chip .handle { position: absolute; top: 0; bottom: 0; width: 7px; cursor: ew-resize; }

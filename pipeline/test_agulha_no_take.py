@@ -1,10 +1,19 @@
 # -*- coding: utf-8 -*-
-"""Clicar em cima de um take move a agulha.
+"""Clicar num take NAO move a agulha; arrastar um intervalo ainda move.
 
-Depois de um corte os takes cobrem a faixa inteira. Como o ramo do clique
-no take saia sem mexer no tempo, so restava a regua (~14px no topo) para
-posicionar a agulha — e o Cortar EXIGE a agulha dentro do take: "fiz um
-corte e nao consigo arrastar a agulha pra cortar mais" (27/08).
+Historia desta regra, porque ela ja virou duas vezes:
+
+  27/08 — clicar no take passou a mover a agulha. A regua era uma tira de
+          ~14px e, depois de um corte, os takes cobriam a faixa inteira:
+          "fiz um corte e nao consigo arrastar a agulha pra cortar mais".
+  04/09 — ele desfez: "se eu clicar em cima de um video nao e pra mover a
+          agulha... a agulha deve ser movida so na linha da minutagem".
+          A regua ficou mais alta (34px) e e o unico lugar que arrasta a
+          agulha; a coluna de tempo e a mesma, entao posicionar para
+          cortar e um clique logo acima do take.
+
+O ARRASTO de intervalo (clip-range) continua levando a agulha junto: ali
+o gesto e deliberado, e e o que mostra onde o corte vai cair.
 """
 from pathlib import Path
 
@@ -12,12 +21,12 @@ RAIZ = Path(__file__).resolve().parent.parent
 JS = (RAIZ / "assets" / "preview" / "app.js").read_text(encoding="utf-8")
 
 
-def test_clique_no_take_posiciona_a_agulha():
+def test_clique_no_take_nao_posiciona_a_agulha():
     i = JS.index("if (clip && S.tab === 1) {")
     corpo = JS[i:JS.index("return;", i)]
-    assert "seekDraft(" in corpo, "o clique no take nao move a agulha"
-    assert corpo.index("seekDraft(") < corpo.index("drag = {"), \
-        "a agulha tem de ir antes de comecar o arrasto"
+    assert "seekDraft(" not in corpo, (
+        "clicar no take voltou a mover a agulha (04/09: so a minutagem move)")
+    assert "drag = { type: 'clip-range'" in corpo, "o arrasto de intervalo sumiu"
 
 
 def test_arrastar_sobre_o_take_leva_a_agulha_junto():
@@ -34,15 +43,15 @@ def test_o_clique_simples_continua_selecionando_o_take():
     assert "S.selected = drag.i" in corpo
 
 
-def test_a_conta_do_tempo_e_a_mesma_da_regua():
-    """Regua e take precisam usar a MESMA formula, senao a agulha pula ao
-    trocar de lugar de clique."""
+def test_a_conta_do_tempo_e_a_mesma_no_clique_e_no_arrasto():
+    """A regua (onde a agulha comeca) e o arrasto (onde ela continua)
+    precisam da MESMA formula, senao a agulha pula ao comecar a arrastar."""
     formula = "timelineEl.getBoundingClientRect()"
-    i = JS.index("// background / ruler → scrub")
-    assert formula in JS[i:i + 300]
-    j = JS.index("if (clip && S.tab === 1) {")
-    assert formula in JS[j:JS.index("return;", j)]
-    assert "LABEL_W) / S.pps" in JS[j:JS.index("return;", j)]
+    i = JS.index("// SO A MINUTAGEM ARRASTA A AGULHA")
+    trecho = JS[i:i + 1100]   # o comentario que explica a regra e longo
+    assert formula in trecho and "LABEL_W) / S.pps" in trecho
+    j = JS.index("if (drag.type === 'scrub') {")
+    assert formula in JS[j:j + 300] and "LABEL_W) / S.pps" in JS[j:j + 300]
 
 
 def test_o_cortar_continua_exigindo_agulha_dentro_do_take():
