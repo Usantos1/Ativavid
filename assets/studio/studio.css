@@ -4363,3 +4363,7 @@ body.view-roteiro-on .ws-body { overflow: hidden; }
 #aulasEngren.on { background: rgba(255,255,255,.18); }
 .aulas-concluir { margin-left: auto; }
 .aulas-concluir.on { color: #35c76b; border-color: #35c76b; }
+
+/* entregas por empresa (5.0.6) */
+.emp-entregas { display: grid; gap: 8px; padding-top: 10px; border-top: 1px dashed var(--hairline); }
+.emp-entregas .hint { margin: 0; }

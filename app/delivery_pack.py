@@ -15,6 +15,12 @@ _WIN_RESERVED = {
 }
 _SKIP_MP4 = {"cut.mp4", "base.mp4", "cut_proxy.mp4", "final_proxy.mp4"}
 PACK_PARENT = "publicar"
+# 5.0.6: alem de `publicar/` dentro do projeto, cada pacote e ESPELHADO em
+# `Entregas/<Empresa>/<nome>/`, ao lado da pasta de projetos (mesma regra
+# da Biblioteca). E a pasta que ele entrega ao cliente / manda ao Drive,
+# sem cacar projeto por projeto.
+ENTREGAS_PARENT = "Entregas"
+SEM_EMPRESA = "Sem empresa"
 
 
 def safe_pack_stem(text: str) -> str:
@@ -197,6 +203,83 @@ def ensure_delivery_pack(
         except (OSError, json.JSONDecodeError, TypeError) as e:
             print(f"[warn] deliveryPack nao gravou em state.json: {e}",
                   flush=True)
+    # 5.0.6: espelho em Entregas/<Empresa>/ — nunca derruba o pack
+    try:
+        espelhar_na_entrega(edit, dest,
+                            anterior=(anterior.name if movido and anterior is not None else ""))
+    except Exception as e:  # noqa: BLE001
+        print(f"[warn] entrega por empresa: {e}", flush=True)
+    return dest
+
+
+def entregas_root(projects_root: Path | None = None) -> Path:
+    """`<pai da raiz de projetos>/Entregas` (ou `entregasRoot` das settings)."""
+    try:
+        from app import settings_store as ss
+
+        custom = str(ss.load_settings().get("entregasRoot") or "").strip()
+        if custom:
+            p = Path(custom).expanduser()
+            p.mkdir(parents=True, exist_ok=True)
+            return p
+    except Exception:  # noqa: BLE001 — settings quebradas nao param a entrega
+        pass
+    from app.broll_library import library_root
+
+    root = library_root(projects_root).parent / ENTREGAS_PARENT
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def nome_da_empresa(brand_id: str | None) -> str:
+    bid = str(brand_id or "").strip()
+    if not bid:
+        return SEM_EMPRESA
+    try:
+        from app.brand_kits import BRANDS_DIR, _slug
+
+        p = BRANDS_DIR / f"{_slug(bid)}.json"
+        if p.exists():
+            nome = str(json.loads(p.read_text(encoding="utf-8-sig")).get("brandName") or "").strip()
+            if nome:
+                return nome
+    except Exception:  # noqa: BLE001
+        pass
+    return bid
+
+
+def pasta_de_entrega_da_empresa(brand_id: str | None, projects_root: Path | None = None) -> Path:
+    return entregas_root(projects_root) / safe_pack_stem(nome_da_empresa(brand_id))
+
+
+def espelhar_na_entrega(edit_dir: Path, pack_dir: Path, *, anterior: str = "",
+                        projects_root: Path | None = None) -> Path | None:
+    """Copia o pacote para Entregas/<Empresa>/<nome>/ (so o que mudou).
+
+    `anterior`: nome do pacote antes de um rename — o espelho e renomeado
+    junto, senao cada correcao de manchete deixava uma pasta para tras
+    (o mesmo problema que `publicar/` ja teve).
+    """
+    edit = Path(edit_dir)
+    pack = Path(pack_dir)
+    if not pack.is_dir():
+        return None
+    from app.broll_library import marca_do_projeto
+
+    brand = marca_do_projeto(edit / "remotion" / "public")
+    base = pasta_de_entrega_da_empresa(brand, projects_root)
+    dest = base / pack.name
+    if anterior and anterior != pack.name:
+        velho = base / anterior
+        if velho.is_dir() and not dest.exists():
+            try:
+                velho.rename(dest)
+            except OSError as e:
+                print(f"[entrega] nao renomeei o espelho: {e}", flush=True)
+    dest.mkdir(parents=True, exist_ok=True)
+    for f in pack.iterdir():
+        if f.is_file():
+            _copy_if_needed(f, dest / f.name)
     return dest
 
 

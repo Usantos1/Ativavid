@@ -465,6 +465,14 @@
                   <button type="button" class="export-btn export-btn--sm" id="empSalvar">Salvar identidade</button>
                   <button type="button" class="ghost-btn ghost-btn--sm hidden" id="empLogoRemover">Tirar logo</button>
                 </div>
+                <!-- 5.0.6: pasta de entrega por empresa (Entregas/<Empresa>/) -->
+                <div class="emp-entregas">
+                  <span class="hint">Cada vídeo pronto desta empresa também é copiado para <strong>Entregas/<span id="empEntregasNome">…</span>/</strong>, ao lado dos Projetos.</span>
+                  <div class="emp-acoes">
+                    <button type="button" class="ghost-btn ghost-btn--sm" id="empEntregas">Abrir pasta de entregas</button>
+                    <button type="button" class="ghost-btn ghost-btn--sm" id="empEntregasReunir" title="Copia para lá os vídeos prontos desta empresa que já existiam">Reunir vídeos antigos</button>
+                  </div>
+                </div>
               </div>
             </div>
             <!-- `data-ident` diz ao editor ONDE parar (ver `irParaNoEstilo`). -->

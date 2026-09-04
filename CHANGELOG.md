@@ -1,5 +1,14 @@
 # Changelog
 
+## 5.0.6
+
+- **Pasta de entrega por empresa.** Todo vídeo pronto passa a ser copiado
+  também para `Entregas/<Empresa>/<nome do vídeo>/` (vídeo, capa e
+  legenda), ao lado da pasta de Projetos. É a pasta para entregar ao
+  cliente ou mandar ao Drive, sem caçar projeto por projeto. Quando a
+  manchete muda, a pasta acompanha. Na tela Empresas: "Abrir pasta de
+  entregas" e "Reunir vídeos antigos" (copia para lá o que já estava pronto).
+
 ## 5.0.5
 
 - **Aulas: player próprio, sem links do YouTube.** O vídeo toca dentro do

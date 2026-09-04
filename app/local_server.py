@@ -3178,6 +3178,40 @@ class StudioHandler(BaseHTTPRequestHandler):
                 self._json({"error": str(e)}, 400)
             return
 
+        if path == "/api/entregas/abrir" or path == "/api/entregas/reunir":
+            # 5.0.6: pasta de entrega por empresa
+            from app.delivery_pack import (
+                espelhar_na_entrega, pasta_de_entrega_da_empresa, read_pack_dir,
+            )
+            body = self._read_json() or {}
+            bid = str(body.get("brandId") or "").strip()
+            pasta = pasta_de_entrega_da_empresa(bid, self.projects_root)
+            pasta.mkdir(parents=True, exist_ok=True)
+            if path == "/api/entregas/abrir":
+                if sys.platform == "win32":
+                    subprocess.Popen(["explorer", str(pasta)])
+                self._json({"ok": True, "path": str(pasta)})
+                return
+            # reunir: espelha os pacotes que JA existem dos videos desta empresa
+            from app.broll_library import marca_do_projeto
+            n = 0
+            for j in self.store.list():
+                edit = Path(j.get("editDir") or "")
+                if not edit.is_dir():
+                    continue
+                if marca_do_projeto(edit / "remotion" / "public") != bid:
+                    continue
+                pack = read_pack_dir(edit)
+                if pack is None:
+                    continue
+                try:
+                    if espelhar_na_entrega(edit, pack, projects_root=self.projects_root):
+                        n += 1
+                except Exception as e:  # noqa: BLE001
+                    print(f"[entrega] {edit}: {e}", flush=True)
+            self._json({"ok": True, "n": n, "path": str(pasta)})
+            return
+
         if path == "/api/library/mover":
             # 5.0.2: muda o dono (empresa ou Comum) de uma imagem/video
             from app.broll_library import mover_para_empresa

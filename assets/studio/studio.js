@@ -7064,6 +7064,7 @@ function preencherEmpresaForm(b) {
   if (tirar) tirar.classList.toggle("hidden", !logo);
   const del = $("#empApagar");
   if (del) del.disabled = (state.brands || []).length <= 1;
+  if ($("#empEntregasNome")) $("#empEntregasNome").textContent = marca.name || "…";
 }
 
 async function loadEmpresaPerfil() {
@@ -7183,6 +7184,39 @@ function wireEmpresas() {
       };
       rd.readAsDataURL(f);
     });
+  }
+  const abrirEnt = $("#empEntregas");
+  if (abrirEnt && !abrirEnt.dataset.wired) {
+    abrirEnt.dataset.wired = "1";
+    abrirEnt.onclick = async () => {
+      const id = state.brandActive && state.brandActive.id;
+      try {
+        await api("/api/entregas/abrir", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ brandId: id || "" }) });
+      } catch (err) {
+        toast(err.message || "Não consegui abrir a pasta");
+      }
+    };
+  }
+  const reunir = $("#empEntregasReunir");
+  if (reunir && !reunir.dataset.wired) {
+    reunir.dataset.wired = "1";
+    reunir.onclick = async () => {
+      const b = state.brandActive;
+      if (!b) return;
+      reunir.disabled = true;
+      reunir.textContent = "Reunindo…";
+      try {
+        const r = await api("/api/entregas/reunir", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ brandId: b.id }) });
+        toast(r.n ? `✓ ${r.n} vídeo${r.n === 1 ? "" : "s"} em Entregas/${b.name}` : "Nenhum vídeo pronto desta empresa para reunir");
+      } catch (err) {
+        toast(err.message || "Não consegui reunir");
+      } finally {
+        reunir.disabled = false;
+        reunir.textContent = "Reunir vídeos antigos";
+      }
+    };
   }
   const tirar = $("#empLogoRemover");
   if (tirar && !tirar.dataset.wired) {
