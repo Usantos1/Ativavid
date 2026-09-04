@@ -55,6 +55,7 @@ const VIEW_COPY = {
   biblioteca: ["Biblioteca", "Arquivos reutilizáveis que a IA pode usar nos vídeos."],
   presets: ["Empresas", "Cada empresa tem identidade, perfil e presets de edição próprios. Clique numa para trabalhar nela."],
   roteiro: ["Roteiro", "A IA escreve o que gravar: ganchos que param o scroll, roteiro por blocos, CTA e legenda."],
+  aulas: ["Aulas", "Aprenda a usar o ATIVAVID em vídeos curtos: do primeiro vídeo ao Multiplicador."],
   ia: ["IA", "A inteligência que corta, escreve e legenda — sessão do navegador e modelo."],
   integracoes: ["Integrações", "Serviços externos que o pipeline chama: transcrição, voz e b-roll."],
   licenca: ["Licença", "Status da assinatura e contas."],
@@ -346,6 +347,7 @@ function setView(name) {
   }
   if (name === "biblioteca") loadLibraryUi().catch(() => {});
   if (name === "roteiro") loadRoteiroUi().catch((e) => toast(e.message));
+  if (name === "aulas") loadAulasUi().catch((e) => toast(e.message));
   if (name === "presets") {
     loadEmpresaUi().catch(() => {});
     // A identidade e o formato moram aqui desde a 4.19 — quem preenche os
@@ -6546,6 +6548,180 @@ function libListaAudio(itens, aba, notas, ordem) {
  * Presets. O backend (/api/brand-presets) já fazia criar/renomear/duplicar/
  * apagar/definir padrão — só era alcançável pelo seletor da tela de importar.
  */
+/* ---- Aulas (5.0.3) -----------------------------------------------------
+ * Central de ajuda: a lista vem do Supabase (o admin gere na propria
+ * tela), o video toca num embed do YouTube. Sem rede, a ultima lista. */
+state.aulas = { lista: [], atualId: "", origem: "" };
+
+function aulaAtual() {
+  return (state.aulas.lista || []).find((a) => a.id === state.aulas.atualId) || null;
+}
+
+async function loadAulasUi() {
+  const box = $("#aulasItens");
+  if (!box) return;
+  try {
+    const r = await api("/api/aulas");
+    state.aulas.lista = r.aulas || [];
+    state.aulas.origem = r.origem || "";
+    state.aulas.erro = r.erro || "";
+  } catch (e) {
+    state.aulas.lista = [];
+    state.aulas.erro = e.message || "";
+  }
+  const admin = !!(state.auth && state.auth.isAdmin);
+  $("#aulasAdmin")?.classList.toggle("hidden", !admin);
+  if (!state.aulas.atualId && state.aulas.lista.length) state.aulas.atualId = state.aulas.lista[0].id;
+  if (state.aulas.atualId && !aulaAtual()) state.aulas.atualId = state.aulas.lista.length ? state.aulas.lista[0].id : "";
+  renderAulas();
+  abrirAula(state.aulas.atualId, { semRolar: true });
+}
+
+function renderAulas() {
+  const box = $("#aulasItens");
+  const hint = $("#aulasHint");
+  if (!box) return;
+  const lista = state.aulas.lista || [];
+  const admin = !!(state.auth && state.auth.isAdmin);
+  if (hint) {
+    hint.textContent = !lista.length
+      ? (admin ? "Nenhuma aula ainda. Cadastre a primeira ao lado." : "As aulas ainda estão sendo gravadas. Volte em breve.")
+      : (state.aulas.origem === "cache"
+        ? `${lista.length} aula(s) · sem internet, mostrando a última lista baixada`
+        : `${lista.length} aula(s)`);
+  }
+  // datalist de secoes para o admin
+  const dl = $("#aulasSecoes");
+  if (dl) dl.innerHTML = [...new Set(lista.map((a) => a.secao))].map((s) => `<option value="${escapeHtml(s)}">`).join("");
+  const porSecao = new Map();
+  for (const a of lista) {
+    if (!porSecao.has(a.secao)) porSecao.set(a.secao, []);
+    porSecao.get(a.secao).push(a);
+  }
+  box.innerHTML = [...porSecao.entries()].map(([secao, aulas]) => `
+    <div class="aulas-secao">
+      <p class="aulas-secao-nome">${escapeHtml(secao)}</p>
+      ${aulas.map((a, i) => `
+        <button type="button" class="aula-item${a.id === state.aulas.atualId ? " on" : ""}" data-aula="${escapeHtml(a.id)}">
+          <img class="aula-thumb" src="https://i.ytimg.com/vi/${escapeHtml(a.youtubeId)}/mqdefault.jpg" alt="" loading="lazy">
+          <span class="aula-txt"><span class="aula-n">${i + 1}</span><span class="aula-titulo">${escapeHtml(a.titulo)}</span></span>
+        </button>`).join("")}
+    </div>`).join("");
+}
+
+function abrirAula(id, opts) {
+  const a = (state.aulas.lista || []).find((x) => x.id === id) || null;
+  state.aulas.atualId = a ? a.id : "";
+  const player = $("#aulasPlayer");
+  const vazio = $("#aulasVazio");
+  if (player) {
+    // Troca o iframe inteiro: mudar so o src deixava o video anterior
+    // tocando por um instante no WebView.
+    for (const f of player.querySelectorAll("iframe")) f.remove();
+    if (a) {
+      const f = document.createElement("iframe");
+      f.className = "aulas-iframe";
+      f.src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(a.youtubeId)}?rel=0&modestbranding=1`;
+      f.title = a.titulo;
+      f.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen";
+      f.setAttribute("allowfullscreen", "");
+      f.referrerPolicy = "strict-origin-when-cross-origin";
+      player.appendChild(f);
+    }
+    if (vazio) vazio.classList.toggle("hidden", !!a);
+  }
+  if ($("#aulaTitulo")) $("#aulaTitulo").textContent = a ? a.titulo : "";
+  if ($("#aulaDescricao")) $("#aulaDescricao").textContent = a ? a.descricao : "";
+  const link = $("#aulaAbrir");
+  if (link) {
+    link.classList.toggle("hidden", !a);
+    if (a) link.href = `https://www.youtube.com/watch?v=${encodeURIComponent(a.youtubeId)}`;
+  }
+  for (const b of document.querySelectorAll("#aulasItens .aula-item")) {
+    b.classList.toggle("on", b.dataset.aula === state.aulas.atualId);
+  }
+  if (a && state.auth && state.auth.isAdmin) aulaPreencherForm(a);
+  if (a && !(opts && opts.semRolar)) $("#aulasPlayer")?.scrollIntoView({ block: "nearest" });
+}
+
+function aulaPreencherForm(a) {
+  const v = a || {};
+  if ($("#aulaId")) $("#aulaId").value = v.id || "";
+  if ($("#aulaFTitulo")) $("#aulaFTitulo").value = v.titulo || "";
+  if ($("#aulaFLink")) $("#aulaFLink").value = v.youtubeId ? `https://youtu.be/${v.youtubeId}` : "";
+  if ($("#aulaFSecao")) $("#aulaFSecao").value = v.secao || "";
+  if ($("#aulaFOrdem")) $("#aulaFOrdem").value = v.ordem != null ? v.ordem : 100;
+  if ($("#aulaFDesc")) $("#aulaFDesc").value = v.descricao || "";
+  $("#aulaApagar")?.classList.toggle("hidden", !v.id);
+  const btn = $("#aulaSalvar");
+  if (btn) btn.textContent = v.id ? "Salvar alterações" : "Salvar aula";
+}
+
+async function aulaAdmin(body) {
+  return api("/api/admin/aulas", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body) });
+}
+
+function wireAulas() {
+  const itens = $("#aulasItens");
+  if (itens && !itens.dataset.wired) {
+    itens.dataset.wired = "1";
+    itens.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-aula]");
+      if (b) abrirAula(b.dataset.aula);
+    });
+  }
+  const nova = $("#aulaNova");
+  if (nova && !nova.dataset.wired) {
+    nova.dataset.wired = "1";
+    nova.onclick = () => { aulaPreencherForm(null); $("#aulaFTitulo")?.focus(); };
+  }
+  const salvar = $("#aulaSalvar");
+  if (salvar && !salvar.dataset.wired) {
+    salvar.dataset.wired = "1";
+    salvar.onclick = async () => {
+      const id = $("#aulaId")?.value || "";
+      try {
+        const r = await aulaAdmin({
+          action: "upsert", id, titulo: $("#aulaFTitulo")?.value || "",
+          youtube: $("#aulaFLink")?.value || "", secao: $("#aulaFSecao")?.value || "",
+          ordem: $("#aulaFOrdem")?.value || "", descricao: $("#aulaFDesc")?.value || "",
+        });
+        state.aulas.lista = (r.aulas || []).filter((a) => a.ativo !== false);
+        state.aulas.origem = "servidor";
+        state.aulas.atualId = r.id || id || state.aulas.atualId;
+        renderAulas();
+        abrirAula(state.aulas.atualId, { semRolar: true });
+        toast(id ? "✓ Aula atualizada" : "✓ Aula publicada — já aparece para todo mundo");
+      } catch (err) {
+        toast(err.message || "Não consegui salvar a aula", 5000);
+      }
+    };
+  }
+  const apagar = $("#aulaApagar");
+  if (apagar && !apagar.dataset.wired) {
+    apagar.dataset.wired = "1";
+    apagar.onclick = async () => {
+      const id = $("#aulaId")?.value || "";
+      if (!id) return;
+      const a = (state.aulas.lista || []).find((x) => x.id === id);
+      const ok = await pedirConfirmacao("Apagar esta aula?", `"${(a && a.titulo) || "Aula"}" some da lista de todo mundo. O vídeo no YouTube fica.`, "Apagar", true);
+      if (!ok) return;
+      try {
+        const r = await aulaAdmin({ action: "delete", id });
+        state.aulas.lista = (r.aulas || []).filter((x) => x.ativo !== false);
+        state.aulas.atualId = state.aulas.lista.length ? state.aulas.lista[0].id : "";
+        renderAulas();
+        abrirAula(state.aulas.atualId, { semRolar: true });
+        aulaPreencherForm(aulaAtual());
+        toast("Aula apagada");
+      } catch (err) {
+        toast(err.message || "Não consegui apagar", 5000);
+      }
+    };
+  }
+}
+
 /* ---- Tela de Empresas (5.0.1) ------------------------------------------
  * Um card por empresa; clicar ativa. O resto da tela e SEMPRE da empresa
  * ativa: identidade (nome, logo, cor, formato), perfil (o que a IA sabe)
@@ -7412,6 +7588,7 @@ async function boot() {
   wirePresets();
   wireIdentidade();
   wireEmpresas();
+  wireAulas();
   wireBiblioteca();
   wireTheme();
   await wireTitlebar();

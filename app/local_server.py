@@ -2005,6 +2005,12 @@ class StudioHandler(BaseHTTPRequestHandler):
 
             self._json(au.public_status())
             return
+        if path == "/api/aulas":
+            # 5.0.3: central de ajuda. Nao passa pelo gate de licenca: quem
+            # esta bloqueado e justamente quem mais precisa da ajuda.
+            from app import aulas
+            self._json(aulas.listar())
+            return
         if path == "/api/admin/licenses":
             from app import auth as au
             from app import license_admin as la
@@ -2577,6 +2583,21 @@ class StudioHandler(BaseHTTPRequestHandler):
             self._json(au.logout())
             return
 
+        if path == "/api/admin/aulas":
+            from app import auth as au
+            from app import aulas
+
+            st = au.require_admin()
+            if not st.get("isAdmin"):
+                self._json({"ok": False, "error": "forbidden", "message": "Login de admin necessário."}, 403)
+                return
+            body = self._read_json() or {}
+            out = aulas.admin(str(body.get("action") or "list"), **{
+                k: body.get(k) for k in ("id", "titulo", "descricao", "youtube", "secao", "ordem", "ativo")
+                if k in body
+            })
+            self._json(out, 200 if out.get("ok") else 400)
+            return
         if path == "/api/admin/access":
             from app import auth as au
             from app import license_admin as la

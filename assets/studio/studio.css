@@ -4264,3 +4264,34 @@ body.view-roteiro-on .ws-body { overflow: hidden; }
   background: color-mix(in srgb, #000 55%, transparent); backdrop-filter: blur(4px);
 }
 .lib-dono-sel { max-width: 120px; }
+
+/* ---- Aulas (5.0.3) ---- */
+.aulas-shell { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 18px; align-items: start; }
+.aulas-lista { display: flex; flex-direction: column; gap: 10px; border-right: 1px solid var(--line); padding-right: 14px; }
+.aulas-itens { display: flex; flex-direction: column; gap: 12px; max-height: calc(100vh - 190px); overflow: auto; }
+.aulas-secao { display: grid; gap: 4px; }
+.aulas-secao-nome { margin: 4px 0 2px; font-size: 10.5px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); }
+.aula-item {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 6px; border: 1px solid transparent; border-radius: 10px;
+  background: transparent; color: var(--text); text-align: left; cursor: pointer; font: inherit;
+}
+.aula-item:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
+.aula-item.on { background: color-mix(in srgb, var(--accent) 12%, transparent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+.aula-thumb { width: 72px; height: 40px; border-radius: 6px; object-fit: cover; background: #000; flex: 0 0 auto; }
+.aula-txt { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+.aula-n { font-size: 11px; font-weight: 800; color: var(--dim); flex: 0 0 auto; }
+.aula-titulo { font-size: 13px; font-weight: 650; line-height: 1.25; }
+.aulas-main { display: grid; gap: 12px; }
+.aulas-player { position: relative; width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: 14px; overflow: hidden; border: 1px solid var(--hairline); }
+.aulas-iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.aulas-vazio { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 14px; }
+.aulas-sobre { display: grid; gap: 4px; }
+.aulas-titulo { margin: 0; font-size: 18px; font-weight: 800; }
+.aulas-admin { margin-top: 8px; }
+.aulas-form { display: grid; gap: 10px; }
+@media (max-width: 900px) {
+  .aulas-shell { grid-template-columns: 1fr; }
+  .aulas-lista { border-right: 0; padding-right: 0; }
+  .aulas-itens { max-height: none; }
+}

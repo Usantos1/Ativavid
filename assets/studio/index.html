@@ -88,6 +88,11 @@
         </button>
 
         <p class="sb-label">Aplicativo</p>
+        <!-- 5.0.3: central de ajuda com as aulas do YouTube (links do admin) -->
+        <button type="button" class="sb-item" data-view="aulas" data-tip="Aulas">
+          <span class="sb-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M10 8.5v7l5.5-3.5z"/></svg></span>
+          <span class="sb-txt">Aulas</span>
+        </button>
         <button type="button" class="sb-item" data-view="sistema" data-tip="Configurações">
           <span class="sb-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v2.5M12 19.5V22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M2 12h2.5M19.5 12H22M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></svg></span>
           <span class="sb-txt">Configurações</span>
@@ -509,6 +514,59 @@
               Nenhum preset ainda. Ajuste o estilo em <strong>Estilos</strong> e salve aqui a combinação.
             </div>
           </section>
+        </section>
+        <!-- AULAS (5.0.3): lista a esquerda, player a direita; o admin edita aqui mesmo -->
+        <section class="view hidden" id="view-aulas" data-view-panel="aulas">
+          <div class="aulas-shell">
+            <aside class="aulas-lista">
+              <p class="hint" id="aulasHint">Carregando…</p>
+              <div class="aulas-itens" id="aulasItens"></div>
+            </aside>
+            <div class="aulas-main">
+              <div class="aulas-player" id="aulasPlayer">
+                <div class="aulas-vazio" id="aulasVazio">Escolha uma aula ao lado.</div>
+              </div>
+              <div class="aulas-sobre">
+                <h3 id="aulaTitulo" class="aulas-titulo"></h3>
+                <p class="hint" id="aulaDescricao"></p>
+                <p class="hint"><a id="aulaAbrir" class="hidden" href="#" target="_blank" rel="noopener">Abrir no YouTube</a></p>
+              </div>
+              <section class="pane-card aulas-admin hidden" id="aulasAdmin">
+                <header class="pane-card-head emp-head">
+                  <div>
+                    <h4><span class="emp-eyebrow">Admin</span> Gerenciar aulas</h4>
+                    <p class="hint">Cole o link do YouTube. Quem abrir o app vê a lista na hora; sem internet, vale a última baixada.</p>
+                  </div>
+                  <button type="button" class="ghost-btn ghost-btn--sm" id="aulaNova">+ Nova aula</button>
+                </header>
+                <div class="aulas-form">
+                  <input type="hidden" id="aulaId">
+                  <label class="ia-form">Título
+                    <input type="text" id="aulaFTitulo" maxlength="120" placeholder="Ex.: Seu primeiro vídeo em 3 minutos">
+                  </label>
+                  <label class="ia-form">Link do YouTube
+                    <input type="text" id="aulaFLink" placeholder="https://youtu.be/… ou https://www.youtube.com/watch?v=…">
+                  </label>
+                  <div class="emp-linha">
+                    <label class="ia-form">Seção
+                      <input type="text" id="aulaFSecao" list="aulasSecoes" placeholder="Começando">
+                      <datalist id="aulasSecoes"></datalist>
+                    </label>
+                    <label class="ia-form">Ordem
+                      <input type="number" id="aulaFOrdem" value="100" min="0" step="10">
+                    </label>
+                  </div>
+                  <label class="ia-form">Descrição (opcional)
+                    <textarea id="aulaFDesc" rows="2" placeholder="O que a pessoa aprende nesta aula"></textarea>
+                  </label>
+                  <div class="emp-acoes">
+                    <button type="button" class="export-btn export-btn--sm" id="aulaSalvar">Salvar aula</button>
+                    <button type="button" class="ghost-btn ghost-btn--sm emp-del hidden" id="aulaApagar">Apagar aula</button>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
         </section>
         <!-- CHAVES + IA -->
         <section class="view hidden" id="view-ia" data-view-panel="ia">

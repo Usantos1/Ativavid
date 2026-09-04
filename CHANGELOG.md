@@ -1,5 +1,16 @@
 # Changelog
 
+## 5.0.3
+
+- **Aulas: central de ajuda dentro do app.** Nova tela "Aulas" (menu
+  Aplicativo): a lista de aulas à esquerda, agrupada por seção, e o vídeo
+  do YouTube tocando à direita, sem sair do ATIVAVID. Funciona mesmo
+  bloqueado ou sem licença, e sem internet mostra a última lista baixada.
+- **O admin gere as aulas ali mesmo.** Logado como admin, aparece o bloco
+  "Gerenciar aulas": cole o link do YouTube, dê título, seção e ordem, e
+  salve. Todo mundo que abrir o app vê na hora. Precisa rodar o
+  `RODAR-NO-SUPABASE-aulas.sql` uma vez no Supabase.
+
 ## 5.0.2
 
 - **Biblioteca de imagens e vídeos por empresa.** Nas abas Imagens e
