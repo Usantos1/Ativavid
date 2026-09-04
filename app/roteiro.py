@@ -95,6 +95,8 @@ def perfil_empresa(brand_id: str | None) -> dict[str, Any]:
         "nome": str(data.get("brandName") or "Minha empresa"),
         "cartao": copy,
         "empresa": str(data.get("empresa") or ""),
+        "perfil": _perfil_limpo(data.get("perfil")),
+        "campos": [{"id": c[0], "rotulo": c[1], "exemplo": c[2]} for c in PERFIL_CAMPOS],
     }
 
 
@@ -119,6 +121,168 @@ def salvar_empresa(brand_id: str | None, texto: str) -> dict[str, Any]:
     return perfil_empresa(bid)
 
 
+# ------------------------------------------------- perfil com campos (4.99)
+# "Pegar do preset ou criar um perfil?" (03/09): o preset so guarda estilo,
+# nenhum dado do negocio. O perfil mora na MARCA (cada marca tem o seu) e
+# vale para o Roteiro hoje e para o resto do pipeline depois.
+PERFIL_CAMPOS: list[tuple[str, str, str]] = [
+    ("vende", "O que vende / serviços", "Ex.: troca de tela, bateria e conector de iPhone e Android"),
+    ("publico", "Para quem", "Ex.: quem quebrou o celular e precisa dele hoje"),
+    ("local", "Cidade / região", "Ex.: Campinas, centro"),
+    ("diferenciais", "Diferenciais", "Ex.: troca em 40 min na sua frente, garantia de 90 dias"),
+    ("provas", "Provas", "Ex.: 900 avaliações no Google nota máxima, 8 anos de loja"),
+    ("oferta", "Oferta do momento", "Ex.: película grátis na troca de tela até sexta"),
+    ("contato", "Como o cliente fala com você", "Ex.: WhatsApp no link da bio, loja aberta até 18h"),
+    ("tom", "Tom de voz", "Ex.: direto, de técnico que explica sem enrolar"),
+    ("proibido", "O que NÃO falar", "Ex.: preço fechado, marcas concorrentes, 'mais barato da cidade'"),
+]
+_PERFIL_IDS = [c[0] for c in PERFIL_CAMPOS]
+
+
+def _perfil_limpo(bruto: Any) -> dict[str, str]:
+    out: dict[str, str] = {}
+    if isinstance(bruto, dict):
+        for k in _PERFIL_IDS:
+            v = bruto.get(k)
+            if isinstance(v, list):
+                v = "; ".join(str(x) for x in v if str(x).strip())
+            v = " ".join(str(v or "").split())[:600]
+            if v:
+                out[k] = v
+    return out
+
+
+def salvar_perfil(brand_id: str | None, perfil: Any) -> dict[str, Any]:
+    ensure_brands_dir()
+    data = load_brand(brand_id)
+    bid = str(data.get("brandId") or brand_id or "padrao")
+    data["perfil"] = _perfil_limpo(perfil)
+    path = BRANDS_DIR / f"{_slug(bid)}.json"
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return perfil_empresa(bid)
+
+
+def _perfil_em_texto(perfil: dict[str, str], empresa_livre: str) -> str:
+    """O perfil como a IA le: uma linha por campo preenchido."""
+    linhas = []
+    rotulo = {c[0]: c[1] for c in PERFIL_CAMPOS}
+    for k in _PERFIL_IDS:
+        if perfil.get(k):
+            linhas.append(f"- {rotulo[k]}: {perfil[k]}")
+    if empresa_livre.strip():
+        linhas.append(f"- Observações: {empresa_livre.strip()}")
+    return "\n".join(linhas)
+
+
+def coletar_falas(projects_root: Path | str, brand_id: str, limite: int = 30) -> list[dict[str, str]]:
+    """As falas (transcrição do corte) e legendas dos últimos vídeos DESTA
+    marca — `edit/preset-used.json` diz de quem é cada projeto."""
+    raiz = Path(projects_root)
+    if not raiz.exists():
+        return []
+    alvo = _slug(brand_id or "padrao")
+    achados: list[tuple[float, Path]] = []
+    for proj in raiz.iterdir():
+        edit = proj / "edit"
+        cut = edit / "transcripts" / "cut.json"
+        if not cut.exists():
+            continue
+        try:
+            usado = json.loads((edit / "preset-used.json").read_text(encoding="utf-8-sig"))
+            if _slug(str(usado.get("brandId") or "")) != alvo:
+                continue
+        except (OSError, json.JSONDecodeError):
+            continue
+        try:
+            achados.append((cut.stat().st_mtime, proj))
+        except OSError:
+            continue
+    achados.sort(key=lambda t: t[0], reverse=True)
+    falas: list[dict[str, str]] = []
+    vistos: set[str] = set()
+    for _, proj in achados:
+        if len(falas) >= limite:
+            break
+        edit = proj / "edit"
+        try:
+            d = json.loads((edit / "transcripts" / "cut.json").read_text(encoding="utf-8-sig"))
+            texto = " ".join(str(d.get("text") or "").split())
+        except (OSError, json.JSONDecodeError, AttributeError):
+            continue
+        if len(texto) < 20:
+            continue
+        # As 27 combinacoes do Multiplicador falam quase a mesma coisa: uma
+        # basta, senao a ficha nasce de um video so repetido 27 vezes.
+        assinatura = texto[:80].lower()
+        if assinatura in vistos:
+            continue
+        vistos.add(assinatura)
+        legenda = ""
+        try:
+            legenda = " ".join((edit / "legenda.txt").read_text(encoding="utf-8-sig").split())[:400]
+        except OSError:
+            pass
+        falas.append({"projeto": proj.name, "texto": texto[:1500], "legenda": legenda})
+    return falas
+
+
+def montar_perfil_pelos_videos(
+    projects_root: Path | str,
+    brand_id: str,
+    *,
+    chamar=None,
+    limite: int = 30,
+) -> dict[str, Any]:
+    """Rascunho do perfil a partir do que a empresa JA disse nos vídeos.
+
+    Devolve {"ok", "perfil": {...}, "videos": n, "backend"}; nunca grava —
+    quem grava é o usuário depois de corrigir na tela.
+    """
+    falas = coletar_falas(projects_root, brand_id, limite=limite)
+    if not falas:
+        raise ValueError("Ainda não há vídeos concluídos desta marca para ler. "
+                         "Preencha o perfil à mão por enquanto.")
+    perfil = perfil_empresa(brand_id)
+    corpo = "\n\n".join(
+        f"VÍDEO {i + 1} ({f['projeto']}):\nFALA: {f['texto']}"
+        + (f"\nLEGENDA DO POST: {f['legenda']}" if f.get("legenda") else "")
+        for i, f in enumerate(falas)
+    )
+    chaves = ", ".join(f'"{k}"' for k in _PERFIL_IDS)
+    rotulos = "\n".join(f"- {k}: {r} ({e})" for k, r, e in PERFIL_CAMPOS)
+    messages = [
+        {"role": "system", "content": (
+            "TAREFA DE TEXTO. Você é um analista que lê transcrições de vídeos de uma "
+            "empresa e monta a ficha dela. Responda APENAS um JSON com as chaves "
+            f"{chaves}. Cada valor é uma frase curta em português do Brasil, com o que "
+            "está EVIDENTE nas falas; o que não aparecer, deixe \"\". Não invente números "
+            "nem endereços. Campos:\n" + rotulos)},
+        {"role": "user", "content": f"EMPRESA: {perfil.get('nome')}\n\n{corpo[:24000]}"},
+    ]
+    if chamar is None:
+        from app import llm_gateway as gw
+
+        def chamar(msgs):  # noqa: E306
+            return gw.chat_com_rede(msgs, "gemini-web/default", json_no_groq=True)
+
+    texto, backend = _chamar_sem_recusa(messages, chamar)
+    import sys as _sys
+
+    helpers = str(Path(__file__).resolve().parent.parent / "helpers")
+    if helpers not in _sys.path:
+        _sys.path.insert(0, helpers)
+    from llm_cut_plan import _extract_json  # type: ignore
+
+    try:
+        bruto = _extract_json(texto)
+    except Exception as e:  # noqa: BLE001
+        raise RuntimeError("A IA não devolveu a ficha em JSON. Tente de novo.") from e
+    rascunho = _perfil_limpo(bruto)
+    if not rascunho:
+        raise RuntimeError("A IA não achou nada nas falas para preencher. Tente de novo.")
+    return {"ok": True, "perfil": rascunho, "videos": len(falas), "backend": backend}
+
+
 # ----------------------------------------------------------------- prompt
 def montar_system(perfil: dict[str, Any], opcoes: dict[str, Any] | None = None) -> str:
     o = opcoes or {}
@@ -128,7 +292,11 @@ def montar_system(perfil: dict[str, Any], opcoes: dict[str, Any] | None = None) 
     objetivo = OBJETIVOS.get(str(o.get("objetivo") or ""), OBJETIVOS["vendas"])
     tom = TONS.get(str(o.get("tom") or ""), TONS["direto"])
     cartao = " / ".join(x for x in perfil.get("cartao") or [] if x)
-    empresa = (perfil.get("empresa") or "").strip() or "(o usuário ainda não descreveu a empresa — pergunte o essencial em UMA linha só se faltar algo indispensável; senão, assuma o óbvio pelo nome)"
+    empresa = _perfil_em_texto(perfil.get("perfil") or {}, perfil.get("empresa") or "")
+    if empresa:
+        empresa = "\n" + empresa
+    else:
+        empresa = "(o usuário ainda não descreveu a empresa — pergunte o essencial em UMA linha só se faltar algo indispensável; senão, assuma o óbvio pelo nome)"
     blocos = max(2, round(dur / 12))
     return (
         "TAREFA DE TEXTO. Você é um REDATOR: escreve o texto que uma pessoa vai ler em voz "

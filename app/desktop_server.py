@@ -532,6 +532,7 @@ class DesktopHandler(ps.Handler):
             "/api/roteiro/empresa",
             "/api/roteiro/apagar",
             "/api/roteiro/renomear",
+            "/api/roteiro/perfil-dos-videos",
         ):
             return self._studio_post()
 

@@ -7188,20 +7188,51 @@ async function loadRoteiroUi() {
   state.roteiro.chats = pack.chats || [];
   if ($("#rotMarcaNome")) $("#rotMarcaNome").textContent = (pack.empresa && pack.empresa.nome) || "Marca";
   if ($("#rotEmpresaTexto") && pack.empresa) $("#rotEmpresaTexto").value = pack.empresa.empresa || "";
+  rotMontarPerfilForm(pack.empresa || {});
   rotPreencherSelects(pack);
   rotRenderLista();
-  // Sem "sobre a empresa", a IA escreve no escuro: abre a caixa na primeira
-  // vez e deixa o aviso aceso ate preencher (o 1o teste real saiu com
-  // "o usuario ainda nao descreveu a empresa" no prompt).
-  const falta = !!(pack.empresa && !pack.empresa.empresa);
-  const link = $("#rotEmpresaAbrir");
-  if (link) {
-    link.classList.toggle("rot-falta", falta);
-    link.textContent = falta ? "Preencher dados da empresa (recomendado)" : "Dados da empresa";
-  }
-  if (falta && !state.roteiro.chats.length) $("#rotEmpresaBox")?.classList.remove("hidden");
+  // Sem perfil, a IA escreve no escuro: abre a caixa na primeira vez e
+  // deixa o aviso aceso ate preencher (o 1o teste real saiu com "o usuario
+  // ainda nao descreveu a empresa" no prompt).
+  rotMarcarFalta(pack.empresa || {});
+  if (rotPerfilVazio(pack.empresa || {}) && !state.roteiro.chats.length) $("#rotEmpresaBox")?.classList.remove("hidden");
   if (state.roteiro.chatId) await rotAbrir(state.roteiro.chatId);
   else rotRenderMsgs(null);
+}
+
+function rotPerfilVazio(emp) {
+  const p = emp.perfil || {};
+  return !Object.values(p).some((v) => String(v || "").trim()) && !String(emp.empresa || "").trim();
+}
+
+function rotMarcarFalta(emp) {
+  const falta = rotPerfilVazio(emp);
+  const link = $("#rotEmpresaAbrir");
+  if (!link) return;
+  link.classList.toggle("rot-falta", falta);
+  link.textContent = falta ? "Preencher o perfil da empresa (recomendado)" : "Perfil da empresa";
+}
+
+/* Perfil com campos (4.99): um textarea curto por campo, rotulo e exemplo
+ * vindos do servidor (a lista mora em app/roteiro.py, um lugar so). */
+function rotMontarPerfilForm(emp) {
+  const grid = $("#rotPerfilGrid");
+  if (!grid) return;
+  const campos = emp.campos || [];
+  const valores = emp.perfil || {};
+  grid.innerHTML = campos.map((c) => `
+    <label class="ia-form rot-perfil-campo">${escapeHtml(c.rotulo)}
+      <textarea rows="2" data-perfil="${escapeHtml(c.id)}" placeholder="${escapeHtml(c.exemplo || "")}">${escapeHtml(valores[c.id] || "")}</textarea>
+    </label>`).join("");
+}
+
+function rotLerPerfilForm() {
+  const out = {};
+  document.querySelectorAll("#rotPerfilGrid [data-perfil]").forEach((ta) => {
+    const v = (ta.value || "").trim();
+    if (v) out[ta.dataset.perfil] = v;
+  });
+  return out;
 }
 
 function rotRenderLista() {
@@ -7406,14 +7437,40 @@ function wireRoteiro() {
   $("#rotEmpresaSalvar")?.addEventListener("click", async () => {
     try {
       const r = await api("/api/roteiro/empresa", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ brandId: state.roteiro.brandId, texto: $("#rotEmpresaTexto")?.value || "" }) });
-      toast(`✓ Dados de ${r.nome} salvos — a IA passa a usar`);
+        body: JSON.stringify({ brandId: state.roteiro.brandId, perfil: rotLerPerfilForm(),
+          texto: $("#rotEmpresaTexto")?.value || "" }) });
+      toast(`✓ Perfil de ${r.nome} salvo — a IA passa a usar`);
       $("#rotEmpresaBox")?.classList.add("hidden");
-      if (state.roteiro.pack && state.roteiro.pack.empresa) state.roteiro.pack.empresa.empresa = r.empresa || "";
-      const l = $("#rotEmpresaAbrir");
-      if (l) { l.classList.toggle("rot-falta", !r.empresa); l.textContent = r.empresa ? "Dados da empresa" : "Preencher dados da empresa (recomendado)"; }
+      if (state.roteiro.pack) state.roteiro.pack.empresa = r;
+      rotMarcarFalta(r);
     } catch (e) {
-      toast(e.message || "Não salvei os dados");
+      toast(e.message || "Não salvei o perfil");
+    }
+  });
+  // "Montar com meus videos": a IA le as falas dos ultimos videos desta
+  // marca e devolve um RASCUNHO nos campos — nada e gravado ate Salvar.
+  $("#rotPerfilDosVideos")?.addEventListener("click", async () => {
+    const btn = $("#rotPerfilDosVideos");
+    const st = $("#rotPerfilStatus");
+    if (btn) btn.disabled = true;
+    if (st) { st.hidden = false; st.classList.remove("hidden"); st.textContent = "Lendo as falas dos seus últimos vídeos…"; }
+    try {
+      const r = await api("/api/roteiro/perfil-dos-videos", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ brandId: state.roteiro.brandId }) });
+      const atual = rotLerPerfilForm();
+      document.querySelectorAll("#rotPerfilGrid [data-perfil]").forEach((ta) => {
+        const k = ta.dataset.perfil;
+        // o que a pessoa ja escreveu fica; o rascunho preenche so o vazio
+        if (!atual[k] && r.perfil[k]) ta.value = r.perfil[k];
+      });
+      const n = Object.keys(r.perfil || {}).length;
+      if (st) st.textContent = `Rascunho a partir de ${r.videos} vídeo(s): ${n} campo(s) preenchidos. Corrija o que quiser e clique em Salvar perfil.`;
+      toast("✓ Rascunho pronto — confira e salve");
+    } catch (e) {
+      if (st) st.textContent = e.message || "Não consegui montar o perfil";
+      toast(e.message || "Não consegui montar o perfil", 5000);
+    } finally {
+      if (btn) btn.disabled = false;
     }
   });
 }

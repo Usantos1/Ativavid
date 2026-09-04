@@ -3028,7 +3028,8 @@ class StudioHandler(BaseHTTPRequestHandler):
             return
 
         if (path == "/api/roteiro/chat" or path == "/api/roteiro/empresa"
-                or path == "/api/roteiro/apagar" or path == "/api/roteiro/renomear"):
+                or path == "/api/roteiro/apagar" or path == "/api/roteiro/renomear"
+                or path == "/api/roteiro/perfil-dos-videos"):
             # Roteiro de gravacao (4.97). A IA e a mesma do corte (sessao ->
             # Groq); a memoria fica em %USERPROFILE%/ATIVAVID/roteiros.
             from app import license as lic
@@ -3043,7 +3044,17 @@ class StudioHandler(BaseHTTPRequestHandler):
             bid = str(body.get("brandId") or "").strip() or get_active_id()
             try:
                 if path == "/api/roteiro/empresa":
-                    self._json({"ok": True, **roteiro.salvar_empresa(bid, str(body.get("texto") or ""))})
+                    # 4.99: perfil com campos; `texto` (livre) continua valendo
+                    if isinstance(body.get("perfil"), dict):
+                        roteiro.salvar_perfil(bid, body.get("perfil"))
+                    if "texto" in body:
+                        roteiro.salvar_empresa(bid, str(body.get("texto") or ""))
+                    self._json({"ok": True, **roteiro.perfil_empresa(bid)})
+                    return
+                if path == "/api/roteiro/perfil-dos-videos":
+                    # Rascunho do perfil lendo as falas dos videos desta marca.
+                    # Nao grava: a pessoa corrige e clica em Salvar.
+                    self._json(roteiro.montar_perfil_pelos_videos(self.projects_root, bid))
                     return
                 if path == "/api/roteiro/apagar":
                     self._json({"ok": roteiro.apagar(bid, str(body.get("id") or ""))})

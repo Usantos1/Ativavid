@@ -377,12 +377,23 @@
                 </div>
               </div>
               <div class="rot-empresa hidden" id="rotEmpresaBox">
-                <label class="ia-form">Sobre a empresa (o que vende, para quem, cidade, diferenciais, preços que pode citar, o que NÃO falar)
-                  <textarea id="rotEmpresaTexto" rows="5" placeholder="Ex.: Assistência técnica de celulares em Campinas, 900 avaliações no Google. Troca de tela em 40 min, garantia de 90 dias. Público: quem quebrou a tela e tem pressa. Não falar de preço fechado."></textarea>
+                <div class="rot-empresa-topo">
+                  <div>
+                    <strong>Perfil da empresa</strong>
+                    <p class="hint">Vale para esta marca. A IA usa tudo isto em cada roteiro.</p>
+                  </div>
+                  <button type="button" class="ghost-btn" id="rotPerfilDosVideos" title="Lê as falas dos seus últimos vídeos desta marca e preenche um rascunho — você corrige e salva">Montar com meus vídeos</button>
+                </div>
+                <p class="hint hidden" id="rotPerfilStatus"></p>
+                <!-- 4.99: campos em vez de texto solto ("pegar do preset ou criar
+                     um perfil?"). O preset so guarda estilo; o negocio mora aqui. -->
+                <div class="rot-perfil-grid" id="rotPerfilGrid"></div>
+                <label class="ia-form">Observações livres
+                  <textarea id="rotEmpresaTexto" rows="2" placeholder="O que mais a IA precisa saber e não coube acima"></textarea>
                 </label>
                 <div class="rot-empresa-acoes">
                   <button type="button" class="ghost-btn" id="rotEmpresaFechar">Fechar</button>
-                  <button type="button" class="export-btn export-btn--sm" id="rotEmpresaSalvar">Salvar dados da empresa</button>
+                  <button type="button" class="export-btn export-btn--sm" id="rotEmpresaSalvar">Salvar perfil</button>
                 </div>
               </div>
               <div class="rot-msgs" id="rotMsgs">

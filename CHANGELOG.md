@@ -1,5 +1,16 @@
 # Changelog
 
+## 4.99
+
+- **Perfil da empresa com campos, por marca.** No Roteiro, "Perfil da
+  empresa" virou um formulário: o que vende, para quem, cidade, diferenciais,
+  provas, oferta do momento, como o cliente fala com você, tom de voz e o
+  que não falar. A IA recebe uma linha por campo em todo roteiro.
+- **"Montar com meus vídeos".** Um botão lê as falas e legendas dos seus
+  últimos vídeos concluídos desta marca (sem repetir as combinações do
+  Multiplicador) e preenche um rascunho do perfil; você corrige e salva.
+  Nada é gravado sem o Salvar.
+
 ## 4.98
 
 - **Roteiro: o cartão final entra no prompt mesmo quando a marca não o

@@ -138,6 +138,85 @@ def test_dados_da_empresa_ficam_na_marca_sem_apagar_o_resto(monkeypatch, tmp_pat
     assert dado["brandName"] == "Prime Camp"
 
 
+# ------------------------------------------------ perfil com campos (4.99)
+def test_o_perfil_com_campos_entra_no_prompt_uma_linha_por_campo(monkeypatch, tmp_path):
+    _casa(monkeypatch, tmp_path)
+    rt.salvar_perfil("prime-camp", {"vende": "troca de tela e bateria", "local": "Campinas",
+                                    "proibido": ["preço fechado", "concorrentes"], "lixo": "x"})
+    p = rt.perfil_empresa("prime-camp")
+    assert p["perfil"] == {"vende": "troca de tela e bateria", "local": "Campinas",
+                           "proibido": "preço fechado; concorrentes"}
+    assert [c["id"] for c in p["campos"]] == rt._PERFIL_IDS
+    s = rt.montar_system(p, {})
+    assert "- O que vende / serviços: troca de tela e bateria" in s
+    assert "- Cidade / região: Campinas" in s
+    assert "- O que NÃO falar: preço fechado; concorrentes" in s
+    assert "ainda não descreveu" not in s
+    dado = json.loads((tmp_path / "brands" / "prime-camp.json").read_text(encoding="utf-8"))
+    assert dado["brandName"] == "Prime Camp", "o resto da marca fica"
+
+
+def _projeto(raiz, nome, brand, texto, legenda=""):
+    edit = raiz / nome / "edit"
+    (edit / "transcripts").mkdir(parents=True)
+    (edit / "transcripts" / "cut.json").write_text(json.dumps({"text": texto}), encoding="utf-8")
+    (edit / "preset-used.json").write_text(json.dumps({"brandId": brand}), encoding="utf-8")
+    if legenda:
+        (edit / "legenda.txt").write_text(legenda, encoding="utf-8")
+
+
+def test_coleta_so_as_falas_desta_marca_sem_repetir_as_combinacoes(tmp_path):
+    raiz = tmp_path / "Projetos"
+    fala = "Seu iPhone quebrou e você não pode ficar sem ele hoje. Na Prime Camp a gente troca a tela em quarenta minutos."
+    _projeto(raiz, "20260903-1_G1C1A1_a", "loja-teste", fala, "Troca de tela em 40 min #campinas")
+    _projeto(raiz, "20260903-1_G1C2A1_b", "loja-teste", fala + " Com garantia.", "Troca de tela em 40 min #campinas")
+    _projeto(raiz, "20260901-1_x", "loja-teste", "Hoje chegou um Xiaomi com a bateria estufada e a gente resolveu na hora com peça original.")
+    _projeto(raiz, "20260902-1_outra", "ativa-crm", "Vídeo de outra marca que não pode entrar aqui de jeito nenhum.")
+    _projeto(raiz, "20260902-1_curto", "loja-teste", "oi")
+    falas = rt.coletar_falas(raiz, "loja-teste")
+    textos = [f["texto"] for f in falas]
+    assert len(falas) == 2, textos
+    assert all("outra marca" not in t for t in textos)
+    assert any(f["legenda"].startswith("Troca de tela") for f in falas)
+
+
+def test_montar_perfil_pelos_videos_devolve_rascunho_sem_gravar(monkeypatch, tmp_path):
+    _casa(monkeypatch, tmp_path)
+    raiz = tmp_path / "Projetos"
+    _projeto(raiz, "20260903-1_a", "prime-camp", "Na Prime Camp a gente troca a tela do seu iPhone em quarenta minutos com noventa dias de garantia, em Campinas.")
+    visto = []
+
+    def chamar(msgs):
+        visto.append(msgs)
+        return ('{"vende": "troca de tela de iPhone", "local": "Campinas", "diferenciais": "40 minutos, garantia de 90 dias", "oferta": ""}', "gemini-web")
+
+    r = rt.montar_perfil_pelos_videos(raiz, "prime-camp", chamar=chamar)
+    assert r["ok"] and r["videos"] == 1
+    assert r["perfil"] == {"vende": "troca de tela de iPhone", "local": "Campinas",
+                           "diferenciais": "40 minutos, garantia de 90 dias"}
+    assert "APENAS um JSON" in visto[0][0]["content"] and "quarenta minutos" in visto[0][1]["content"]
+    assert rt.perfil_empresa("prime-camp")["perfil"] == {}, "rascunho nao grava; quem grava e o Salvar"
+
+
+def test_sem_videos_da_marca_o_botao_explica(monkeypatch, tmp_path):
+    import pytest
+    _casa(monkeypatch, tmp_path)
+    with pytest.raises(ValueError, match="Ainda não há vídeos"):
+        rt.montar_perfil_pelos_videos(tmp_path / "vazio", "prime-camp", chamar=lambda m: ("{}", "x"))
+
+
+def test_a_tela_tem_o_formulario_e_o_botao_dos_videos():
+    i = HTML.index('id="rotEmpresaBox"')
+    bloco = HTML[i:HTML.index('id="rotMsgs"', i)]
+    assert 'id="rotPerfilGrid"' in bloco and 'id="rotPerfilDosVideos"' in bloco and 'id="rotEmpresaTexto"' in bloco
+    assert "function rotMontarPerfilForm(" in JS and "function rotLerPerfilForm(" in JS
+    assert 'api("/api/roteiro/perfil-dos-videos"' in JS
+    assert "if (!atual[k] && r.perfil[k]) ta.value = r.perfil[k];" in JS, "o rascunho nao apaga o que a pessoa escreveu"
+    assert 'perfil: rotLerPerfilForm()' in JS
+    assert '"/api/roteiro/perfil-dos-videos"' in DESKTOP
+    assert 'if path == "/api/roteiro/perfil-dos-videos":' in SERVER
+
+
 # ---------------------------------------------------------------- recusa
 RECUSA = "Sou um modelo de linguagem. Isso está além das minhas habilidades."
 BOM = "GANCHOS\n1. Seu celular ainda carrega assim?\n\nCTA\nsegue"
@@ -201,7 +280,7 @@ def test_so_a_secao_de_ganchos():
 # ----------------------------------------------------------------- rotas
 def test_as_rotas_existem_cobram_licenca_e_o_desktop_delega():
     i = SERVER.index('if (path == "/api/roteiro/chat" or path == "/api/roteiro/empresa"')
-    corpo = SERVER[i:i + 2500]
+    corpo = SERVER[i:SERVER.index('if path == "/api/brands":', i)]
     assert "lic.entitlement()" in corpo and "deny_reason" in corpo
     assert "roteiro.responder(" in corpo and "roteiro.salvar_empresa(" in corpo
     assert "friendly_llm_error" in corpo, "erro da IA vira frase de gente"
