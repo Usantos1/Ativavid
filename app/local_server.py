@@ -3022,6 +3022,7 @@ class StudioHandler(BaseHTTPRequestHandler):
 
         if path == "/api/brand-presets":
             from app.brand_presets import (
+                copy_to_brand,
                 create as create_preset,
                 delete as delete_preset,
                 duplicate as dup_preset,
@@ -3044,6 +3045,20 @@ class StudioHandler(BaseHTTPRequestHandler):
                     )
                 elif action == "duplicate":
                     pack = dup_preset(brand_id, str(body.get("id") or ""), str(body.get("name") or "Cópia"))
+                elif action == "copy":
+                    # 5.0.4: para OUTRA empresa (`id` vazio = todos). A
+                    # resposta continua sendo o pack da empresa de ORIGEM,
+                    # que e o que a tela esta mostrando.
+                    from app.brand_kits import list_brands
+                    destino = str(body.get("to") or "").strip()
+                    nome = next((str(b.get("name") or "") for b in list_brands()
+                                 if str(b.get("id") or "") == destino), "")
+                    if not nome:
+                        raise ValueError("empresa de destino não encontrada")
+                    r = copy_to_brand(brand_id, destino, str(body.get("id") or "") or None,
+                                      dest_name=nome)
+                    pack = {**load_presets(brand_id), "copiados": r["copiados"],
+                            "destinoNome": nome}
                 elif action == "rename":
                     pack = rename_preset(brand_id, str(body.get("id") or ""), str(body.get("name") or ""))
                 elif action == "delete":

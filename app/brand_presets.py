@@ -131,6 +131,59 @@ def duplicate(brand_id: str, preset_id: str, new_name: str, *, root: Path | None
     )
 
 
+def copy_to_brand(
+    src_brand: str,
+    dest_brand: str,
+    preset_id: str | None = None,
+    *,
+    root: Path | None = None,
+    dest_name: str = "",
+) -> dict:
+    """Copia um preset (ou TODOS, com `preset_id` vazio) para outra empresa.
+
+    "Quero copiar os presets de uma empresa pra outra" (04/09): o preset
+    e so JSON de estilo, entao a copia e barata. O que a copia NAO faz:
+    virar o padrao da empresa de destino (o padrao dela continua o que
+    era) nem atropelar um preset de mesmo nome (a copia ganha "(cópia)").
+    """
+    if _slug(src_brand) == _slug(dest_brand):
+        raise ValueError("origem e destino são a mesma empresa")
+    origem = load(src_brand, root=root)
+    if preset_id:
+        escolhidos = [p for p in origem["presets"] if p["id"] == preset_id]
+        if not escolhidos:
+            raise ValueError("preset não encontrado")
+    else:
+        escolhidos = list(origem["presets"])
+    if not escolhidos:
+        raise ValueError("a empresa de origem não tem presets")
+    destino = load(dest_brand, root=root, brand_name=dest_name)
+    usados = {p["id"] for p in destino["presets"]}
+    nomes = {str(p.get("name") or "").strip().lower() for p in destino["presets"]}
+    copiados = []
+    for src in escolhidos:
+        nome = str(src.get("name") or "Preset").strip() or "Preset"
+        if nome.lower() in nomes:
+            nome = f"{nome} (cópia)"
+        pid = _safe_id(nome)
+        base, n = pid, 2
+        while pid in usados:
+            pid = f"{base}-{n}"
+            n += 1
+        usados.add(pid)
+        nomes.add(nome.lower())
+        destino["presets"].append({
+            "id": pid,
+            "name": nome,
+            "isDefault": False,
+            "contentType": src.get("contentType"),
+            "style": style_snapshot(dict(src.get("style") or {})),
+        })
+        copiados.append({"id": pid, "name": nome})
+    pack = save(dest_brand, destino, root=root)
+    return {"ok": True, "copiados": copiados, "destino": pack}
+
+
 def rename(brand_id: str, preset_id: str, new_name: str, *, root: Path | None = None) -> dict:
     pack = load(brand_id, root=root)
     found = False

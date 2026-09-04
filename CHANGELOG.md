@@ -1,5 +1,13 @@
 # Changelog
 
+## 5.0.4
+
+- **Copiar presets de uma empresa para outra.** Na tela Empresas, cada
+  preset ganhou "Copiar para…" e o bloco ganhou "Copiar todos para…":
+  escolha a empresa de destino e pronto. A cópia não vira o padrão da
+  outra empresa e, se lá já existir um preset com o mesmo nome, a cópia
+  chega como "(cópia)".
+
 ## 5.0.3
 
 - **Aulas: central de ajuda dentro do app.** Nova tela "Aulas" (menu

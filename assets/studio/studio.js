@@ -7026,6 +7026,7 @@ function nomeDoEstilo(eixo, id) {
         <button type="button" class="export-btn export-btn--sm" data-preset-act="edit">Editar estilo</button>
         ${on ? "" : `<button type="button" class="ghost-btn ghost-btn--sm" data-preset-act="default">Usar como padrão</button>`}
         <button type="button" class="ghost-btn ghost-btn--sm" data-preset-act="duplicate">Duplicar</button>
+        <button type="button" class="ghost-btn ghost-btn--sm" data-preset-act="copy" title="Copiar este preset para outra empresa">Copiar para…</button>
         <button type="button" class="ghost-btn ghost-btn--sm" data-preset-act="rename">Renomear</button>
         <button type="button" class="ghost-btn ghost-btn--sm preset-del" data-preset-act="delete">Apagar</button>
       </div>
@@ -7129,7 +7130,49 @@ function wireEspacoDosProjetos() {
   }
 }
 
+/* Copiar preset(s) para OUTRA empresa (5.0.4). `id` vazio = todos. */
+async function copiarPresetsPara(id, rotulo) {
+  const origem = state.presetBrandId || (state.brandActive && state.brandActive.id) || "";
+  const outras = (state.brands || []).filter((b) => b.id !== origem);
+  if (!outras.length) { toast("Crie outra empresa primeiro (tela Empresas)"); return; }
+  const destino = await pedirEmpresa(
+    id ? `Copiar "${rotulo}" para qual empresa?` : `Copiar todos os presets de ${nomeDaMarca(origem)} para qual empresa?`,
+    outras);
+  if (!destino) return;
+  try {
+    const pack = await presetAction("copy", { id: id || "", to: destino });
+    const n = (pack.copiados || []).length;
+    toast(`✓ ${n} preset${n === 1 ? "" : "s"} copiado${n === 1 ? "" : "s"} para ${pack.destinoNome || nomeDaMarca(destino)}`);
+    loadBrandsUi().catch(() => {});   // a contagem no card da empresa
+  } catch (e) {
+    toast(e.message || "Não consegui copiar");
+  }
+}
+
+/** Pergunta uma empresa da lista. Devolve o id ou null. */
+function pedirEmpresa(titulo, empresas) {
+  return _dlgApp(
+    `<h3>${escapeHtml(titulo)}</h3>
+     <select class="dlg-input" id="_dlgEmp">${empresas.map((b) =>
+       `<option value="${escapeHtml(b.id)}">${escapeHtml(b.name || b.id)}</option>`).join("")}</select>
+     <div class="dlg-actions">
+       <button type="button" class="ghost-btn" data-nao>Cancelar</button>
+       <button type="button" class="export-btn" data-sim>Copiar</button>
+     </div>`,
+    (d, fechar) => {
+      const sel = d.querySelector("#_dlgEmp");
+      d.querySelector("[data-sim]").addEventListener("click", () => fechar(sel.value || null));
+      setTimeout(() => sel.focus(), 30);
+    },
+  );
+}
+
 function wirePresets() {
+  const btnTodos = $("#btnPresetsCopiarTodos");
+  if (btnTodos && !btnTodos.dataset.wired) {
+    btnTodos.dataset.wired = "1";
+    btnTodos.onclick = () => copiarPresetsPara("", "");
+  }
   const btnNovo = $("#btnPresetNovo");
   if (btnNovo && !btnNovo.dataset.wired) {
     btnNovo.dataset.wired = "1";
@@ -7188,6 +7231,9 @@ function wirePresets() {
           const atual = row.querySelector(".preset-name")?.textContent || "Preset";
           await presetAction("duplicate", { id, name: `${atual} (cópia)` });
           toast("Preset duplicado");
+        } else if (act === "copy") {
+          const atual = row.querySelector(".preset-name")?.textContent || "Preset";
+          await copiarPresetsPara(id, atual);
         } else if (act === "default") {
           await presetAction("default", { id });
           toast("Preset virou o padrão");
