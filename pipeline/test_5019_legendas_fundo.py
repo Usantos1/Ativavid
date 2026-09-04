@@ -76,10 +76,10 @@ def test_os_numeros_do_desenho_batem_nos_tres():
     diferente em um motor sai como outra legenda e ninguém percebe."""
     assert "const ETIQUETA_BARRA = 10;" in TSX and "ETIQUETA_BARRA = 10" in PY and "const ETIQUETA_BARRA = 10;" in PJS
     assert "const FITA_ESCURO = 0.55;" in TSX and "FITA_ESCURO = 0.55" in PY and "const FITA_ESCURO = 0.55;" in PJS
-    for nome, valor in (("MARCADOR_TOPO", 26), ("MARCADOR_BASE", 96)):
+    for nome, valor in (("MARCADOR_PADY", 0.14), ("MARCADOR_PADX", 0.16)):
         assert f"const {nome} = {valor};" in TSX, nome
         assert f"const {nome} = {valor};" in PJS, nome
-    assert "MARCADOR_TOPO = 0.26" in PY and "MARCADOR_BASE = 0.96" in PY
+        assert f"{nome} = {valor}" in PY, nome
     assert "const MARCADOR_PADRAO = '#ffd400';" in TSX and 'MARCADOR_PADRAO = "#ffd400"' in PY
 
 
@@ -95,13 +95,38 @@ def test_a_pilula_e_capsula_e_a_etiqueta_tem_barra():
     assert "borderLeft: `${ETIQUETA_BARRA}px solid ${barra}`" in TSX
 
 
-def test_o_marca_texto_deixa_o_topo_da_letra_de_fora():
+def test_a_faixa_do_marca_texto_cobre_a_letra_inteira():
+    """5.0.20 — ele: "essa ultima esta cortando o fundo dela". A listra
+    ficava DENTRO da caixa de linha e o pe do "p" e a ponta do "d" ficavam
+    de fora; agora a faixa e a caixa de linha MAIS a folga."""
     i = PY.index("def _marca_texto(")
-    bloco = PY[i:i + 2600]
-    assert "t0 = folga + int(round(alt_cx * self.MARCADOR_TOPO))" in bloco
-    assert "t1 = folga + int(round(alt_cx * self.MARCADOR_BASE))" in bloco
+    bloco = PY[i:i + 3000]
+    assert "alt_cx = int(round(alt_l)) + 2 * pad_y" in bloco
+    assert "alpha[folga:folga + alt_cx, folga:L - folga] = 1.0" in bloco
+    assert "ty = folga + pad_y + int((alt_l - (asc + desc)) / 2)" in bloco
     assert "self._tinta_na_caixa(faixa)" in bloco, "a tinta sai da luminancia da faixa"
     # a sombra parte do GLIFO, nao da faixa (senao vira lapide com halo)
     assert "sombra = self._sombra_de(glifo," in bloco
-    assert "transparent 0 ${MARCADOR_TOPO}%" in TSX
+    assert "MARCADOR_TOPO" not in PY and "MARCADOR_TOPO" not in TSX, "a listra saiu"
+    assert "background: faixa," in TSX and "padding: `${padY}px ${padX}px`" in TSX
+    # a folga entra na altura empilhada, senao o CSS e o motor ancoram
+    # a linha em alturas diferentes
+    assert "alt_total = (alt_l * sq_y + 2 * pad_y_marc) * len(linhas)" in PY
     assert "marcador" not in Renderizador.SIMPLE_PAINEL, "e por LINHA, nao um painel do cue"
+
+
+def test_a_faixa_cobre_a_caixa_do_glifo_da_fonte():
+    """A folga de 0,14 do corpo tem de cobrir o que a fonte desenha: com
+    entrelinha 1,16 a Poppins passa dos DOIS lados da caixa de linha."""
+    from PIL import ImageFont
+    tam, lh = 74, 1.16
+    f = ImageFont.truetype(str(REPO / "assets" / "fonts-render" / "Poppins-ExtraBold.ttf"), tam)
+    asc, desc = f.getmetrics()
+    caixa = tam * lh
+    pad_y = round(tam * 0.14)
+    meia = (caixa - (asc + desc)) / 2
+    topo_glifo = pad_y + meia            # dentro da caixa com folga
+    base_glifo = topo_glifo + asc + desc
+    assert topo_glifo >= 0, f"a faixa corta o topo da letra em {-topo_glifo:.1f}px"
+    assert base_glifo <= caixa + 2 * pad_y, (
+        f"a faixa corta o pe da letra em {base_glifo - (caixa + 2 * pad_y):.1f}px")

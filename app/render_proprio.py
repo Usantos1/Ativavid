@@ -2920,8 +2920,11 @@ class Renderizador:
     ETIQUETA_BARRA = 10
     FITA_ESCURO = 0.55
     MARCADOR_PADRAO = "#ffd400"
-    MARCADOR_TOPO = 0.26
-    MARCADOR_BASE = 0.96
+    # folga da faixa em volta da linha (fracao do corpo) — os MESMOS numeros
+    # do SimpleCaptions.tsx. Ver o comentario de la: a listra por dentro da
+    # caixa de linha cortava a letra.
+    MARCADOR_PADY = 0.14
+    MARCADOR_PADX = 0.16
 
     @staticmethod
     def velocidade_maquina(dur_f: int, n_chars: int) -> float:
@@ -3430,7 +3433,11 @@ class Renderizador:
                 camadas.append(leg)
                 continue
             gap_l = round(tam * 0.14) if modo == "bloco" else 0
-            alt_total = alt_l * len(linhas) * sq_y + gap_l * (len(linhas) - 1)
+            # marca-texto: a faixa e a caixa de linha MAIS a folga, como o
+            # `padding` do CSS — e ela que manda na altura empilhada
+            pad_y_marc = round(tam * self.MARCADOR_PADY) if modo == "marcador" else 0
+            alt_total = (alt_l * sq_y + 2 * pad_y_marc) * len(linhas) \
+                + gap_l * (len(linhas) - 1)
             y = self.h - bottom - alt_total
 
             for ln in linhas:
@@ -3496,8 +3503,9 @@ class Renderizador:
 
                 if modo == "marcador":
                     leg.palavras.append(self._marca_texto(
-                        m, cor_emj, tam, alt_l, y, caps_cfg, asc, desc))
-                    y += alt_l * sq_y + gap_l
+                        m, cor_emj, tam, alt_l, y, caps_cfg, asc, desc,
+                        pad_y_marc))
+                    y += alt_l * sq_y + 2 * pad_y_marc
                     continue
 
                 pad_m = np.zeros((h_m + 2 * folga, w_m + 2 * folga),
@@ -3718,12 +3726,18 @@ class Renderizador:
         import numpy as np
         return np.clip(np.asarray(cor, dtype=np.float32) * float(f), 0, 255)
 
-    def _marca_texto(self, m, cor_emj, tam, alt_l, y, caps_cfg, asc, desc):
-        """Faixa de marca-texto ATRAS da letra (uma por linha).
+    def _marca_texto(self, m, cor_emj, tam, alt_l, y, caps_cfg, asc, desc,
+                     pad_y):
+        """Faixa de caneta marca-texto (uma por linha).
 
-        A listra cobre de 26% a 96% da caixa de linha: o topo das maiusculas
-        fica de fora, que e o que faz parecer caneta marca-texto. A cor e a
-        de ENFASE (amarela por padrao), como a caixa do `impacto`.
+        A faixa e o FUNDO da linha com folga em volta — o `padding` do CSS,
+        nao uma listra por dentro da caixa de linha. Com a listra (5.0.19)
+        o pe do "p" e a ponta do "d" ficavam de fora: a Poppins ocupa de
+        -10,6% a 110,6% da caixa de linha com entrelinha 1,16. A cor e a de
+        ENFASE (amarela por padrao), como a caixa do `impacto`.
+
+        `y` e o topo da caixa COM a folga (o motor ja soma as duas folgas na
+        altura empilhada), igual ao que o CSS faz com a caixa de padding.
         """
         import numpy as np
 
@@ -3731,18 +3745,16 @@ class Renderizador:
         faixa = caps_cfg.get("emphasisAccent") or self.MARCADOR_PADRAO
         cor_f = self._cor(faixa)
         cor_t = self._cor(self._tinta_na_caixa(faixa))
-        pad = round(tam * 0.16)
+        pad = round(tam * self.MARCADOR_PADX)
         folga = 48
-        alt_cx = int(round(alt_l))
+        alt_cx = int(round(alt_l)) + 2 * pad_y
         L = w_m + 2 * pad + 2 * folga
         A = alt_cx + 2 * folga
         alpha = np.zeros((A, L), dtype=np.float32)
         rgb = np.broadcast_to(cor_f, (A, L, 3)).copy()
-        t0 = folga + int(round(alt_cx * self.MARCADOR_TOPO))
-        t1 = folga + int(round(alt_cx * self.MARCADOR_BASE))
-        alpha[t0:t1, folga:L - folga] = 1.0
+        alpha[folga:folga + alt_cx, folga:L - folga] = 1.0
         tx = folga + pad
-        ty = folga + int((alt_l - (asc + desc)) / 2)
+        ty = folga + pad_y + int((alt_l - (asc + desc)) / 2)
         hh = min(h_m, A - ty)
         ww = min(w_m, L - tx)
         if hh > 0 and ww > 0:

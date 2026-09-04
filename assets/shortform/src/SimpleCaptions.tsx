@@ -219,8 +219,13 @@ const ETIQUETA_FUNDO = 'rgba(11,13,16,0.86)';
 const ETIQUETA_BARRA = 10;    // px da barra colorida na borda esquerda
 const FITA_ESCURO = 0.55;     // fator da cor no PE do degrade da fita
 const MARCADOR_PADRAO = '#ffd400';
-const MARCADOR_TOPO = 26;     // % da caixa de linha em que a faixa comeca
-const MARCADOR_BASE = 96;     // % em que ela termina
+// A faixa e o FUNDO da linha com folga em volta — nao uma listra por dentro
+// dela. A listra de 26%-96% (5.0.19) cortava a letra: com line-height 1,16 a
+// Poppins ocupa de -10,6% a 110,6% da caixa de linha (asc+desc = 104px num
+// corpo de 74), entao pe de "p" e ponta de "d" ficavam de fora. 0,14 do
+// corpo de cada lado cobre a caixa do glifo inteira com folga.
+const MARCADOR_PADY = 0.14;
+const MARCADOR_PADX = 0.16;
 // Maquina de escrever: uma letra a cada VEL quadros, no maximo 2 quadros por
 // letra, e o cue inteiro digitado em 55% do tempo dele.
 export function velocidadeMaquina(durFrames: number, nChars: number): number {
@@ -626,13 +631,11 @@ export const SimpleCaptions: React.FC<{variant: string}> = ({variant}) => {
     }
 
     if (V.modo === 'marcador') {
-      // Faixa de marca-texto ATRAS da letra: uma listra que cobre de 26% a
-      // 96% da caixa de linha, entao o topo das maiusculas fica de fora —
-      // e o que faz parecer caneta marca-texto, e nao uma lapide.
+      // Faixa de caneta marca-texto: o fundo da LINHA, com folga em volta,
+      // de ponta reta. A cor e a de ENFASE (amarela por padrao).
       const faixa = C.emphasisAccent || MARCADOR_PADRAO;
-      const pad = Math.round(V.size * 0.16);
-      const listra = `linear-gradient(180deg, transparent 0 ${MARCADOR_TOPO}%, `
-        + `${faixa} ${MARCADOR_TOPO}% ${MARCADOR_BASE}%, transparent ${MARCADOR_BASE}% 100%)`;
+      const padX = Math.round(V.size * MARCADOR_PADX);
+      const padY = Math.round(V.size * MARCADOR_PADY);
       return (
         <AbsoluteFill style={fora}>
           <div style={{display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
@@ -641,8 +644,8 @@ export const SimpleCaptions: React.FC<{variant: string}> = ({variant}) => {
                 key={i}
                 style={{
                   ...tipo,
-                  padding: `0 ${pad}px`,
-                  backgroundImage: listra,
+                  padding: `${padY}px ${padX}px`,
+                  background: faixa,
                   color: inkOn(faixa),
                   textShadow: '0 4px 14px rgba(0,0,0,0.35)',
                 }}

@@ -850,8 +850,8 @@ const ETIQUETA_FUNDO = 'rgba(11,13,16,0.86)';
 const ETIQUETA_BARRA = 10;
 const FITA_ESCURO = 0.55;
 const MARCADOR_PADRAO = '#ffd400';
-const MARCADOR_TOPO = 26;
-const MARCADOR_BASE = 96;
+const MARCADOR_PADY = 0.14;
+const MARCADOR_PADX = 0.16;
 function escurecer(hex, f) {
   const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim());
   if (!m) return hex;
@@ -1080,12 +1080,12 @@ function buildStaticDemo(host, id) {
       }
       if (V.modo === 'marcador') {
         const faixa = S.style.emphasisAccent || MARCADOR_PADRAO;
-        const pad = V.size * 0.16 * s;
+        const padX = V.size * MARCADOR_PADX * s;
+        const padY = V.size * MARCADOR_PADY * s;
         for (const ln of lines) {
           const b = el('div', '', box);
-          b.style.padding = `0 ${pad}px`;
-          b.style.backgroundImage = `linear-gradient(180deg, transparent 0 ${MARCADOR_TOPO}%, `
-            + `${faixa} ${MARCADOR_TOPO}% ${MARCADOR_BASE}%, transparent ${MARCADOR_BASE}% 100%)`;
+          b.style.padding = `${padY}px ${padX}px`;
+          b.style.background = faixa;
           b.style.color = inkOn(faixa);
           b.style.textShadow = `0 ${2 * s}px ${7 * s}px rgba(0,0,0,0.35)`;
           b.textContent = t(ln);

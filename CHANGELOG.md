@@ -1,5 +1,11 @@
 # Changelog
 
+## 5.0.20
+
+- **Marca-texto: a faixa cortava a letra.** Ela cobria só o miolo da
+  linha, então o pé do "p" e a ponta do "d" ficavam de fora. Agora a
+  faixa abraça a letra inteira, com folga em cima e embaixo.
+
 ## 5.0.19
 
 - **Mais quatro legendas de fundo colorido**, na linha da Bandeira:
