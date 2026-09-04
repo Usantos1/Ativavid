@@ -1,5 +1,12 @@
 # Changelog
 
+## 5.0.8
+
+- **Roteiro conhece os ganchos que a empresa já usou.** Antes de escrever,
+  a IA recebe as headlines dos últimos vídeos da empresa ativa. Ela não
+  repete nenhum e segue o estilo dos que você aprovou no Multiplicador
+  (os que levam ✅ no nome).
+
 ## 5.0.7
 
 - **O perfil da empresa alimenta toda a IA.** O que você preenche em

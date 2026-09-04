@@ -320,8 +320,95 @@ def montar_perfil_pelos_videos(
     return {"ok": True, "perfil": rascunho, "videos": len(falas), "backend": backend}
 
 
+def _gancho_do_projeto(edit: Path) -> str:
+    """A headline que saiu no video: hook.lines do edit-data, senao aiHeadline."""
+    try:
+        d = json.loads((edit / "remotion" / "public" / "edit-data.json").read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError, AttributeError):
+        return ""
+    if not isinstance(d, dict):
+        return ""
+    hook = d.get("hook") or {}
+    linhas = hook.get("lines") or hook.get("text") or [] if isinstance(hook, dict) else []
+    if isinstance(linhas, str):
+        linhas = [linhas]
+    texto = " ".join(str(x).strip() for x in linhas if str(x or "").strip())
+    if not texto:
+        texto = str(d.get("aiHeadline") or "").strip()
+    return " ".join(texto.split())[:120]
+
+
+def coletar_ganchos(projects_root: Path | str, brand_id: str, limite: int = 15) -> list[dict[str, Any]]:
+    """Os ganchos (headlines) que os últimos vídeos DESTA empresa usaram.
+
+    "Ganchos que funcionaram": o card aprovado no Multiplicador leva ✅ no
+    nome, e esse nome fica em `state.json` (packStem). O Roteiro recebe a
+    lista para NÃO repetir o que já saiu e para seguir o estilo do que foi
+    aprovado.
+    """
+    raiz = Path(projects_root)
+    if not raiz.exists():
+        return []
+    alvo = _slug(brand_id or "padrao")
+    achados: list[tuple[float, Path]] = []
+    for proj in raiz.iterdir():
+        edit = proj / "edit"
+        ed = edit / "remotion" / "public" / "edit-data.json"
+        if not ed.exists():
+            continue
+        try:
+            usado = json.loads((edit / "preset-used.json").read_text(encoding="utf-8-sig"))
+            if _slug(str(usado.get("brandId") or "")) != alvo:
+                continue
+            achados.append((ed.stat().st_mtime, proj))
+        except (OSError, json.JSONDecodeError, AttributeError):
+            continue
+    achados.sort(key=lambda t: t[0], reverse=True)
+    out: list[dict[str, Any]] = []
+    por_chave: dict[str, dict[str, Any]] = {}
+    for _, proj in achados:
+        edit = proj / "edit"
+        gancho = _gancho_do_projeto(edit)
+        if len(gancho) < 6:
+            continue
+        aprovado = False
+        try:
+            st = json.loads((edit / "state.json").read_text(encoding="utf-8-sig"))
+            aprovado = str((st or {}).get("packStem") or "").strip().startswith("✅")
+        except (OSError, json.JSONDecodeError, AttributeError):
+            pass
+        chave = gancho.lower()
+        ja = por_chave.get(chave)
+        if ja is not None:
+            # as 27 combinacoes do Multiplicador repetem o gancho: vale UMA
+            # linha, e ela e "aprovada" se QUALQUER combinacao foi aprovada
+            if aprovado:
+                ja["aprovado"] = True
+            continue
+        if len(out) >= limite:
+            continue
+        item = {"gancho": gancho, "aprovado": aprovado, "projeto": proj.name}
+        por_chave[chave] = item
+        out.append(item)
+    return out
+
+
+def _ganchos_em_texto(ganchos: list[dict[str, Any]] | None) -> str:
+    if not ganchos:
+        return ""
+    linhas = [f"- {'✅ ' if g.get('aprovado') else ''}{g.get('gancho')}" for g in ganchos if g.get("gancho")]
+    if not linhas:
+        return ""
+    return (
+        "GANCHOS QUE ESTA EMPRESA JÁ USOU nos últimos vídeos (não repita nenhum "
+        "literalmente; os com ✅ foram aprovados pelo dono — siga o estilo deles):\n"
+        + "\n".join(linhas) + "\n\n"
+    )
+
+
 # ----------------------------------------------------------------- prompt
-def montar_system(perfil: dict[str, Any], opcoes: dict[str, Any] | None = None) -> str:
+def montar_system(perfil: dict[str, Any], opcoes: dict[str, Any] | None = None,
+                  ganchos: list[dict[str, Any]] | None = None) -> str:
     o = opcoes or {}
     estilo = next((e for e in ESTILOS if e["id"] == str(o.get("estilo") or "")), ESTILOS[0])
     dur = int(o.get("duracao") or 30)
@@ -349,7 +436,8 @@ def montar_system(perfil: dict[str, Any], opcoes: dict[str, Any] | None = None) 
         f"DURAÇÃO ALVO: {dur} segundos (cerca de {int(dur * 2.3)} palavras faladas no total).\n"
         f"OBJETIVO: {objetivo}.\nTOM: {tom}.\n"
         f"GATILHO PRINCIPAL: {gatilho}.\n\n"
-        "VIRAL QUE VENDE (a regra do jogo):\n"
+        + _ganchos_em_texto(ganchos)
+        + "VIRAL QUE VENDE (a regra do jogo):\n"
         "- o vídeo precisa PARAR o scroll e TRAZER cliente — humor sozinho não serve; "
         "piada só entra se carregar a oferta ou a dor;\n"
         "- seja ESPECÍFICO desta empresa: use os dados do perfil (serviço, cidade, prova, "
@@ -489,6 +577,7 @@ def responder(
     opcoes: dict[str, Any] | None = None,
     chamar=None,
     groq=None,
+    projects_root: Path | str | None = None,
 ) -> dict[str, Any]:
     """Manda o pedido para a IA com a empresa e o histórico; grava e devolve.
 
@@ -509,7 +598,13 @@ def responder(
         chat["opcoes"] = dict(opcoes)
 
     perfil = perfil_empresa(brand_id)
-    system = montar_system(perfil, chat.get("opcoes"))
+    ganchos: list[dict[str, Any]] = []
+    if projects_root:
+        try:
+            ganchos = coletar_ganchos(projects_root, brand_id)
+        except Exception:  # noqa: BLE001 — o roteiro sai mesmo sem os ganchos
+            ganchos = []
+    system = montar_system(perfil, chat.get("opcoes"), ganchos)
     historico = [
         {"role": m["role"], "content": str(m.get("content") or "")[:MAX_CHARS_MSG]}
         for m in (chat.get("mensagens") or [])[-MAX_HISTORICO:]

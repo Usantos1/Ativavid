@@ -3114,6 +3114,7 @@ class StudioHandler(BaseHTTPRequestHandler):
                     bid, str(body.get("mensagem") or ""),
                     chat_id=str(body.get("id") or "") or None,
                     opcoes=body.get("opcoes") if isinstance(body.get("opcoes"), dict) else None,
+                    projects_root=self.projects_root,   # ganchos ja usados (5.0.8)
                 )
                 self._json(out)
             except ValueError as e:
