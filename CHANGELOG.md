@@ -1,5 +1,19 @@
 # Changelog
 
+## 5.0.24
+
+- **"Precisa de placa NVIDIA" numa máquina que tem placa NVIDIA.** A IA local
+  de música só perguntava ao `nvidia-smi`, e quando o driver não o deixa no
+  PATH do Windows a resposta virava "sem GPU" — a instalação era recusada
+  numa máquina perfeitamente capaz. Agora o ATIVAVID procura o `nvidia-smi`
+  onde o driver o instala e, se ainda não achar, usa o mesmo detector de
+  placa da tela Sistema.
+- **A tela diz QUAL placa encontrou.** Antes ela só falava do que faltava,
+  então não dava para saber se o app tinha visto a placa errada ou não tinha
+  visto nenhuma. Em Configurações → "Música dos vídeos" agora aparece o nome
+  da placa detectada, e o mesmo nome entra no aviso quando a instalação é
+  recusada.
+
 ## 5.0.23
 
 - **A cor e a legenda da empresa não ficavam salvas.** Você escolhia o preset

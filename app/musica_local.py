@@ -96,22 +96,77 @@ def _sem_janela() -> dict:
 
 _GPU_CACHE: dict = {}
 
+# Onde o driver da NVIDIA poe o nvidia-smi quando ele NAO esta no PATH.
+# Caso do cliente (04/09): "ele tem placa de video sim", e a tela dizia
+# "precisa de placa NVIDIA" — `subprocess.run(["nvidia-smi"])` levanta
+# OSError e a resposta virava "sem GPU", sem dizer que placa havia.
+_NVIDIA_SMI = (
+    r"C:\Windows\System32\nvidia-smi.exe",
+    r"C:\Program Files\NVIDIA Corporation\NVSMI\nvidia-smi.exe",
+)
+
+
+def _nvidia_smi() -> str:
+    """O caminho do nvidia-smi: PATH primeiro, depois os lugares do driver."""
+    achado = shutil.which("nvidia-smi")
+    if achado:
+        return achado
+    for c in _NVIDIA_SMI:
+        if Path(c).is_file():
+            return c
+    return ""
+
+
+def _placa_pelo_sistema() -> tuple[bool, str]:
+    """(e NVIDIA?, nome da placa) pelo mesmo detector do resto do app.
+
+    `system_info` le a Win32_VideoController e os encoders do ffmpeg — nao
+    depende do nvidia-smi estar instalado. E o que a tela Sistema mostra,
+    entao os dois cartoes passam a dizer a mesma coisa.
+    """
+    try:
+        from app.system_info import detect_machine
+
+        gpus = detect_machine().get("gpus") or []
+    except Exception:  # noqa: BLE001 — deteccao nunca derruba a tela
+        return False, ""
+    nomes = [str(g.get("name") or "").strip() for g in gpus if g.get("name")]
+    # O notebook dele lista a Intel PRIMEIRO e a NVIDIA depois: pegar
+    # nomes[0] diria "Intel UHD" numa maquina que tem a placa boa.
+    nvidia = next((n for n in nomes if "nvidia" in n.lower()), "")
+    return bool(nvidia), (nvidia or (nomes[0] if nomes else ""))
+
+
+def gpu_do_motor() -> tuple[bool, str]:
+    """(da para compor aqui?, nome da placa). Cacheado: o poll da tela
+    pergunta de 3 em 3 segundos e a resposta nao muda na sessao."""
+    if "tem" in _GPU_CACHE:
+        return bool(_GPU_CACHE["tem"]), str(_GPU_CACHE.get("nome") or "")
+    tem, nome = False, ""
+    smi = _nvidia_smi()
+    if smi:
+        try:
+            r = subprocess.run([smi, "--query-gpu=name",
+                                "--format=csv,noheader"],
+                               capture_output=True, text=True, timeout=20,
+                               **_sem_janela())
+            if r.returncode == 0 and (r.stdout or "").strip():
+                tem = True
+                nome = (r.stdout or "").strip().splitlines()[0].strip()
+        except (OSError, subprocess.SubprocessError):
+            pass
+    if not tem:
+        # Sem nvidia-smi ainda pode haver placa NVIDIA — e havendo outra,
+        # o nome dela e o que a tela precisa dizer.
+        tem, nome_sis = _placa_pelo_sistema()
+        nome = nome or nome_sis
+    _GPU_CACHE["tem"] = tem
+    _GPU_CACHE["nome"] = nome
+    return tem, nome
+
 
 def tem_gpu_nvidia() -> bool:
-    """Cacheado: a resposta nao muda durante a sessao e o poll pergunta
-    de 3 em 3 segundos."""
-    if "tem" in _GPU_CACHE:
-        return bool(_GPU_CACHE["tem"])
-    try:
-        r = subprocess.run(["nvidia-smi", "--query-gpu=name",
-                            "--format=csv,noheader"],
-                           capture_output=True, text=True, timeout=20,
-                           **_sem_janela())
-        tem = r.returncode == 0 and bool((r.stdout or "").strip())
-    except (OSError, subprocess.SubprocessError):
-        tem = False
-    _GPU_CACHE["tem"] = tem
-    return tem
+    return gpu_do_motor()[0]
 
 
 def _uv() -> str | None:
@@ -131,11 +186,13 @@ def estado(raiz_projetos: Path | None = None) -> dict:
                      if f.is_file()) / 1e9
         except OSError:
             gb = 0.0
+    tem, nome = gpu_do_motor()
     return {
         "instalado": pronto,
         "incompleta": instalacao_incompleta(raiz_projetos),
         "pasta": str(pasta),
-        "gpu": tem_gpu_nvidia(),
+        "gpu": tem,
+        "gpuNome": nome,
         "mbTotal": MB_TOTAL,
         "gb": round(gb, 1),
         "uv": bool(_uv()),
@@ -175,9 +232,11 @@ def instalar(
         # Pasta pela metade de uma tentativa interrompida: `uv venv` e
         # `uv pip install` sao idempotentes e completam o que falta.
         passo(0.01, "Retomando a instalação…")
-    if not tem_gpu_nvidia():
-        return False, ("sem GPU NVIDIA — na CPU a música local levaria "
-                       "cerca de 9 minutos por trilha")
+    tem_gpu, nome_gpu = gpu_do_motor()
+    if not tem_gpu:
+        achada = f"encontrei {nome_gpu}" if nome_gpu else "não encontrei placa"
+        return False, (f"a IA local precisa de placa NVIDIA — {achada}. "
+                       "Na CPU cada trilha levaria uns 9 minutos")
     uv = _uv()
     if not uv:
         return False, "uv não encontrado — reinstale o ATIVAVID"

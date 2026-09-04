@@ -5848,8 +5848,12 @@ async function pintarMotorMusica() {
     btn.disabled = false;
     barra?.classList.add("hidden");
   } else if (!d.gpu) {
+    // Dizer QUAL placa foi encontrada: "ele tem placa de video sim" (04/09)
+    // — a mensagem antiga so falava do que faltava, e nao dava para saber
+    // se o app tinha visto a placa errada ou nao tinha visto nenhuma.
     linha.textContent = "IA local indisponível: precisa de placa NVIDIA "
-      + "(sem ela, uma trilha levaria uns 9 minutos).";
+      + (d.gpuNome ? `— aqui encontrei ${d.gpuNome}. ` : "— não encontrei placa aqui. ")
+      + "Sem ela, uma trilha levaria uns 9 minutos, então entra uma música da Biblioteca.";
     btn.classList.add("hidden");
     barra?.classList.add("hidden");
   } else {

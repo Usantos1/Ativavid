@@ -24,11 +24,21 @@ def test_a_pasta_do_motor_e_irma_da_biblioteca(tmp_path):
 
 def test_sem_gpu_nao_oferece_e_nao_instala(monkeypatch, tmp_path):
     """Na CPU a trilha levaria ~9 minutos (medido 27/08) — prometer isso
-    seria pior que não oferecer."""
-    monkeypatch.setattr(musica_local, "tem_gpu_nvidia", lambda: False)
+    seria pior que não oferecer.
+
+    5.0.24: quem decide passou a ser `gpu_do_motor()`, que devolve
+    (tem?, nome da placa). Enquanto isto travava só o `tem_gpu_nvidia`,
+    a instalação de VERDADE rodava aqui: 4,3 GB dentro do tmp do pytest,
+    a cada rodada da suíte nesta máquina (que tem a placa).
+    """
+    monkeypatch.setattr(musica_local, "gpu_do_motor", lambda: (False, ""))
+    travar = [False]
+    monkeypatch.setattr(musica_local, "_rodar",
+                        lambda *a, **k: (travar.__setitem__(0, True), (True, "ok"))[1])
     ok, motivo = musica_local.instalar(raiz_projetos=tmp_path / "Projetos")
     assert not ok
     assert "NVIDIA" in motivo
+    assert not travar[0], "sem placa, nada pode ser baixado"
 
 
 def test_ja_instalado_nao_baixa_de_novo(monkeypatch, tmp_path):
