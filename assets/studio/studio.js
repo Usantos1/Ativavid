@@ -1384,7 +1384,44 @@ function patchCard(el, j, opts) {
   }
 }
 
+/* "Comece por aqui" (5.0.11): guia de 3 passos so enquanto nao ha video
+ * nenhum. O estado de cada passo vem do que ja existe: perfil da empresa
+ * ativa, alguma aula concluida, algum video. */
+const COMECE_KEY = "ativavid.comece.ocultar";
+function renderComece() {
+  const box = $("#comece");
+  if (!box) return;
+  let oculto = false;
+  try { oculto = localStorage.getItem(COMECE_KEY) === "1"; } catch { /* ignore */ }
+  const mostrar = !oculto && !!state.jobsLoaded && (state.jobs || []).length === 0;
+  box.classList.toggle("hidden", !mostrar);
+  if (!mostrar) return;
+  const feitos = {
+    empresa: !!(state.brandActive && state.brandActive.perfilOk),
+    aula: !!(state.aulas && state.aulas.feitas && state.aulas.feitas.size > 0),
+    video: false,
+  };
+  for (const li of box.querySelectorAll("[data-passo]")) {
+    const ok = !!feitos[li.dataset.passo];
+    li.classList.toggle("feito", ok);
+    const n = li.querySelector(".comece-n");
+    if (n) n.textContent = ok ? "✓" : String([...li.parentElement.children].indexOf(li) + 1);
+  }
+}
+
+function wireComece() {
+  const box = $("#comece");
+  if (!box || box.dataset.wired) return;
+  box.dataset.wired = "1";
+  $("#comeceOcultar")?.addEventListener("click", () => {
+    try { localStorage.setItem(COMECE_KEY, "1"); } catch { /* ignore */ }
+    box.classList.add("hidden");
+  });
+  $("#comeceImportar")?.addEventListener("click", () => $("#btnPick")?.click());
+}
+
 function renderJobs() {
+  renderComece();
   const fila = filterJobs("fila");
   const done = filterJobs("done");
   setCount("#countFila", fila.length);
@@ -5942,6 +5979,7 @@ async function loadBrandsUi() {
   renderWsMarcas();
   renderWorkspaceCard();
   renderJobs();
+  renderComece();
   renderEmpresaCards();
   preencherEmpresaForm(active);
   if ($("#exportPresetSelect") && active) {
@@ -8003,6 +8041,7 @@ async function boot() {
   wireIdentidade();
   wireEmpresas();
   wireAulas();
+  wireComece();
   wireBiblioteca();
   wireTheme();
   await wireTitlebar();

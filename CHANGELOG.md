@@ -1,5 +1,12 @@
 # Changelog
 
+## 5.0.11
+
+- **"Comece por aqui" para quem acabou de instalar.** Sem nenhum vídeo, o
+  Início mostra três passos com botão: cadastrar a empresa (com o perfil),
+  assistir à primeira aula e importar o primeiro vídeo. Cada passo marca ✓
+  sozinho quando é feito, e o guia some quando o primeiro vídeo entra.
+
 ## 5.0.10
 
 - **Entregas: pacote caía em "Sem empresa".** Quando o pacote era montado a

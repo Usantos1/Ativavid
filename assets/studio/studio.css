@@ -4371,3 +4371,14 @@ body.view-roteiro-on .ws-body { overflow: hidden; }
 /* pasta de entregas em Configuracoes (5.0.9) */
 .sys-pasta { align-items: center; }
 .sys-pasta input { flex: 1 1 260px; min-width: 0; }
+
+/* Comece por aqui (5.0.11) */
+.comece { margin-bottom: 4px; }
+.comece-passos { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.comece-passo { display: flex; align-items: center; gap: 14px; padding: 10px 12px; border: 1px solid var(--hairline); border-radius: 12px; background: color-mix(in srgb, var(--panel2) 60%, transparent); }
+.comece-n { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 13px; color: #fff; background: var(--accent); flex: 0 0 auto; }
+.comece-passo.feito .comece-n { background: #35c76b; }
+.comece-passo.feito strong { color: var(--muted); text-decoration: line-through; }
+.comece-txt { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.comece-txt .hint { margin: 0; }
+@media (max-width: 720px) { .comece-passo { flex-wrap: wrap; } }

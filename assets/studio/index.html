@@ -208,6 +208,44 @@
               </div>
             </div>
           </div>
+          <!-- 5.0.11: "Comece por aqui" — so para quem ainda nao tem video
+               nenhum (instalacao nova). Tres passos com o estado de cada um;
+               some sozinho quando o primeiro video entra. -->
+          <section class="pane-card comece hidden" id="comece">
+            <header class="pane-card-head emp-head">
+              <div>
+                <h4><span class="emp-eyebrow">Comece por aqui</span> Três passos para o primeiro vídeo</h4>
+                <p class="hint">Em 10 minutos você tem o primeiro Reels pronto. A ordem importa: a IA escreve melhor quando conhece a empresa.</p>
+              </div>
+              <button type="button" class="ghost-btn ghost-btn--sm" id="comeceOcultar" title="Não mostrar de novo">Fechar</button>
+            </header>
+            <ol class="comece-passos">
+              <li class="comece-passo" data-passo="empresa">
+                <span class="comece-n">1</span>
+                <div class="comece-txt">
+                  <strong>Cadastre sua empresa</strong>
+                  <span class="hint">Nome, logo, cor e o perfil: o que vende, para quem, como o cliente fala com você. É daí que a IA tira a headline, a legenda e o roteiro.</span>
+                </div>
+                <button type="button" class="export-btn export-btn--sm" data-view="presets">Abrir Empresas</button>
+              </li>
+              <li class="comece-passo" data-passo="aula">
+                <span class="comece-n">2</span>
+                <div class="comece-txt">
+                  <strong>Assista à primeira aula</strong>
+                  <span class="hint">Poucos minutos de vídeo mostrando o caminho inteiro, do arquivo bruto ao Reels exportado.</span>
+                </div>
+                <button type="button" class="ghost-btn ghost-btn--sm" data-view="aulas">Ver as aulas</button>
+              </li>
+              <li class="comece-passo" data-passo="video">
+                <span class="comece-n">3</span>
+                <div class="comece-txt">
+                  <strong>Importe o primeiro vídeo</strong>
+                  <span class="hint">Grave falando com o celular, escolha o arquivo aqui e deixe a IA cortar, legendar e montar. Você revisa no editor antes de exportar.</span>
+                </div>
+                <button type="button" class="ghost-btn ghost-btn--sm" id="comeceImportar">Escolher vídeo</button>
+              </li>
+            </ol>
+          </section>
           <div class="section-block">
             <div class="hub-list-head">
               <h3>Recentes</h3>
