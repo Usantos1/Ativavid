@@ -92,7 +92,8 @@ export type EditData = {
     style?: 'outline' | 'card' | 'realce' | 'misto' | 'sombra' | 'sublinhado'
       | 'pilula' | 'manchete' | 'carimbo' | 'pergunta'
       | 'faixa' | 'fita' | 'neon' | 'vazado' | 'gradiente'
-      | 'recorte' | 'etiqueta' | 'marcador' | 'linhas';
+      | 'recorte' | 'etiqueta' | 'marcador' | 'linhas'
+      | 'riscado' | 'caixas' | 'quadro';
     // "pergunta": two-phase hook. `lines` is the QUESTION (shown from 0);
     // at answerAtSec the ANSWER pops in and holds until endSec. The pipeline
     // aims answerAtSec at the end of the first kept range — where the speech
@@ -931,6 +932,9 @@ const HL_STYLES: Record<string, HlStyle> = {
   etiqueta: {weights: [900, 900], cap: 82, safeW: 840, lh: 1.05, top: 300},
   marcador: {weights: [900, 900], cap: 88, safeW: 880, lh: 1.06, top: 302},
   linhas: {weights: [800, 800], cap: 80, safeW: 860, lh: 1.12, top: 300},
+  riscado: {weights: [900, 900], cap: 88, safeW: 860, lh: 1.06, top: 302},
+  caixas: {weights: [900, 900], cap: 84, safeW: 840, lh: 1.05, top: 300},
+  quadro: {weights: [800, 800], cap: 82, safeW: 860, lh: 1.10, top: 300},
 };
 
 const hlWidth = (text: string, size: number, weight: number) =>
@@ -1360,6 +1364,112 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
               {l}
             </div>
           ))}
+        </div>
+      </AbsoluteFill>
+    );
+  }
+
+  if (styleId === 'riscado') {
+    // Um risco da marca atravessando a letra, um pouco acima do meio. A
+    // mesma montagem do sublinhado/marcador: risco e o irmao de baixo.
+    const riscoH = Math.max(6, Math.round(size * 0.14));
+    return (
+      <AbsoluteFill style={envolucro}>
+        <Sfx src="whoosh.mp3" volume={0.1} />
+        <div style={{...shell, display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
+          {lines.filter(Boolean).map((l, i) => (
+            <div key={i} style={{position: 'relative', display: 'inline-block'}}>
+              <div
+                style={{
+                  position: 'absolute',
+                  left: '-0.06em',
+                  right: '-0.06em',
+                  top: `calc(52% - ${riscoH / 2}px)`,
+                  height: riscoH,
+                  borderRadius: 3,
+                  background: H.accent ?? '#ff5200',
+                }}
+              />
+              <div
+                style={{
+                  position: 'relative',
+                  fontWeight: hookWeight(900),
+                  fontSize: size,
+                  color: '#fff',
+                  textShadow: '0 4px 16px rgba(0,0,0,0.55)',
+                }}
+              >
+                {l}
+              </div>
+            </div>
+          ))}
+        </div>
+      </AbsoluteFill>
+    );
+  }
+
+  if (styleId === 'caixas') {
+    const ac = H.accent ?? '#ff5200';
+    return (
+      <AbsoluteFill style={envolucro}>
+        <Sfx src="whoosh.mp3" volume={0.1} />
+        <div style={{...shell, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10}}>
+          {lines.filter(Boolean).map((l, i) => (
+            <div
+              key={i}
+              style={{
+                background: i === 0 ? ac : '#fff',
+                color: i === 0 ? '#fff' : ac,
+                fontWeight: hookWeight(900),
+                fontSize: size,
+                padding: '0.08em 0.3em 0.16em',
+                borderRadius: 12,
+                boxShadow: '0 10px 28px rgba(0,0,0,0.45)',
+              }}
+            >
+              {l}
+            </div>
+          ))}
+        </div>
+      </AbsoluteFill>
+    );
+  }
+
+  if (styleId === 'quadro') {
+    // Moldura fina da marca em volta do bloco, fundo escuro translucido.
+    // Padding e borda em PIXELS derivados de `size`, para o motor proprio
+    // bater a geometria (em `em` o valor resolveria contra a fonte do shell).
+    const fio = Math.max(4, Math.round(size * 0.06));
+    const ac = H.accent ?? '#ff5200';
+    return (
+      <AbsoluteFill style={envolucro}>
+        <Sfx src="whoosh.mp3" volume={0.1} />
+        <div style={{...shell, display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              border: `${fio}px solid ${ac}`,
+              borderRadius: 10,
+              background: 'rgba(0,0,0,0.28)',
+              padding: `${Math.round(size * 0.22)}px ${Math.round(size * 0.36)}px`,
+            }}
+          >
+            {lines.filter(Boolean).map((l, i) => (
+              <div
+                key={i}
+                style={{
+                  fontWeight: hookWeight(800),
+                  fontSize: size,
+                  color: '#fff',
+                  textShadow: '0 4px 16px rgba(0,0,0,0.55)',
+                }}
+              >
+                {l}
+              </div>
+            ))}
+          </div>
         </div>
       </AbsoluteFill>
     );

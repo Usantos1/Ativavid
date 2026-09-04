@@ -305,6 +305,9 @@ const STYLE_CATALOG = {
     {id: 'etiqueta', name: 'Etiqueta', hl: 'etiqueta'},
     {id: 'marcador', name: 'Marca-texto', hl: 'marcador'},
     {id: 'linhas', name: 'Entre linhas', hl: 'linhas'},
+    {id: 'riscado', name: 'Riscado', hl: 'riscado'},
+    {id: 'caixas', name: 'Duas caixas', hl: 'caixas'},
+    {id: 'quadro', name: 'Quadro', hl: 'quadro'},
     // opts out of the hook entirely (hook.enabled:false in edit-data.json) — a
     // real final look (talking-head cut, images placed by hand later), not a
     // placeholder, so it earns its own card and label like the mockups do.
@@ -557,6 +560,9 @@ const HL_STYLES = {
   etiqueta: { weights: [900, 900], cap: 82, safeW: 840, lh: 1.05 },
   marcador: { weights: [900, 900], cap: 88, safeW: 880, lh: 1.06 },
   linhas: { weights: [800, 800], cap: 80, safeW: 860, lh: 1.12 },
+  riscado: { weights: [900, 900], cap: 88, safeW: 860, lh: 1.06 },
+  caixas: { weights: [900, 900], cap: 84, safeW: 840, lh: 1.05 },
+  quadro: { weights: [800, 800], cap: 82, safeW: 860, lh: 1.10 },
 };
 
 // Measured in RENDER units (1080-wide), scaled to the box only at the end — the
@@ -720,6 +726,52 @@ function buildHeadlineDemo(host, styleId) {
           `inset 0 0 0 ${Math.max(2, size * 0.045)}px #fff, 0 10px 28px rgba(0,0,0,.45)`;
       }
       b.textContent = l;
+    }
+    return;
+  }
+  if (styleId === 'riscado') {
+    for (const l of lines) {
+      if (!l) continue;
+      const holder = el('div', 'hl-under', box);
+      const bar = el('div', 'hl-under-bar', holder);
+      const h = Math.max(3, size * 0.14);
+      bar.style.height = `${h}px`;
+      bar.style.top = `calc(52% - ${h / 2}px)`;
+      bar.style.bottom = 'auto';
+      bar.style.borderRadius = `${3 * s}px`;
+      const t = el('div', 'hl-under-text', holder);
+      t.style.fontSize = `${size}px`;
+      t.textContent = l;
+    }
+    return;
+  }
+  if (styleId === 'caixas') {
+    for (const [i, l] of lines.entries()) {
+      if (!l) continue;
+      const b = el('div', 'hl-block', box);
+      b.style.fontSize = `${size}px`;
+      b.style.borderRadius = `${12 * s}px`;
+      if (i === 0) {
+        b.style.background = 'var(--hl-accent)';
+      } else {
+        b.style.background = '#ffffff';
+        b.style.color = 'var(--hl-accent)';
+      }
+      b.textContent = l;
+    }
+    return;
+  }
+  if (styleId === 'quadro') {
+    const fio = Math.max(2, size * 0.06);
+    box.style.border = `${fio}px solid var(--hl-accent)`;
+    box.style.borderRadius = `${10 * s}px`;
+    box.style.background = 'rgba(0,0,0,.28)';
+    box.style.padding = `${size * 0.22}px ${size * 0.36}px`;
+    for (const l of lines) {
+      if (!l) continue;
+      const d = el('div', '', box);
+      d.style.fontSize = `${size}px`;
+      d.textContent = l;
     }
     return;
   }
@@ -3761,7 +3813,7 @@ const normHex = (v) => {
 // genuinely consume the pick, so leaving them out would have the Estilo tab
 // report "este estilo não usa destaque" while the render plainly used it
 const HL_ACCENT_USERS = ['realce', 'misto', 'sombra', 'sublinhado', 'pilula', 'manchete', 'carimbo', 'pergunta',
-  'recorte', 'etiqueta', 'marcador', 'linhas'];
+  'recorte', 'etiqueta', 'marcador', 'linhas', 'riscado', 'caixas', 'quadro'];
 const ACCENT_DEFAULT = '#FF0000';
 
 /* Three independent caption colour channels, each painting a different set of

@@ -7635,7 +7635,8 @@ const NOME_DO_ESTILO = {
     pergunta: "Pergunta → Resposta", faixa: "Faixa cheia", fita: "Fita",
     neon: "Neon", vazado: "Vazado", gradiente: "Degradê na letra",
     recorte: "Recorte", etiqueta: "Etiqueta", marcador: "Marca-texto",
-    linhas: "Entre linhas",
+    linhas: "Entre linhas", riscado: "Riscado", caixas: "Duas caixas",
+    quadro: "Quadro",
     nenhuma: "Nenhuma",
   },
   transicao: {

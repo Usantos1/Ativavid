@@ -1,5 +1,16 @@
 # Changelog
 
+## 5.0.33
+
+- **Três estilos de manchete novos:** **Riscado** (um risco da cor da
+  empresa atravessando a letra), **Duas caixas** (a primeira linha na caixa
+  da cor, a segunda na caixa branca com a letra da cor) e **Quadro** (moldura
+  fina da cor em volta do bloco, com fundo escuro translúcido para ler sobre
+  imagem clara). Com estes são 22 manchetes, todas conferidas contra o
+  desenho de referência.
+- **Botão de trilhas provado num computador limpo:** 596 arquivos em 38
+  segundos numa Biblioteca vazia, sem sobras.
+
 ## 5.0.32
 
 - **O registro de aberturas nunca funcionou no app instalado.** No painel de

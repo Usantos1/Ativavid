@@ -1648,6 +1648,10 @@ class Renderizador:
         "etiqueta":    ((900, 900), 82, 840, 1.05, 300),
         "marcador":    ((900, 900), 88, 880, 1.06, 302),
         "linhas":      ((800, 800), 80, 860, 1.12, 300),
+        # Os tres de 04/09 (noite): a linha das manchetes continuou.
+        "riscado":     ((900, 900), 88, 860, 1.06, 302),
+        "caixas":      ((900, 900), 84, 840, 1.05, 300),
+        "quadro":      ((800, 800), 82, 860, 1.10, 300),
     }
     HL_MAIUSCULA = ("card", "manchete", "carimbo", "faixa", "vazado")
     # peso -> arquivo Poppins
@@ -2220,6 +2224,85 @@ class Renderizador:
                     tt = t[:, None, None]
                     pal.rgb[:] = (pal.rgb * (1 - tt)
                                   + self._cor(accent)[None, None, :] * tt)
+                y += alt
+            return leg
+
+        if estilo == "riscado":
+            # Um risco da marca ATRAVESSANDO a letra, um pouco acima do meio
+            # (cruza a altura-x). Mesma montagem do marcador: o risco entra
+            # antes do texto, e a letra passa por cima.
+            risco_h = max(6, round(tam * 0.14))
+            sobra = round(tam * 0.06)
+            y = top
+            for l in linhas:
+                larg = self._larg_hl(l, tam, 900)
+                larg_b = int(larg) + 2 * sobra
+                img = Image.new("L", (larg_b, risco_h), 0)
+                ImageDraw.Draw(img).rounded_rectangle(
+                    [0, 0, larg_b - 1, risco_h - 1], radius=3, fill=255)
+                a_b = np.asarray(img, dtype=np.float32) / 255.0
+                # centro do risco a 52% da caixa de linha, contado do topo
+                y_risco = int(y + alt_cx * 0.52 - risco_h / 2)
+                leg.palavras.append(Palavra(
+                    int((self.w - larg) / 2) - sobra, y_risco,
+                    np.broadcast_to(self._cor(accent), (*a_b.shape, 3)).copy(),
+                    a_b, np.zeros_like(a_b), inicio_f=0, enter=enter_hl,
+                    sobe=sobe))
+                alt = self._hl_bloco_texto(
+                    leg, l, tam, 900, (self.w - larg) / 2, y, alt_cx,
+                    "#ffffff", [(0, 4, 16, 0.55)], sobe=sobe, enter=enter_hl)
+                y += alt
+            return leg
+
+        if estilo == "caixas":
+            # Linha 1 na caixa da marca (letra branca); linha 2 na caixa
+            # branca (letra da marca). O realce e o recorte alternados.
+            y = top
+            for i, l in enumerate(linhas):
+                pad = (0.3 * tam, 0.08 * tam, 0.16 * tam)
+                larg_b = self._larg_hl(l, tam, 900) + 2 * pad[0]
+                fundo, cor = (accent, "#ffffff") if i == 0 else ("#ffffff", accent)
+                alt = self._hl_bloco_texto(
+                    leg, l, tam, 900, (self.w - larg_b) / 2, y, alt_cx,
+                    cor, [(0, 10, 28, 0.45)], fundo=fundo, raio=12,
+                    pad_xy=pad, sobe=sobe, enter=enter_hl)
+                y += alt + 10
+            return leg
+
+        if estilo == "quadro":
+            # Moldura fina da marca em volta do BLOCO, com fundo escuro
+            # translucido para ler sobre imagem clara. Reta (o carimbo e
+            # torto e pinta a letra na cor da marca; aqui a letra e branca).
+            fio = max(4, round(tam * 0.06))
+            pad_x = round(tam * 0.36)
+            pad_y = round(tam * 0.22)
+            usadas = [l for l in linhas if l]
+            larg_max = max((self._larg_hl(l, tam, 800) for l in usadas),
+                           default=0)
+            larg_q = int(larg_max) + 2 * pad_x + 2 * fio
+            alt_q = int(alt_cx * len(usadas)) + 2 * pad_y + 2 * fio
+            img_f = Image.new("L", (larg_q, alt_q), 0)
+            ImageDraw.Draw(img_f).rounded_rectangle(
+                [0, 0, larg_q - 1, alt_q - 1], radius=10, fill=255)
+            cheio = np.asarray(img_f, dtype=np.float32) / 255.0
+            img_b = Image.new("L", (larg_q, alt_q), 0)
+            ImageDraw.Draw(img_b).rounded_rectangle(
+                [0, 0, larg_q - 1, alt_q - 1], radius=10, outline=255, width=fio)
+            borda = np.asarray(img_b, dtype=np.float32) / 255.0
+            # fundo preto a 0,28 por dentro; a borda cobre por cima a 1,0
+            alpha = np.maximum(cheio * 0.28, borda)
+            rgb = np.zeros((alt_q, larg_q, 3), dtype=np.float32)
+            rgb[:] = self._cor(accent)[None, None, :] * borda[..., None]
+            x_q = int((self.w - larg_q) / 2)
+            leg.palavras.append(Palavra(
+                x_q, int(top), rgb, alpha, np.zeros_like(alpha),
+                inicio_f=0, enter=enter_hl, sobe=sobe))
+            y = top + fio + pad_y
+            for l in usadas:
+                larg = self._larg_hl(l, tam, 800)
+                alt = self._hl_bloco_texto(
+                    leg, l, tam, 800, (self.w - larg) / 2, y, alt_cx,
+                    "#ffffff", [(0, 4, 16, 0.55)], sobe=sobe, enter=enter_hl)
                 y += alt
             return leg
 
