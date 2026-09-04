@@ -1,5 +1,14 @@
 # Changelog
 
+## 5.0.30
+
+- **"Verificar" dizia "sem atualização" com a versão nova já publicada.** O
+  app comparava, via que havia versão mais nova, e mesmo assim copiava a
+  resposta antiga guardada no cache da licença. Agora a comparação decide,
+  e clicar em Verificar renova a licença antes de responder — assim uma
+  atualização obrigatória recém-publicada aparece na hora, não em até 30
+  minutos.
+
 ## 5.0.29
 
 - **Botão para baixar as trilhas e os efeitos prontos.** Em Configurações →

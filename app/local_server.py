@@ -2272,6 +2272,16 @@ class StudioHandler(BaseHTTPRequestHandler):
         if path == "/api/update/check":
             from app.settings_store import load_settings
             from app.update_check import check_update
+            # Quem clicou em Verificar quer a resposta de AGORA, nao a do
+            # cache de 30 min: sem isto o min_version subido ha um minuto
+            # e a release de ha cinco continuavam invisiveis.
+            try:
+                from app import license as lic
+
+                if lic.configured():
+                    lic.entitlement(refresh=True)
+            except Exception:  # noqa: BLE001 — sem rede, segue com o cache
+                pass
             s = load_settings()
             result = check_update(channel=str(s.get("updateChannel") or "stable"))
             result["enabled"] = True

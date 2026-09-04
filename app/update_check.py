@@ -139,7 +139,16 @@ def check_update(*, channel: str = "stable") -> dict[str, Any]:
                 latest = latest_sb or None
                 result["latestVersion"] = latest
                 result["force"] = bool(upd.get("force"))
-                result["updateAvailable"] = bool(upd.get("updateAvailable") or upd.get("force"))
+                # A COMPARACAO que acabou de ser feita decide, nao a flag
+                # gravada no cache. A flag foi calculada quando o cache foi
+                # escrito — antes da release — e vinha False: o app sabia
+                # que 5.0.28 > 5.0.27 (entrou neste ramo por isso) e ainda
+                # assim dizia "Voce esta em 5.0.27 — sem atualizacao" (print
+                # dele, 04/09). Toda release ficava invisivel por ate 30 min
+                # para quem clicasse em Verificar.
+                result["updateAvailable"] = bool(
+                    upd.get("force")
+                    or (bool(latest_sb) and _e_mais_nova(latest_sb, cur)))
                 result["downloadUrl"] = upd.get("downloadUrl") or None
                 result["releaseUrl"] = (
                     upd.get("downloadUrl")

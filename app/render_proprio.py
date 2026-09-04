@@ -4986,6 +4986,12 @@ class Renderizador:
             img.paste(barra,
                       (int(round(cx - barra.width / 2.0)),
                        int(round(cy - barra.height / 2.0))), barra)
+            # O `filter: blur(16px)` do template NAO entra aqui. Medido duas
+            # vezes: em 30/08 (0,892 -> 0,895) e de novo na 5.0.29, depois
+            # que o giro do feixe foi acertado — mesmo resultado, 0,895, e o
+            # quadro passou de 2,7s para 7,0s. Tres milesimos de tinta por
+            # 2,6x de custo, num efeito que aparece uma media de 8 vezes por
+            # video. A sobra de 4% continua sem explicacao, e sem importar.
             cache[est] = np.clip(
                 np.asarray(img, dtype=np.float32) / 255.0 * beam, 0.0, 1.0)
         return (np.clip(np.maximum(cache[est], np.float32(bloom)) * k, 0.0, 1.0),
