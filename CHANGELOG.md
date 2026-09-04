@@ -1,5 +1,15 @@
 # Changelog
 
+## 5.0.18
+
+- **Quatro estilos de legenda novos**, no menu Estilo de legenda:
+  **Neon** (letra branca com brilho na cor da empresa), **Degradê** (a
+  letra vai de branco à cor da empresa, com contorno escuro), **Bandeira**
+  (fita inclinada na cor da empresa com o texto dentro) e **Máquina de
+  escrever** (as letras aparecem uma a uma enquanto a pessoa fala). São 19
+  estilos ao todo. Cada um foi conferido quadro a quadro contra o motor de
+  referência antes de entrar.
+
 ## 5.0.17
 
 - **Onze fontes novas** para legenda e headline, todas de licença aberta:

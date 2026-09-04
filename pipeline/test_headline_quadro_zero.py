@@ -132,21 +132,30 @@ def test_o_template_e_o_motor_concordam_em_quem_tem_entrada():
 
 
 def test_enter_zero_nao_vazou_para_a_legenda(tmp_path):
-    """`_opacidade` é compartilhado. `enter <= 0` (aparecer pronto) tem DOIS
-    usos sancionados: a headline `padrao` e o emoji manual (o template mostra
-    os dois já assentados no primeiro quadro deles). Qualquer outra chamada
-    literal com enter=0 é vazamento."""
+    """`_opacidade` é compartilhado. `enter <= 0` (aparecer pronto) tem usos
+    SANCIONADOS: a headline `padrao`, o emoji manual e — desde a 5.0.18 — a
+    máquina de escrever, em que cada LETRA aparece pronta (o template troca
+    `visibility`, sem fade nenhum). Qualquer OUTRA chamada literal com
+    enter=0 é vazamento: apagaria a entrada suave de uma legenda inteira."""
     import re
 
     py = (REPO / "app" / "render_proprio.py").read_text(encoding="utf-8")
     linhas_zero = [ln.strip() for ln in py.splitlines()
                    if re.search(r"enter=0\b", ln)
                    and not ln.strip().startswith("#")]
-    assert len(linhas_zero) == 1, (
+    assert len(linhas_zero) == 2, (
         f"enter=0 literal fora do lugar sancionado: {linhas_zero}"
     )
-    i = py.index(linhas_zero[0])
-    contexto = py[max(0, i - 400):i]
-    assert "INSTANTANEO" in contexto, "o enter=0 nao e o do emoji manual"
+    # cada um no seu dono: o emoji manual (comentario INSTANTANEO logo acima)
+    # e a maquina de escrever (a funcao em que a linha vive)
+    donos = []
+    for ln in linhas_zero:
+        i = py.index(ln)
+        antes = py[max(0, i - 2000):i]
+        achados = re.findall(r"def (\w+)", antes)
+        donos.append((achados[-1] if achados else "", "INSTANTANEO" in py[max(0, i - 400):i]))
+    assert any(marca for _nome, marca in donos), "sumiu o enter=0 do emoji manual"
+    assert any(nome == "_maquina_de_escrever" for nome, _m in donos), (
+        f"o outro enter=0 nao e o da maquina de escrever: {donos}")
     valores = re.findall(r"enter=(\d+)", py)
     assert valores and all(int(v) >= 0 for v in valores)

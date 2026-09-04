@@ -2879,14 +2879,19 @@ class Renderizador:
         "traco":    ("Poppins-ExtraBold.ttf", None, 74, 3, 1, 1.0, 1.0, -1, 430, 820, "traco"),
         "moldura":  ("Inter[opsz,wght].ttf", "SemiBold", 44, 6, 1, 1.0, 1.0, 6, 430, 700, "moldura"),
         "eco":      ("Poppins-ExtraBold.ttf", None, 78, 3, 1, 1.0, 1.0, -2, 430, 800, "eco"),
+        # --- os quatro de 04/09 ------------------------------------------
+        "neon":     ("Poppins-ExtraBold.ttf", None, 74, 3, 1, 1.0, 1.0, -1, 430, 800, "neon"),
+        "degrade":  ("Poppins-ExtraBold.ttf", None, 78, 3, 1, 1.0, 1.0, -2, 430, 800, "degrade"),
+        "bandeira": ("Poppins-ExtraBold.ttf", None, 62, 4, 1, 1.0, 1.0, 0, 430, 760, "bandeira"),
+        "maquina":  ("Inter[opsz,wght].ttf", "SemiBold", 56, 8, 2, 1.0, 1.0, 1, 430, 840, "maquina"),
     }
     # Modos que desenham em CAIXA ALTA. Isso muda a MEDIDA das linhas, entao
     # os tres motores tem de concordar sobre quem esta nesta lista.
-    SIMPLE_MAIUSCULA = ("sticker", "metal", "moldura", "eco")
+    SIMPLE_MAIUSCULA = ("sticker", "metal", "moldura", "eco", "degrade", "bandeira")
     # Modos com um painel em volta do cue INTEIRO (e nao por linha, como o
     # bloco): a caixa e uma so para as duas linhas. O `vidro` saiu daqui —
     # ele virou uma LETRA de vidro, nao uma caixa atras da letra.
-    SIMPLE_PAINEL = ("moldura",)
+    SIMPLE_PAINEL = ("moldura", "bandeira")
     # Peso que cada variante estatica tem no template (`capWeight(base.weight)`
     # em SimpleCaptions.tsx:218). Aqui ele fica implicito no ARQUIVO —
     # `Poppins-SemiBold.ttf` E o 600 — entao, quando a fonte da marca
@@ -2894,7 +2899,18 @@ class Renderizador:
     SIMPLE_PESO = {"simples": 600, "serifada": 700, "classica": 500,
                    "bloco": 800, "recorte_simple": 800,
                    "metal": 800, "vidro": 600, "traco": 800,
-                   "moldura": 600, "eco": 800}
+                   "moldura": 600, "eco": 800,
+                   "neon": 800, "degrade": 800, "bandeira": 800, "maquina": 600}
+    # Os MESMOS padroes do SimpleCaptions.tsx (NEON_PADRAO etc.)
+    NEON_PADRAO = "#4de1ff"
+    DEGRADE_PADRAO = "#ff6a00"
+    BANDEIRA_PADRAO = "#ff6a00"
+    BANDEIRA_SKEW = 8.0
+
+    @staticmethod
+    def velocidade_maquina(dur_f: int, n_chars: int) -> float:
+        """Quadros por letra — `velocidadeMaquina` do template."""
+        return min(2.0, 0.55 * dur_f / max(1, n_chars))
 
     # Opacidades do Vidro e do Metalico. Ficam aqui, com nome, porque os
     # tres motores tem de usar o MESMO numero — um 0,32 que vira 0,30 no
@@ -3367,7 +3383,9 @@ class Renderizador:
 
         camadas = []
         lh = {"bloco": 1.06, "sticker": 1.16, "metal": 1.10, "vidro": 1.16,
-              "traco": 1.16, "moldura": 1.20, "eco": 1.14}.get(modo, 1.18)
+              "traco": 1.16, "moldura": 1.20, "eco": 1.14,
+              "neon": 1.16, "degrade": 1.14, "bandeira": 1.20,
+              "maquina": 1.30}.get(modo, 1.18)
         for ci, cue in enumerate(cues):
             ini_f = int(round(cue[0]["startMs"] / 1000 * self.fps))
             nxt = cues[ci + 1] if ci + 1 < len(cues) else None
@@ -3383,6 +3401,11 @@ class Renderizador:
             linhas = duas(cue)
             asc, desc = f.getmetrics()
             alt_l = tam * lh
+            if modo == "maquina":
+                self._maquina_de_escrever(leg, linhas, f, track, tam, alt_l,
+                                          bottom, accent, limpar, asc, desc)
+                camadas.append(leg)
+                continue
             if modo in self.SIMPLE_PAINEL:
                 leg.palavras.append(
                     self._painel_legenda(modo, linhas, f, track, tam, alt_l,
@@ -3457,7 +3480,7 @@ class Renderizador:
                 pad_m = np.zeros((h_m + 2 * folga, w_m + 2 * folga),
                                  dtype=np.float32)
                 pad_m[folga:folga + h_m, folga:folga + w_m] = m
-                if modo in ("metal", "traco", "eco", "vidro"):
+                if modo in ("metal", "traco", "eco", "vidro", "neon", "degrade"):
                     rgb, alpha, sombra = self._tinta_dos_novos(
                         modo, pad_m, folga, h_m, tam, accent, cor_emj)
                     leg.palavras.append(Palavra(
@@ -3596,6 +3619,39 @@ class Renderizador:
             return rgb, alpha, self._sombra_de(
                 pad_m, [(0, 8, 22, 0.55 * self.VIDRO_OPACO)], k=BLUR_K)
 
+        if modo == "neon":
+            # Letra branca; brilho na cor da marca em tres raios (8/22/46px
+            # de text-shadow, sigma = raio/2). O brilho fica ATRAS da letra:
+            # cor do brilho onde so ha brilho, branco onde ha letra.
+            g = self._cor(accent or self.NEON_PADRAO)
+            brilho = self._sombra_de(pad_m, [(0, 0, 8, 1.0), (0, 0, 22, 1.0),
+                                             (0, 0, 46, 1.0)], k=0.5)
+            branco = self._cor("#ffffff")
+            rgb = np.broadcast_to(g, (*pad_m.shape, 3)).copy()
+            rgb = rgb * (1 - pad_m[..., None]) + branco * pad_m[..., None]
+            alpha = np.maximum(brilho, pad_m)
+            self._pintar_emoji(rgb, cor_emj, folga)
+            return rgb, alpha, self._sombra_de(pad_m, [(0, 8, 20, 0.5)], k=0.5)
+
+        if modo == "degrade":
+            # Branco em cima, cor da marca embaixo, linear ao longo da letra;
+            # contorno fino escuro por baixo (copia de baixo do template).
+            base = self._cor(accent or self.DEGRADE_PADRAO)
+            branco = self._cor("#ffffff")
+            tt = np.linspace(0.0, 1.0, max(1, h_m), dtype=np.float32)[:, None]
+            faixa = (branco[None, :] * (1.0 - tt) + base[None, :] * tt).astype(np.float32)
+            rgb = np.zeros((*pad_m.shape, 3), dtype=np.float32)
+            rgb[folga:folga + h_m, :, :] = faixa[:, None, :]
+            rgb[:folga] = faixa[0]
+            rgb[folga + h_m:] = faixa[-1]
+            r = max(2, round(tam * 0.03))
+            borda = self._contorno(pad_m, r)
+            cor_b = self._cor("#0e1013")
+            alpha = np.maximum(borda, pad_m)
+            rgb = rgb * pad_m[..., None] + cor_b * (1.0 - pad_m[..., None])
+            self._pintar_emoji(rgb, cor_emj, folga)
+            return rgb, alpha, self._sombra_de(pad_m, [(0, 10, 24, 0.5)], k=0.5)
+
         if modo == "traco":
             # o Recorte com contorno FINO: 3px em vez dos 7px dele
             r = max(2, round(tam * 0.035))
@@ -3633,6 +3689,102 @@ class Renderizador:
         self._pintar_emoji(rgb, cor_emj, folga)
         return rgb, alpha, self._sombra_de(pad_m, [(0, 10, 26, 0.45)], k=0.5)
 
+    def _bandeira(self, masks, w_txt, h_txt, alt_l, gap, tam, bottom, accent,
+                  folga):
+        """Fita inclinada na cor da marca com o texto dentro (bandeira).
+
+        Monta a fita RETA (retangulo + texto) e inclina a imagem inteira com
+        o cisalhamento do `skewX(-8deg)` do CSS, em torno do centro — o
+        texto inclina junto, como no template.
+        """
+        import math
+        import numpy as np
+
+        pad_x = round(tam * 0.55)
+        pad_y = round(tam * 0.28)
+        cw = int(w_txt + 2 * pad_x)
+        ch = int(h_txt + 2 * pad_y)
+        # folga maior: a inclinacao empurra os cantos para fora
+        folga = folga + int(math.tan(math.radians(self.BANDEIRA_SKEW)) * ch / 2) + 8
+        L, A = cw + 2 * folga, ch + 2 * folga
+        fita = accent or self.BANDEIRA_PADRAO
+        cor_f = self._cor(fita)
+        cor_t = self._cor(self._tinta_na_caixa(fita))
+        a_pan = np.zeros((A, L), dtype=np.float32)
+        a_pan[folga:folga + ch, folga:folga + cw] = 1.0
+        rgb = np.broadcast_to(cor_f, (A, L, 3)).copy()
+        alpha = a_pan.copy()
+        y = folga + pad_y
+        for m, cor_emj in masks:
+            h_m, w_m = m.shape
+            x = folga + int((cw - w_m) / 2)
+            ty = int(y + (alt_l - h_m) / 2)
+            hh = min(h_m, A - ty)
+            ww = min(w_m, L - x)
+            sub = m[:hh, :ww]
+            rgb[ty:ty + hh, x:x + ww] = (rgb[ty:ty + hh, x:x + ww] * (1 - sub[..., None])
+                                         + cor_t * sub[..., None])
+            alpha[ty:ty + hh, x:x + ww] = np.maximum(alpha[ty:ty + hh, x:x + ww], sub)
+            self._pintar_emoji(rgb, cor_emj, x, ty)
+            y += alt_l + gap
+        # cisalhamento: saida x' = x - k*(y - cy)  =>  entrada x = x' + k*(y - cy)
+        k = math.tan(math.radians(self.BANDEIRA_SKEW))
+        cy = A / 2.0
+        coef = (1.0, k, -k * cy, 0.0, 1.0, 0.0)
+        def _cisalha(arr, modo_img):
+            im = Image.fromarray(arr, modo_img)
+            return im.transform((L, A), Image.AFFINE, coef, resample=Image.BILINEAR)
+        alpha8 = (np.clip(alpha, 0, 1) * 255).astype(np.uint8)
+        rgb8 = np.clip(rgb, 0, 255).astype(np.uint8)
+        alpha = np.asarray(_cisalha(alpha8, "L"), dtype=np.float32) / 255.0
+        rgb = np.asarray(_cisalha(rgb8, "RGB"), dtype=np.float32)
+        # box-shadow 0 12px 30px .45 — da fita ja inclinada
+        sombra = self._sombra_de(alpha, [(0, 12, 30, 0.45)], k=0.5, caixa=True)
+        x0 = int((self.w - L) / 2)
+        y0 = int(self.h - bottom - ch) - folga
+        return Palavra(x0, y0, rgb, alpha, sombra, inicio_f=-1, enter=1, sobe=0.0)
+
+    def _maquina_de_escrever(self, leg, linhas, f, track, tam, alt_l, bottom,
+                             accent, limpar, asc, desc):
+        """Uma Palavra por LETRA, cada uma com o seu quadro de entrada (sem
+        fade): e a maquina de escrever. A linha fica fixa no lugar final
+        (largura da linha inteira, alinhada a esquerda) — o mesmo que o
+        template faz com os spans invisiveis."""
+        import numpy as np
+
+        textos = [" ".join(limpar(w["text"]) for w in ln) for ln in linhas]
+        total = sum(len(t) for t in textos)
+        vel = self.velocidade_maquina(int(leg.dur_f), total)
+        cor = self._cor(accent or "#f4f1e9")
+        n_lin = len(textos)
+        alt_total = alt_l * n_lin
+        y = self.h - bottom - alt_total
+        folga = 48
+        k_global = 0
+        for texto in textos:
+            w_lin = f.getlength(texto) + track * len(texto)
+            x_lin = int((self.w - w_lin) / 2)
+            for k, ch in enumerate(texto):
+                inicio = leg.inicio_f + k_global * vel
+                k_global += 1
+                if ch == " ":
+                    continue
+                prefixo = texto[:k]
+                x = x_lin + f.getlength(prefixo) + track * len(prefixo)
+                m, cor_emj = self._mascara_cor(f, ch, float(track))
+                h_m, w_m = m.shape
+                pad_m = np.zeros((h_m + 2 * folga, w_m + 2 * folga), dtype=np.float32)
+                pad_m[folga:folga + h_m, folga:folga + w_m] = m
+                sombra = self._sombra_de(pad_m, [(0, 4, 18, 0.55)], k=0.5)
+                rgb = np.broadcast_to(cor, (*pad_m.shape, 3)).copy()
+                self._pintar_emoji(rgb, cor_emj, folga)
+                leg.palavras.append(Palavra(
+                    int(x) - folga,
+                    int(y + (alt_l - (asc + desc)) / 2) - folga,
+                    rgb, pad_m, sombra,
+                    inicio_f=inicio - leg.inicio_f, enter=0, sobe=0.0))
+            y += alt_l
+
     def _painel_legenda(self, modo, linhas, f, track, tam, alt_l, bottom,
                         accent, limpar):
         """Vidro e Moldura: UM painel em volta do cue inteiro.
@@ -3651,6 +3803,9 @@ class Renderizador:
             masks.append(self._mascara_cor(f, texto, float(track)))
         w_txt = max(m.shape[1] for m, _ in masks)
         h_txt = alt_l * len(masks) + gap * (len(masks) - 1)
+        if modo == "bandeira":
+            return self._bandeira(masks, w_txt, h_txt, alt_l, gap, tam,
+                                  bottom, accent, folga)
         pad_x = round(tam * (0.62 if modo == "vidro" else 0.72))
         pad_y = round(tam * (0.44 if modo == "vidro" else 0.40))
         cw = int(w_txt + 2 * pad_x)

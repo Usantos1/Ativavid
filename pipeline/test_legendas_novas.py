@@ -53,9 +53,10 @@ def test_o_motor_rapido_aceita_os_cinco():
 def test_a_caixa_alta_e_a_mesma_nos_tres():
     """Caixa alta muda a MEDIDA das linhas: se os motores discordarem, a
     quebra de linha sai diferente e as legendas não casam mais."""
-    assert 'SIMPLE_MAIUSCULA = ("sticker", "metal", "moldura", "eco")' in PY
-    assert "const MAIUSCULA = new Set(['metal', 'moldura', 'eco']);" in TSX
-    assert "const CAP_MAIUSCULA = new Set(['metal', 'moldura', 'eco']);" in JS
+    # 5.0.18: degrade e bandeira tambem sao caixa alta
+    assert 'SIMPLE_MAIUSCULA = ("sticker", "metal", "moldura", "eco", "degrade", "bandeira")' in PY
+    assert "const MAIUSCULA = new Set(['metal', 'moldura', 'eco', 'degrade', 'bandeira']);" in TSX
+    assert "const CAP_MAIUSCULA = new Set(['metal', 'moldura', 'eco', 'degrade', 'bandeira']);" in JS
 
 
 def test_o_tamanho_e_a_medida_batem():
@@ -122,7 +123,7 @@ def test_o_vidro_e_a_letra_e_nao_uma_caixa_atras_dela():
     """"apenas o estilo da fonte é tipo de vidro, com uma certa
     transparência, nao aquele fundo escroto" (30/08). A primeira versão era
     um PAINEL de vidro fumado — uma caixa, não uma letra de vidro."""
-    assert 'SIMPLE_PAINEL = ("moldura",)' in PY      # o vidro saiu daqui
+    assert 'SIMPLE_PAINEL = ("moldura", "bandeira")' in PY      # o vidro saiu daqui; a bandeira (5.0.18) e painel
     assert "VIDRO_OPACO = 0.32" in PY and "VIDRO_FIO = 0.92" in PY
     for fonte in (TSX, JS):
         assert "VIDRO_OPACO = 0.32;" in fonte

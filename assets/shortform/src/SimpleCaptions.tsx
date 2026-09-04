@@ -54,12 +54,13 @@ type Variant = {
   sticker?: boolean;
   // Os cinco de 30/08. `modo` decide o RAMO de desenho; `bloco`/`sticker`
   // continuam como flags proprias porque ja estavam no contrato.
-  modo?: 'metal' | 'vidro' | 'traco' | 'moldura' | 'eco';
+  modo?: 'metal' | 'vidro' | 'traco' | 'moldura' | 'eco'
+    | 'neon' | 'degrade' | 'bandeira' | 'maquina';
 };
 
 // Quem desenha em CAIXA ALTA. Muda a MEDIDA das linhas, entao os tres
 // motores (este, o render_proprio e a previa) tem de concordar.
-const MAIUSCULA = new Set(['metal', 'moldura', 'eco']);
+const MAIUSCULA = new Set(['metal', 'moldura', 'eco', 'degrade', 'bandeira']);
 
 // Opacidades do Vidro e do Metálico — os MESMOS números do render_proprio
 // (VIDRO_OPACO / VIDRO_FIO / METAL_OPACO). Um 0,32 que vira 0,30 aqui sai
@@ -161,7 +162,40 @@ export const SIMPLE_VARIANTS: Record<string, Variant> = {
     squeeze: 1, squeezeY: 1, tracking: -2, bottom: 430, maxW: 800,
     modo: 'eco',
   },
+  // ---- os quatro de 04/09 ------------------------------------------------
+  neon: {
+    family: POPPINS, weight: 800, size: 74, maxWords: 3, lines: 1,
+    squeeze: 1, squeezeY: 1, tracking: -1, bottom: 430, maxW: 800,
+    modo: 'neon',
+  },
+  degrade: {
+    family: POPPINS, weight: 800, size: 78, maxWords: 3, lines: 1,
+    squeeze: 1, squeezeY: 1, tracking: -2, bottom: 430, maxW: 800,
+    modo: 'degrade',
+  },
+  bandeira: {
+    family: POPPINS, weight: 800, size: 62, maxWords: 4, lines: 1,
+    squeeze: 1, squeezeY: 1, tracking: 0, bottom: 430, maxW: 760,
+    modo: 'bandeira',
+  },
+  maquina: {
+    family: INTER, weight: 600, size: 56, maxWords: 8, lines: 2,
+    squeeze: 1, squeezeY: 1, tracking: 1, bottom: 430, maxW: 840,
+    modo: 'maquina',
+  },
 };
+
+// Neon: cor do brilho quando a marca nao escolheu; degrade/bandeira: a
+// cor de baixo / da fita. Os MESMOS padroes do render_proprio.
+const NEON_PADRAO = '#4de1ff';
+const DEGRADE_PADRAO = '#ff6a00';
+const BANDEIRA_PADRAO = '#ff6a00';
+const BANDEIRA_SKEW = 8;      // graus; o motor proprio usa tan(8deg)
+// Maquina de escrever: uma letra a cada VEL quadros, no maximo 2 quadros por
+// letra, e o cue inteiro digitado em 55% do tempo dele.
+export function velocidadeMaquina(durFrames: number, nChars: number): number {
+  return Math.min(2, (0.55 * durFrames) / Math.max(1, nChars));
+}
 
 /* As cinco paradas do cromado, tiradas DA COR escolhida. `f > 1` clareia
  * em direcao ao branco, `f < 1` escurece. A parada escura em 50% com o
@@ -350,6 +384,7 @@ export const SimpleCaptions: React.FC<{variant: string}> = ({variant}) => {
       ln.map((w) => (CAIXA ? clean(w.text).toUpperCase() : clean(w.text))).join(' ');
     const LH: Record<string, number> = {
       metal: 1.1, vidro: 1.16, traco: 1.16, moldura: 1.2, eco: 1.14,
+      neon: 1.16, degrade: 1.14, bandeira: 1.2, maquina: 1.3,
     };
     const tipo = {
       fontFamily: V.family,
@@ -415,6 +450,116 @@ export const SimpleCaptions: React.FC<{variant: string}> = ({variant}) => {
                        textShadow: [...contornoCss(R, '#101215'),
                                     '0 8px 20px rgba(0,0,0,0.4)'].join(', ')}}>
             {lines.map((ln, i) => <div key={i}>{txt(ln)}</div>)}
+          </div>
+        </AbsoluteFill>
+      );
+    }
+
+    if (V.modo === 'neon') {
+      // Letra branca, brilho na cor da marca em tres raios (8/22/46px) e a
+      // sombra escura de sempre por baixo, para ler sobre imagem clara.
+      const g = C.accent ?? NEON_PADRAO;
+      return (
+        <AbsoluteFill style={fora}>
+          <div style={{...tipo, color: '#ffffff',
+                       textShadow: [`0 0 8px ${g}`, `0 0 22px ${g}`, `0 0 46px ${g}`,
+                                    '0 8px 20px rgba(0,0,0,0.5)'].join(', ')}}>
+            {lines.map((ln, i) => <div key={i}>{txt(ln)}</div>)}
+          </div>
+        </AbsoluteFill>
+      );
+    }
+
+    if (V.modo === 'degrade') {
+      // Como o metal: copia de baixo so com o contorno, copia de cima com o
+      // degrade (branco em cima, cor da marca embaixo) recortado na letra.
+      const R = Math.max(2, Math.round(V.size * 0.03));
+      const borda = contornoCss(R, '#0e1013').join(', ');
+      const corpo = lines.map((ln, i) => <div key={i}>{txt(ln)}</div>);
+      return (
+        <AbsoluteFill style={fora}>
+          <div style={{position: 'relative'}}>
+            <div style={{...tipo, color: 'transparent',
+                         textShadow: `${borda}, 0 10px 24px rgba(0,0,0,0.5)`}}>
+              {corpo}
+            </div>
+            <div
+              style={{
+                ...tipo,
+                position: 'absolute',
+                left: 0,
+                top: 0,
+                width: '100%',
+                backgroundImage: `linear-gradient(180deg, #ffffff 0%, ${C.accent ?? DEGRADE_PADRAO} 100%)`,
+                WebkitBackgroundClip: 'text',
+                backgroundClip: 'text',
+                color: 'transparent',
+                WebkitTextFillColor: 'transparent',
+              }}
+            >
+              {corpo}
+            </div>
+          </div>
+        </AbsoluteFill>
+      );
+    }
+
+    if (V.modo === 'bandeira') {
+      // Uma fita na cor da marca, inclinada (skewX), texto em caixa alta na
+      // tinta que a luminancia da fita pede. A fita inclina o texto junto —
+      // e o adesivo do CapCut, nao uma placa.
+      const fita = C.accent ?? BANDEIRA_PADRAO;
+      const padX = Math.round(V.size * 0.55);
+      const padY = Math.round(V.size * 0.28);
+      return (
+        <AbsoluteFill style={fora}>
+          <div
+            style={{
+              ...tipo,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              padding: `${padY}px ${padX}px`,
+              background: fita,
+              color: inkOn(fita),
+              transform: `skewX(-${BANDEIRA_SKEW}deg)`,
+              boxShadow: '0 12px 30px rgba(0,0,0,0.45)',
+            }}
+          >
+            {lines.map((ln, i) => <div key={i}>{txt(ln)}</div>)}
+          </div>
+        </AbsoluteFill>
+      );
+    }
+
+    if (V.modo === 'maquina') {
+      // As letras aparecem uma a uma, a esquerda de cada linha fixa (a linha
+      // nao "anda" enquanto cresce). Cada letra e um span: o navegador nao
+      // faz kerning entre spans, e o motor proprio desenha letra a letra —
+      // os dois medem igual.
+      const ini = Math.round((cues[idx][0].startMs / 1000) * fps);
+      const dur = Math.max(1, end - ini);
+      const textos = lines.map((ln) => txt(ln));
+      const total = textos.reduce((s, tx) => s + tx.length, 0);
+      const vel = velocidadeMaquina(dur, total);
+      let vistos = frame < ini ? 0 : Math.floor((frame - ini) / vel) + 1;
+      const cor = C.accent ?? '#f4f1e9';
+      return (
+        <AbsoluteFill style={fora}>
+          <div style={{...tipo, color: cor, display: 'flex', flexDirection: 'column',
+                       alignItems: 'center', textShadow: '0 4px 18px rgba(0,0,0,0.55)'}}>
+            {textos.map((tx, i) => {
+              const w = widthOf(lines[i], V);
+              const daqui = Math.max(0, Math.min(tx.length, vistos));
+              vistos -= tx.length;
+              return (
+                <div key={i} style={{width: Math.ceil(w), textAlign: 'left', whiteSpace: 'pre'}}>
+                  {Array.from(tx).map((ch, k) => (
+                    <span key={k} style={{visibility: k < daqui ? 'visible' : 'hidden'}}>{ch}</span>
+                  ))}
+                </div>
+              );
+            })}
           </div>
         </AbsoluteFill>
       );

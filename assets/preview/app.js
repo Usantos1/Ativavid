@@ -320,6 +320,10 @@ const STYLE_CATALOG = {
     {id: 'traco', name: 'Contorno fino', stat: 'traco'},
     {id: 'moldura', name: 'Moldura', stat: 'moldura'},
     {id: 'eco', name: 'Eco', stat: 'eco'},
+    {id: 'neon', name: 'Neon', stat: 'neon'},
+    {id: 'degrade', name: 'Degradê', stat: 'degrade'},
+    {id: 'bandeira', name: 'Bandeira', stat: 'bandeira'},
+    {id: 'maquina', name: 'Máquina de escrever', stat: 'maquina'},
     // opts out of burned captions (captions.enabled:false) — same reasoning.
     {id: 'nenhuma', name: 'Nenhuma', none: true},
   ],
@@ -825,12 +829,21 @@ const STATIC_VARIANTS = {
   traco: {family: "'Poppins',sans-serif", weight: 800, size: 74, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: -1, maxW: 820, modo: 'traco'},
   moldura: {family: "'Inter',sans-serif", weight: 600, size: 44, maxWords: 6, lines: 1, sx: 1, sy: 1, tracking: 6, maxW: 700, modo: 'moldura'},
   eco: {family: "'Poppins',sans-serif", weight: 800, size: 78, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: -2, maxW: 800, modo: 'eco'},
+  neon: {family: "'Poppins',sans-serif", weight: 800, size: 74, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: -1, maxW: 800, modo: 'neon'},
+  degrade: {family: "'Poppins',sans-serif", weight: 800, size: 78, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: -2, maxW: 800, modo: 'degrade'},
+  bandeira: {family: "'Poppins',sans-serif", weight: 800, size: 62, maxWords: 4, lines: 1, sx: 1, sy: 1, tracking: 0, maxW: 760, modo: 'bandeira'},
+  maquina: {family: "'Inter',sans-serif", weight: 600, size: 56, maxWords: 8, lines: 2, sx: 1, sy: 1, tracking: 1, maxW: 840, modo: 'maquina'},
 };
+// os mesmos padroes do SimpleCaptions.tsx / render_proprio
+const NEON_PADRAO = '#4de1ff';
+const DEGRADE_PADRAO = '#ff6a00';
+const BANDEIRA_PADRAO = '#ff6a00';
 
 // Quem desenha em CAIXA ALTA — muda a MEDIDA das linhas, entao esta lista
 // tem de ser a mesma nos tres motores (SimpleCaptions.tsx e render_proprio).
-const CAP_MAIUSCULA = new Set(['metal', 'moldura', 'eco']);
-const CAP_LH = {metal: 1.1, vidro: 1.16, traco: 1.16, moldura: 1.2, eco: 1.14};
+const CAP_MAIUSCULA = new Set(['metal', 'moldura', 'eco', 'degrade', 'bandeira']);
+const CAP_LH = {metal: 1.1, vidro: 1.16, traco: 1.16, moldura: 1.2, eco: 1.14,
+                neon: 1.16, degrade: 1.14, bandeira: 1.2, maquina: 1.3};
 // Os MESMOS numeros do render_proprio (VIDRO_OPACO/VIDRO_FIO/METAL_OPACO).
 const VIDRO_OPACO = 0.32;
 const VIDRO_FIO = 0.92;
@@ -980,6 +993,56 @@ function buildStaticDemo(host, id) {
         for (const alvo of [baixo, cima]) {
           for (const ln of lines) el('div', '', alvo).textContent = t(ln);
         }
+        return box;
+      }
+      if (V.modo === 'neon') {
+        const g = cor || NEON_PADRAO;
+        box.style.color = '#ffffff';
+        box.style.textShadow = [`0 0 ${4 * s}px ${g}`, `0 0 ${11 * s}px ${g}`, `0 0 ${23 * s}px ${g}`,
+                                `0 ${4 * s}px ${10 * s}px rgba(0,0,0,0.5)`].join(', ');
+        for (const ln of lines) el('div', '', box).textContent = t(ln);
+        return box;
+      }
+      if (V.modo === 'degrade') {
+        const R = Math.max(1, Math.round(V.size * 0.03 * s));
+        const dentro = el('div', 'stat-metal', box);
+        dentro.style.position = 'relative';
+        const baixo = el('div', '', dentro);
+        baixo.style.color = 'transparent';
+        baixo.style.textShadow = [...contornoCss(R, '#0e1013'), '0 5px 12px rgba(0,0,0,0.5)'].join(', ');
+        const cima = el('div', '', dentro);
+        cima.style.position = 'absolute';
+        cima.style.left = '0';
+        cima.style.top = '0';
+        cima.style.width = '100%';
+        cima.style.backgroundImage = `linear-gradient(180deg, #ffffff 0%, ${cor || DEGRADE_PADRAO} 100%)`;
+        cima.style.webkitBackgroundClip = 'text';
+        cima.style.backgroundClip = 'text';
+        cima.style.color = 'transparent';
+        cima.style.webkitTextFillColor = 'transparent';
+        for (const alvo of [baixo, cima]) {
+          for (const ln of lines) el('div', '', alvo).textContent = t(ln);
+        }
+        return box;
+      }
+      if (V.modo === 'bandeira') {
+        const fita = cor || BANDEIRA_PADRAO;
+        box.style.display = 'flex';
+        box.style.flexDirection = 'column';
+        box.style.alignItems = 'center';
+        box.style.padding = `${V.size * 0.28 * s}px ${V.size * 0.55 * s}px`;
+        box.style.background = fita;
+        box.style.color = inkOn(fita);
+        box.style.transform = 'skewX(-8deg)';
+        box.style.boxShadow = `0 ${6 * s}px ${15 * s}px rgba(0,0,0,0.45)`;
+        for (const ln of lines) el('div', '', box).textContent = t(ln);
+        return box;
+      }
+      if (V.modo === 'maquina') {
+        // a demo mostra a linha inteira (a digitacao e do video)
+        box.style.color = cor || '#f4f1e9';
+        box.style.textShadow = `0 ${2 * s}px ${9 * s}px rgba(0,0,0,0.55)`;
+        for (const ln of lines) el('div', '', box).textContent = t(ln);
         return box;
       }
       if (V.modo === 'traco' || V.modo === 'eco') {
@@ -3603,7 +3666,7 @@ const capAccentUsed = () => S.style.captions !== 'nenhuma';
 // cromado e feito (o degrade sai dela), no `traco` e no `eco` ela pinta o
 // texto, na `moldura` a linha e o texto, no `vidro` o texto.
 const CAP_BASE_STYLES = ['karaoke', 'simples', 'serifada', 'classica', 'bloco', 'recorte', 'bolha',
-  'metal', 'vidro', 'traco', 'moldura', 'eco'];
+  'metal', 'vidro', 'traco', 'moldura', 'eco', 'neon', 'degrade', 'bandeira', 'maquina'];
 const CAP_EMPH_STYLES = ['stacked', 'scatter', 'impacto'];
 const CAP_CIRCLE_STYLES = ['stacked'];
 const legendaAccentUsed = () => capAccentUsed() && CAP_BASE_STYLES.includes(S.style.captions);

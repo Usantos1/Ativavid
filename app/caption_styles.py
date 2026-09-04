@@ -35,6 +35,11 @@ NOMES = {
     "traco": "Contorno fino",
     "moldura": "Moldura",
     "eco": "Eco",
+    # os quatro de 04/09 ("todos")
+    "neon": "Neon",
+    "degrade": "Degradê",
+    "bandeira": "Bandeira",
+    "maquina": "Máquina de escrever",
 }
 
 TODOS = frozenset(NOMES)
@@ -45,6 +50,7 @@ TODOS = frozenset(NOMES)
 USAM_COR_DA_LEGENDA = frozenset({
     "karaoke", "simples", "serifada", "classica", "bloco", "recorte",
     "metal", "vidro", "traco", "moldura", "eco",
+    "neon", "degrade", "bandeira", "maquina",
 })
 
 # Estilos em que a cor pinta a ÊNFASE (a palavra quente), não a linha toda.
