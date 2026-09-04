@@ -1,5 +1,16 @@
 # Changelog
 
+## 5.0.9
+
+- **Pasta de entregas configurável.** Em Configurações → Projetos e cache,
+  "Pasta de entregas": aponte para a pasta do Google Drive (ou qualquer
+  outra) e cada empresa ganha a sua subpasta lá, sincronizando sozinha.
+  Vazio = `Entregas` ao lado dos Projetos, como antes. Vale na hora, sem
+  reiniciar.
+- **Roteiro aprende com as legendas aprovadas.** Além dos ganchos, a IA
+  recebe as legendas dos posts que você aprovou no Multiplicador e segue o
+  jeito de escrever, sem copiar.
+
 ## 5.0.8
 
 - **Roteiro conhece os ganchos que a empresa já usou.** Antes de escrever,

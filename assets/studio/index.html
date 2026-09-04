@@ -984,6 +984,17 @@
                      diferentes. Fica como title do campo. -->
                 <p class="hint mono ellipsis hidden" id="projectsRootHint" hidden></p>
                 <p class="hint" id="espacoHint"></p>
+                <!-- 5.0.9: pasta de Entregas (por empresa). Vazio = ao lado dos
+                     Projetos. Apontar para a pasta do Drive faz a entrega
+                     sincronizar sozinha. -->
+                <label class="ia-form">Pasta de entregas (uma subpasta por empresa)
+                  <div class="emp-linha sys-pasta">
+                    <input type="text" id="entregasRootInput" placeholder="vazio = Entregas ao lado dos Projetos" spellcheck="false">
+                    <button type="button" class="ghost-btn ghost-btn--sm" id="btnEntregasEscolher" title="Escolher a pasta (ex.: a do Google Drive)">Escolher…</button>
+                    <button type="button" class="ghost-btn ghost-btn--sm" id="btnSaveEntregas">Salvar</button>
+                  </div>
+                </label>
+                <p class="hint mono ellipsis" id="entregasRootHint"></p>
                 <div class="panel-actions">
                   <button type="button" class="export-btn" id="btnSaveRoot">Salvar pasta</button>
                   <button type="button" class="ghost-btn" id="btnClearCache">Limpar cache</button>

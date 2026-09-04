@@ -4721,6 +4721,40 @@ function wireForms() {
       toast("Pasta salva — reinicie o app para aplicar");
     };
   }
+  // 5.0.9: pasta de Entregas — vale na hora, sem reiniciar
+  const btnEsc = $("#btnEntregasEscolher");
+  if (btnEsc && !btnEsc.dataset.wired) {
+    btnEsc.dataset.wired = "1";
+    btnEsc.onclick = async () => {
+      const nat = apiNativa();
+      if (!nat) { toast("Escolha a pasta digitando o caminho (o seletor só existe dentro do app)"); return; }
+      try {
+        const r = await nat.escolher_pasta();
+        const pasta = Array.isArray(r) ? r[0] : r;
+        if (pasta && $("#entregasRootInput")) $("#entregasRootInput").value = String(pasta);
+      } catch (e) {
+        toast(e.message || "Não consegui abrir o seletor de pasta");
+      }
+    };
+  }
+  const btnSaveEnt = $("#btnSaveEntregas");
+  if (btnSaveEnt && !btnSaveEnt.dataset.wired) {
+    btnSaveEnt.dataset.wired = "1";
+    btnSaveEnt.onclick = async () => {
+      const entregasRoot = ($("#entregasRootInput")?.value || "").trim() || null;
+      try {
+        const r = await api("/api/settings", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ entregasRoot }),
+        });
+        const efetiva = (r.settings && r.settings.entregasRootEfetiva) || "";
+        if ($("#entregasRootHint")) $("#entregasRootHint").textContent = efetiva ? `Em uso: ${efetiva}` : "";
+        toast(entregasRoot ? "✓ Entregas passam a ir para essa pasta" : "✓ Entregas voltam para o padrão, ao lado dos Projetos");
+      } catch (e) {
+        toast(e.message || "Não consegui salvar");
+      }
+    };
+  }
   const btnLicAdvOpen = $("#btnLicAdvOpen");
   if (btnLicAdvOpen) {
     btnLicAdvOpen.onclick = () => {
@@ -5598,6 +5632,10 @@ function applySistemaData(data) {
   if ($("#projectsRootInput") && !$("#projectsRootInput").value) {
     $("#projectsRootInput").value = s.projectsRoot || m.projectsRoot || "";
   }
+  if ($("#entregasRootInput") && document.activeElement !== $("#entregasRootInput")) {
+    $("#entregasRootInput").value = s.entregasRoot || "";
+  }
+  if ($("#entregasRootHint")) $("#entregasRootHint").textContent = s.entregasRootEfetiva ? `Em uso: ${s.entregasRootEfetiva}` : "";
   if ($("#supabaseUrlInput")) $("#supabaseUrlInput").value = s.supabaseUrl || "";
   if ($("#supabaseAnonInput")) $("#supabaseAnonInput").value = s.supabaseAnonKey || "";
   if ($("#checkoutUrlInput")) $("#checkoutUrlInput").value = s.checkoutUrl || "";

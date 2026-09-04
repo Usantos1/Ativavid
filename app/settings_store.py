@@ -159,6 +159,14 @@ def public_settings() -> dict[str, Any]:
     out["supabaseServiceRoleKey"] = ""
     out["hasServiceRole"] = bool(srv)
     out["licenseManaged"] = license_managed()
+    # 5.0.9: a pasta de Entregas EM USO (a escolhida ou a padrao ao lado
+    # dos Projetos), para a tela mostrar sem adivinhar
+    try:
+        from app.delivery_pack import entregas_root
+
+        out["entregasRootEfetiva"] = str(entregas_root())
+    except Exception:  # noqa: BLE001
+        out["entregasRootEfetiva"] = ""
     return out
 
 

@@ -388,6 +388,12 @@ def coletar_ganchos(projects_root: Path | str, brand_id: str, limite: int = 15) 
         if len(out) >= limite:
             continue
         item = {"gancho": gancho, "aprovado": aprovado, "projeto": proj.name}
+        # 5.0.9: a legenda do post aprovado tambem ensina o estilo
+        if aprovado:
+            try:
+                item["legenda"] = " ".join((edit / "legenda.txt").read_text(encoding="utf-8-sig").split())[:300]
+            except OSError:
+                pass
         por_chave[chave] = item
         out.append(item)
     return out
@@ -399,10 +405,20 @@ def _ganchos_em_texto(ganchos: list[dict[str, Any]] | None) -> str:
     linhas = [f"- {'✅ ' if g.get('aprovado') else ''}{g.get('gancho')}" for g in ganchos if g.get("gancho")]
     if not linhas:
         return ""
+    legendas = [str(g.get("legenda") or "").strip() for g in ganchos
+                if g.get("aprovado") and str(g.get("legenda") or "").strip()][:3]
+    bloco_legendas = ""
+    if legendas:
+        bloco_legendas = (
+            "LEGENDAS DE POSTS APROVADOS (o jeito de escrever que o dono aprovou — "
+            "siga o estilo, não copie):\n"
+            + "\n".join(f"- {t}" for t in legendas) + "\n\n"
+        )
     return (
         "GANCHOS QUE ESTA EMPRESA JÁ USOU nos últimos vídeos (não repita nenhum "
         "literalmente; os com ✅ foram aprovados pelo dono — siga o estilo deles):\n"
         + "\n".join(linhas) + "\n\n"
+        + bloco_legendas
     )
 
 
