@@ -804,7 +804,7 @@ def resolve_query_to_public(
             except ValueError:
                 pass
 
-    # Pexels fallback
+    # Pexels fallback; sem chave do Pexels (ou sem resultado), Freepik (4.96)
     try:
         import sys
         helpers = str(REPO / "helpers")
@@ -812,10 +812,14 @@ def resolve_query_to_public(
             sys.path.insert(0, helpers)
         import pexels_search  # type: ignore
 
-        key = pexels_search.load_api_key()
-        photos = pexels_search.search(q, key, 3, "portrait")
+        photos: list = []
+        try:
+            key = pexels_search.load_api_key()
+            photos = pexels_search.search(q, key, 3, "portrait")
+        except SystemExit:
+            photos = []
         if not photos:
-            return None
+            return _freepik_para_public(q, public_dir)
         photo = photos[0]
         src = photo.get("src") or {}
         url = src.get("large2x") or src.get("large") or src.get("original")
@@ -836,6 +840,41 @@ def resolve_query_to_public(
             "query": q,
             "source": "pexels",
             "credit": photographer,
+        }
+    except Exception:
+        return None
+
+
+def _freepik_para_public(q: str, public_dir: Path) -> dict[str, Any] | None:
+    """Foto da Freepik (Magnific) em public/freepik/. Sem chave → None, mudo."""
+    try:
+        import sys
+        helpers = str(REPO / "helpers")
+        if helpers not in sys.path:
+            sys.path.insert(0, helpers)
+        import freepik_search  # type: ignore
+
+        try:
+            key = freepik_search.load_api_key()
+        except SystemExit:
+            return None
+        fotos = freepik_search.search(q, key, 3, "portrait")
+        if not fotos:
+            return None
+        foto = fotos[0]
+        out_dir = Path(public_dir) / "freepik"
+        name = f"{freepik_search.slugify(q)}-{foto['id']}.jpg"
+        dest = out_dir / name
+        freepik_search.download(foto["id"], key, dest, image_size="large")
+        return {
+            "ok": True,
+            "ref": f"freepik/{name}",
+            "src": f"freepik/{name}",
+            "kind": "image",
+            "path": str(dest),
+            "query": q,
+            "source": "freepik",
+            "credit": foto.get("credit") or "Freepik",
         }
     except Exception:
         return None

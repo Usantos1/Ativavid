@@ -291,6 +291,7 @@ class DesktopHandler(ps.Handler):
             self._json({
                 "GROQ_API_KEY": bool(keys.get("GROQ_API_KEY")),
                 "PEXELS_API_KEY": bool(keys.get("PEXELS_API_KEY")),
+                "FREEPIK_API_KEY": bool(keys.get("FREEPIK_API_KEY")),
             })
             return
         if raw == "/api/llm-proxy":

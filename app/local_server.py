@@ -997,7 +997,7 @@ def save_env_keys(updates: dict[str, str]) -> None:
     # expose to this process (worker children inherit)
     for k, v in current.items():
         os.environ[k] = v
-    for k in ("GROQ_API_KEY", "PEXELS_API_KEY"):
+    for k in ("GROQ_API_KEY", "PEXELS_API_KEY", "FREEPIK_API_KEY"):
         if k not in current and k in os.environ:
             os.environ.pop(k, None)
 
@@ -2061,6 +2061,7 @@ class StudioHandler(BaseHTTPRequestHandler):
             self._json({
                 "GROQ_API_KEY": bool(keys.get("GROQ_API_KEY")),
                 "PEXELS_API_KEY": bool(keys.get("PEXELS_API_KEY")),
+                "FREEPIK_API_KEY": bool(keys.get("FREEPIK_API_KEY")),
             })
             return
         if path == "/api/llm-proxy":
@@ -2402,7 +2403,7 @@ class StudioHandler(BaseHTTPRequestHandler):
         if path == "/api/keys":
             body = self._read_json() or {}
             allowed = {k: body[k] for k in (
-                "GROQ_API_KEY", "PEXELS_API_KEY",
+                "GROQ_API_KEY", "PEXELS_API_KEY", "FREEPIK_API_KEY",
                 "IG_USER_ID", "META_ACCESS_TOKEN") if k in body}
             try:
                 save_env_keys(allowed)
@@ -2412,6 +2413,7 @@ class StudioHandler(BaseHTTPRequestHandler):
             self._json({"ok": True, "keys": {
                 "GROQ_API_KEY": bool(load_env_keys().get("GROQ_API_KEY")),
                 "PEXELS_API_KEY": bool(load_env_keys().get("PEXELS_API_KEY")),
+                "FREEPIK_API_KEY": bool(load_env_keys().get("FREEPIK_API_KEY")),
                 "IG_USER_ID": bool(load_env_keys().get("IG_USER_ID")),
                 "META_ACCESS_TOKEN": bool(load_env_keys().get("META_ACCESS_TOKEN")),
             }})
@@ -2426,6 +2428,8 @@ class StudioHandler(BaseHTTPRequestHandler):
                 patch["GROQ_API_KEY"] = str(body["GROQ_API_KEY"])
             if body.get("PEXELS_API_KEY"):
                 patch["PEXELS_API_KEY"] = str(body["PEXELS_API_KEY"])
+            if body.get("FREEPIK_API_KEY"):
+                patch["FREEPIK_API_KEY"] = str(body["FREEPIK_API_KEY"])
             for k in ("IG_USER_ID", "META_ACCESS_TOKEN"):
                 if body.get(k):
                     patch[k] = str(body[k])
@@ -2468,6 +2472,20 @@ class StudioHandler(BaseHTTPRequestHandler):
                     self._json({"ok": r.status_code < 400, "status": r.status_code})
                 except Exception as e:  # noqa: BLE001
                     self._json({"ok": False, "error": str(e)[:120]}, 502)
+                return
+            if which == "freepik":
+                key = keys.get("FREEPIK_API_KEY") or ""
+                if not key:
+                    self._json({"ok": False, "error": "FREEPIK_API_KEY ausente — cole a chave e salve."}, 400)
+                    return
+                try:
+                    sys.path.insert(0, str(HELPERS))
+                    import freepik_search  # type: ignore
+
+                    fotos = freepik_search.search("phone", key, 1, None)
+                    self._json({"ok": True, "hint": f"{len(fotos)} foto(s) de teste — chave válida"})
+                except Exception as e:  # noqa: BLE001
+                    self._json({"ok": False, "error": str(e)[:160]}, 502)
                 return
             if which == "instagram":
                 igid = (keys.get("IG_USER_ID") or "").strip()

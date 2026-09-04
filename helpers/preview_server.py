@@ -828,8 +828,12 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/projects":
             self._scan_projects()
         elif path == "/api/images/search":
-            q = parse_qs(urlparse(self.path).query).get("q", [""])[0].strip()
-            self._images_search(q)
+            qs = parse_qs(urlparse(self.path).query)
+            q = qs.get("q", [""])[0].strip()
+            # 4.96: `source=freepik&kind=video` busca no banco da Freepik
+            # (Magnific); sem os dois, e o Pexels de sempre.
+            self._images_search(q, source=qs.get("source", [""])[0].strip().lower(),
+                                kind=qs.get("kind", [""])[0].strip().lower())
         else:
             self._json({"error": "unknown route"}, 404)
 
@@ -1433,9 +1437,12 @@ class Handler(BaseHTTPRequestHandler):
         self._json({"ok": True})
 
     # ---- image picker (search first, download only what's picked) ----
-    def _images_search(self, query: str) -> None:
+    def _images_search(self, query: str, source: str = "", kind: str = "") -> None:
         if not query:
             self._json({"ok": False, "error": "busca vazia"}, 400)
+            return
+        if source == "freepik":
+            self._images_search_freepik(query, kind or "image")
             return
         if pexels_search is None:
             self._json({"ok": False, "error": "helper indisponível (requests instalado?)"}, 500)
@@ -1463,12 +1470,72 @@ class Handler(BaseHTTPRequestHandler):
             for p in photos if (p.get("src") or {}).get("medium")
         ]})
 
+    def _images_search_freepik(self, query: str, kind: str) -> None:
+        """Fotos ou vídeos da Freepik (Magnific). A busca devolve só a
+        prévia; o arquivo grande vem no pick, por id — é essa a chamada que
+        a Freepik conta (e cobra) como download."""
+        try:
+            import freepik_search  # type: ignore
+        except ImportError:
+            self._json({"ok": False, "error": "helper da Freepik indisponível"}, 500)
+            return
+        try:
+            key = freepik_search.load_api_key()
+        except SystemExit as e:
+            self._json({"ok": False, "error": str(e)}, 400)
+            return
+        try:
+            if kind == "video":
+                itens = freepik_search.search_videos(query, key, 12, "portrait")
+            else:
+                itens = freepik_search.search(query, key, 12, "portrait")
+        except Exception as e:  # noqa: BLE001
+            self._json({"ok": False, "error": str(e)}, 502)
+            return
+        self._json({"ok": True, "source": "freepik", "kind": kind, "results": itens})
+
+    def _images_pick_freepik(self, body: dict) -> None:
+        """Baixa pelo ID (nunca por URL vinda do cliente) para public/freepik/."""
+        try:
+            import freepik_search  # type: ignore
+        except ImportError:
+            self._json({"ok": False, "error": "helper da Freepik indisponível"}, 500)
+            return
+        try:
+            key = freepik_search.load_api_key()
+        except SystemExit as e:
+            self._json({"ok": False, "error": str(e)}, 400)
+            return
+        rid = str(body.get("id") or "").strip()
+        if not rid.isdigit():
+            self._json({"ok": False, "error": "id inválido"}, 400)
+            return
+        kind = "video" if str(body.get("kind") or "") == "video" else "image"
+        out_dir = self.root / "remotion" / "public" / "freepik"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        ext = ".mp4" if kind == "video" else ".jpg"
+        name = f"{freepik_search.slugify(body.get('query') or 'img')}-{rid}{ext}"
+        dest = out_dir / name
+        try:
+            if kind == "video":
+                freepik_search.download_video(rid, key, dest)
+            else:
+                freepik_search.download(rid, key, dest, image_size="large")
+        except Exception as e:  # noqa: BLE001
+            self._json({"ok": False, "error": str(e)}, 502)
+            return
+        self._json({"ok": True, "ref": f"freepik/{name}", "kind": kind,
+                    "credit": body.get("credit", "")})
+
     def _images_pick(self) -> None:
         try:
             length = int(self.headers.get("Content-Length", "0"))
             body = json.loads(self.rfile.read(length) or b"{}")
         except (ValueError, json.JSONDecodeError):
             self._json({"error": "invalid JSON"}, 400)
+            return
+        if str(body.get("source") or "").lower() == "freepik":
+            self._images_pick_freepik(body)
             return
         url = body.get("url") or ""
         # only ever fetch a Pexels-hosted image: this endpoint takes a URL

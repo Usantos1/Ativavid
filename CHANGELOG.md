@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.96
+
+- **Freepik (Magnific) como banco de imagens e vídeos.** No "Buscar
+  online" do editor há três fontes: Pexels · fotos, Freepik · fotos e
+  Freepik · vídeos. A busca mostra prévias; o download acontece só no
+  clique, por id (é o que a Freepik conta). A chave entra em Integrações →
+  "B-roll — Freepik (Magnific)", com Testar. O b-roll automático e o
+  planejador usam a Freepik quando não há chave do Pexels.
+
 ## 4.95
 
 - **Multiplicador: escolha a marca e o preset antes de criar as

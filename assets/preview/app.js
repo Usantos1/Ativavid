@@ -7314,14 +7314,47 @@ function pushInsertFromRef(src, label, credit) {
   scheduleAutosave();
 }
 
+/* De onde a busca online vem (4.96): Pexels fotos, Freepik fotos ou Freepik
+ * videos. A escolha fica guardada — quem usa Freepik usa sempre. */
+const IMG_FONTE_KEY = 'ativavid.imgFonte';
+let IMG_FONTE = { fonte: 'pexels', kind: 'image' };
+try {
+  const salvo = JSON.parse(localStorage.getItem(IMG_FONTE_KEY) || 'null');
+  if (salvo && salvo.fonte) IMG_FONTE = salvo;
+} catch { /* ignore */ }
+function setImgFonte(fonte, kind) {
+  IMG_FONTE = { fonte: fonte === 'freepik' ? 'freepik' : 'pexels', kind: kind === 'video' ? 'video' : 'image' };
+  try { localStorage.setItem(IMG_FONTE_KEY, JSON.stringify(IMG_FONTE)); } catch { /* ignore */ }
+  document.querySelectorAll('.img-fonte').forEach((b) => {
+    b.classList.toggle('active', b.dataset.fonte === IMG_FONTE.fonte && b.dataset.kind === IMG_FONTE.kind);
+  });
+  const q = $('imgQuery');
+  if (q) q.placeholder = IMG_FONTE.kind === 'video'
+    ? 'ex.: celular na mão, loja, cliente sorrindo'
+    : 'ex.: celular capinha, loja, mãos digitando';
+  const hint = $('imgHint');
+  if (hint && IMG_TAB === 'pexels') hint.textContent = IMG_FONTE.kind === 'video'
+    ? 'Clipes de até 20 s. O vídeo vem em 4K e é convertido para 1080p aqui: o download leva alguns minutos.'
+    : 'A imagem escolhida entra na trilha de inserts, na posição da agulha.';
+}
+document.querySelectorAll('.img-fonte').forEach((b) => {
+  b.addEventListener('click', () => {
+    setImgFonte(b.dataset.fonte, b.dataset.kind);
+    if ($('imgQuery').value.trim()) $('imgGo').click();
+  });
+});
+setImgFonte(IMG_FONTE.fonte, IMG_FONTE.kind);
+
 $('imgGo').addEventListener('click', async () => {
   const q = $('imgQuery').value.trim();
   if (!q) return;
   const box = $('imgResults');
   box.innerHTML = '<div class="img-empty">buscando…</div>';
   let data;
+  const extra = IMG_FONTE.fonte === 'freepik'
+    ? `&source=freepik&kind=${encodeURIComponent(IMG_FONTE.kind)}` : '';
   try {
-    data = await (await fetch(`${BASE}/api/images/search?q=${encodeURIComponent(q)}`)).json();
+    data = await (await fetch(`${BASE}/api/images/search?q=${encodeURIComponent(q)}${extra}`)).json();
   } catch (e) {
     box.innerHTML = '<div class="img-empty">falha na busca — servidor de pé?</div>';
     return;
@@ -7337,19 +7370,29 @@ $('imgGo').addEventListener('click', async () => {
   box.innerHTML = '';
   data.results.forEach((r) => {
     const card = el('button', 'img-card', box);
-    card.innerHTML = `<img src="${r.thumb}" alt=""><span class="img-credit">${r.credit}</span>`;
-    card.addEventListener('click', () => pickImage(q, r));
+    const selo = r.kind === 'video'
+      ? `<span class="img-selo">▶ ${r.duration || 'vídeo'}</span>` : '';
+    const premium = r.premium ? '<span class="img-selo img-selo-premium">premium</span>' : '';
+    card.innerHTML = `<img src="${r.thumb}" alt="">${selo}${premium}<span class="img-credit">${r.credit}</span>`;
+    if (r.title) card.title = r.title;
+    card.addEventListener('click', () => pickImage(q, r, data.source || 'pexels'));
   });
 });
 
-async function pickImage(query, r) {
-  toast('Baixando…', 1500);
+async function pickImage(query, r, source) {
+  // Video da Freepik so existe no original 4K: baixa e converte para
+  // 1080p aqui — minutos, nao segundos. Quem clicou precisa saber.
+  if (source === 'freepik' && r.kind === 'video') toast('Baixando o vídeo original (4K) e convertendo para 1080p — pode levar alguns minutos…', 8000);
+  else toast('Baixando…', 1500);
   let data;
+  const corpo = source === 'freepik'
+    ? { source: 'freepik', id: r.id, kind: r.kind || 'image', query, credit: r.credit }
+    : { url: r.full, id: r.id, query, credit: r.credit };
   try {
     data = await (await fetch(`${BASE}/api/images/pick`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: r.full, id: r.id, query, credit: r.credit }),
+      body: JSON.stringify(corpo),
     })).json();
   } catch (e) {
     toast('Falha ao baixar a imagem', 3000);
@@ -7359,7 +7402,9 @@ async function pickImage(query, r) {
 
   pushInsertFromRef(data.ref, data.ref.split('/').pop(), data.credit);
   toggleImgPicker(false);
-  toast('✓ Imagem inserida — arraste pra ajustar, depois Salvar', 4000);
+  toast(data.kind === 'video'
+    ? '✓ Vídeo inserido — arraste pra ajustar, depois Salvar'
+    : '✓ Imagem inserida — arraste pra ajustar, depois Salvar', 4000);
 }
 
 // header — pasta do projeto, vídeo final, foco e menu •••

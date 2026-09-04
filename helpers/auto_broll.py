@@ -91,8 +91,10 @@ def build_auto_inserts(
         return []
     key = _pexels_key()
     if not key:
-        print("[broll] PEXELS_API_KEY ausente — sem inserts auto", flush=True)
-        return []
+        # 4.96: sem Pexels, o banco da Freepik (Magnific) faz o mesmo papel.
+        return _inserts_freepik(public_dir=public_dir, transcript=transcript,
+                                duration=duration, n=n, hook_end=hook_end,
+                                end_card_sec=end_card_sec)
 
     try:
         import pexels_search  # type: ignore
@@ -147,4 +149,55 @@ def build_auto_inserts(
         })
         print(f"[broll] + {name} @ {start:.1f}-{end:.1f}s ({query})", flush=True)
 
+    return inserts
+
+
+def _inserts_freepik(*, public_dir: Path, transcript: str, duration: float,
+                     n: int, hook_end: float, end_card_sec: float) -> list[dict[str, Any]]:
+    """O mesmo desenho do Pexels, com fotos da Freepik (Magnific)."""
+    try:
+        import freepik_search  # type: ignore
+    except ImportError:
+        print("[broll] sem PEXELS_API_KEY e sem helper da Freepik — sem inserts auto", flush=True)
+        return []
+    try:
+        key = freepik_search.load_api_key()
+    except SystemExit:
+        print("[broll] PEXELS_API_KEY e FREEPIK_API_KEY ausentes — sem inserts auto", flush=True)
+        return []
+    kws = keywords_from_text(transcript, limit=max(2, n)) or ["produto", "loja"]
+    usable = max(0.0, duration - hook_end - end_card_sec - 0.4)
+    if usable < 1.2:
+        return []
+    slot = usable / n
+    out_dir = Path(public_dir) / "freepik"
+    inserts: list[dict[str, Any]] = []
+    for i in range(n):
+        query = " ".join(kws[i:i + 2]) if i < len(kws) else kws[0]
+        try:
+            fotos = freepik_search.search(query, key, 3, "portrait")
+        except Exception as e:  # noqa: BLE001
+            print(f"[broll] freepik: busca falhou ({query}): {e}", flush=True)
+            continue
+        if not fotos:
+            continue
+        foto = fotos[0]
+        name = f"{freepik_search.slugify(query)}-auto{i + 1}.jpg"
+        try:
+            freepik_search.download(foto["id"], key, out_dir / name, image_size="large")
+        except Exception as e:  # noqa: BLE001
+            print(f"[broll] freepik: download falhou: {e}", flush=True)
+            continue
+        start = hook_end + 0.3 + i * slot
+        end = min(duration - end_card_sec - 0.2, start + min(1.6, max(1.0, slot * 0.55)))
+        if end <= start + 0.6:
+            continue
+        inserts.append({
+            "src": f"freepik/{name}",
+            "start": round(start, 3),
+            "end": round(end, 3),
+            "credit": foto.get("credit") or "",
+            "auto": True,
+        })
+        print(f"[broll] + {name} @ {start:.1f}-{end:.1f}s ({query}, freepik)", flush=True)
     return inserts

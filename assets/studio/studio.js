@@ -4403,8 +4403,10 @@ function wireForms() {
     const body = {};
     const g = ($("#keyGroq")?.value || "").trim();
     const px = ($("#keyPx")?.value || "").trim();
+    const fp = ($("#keyFreepik")?.value || "").trim();
     if (g) body.GROQ_API_KEY = g;
     if (px) body.PEXELS_API_KEY = px;
+    if (fp) body.FREEPIK_API_KEY = fp;
 
     if (!Object.keys(body).length) {
       toast("Cole pelo menos uma chave antes de salvar");
@@ -4420,6 +4422,7 @@ function wireForms() {
       const ok = [];
       if (res.keys?.GROQ_API_KEY) ok.push("Groq");
       if (res.keys?.PEXELS_API_KEY) ok.push("Pexels");
+      if (res.keys?.FREEPIK_API_KEY) ok.push("Freepik");
       $("#keysStatus").textContent = ok.length ? `Salvo: ${ok.join(", ")}` : "Salvo.";
       toast(ok.length ? `Chaves salvas (${ok.join(", ")})` : "Chaves salvas");
       refreshHealth();
@@ -4505,6 +4508,8 @@ function wireForms() {
       const px = ($("#keyPx")?.value || "").trim();
       if (service === "groq" && g) body.GROQ_API_KEY = g;
       if (service === "pexels" && px) body.PEXELS_API_KEY = px;
+      const fp = ($("#keyFreepik")?.value || "").trim();
+      if (service === "freepik" && fp) body.FREEPIK_API_KEY = fp;
       try {
         const res = await api("/api/keys/test", {
           method: "POST",

@@ -4253,3 +4253,10 @@ body > .fx-drop { position: fixed; bottom: auto; }
 /* botao de copiar o nome (com ✅) ao lado do nome do card (03/09) */
 .project-meta .proj-copiar { margin-left: 6px; padding: 0 4px; border: 0; background: transparent; color: var(--text, #f2f2f2); opacity: 0.7; cursor: pointer; font-size: 12px; line-height: 1; }
 .project-meta .proj-copiar:hover { opacity: 1; }
+
+/* 4.96: fontes da busca online (Pexels / Freepik fotos / Freepik vídeos) */
+.img-fontes { display: flex; gap: 6px; flex-wrap: wrap; margin: -4px 0 10px; }
+.img-fonte { font: inherit; font-size: 12px; font-weight: 600; color: var(--muted, #9aa3ad); background: transparent; border: 1px solid var(--line, #2a2f3a); border-radius: 999px; padding: 5px 10px; cursor: pointer; }
+.img-fonte.active { color: #fff; border-color: var(--orange, #ff6a00); background: rgba(255, 106, 0, .12); }
+.img-card .img-selo { position: absolute; left: 6px; top: 6px; font-size: 11px; font-weight: 700; color: #fff; background: rgba(0, 0, 0, .65); border-radius: 6px; padding: 2px 6px; }
+.img-card .img-selo-premium { left: auto; right: 6px; background: rgba(255, 106, 0, .85); }
