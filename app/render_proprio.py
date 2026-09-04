@@ -2898,6 +2898,9 @@ class Renderizador:
     # bloco): a caixa e uma so para as duas linhas. O `vidro` saiu daqui —
     # ele virou uma LETRA de vidro, nao uma caixa atras da letra.
     SIMPLE_PAINEL = ("moldura", "bandeira", "pilula", "etiqueta", "fitadegrade")
+    # Estilos em que a cor pinta uma SUPERFICIE, e por isso sai da ENFASE
+    SIMPLE_SUPERFICIE = ("neon", "degrade", "bandeira", "pilula", "etiqueta",
+                         "fitadegrade")
     # Peso que cada variante estatica tem no template (`capWeight(base.weight)`
     # em SimpleCaptions.tsx:218). Aqui ele fica implicito no ARQUIVO —
     # `Poppins-SemiBold.ttf` E o 600 — entao, quando a fonte da marca
@@ -3357,6 +3360,10 @@ class Renderizador:
         pos = {"centro": 900, "alto": 1330}.get(caps_cfg.get("position") or "")
         bottom = pos if pos else bottom0
         accent = caps_cfg.get("accent")
+        # A cor da SUPERFICIE (brilho, degrade, fita, capsula, barra) vem da
+        # ENFASE — ver o comentario em caption_styles.USAM_COR_DA_ENFASE.
+        superficie = caps_cfg.get("emphasisAccent") or accent
+        cor_do_modo = superficie if modo in self.SIMPLE_SUPERFICIE else accent
         f = self._fonte_estilo(arq, tam, eixo, self.SIMPLE_PESO.get(variante))
 
         def limpar(t):
@@ -3429,7 +3436,7 @@ class Renderizador:
             if modo in self.SIMPLE_PAINEL:
                 leg.palavras.append(
                     self._painel_legenda(modo, linhas, f, track, tam, alt_l,
-                                         bottom, accent, limpar))
+                                         bottom, cor_do_modo, limpar))
                 camadas.append(leg)
                 continue
             gap_l = round(tam * 0.14) if modo == "bloco" else 0
@@ -3513,7 +3520,7 @@ class Renderizador:
                 pad_m[folga:folga + h_m, folga:folga + w_m] = m
                 if modo in ("metal", "traco", "eco", "vidro", "neon", "degrade"):
                     rgb, alpha, sombra = self._tinta_dos_novos(
-                        modo, pad_m, folga, h_m, tam, accent, cor_emj)
+                        modo, pad_m, folga, h_m, tam, cor_do_modo, cor_emj)
                     leg.palavras.append(Palavra(
                         x0 - folga,
                         int(y + (alt_l - (asc + desc)) / 2) - folga,

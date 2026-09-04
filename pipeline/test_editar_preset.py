@@ -67,14 +67,18 @@ def test_o_editor_reconhece_o_preset_pedido():
 def test_salvar_no_modo_preset_nao_toca_no_estilo_base():
     """A parte que importa. O Salvar antigo gravava `/api/default-style`
     e depois copiava por cima do preset PADRAO — editar o Uander mudaria
-    o Prime Camp [Centro]."""
+    o Prime Camp [Centro].
+
+    5.0.23: com empresa, o estilo base passou a ser gravado NELA
+    (`/api/brands`, action `estilo`) — a ancora antiga era a chamada ao
+    `/api/default-style`, que agora so acontece sem empresa.
+    """
     i = ED.index("if (EDIT_PRESET_ID) {", ED.index("const house = {"))
-    bloco = ED[i:ED.index("const res = await fetch('/api/default-style'", i)]
+    bloco = ED[i:ED.index("// COM EMPRESA, o estilo base e DELA", i)]
     assert "action: 'update'" in bloco
     assert "id: EDIT_PRESET_ID" in bloco
-    assert "/api/default-style" not in bloco, (
-        "o modo preset nao pode gravar o estilo base"
-    )
+    for rota in ("/api/default-style", "/api/brands"):
+        assert rota not in bloco, "o modo preset nao pode gravar o estilo base"
     assert "return;" in bloco, "sem o return, cai no salvamento do base"
 
 

@@ -989,7 +989,11 @@ function buildStaticDemo(host, id) {
     if (V.modo) {
       const t = (ln) => (caixaAlta ? ln.join(' ').toUpperCase() : ln.join(' '));
       box.style.lineHeight = String(CAP_LH[V.modo]);
-      const cor = S.style.captionAccent || '';
+      // superficie (brilho, degrade, fita, capsula, barra) = cor da ENFASE
+      const CAP_SUP = ['neon', 'degrade', 'bandeira', 'pilula', 'etiqueta', 'fitadegrade'];
+      const cor = (CAP_SUP.includes(V.modo)
+        ? (S.style.emphasisAccent || S.style.captionAccent)
+        : S.style.captionAccent) || '';
       if (V.modo === 'metal') {
         // duas copias: a de baixo so o contorno, a de cima o cromado. Uma
         // copia so nao serve — com `background-clip: text` o fundo e pintado
@@ -3733,9 +3737,9 @@ const capAccentUsed = () => S.style.captions !== 'nenhuma';
 // cromado e feito (o degrade sai dela), no `traco` e no `eco` ela pinta o
 // texto, na `moldura` a linha e o texto, no `vidro` o texto.
 const CAP_BASE_STYLES = ['karaoke', 'simples', 'serifada', 'classica', 'bloco', 'recorte', 'bolha',
-  'metal', 'vidro', 'traco', 'moldura', 'eco', 'neon', 'degrade', 'bandeira', 'maquina',
-  'pilula', 'etiqueta', 'fitadegrade'];
-const CAP_EMPH_STYLES = ['stacked', 'scatter', 'impacto', 'marcador'];
+  'metal', 'vidro', 'traco', 'moldura', 'eco', 'maquina'];
+const CAP_EMPH_STYLES = ['stacked', 'scatter', 'impacto', 'marcador',
+  'neon', 'degrade', 'bandeira', 'pilula', 'etiqueta', 'fitadegrade'];
 const CAP_CIRCLE_STYLES = ['stacked'];
 const legendaAccentUsed = () => capAccentUsed() && CAP_BASE_STYLES.includes(S.style.captions);
 const emphasisAccentUsed = () => capAccentUsed() && CAP_EMPH_STYLES.includes(S.style.captions);
@@ -5174,26 +5178,32 @@ $('setupGo').addEventListener('click', async () => {
       }
       return;
     }
-    const res = await fetch('/api/default-style', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(house),
-    });
-    if ((await res.json()).ok) {
+    // COM EMPRESA, o estilo base e DELA. A tela diz "vale para todos os
+    // presets desta empresa", e ate a 5.0.22 este Salvar escrevia no padrao
+    // do APP e no preset ativo — a empresa ficava com a copia congelada do
+    // modelo por cima, e o que ele salvava nao aparecia no video ("nao fica
+    // salvo as cores do preset que ele definiu", 04/09).
+    const empresa = (S.brandPresets && S.brandPresets.brandId) || '';
+    const res = empresa
+      ? await fetch('/api/brands', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'estilo', id: empresa, style: house }),
+      })
+      : await fetch('/api/default-style', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(house),
+      });
+    const dadoSalvo = await res.json();
+    if (dadoSalvo.ok) {
       SHARED_DEFAULT_STYLE = house;
-      if (S.brandPresets && S.brandPresets.activeId) {
-        fetch('/api/brand-presets', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'update',
-            brandId: S.brandPresets.brandId || 'padrao',
-            id: S.brandPresets.activeId,
-            style: house,
-          }),
-        }).catch(() => {});
-      }
-      toast('✓ Estilo padrão salvo', 2000);
+      const nPresets = dadoSalvo.presetsAtualizados || 0;
+      toast(empresa
+        ? (nPresets
+          ? `✓ Estilo salvo — ${nPresets} ajuste(s) levados aos presets`
+          : '✓ Estilo da empresa salvo')
+        : '✓ Estilo padrão salvo', 2000);
       // Com embed=1 NÃO navegar o iframe para "/" — isso duplicava a sidebar.
       if (HUB_EMBED) {
         try {
@@ -9566,6 +9576,33 @@ async function carregarPresetDoVideo() {
   S.presetOriginal = sel.value;
   if (dica) dica.textContent = '';
   sel.onchange = () => trocarPresetDoVideo(sel.value);
+
+  // "Voltar ao preset": o estilo ajustado NESTE video (preview_style.json)
+  // e a camada mais forte da cadeia — mais forte que a empresa e que o
+  // preset. Um video editado antes de acertar a cor da empresa ficava com
+  // a cor velha congelada, e nem trocar o preset o tirava de la, porque
+  // trocar para o MESMO preset nao dispara `change`. Este botao repoe o
+  // estilo do preset escolhido e o Salvar grava isso no projeto (04/09).
+  const voltar = document.getElementById('btnUsarPreset');
+  if (voltar && !voltar.dataset.wired) {
+    voltar.dataset.wired = '1';
+    voltar.onclick = async () => {
+      const alvo = (S.presetsDoVideo || []).find((x) => x.id === sel.value);
+      if (!alvo) return;
+      if (!await pedirConfirmacao(
+        'Voltar ao estilo do preset?',
+        'Os ajustes de estilo feitos neste vídeo (cor, legenda, manchete) '
+        + 'são trocados pelos do preset. O corte e a linha do tempo ficam '
+        + 'como estão. Vale depois de "Salvar e refazer a Fase 2".',
+        'Voltar ao preset')) return;
+      trocarPresetDoVideo(alvo.id);
+      if (dica) {
+        dica.textContent = 'aplique em "Salvar e refazer a Fase 2" '
+          + 'para o vídeo sair assim';
+      }
+      toast('Estilo do preset carregado — falta salvar e refazer', 4000);
+    };
+  }
 }
 
 function trocarPresetDoVideo(id) {
@@ -9575,8 +9612,14 @@ function trocarPresetDoVideo(id) {
   // O estilo do preset entra no editor. `endCardCopy` faz parte do
   // retrato (STYLE_KEYS), senao o video trocaria de cor e continuaria com
   // o CTA antigo — que foi exatamente o caso de 29/08.
-  applyPresetToUi(p);
-  const cta = (p.style || {}).endCardCopy;
+  //
+  // `resolved` e o estilo CHEIO desse preset (padrao do app + empresa +
+  // preset). Sem ele, escolher um preset vazio — o "Padrao" que nasce com
+  // toda empresa — nao mudava nada na tela, e o Salvar congelava a cor do
+  // video anterior no projeto: o vermelho voltando sempre (04/09).
+  const est = p.resolved || p.style || {};
+  applyPresetToUi({ ...p, style: est });
+  const cta = est.endCardCopy;
   if (cta && typeof cta === 'object') {
     S.endCardCopy = { ...cta };
     const l1 = document.getElementById('ecLine1');

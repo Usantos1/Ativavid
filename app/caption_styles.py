@@ -55,15 +55,21 @@ TODOS = frozenset(NOMES)
 USAM_COR_DA_LEGENDA = frozenset({
     "karaoke", "simples", "serifada", "classica", "bloco", "recorte",
     "metal", "vidro", "traco", "moldura", "eco",
-    "neon", "degrade", "bandeira", "maquina",
-    "pilula", "etiqueta", "fitadegrade",
+    "maquina",
 })
 
 # Estilos em que a cor pinta a ÊNFASE (a palavra quente), não a linha toda.
 # O `marcador` entra aqui, e nao na lista de cima, porque a faixa dele e um
 # elemento de ENFASE (como a caixa do impacto): amarelo por padrao, e o que
 # o usuario espera de um marca-texto.
-USAM_COR_DA_ENFASE = frozenset({"stacked", "scatter", "impacto", "marcador"})
+# Os oito de 04/09 pintam uma SUPERFICIE (brilho, degrade, fita, capsula,
+# barra, faixa), nao a letra — e superficie e ENFASE. Nasceram lendo a cor
+# da legenda e, como quase todo preset tem legenda BRANCA (os tres do Prime
+# Camp tem), o neon saia sem brilho e o degrade saia branco liso: a cor da
+# marca nao aparecia em nenhum deles.
+USAM_COR_DA_ENFASE = frozenset({"stacked", "scatter", "impacto", "marcador",
+                                "neon", "degrade", "bandeira", "pilula",
+                                "etiqueta", "fitadegrade"})
 
 
 def valido(estilo: str | None) -> bool:

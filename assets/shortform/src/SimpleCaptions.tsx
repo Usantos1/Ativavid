@@ -281,6 +281,13 @@ function escurecer(hex: string, f: number): string {
   return `rgb(${rgb.join(',')})`;
 }
 
+/* A cor que pinta a SUPERFICIE de um estilo (brilho, degrade, fita,
+ * capsula, barra). Vem da ENFASE; cai na cor da legenda so para preset
+ * antigo que nao tem enfase, e por fim no padrao do estilo. */
+function corDaSuperficie(padrao: string): string {
+  return (C.emphasisAccent as string) || (C.accent as string) || padrao;
+}
+
 function inkOn(bg: string): string {
   const m = /^#?([0-9a-f]{6})$/i.exec(bg.trim());
   if (!m) return '#fff';
@@ -505,7 +512,9 @@ export const SimpleCaptions: React.FC<{variant: string}> = ({variant}) => {
     if (V.modo === 'neon') {
       // Letra branca, brilho na cor da marca em tres raios (8/22/46px) e a
       // sombra escura de sempre por baixo, para ler sobre imagem clara.
-      const g = C.accent ?? NEON_PADRAO;
+      // A cor vem da ENFASE: a da legenda e quase sempre branca, e brilho
+      // branco em letra branca e brilho nenhum (04/09).
+      const g = corDaSuperficie(NEON_PADRAO);
       return (
         <AbsoluteFill style={fora}>
           <div style={{...tipo, color: '#ffffff',
@@ -537,7 +546,7 @@ export const SimpleCaptions: React.FC<{variant: string}> = ({variant}) => {
                 left: 0,
                 top: 0,
                 width: '100%',
-                backgroundImage: `linear-gradient(180deg, #ffffff 0%, ${C.accent ?? DEGRADE_PADRAO} 100%)`,
+                backgroundImage: `linear-gradient(180deg, #ffffff 0%, ${corDaSuperficie(DEGRADE_PADRAO)} 100%)`,
                 WebkitBackgroundClip: 'text',
                 backgroundClip: 'text',
                 color: 'transparent',
@@ -553,7 +562,7 @@ export const SimpleCaptions: React.FC<{variant: string}> = ({variant}) => {
 
     if (V.modo === 'pilula') {
       // Capsula: raio = metade da altura, entao as pontas sao semicirculos.
-      const fundo = C.accent ?? '#ffffff';
+      const fundo = corDaSuperficie('#ffffff');
       const padX = Math.round(V.size * 0.55);
       const padY = Math.round(V.size * 0.30);
       return (
@@ -579,7 +588,7 @@ export const SimpleCaptions: React.FC<{variant: string}> = ({variant}) => {
 
     if (V.modo === 'etiqueta') {
       // Painel escuro com uma barra da cor da marca na borda esquerda.
-      const barra = C.accent ?? '#ffffff';
+      const barra = corDaSuperficie('#ffffff');
       const padX = Math.round(V.size * 0.55);
       const padY = Math.round(V.size * 0.34);
       return (
@@ -606,7 +615,7 @@ export const SimpleCaptions: React.FC<{variant: string}> = ({variant}) => {
 
     if (V.modo === 'fitadegrade') {
       // A fita da bandeira, sem inclinacao e com o fundo em degrade.
-      const topo = C.accent ?? '#ff6a00';
+      const topo = corDaSuperficie('#ff6a00');
       const padX = Math.round(V.size * 0.55);
       const padY = Math.round(V.size * 0.30);
       return (
@@ -662,7 +671,7 @@ export const SimpleCaptions: React.FC<{variant: string}> = ({variant}) => {
       // Uma fita na cor da marca, inclinada (skewX), texto em caixa alta na
       // tinta que a luminancia da fita pede. A fita inclina o texto junto —
       // e o adesivo do CapCut, nao uma placa.
-      const fita = C.accent ?? BANDEIRA_PADRAO;
+      const fita = corDaSuperficie(BANDEIRA_PADRAO);
       const padX = Math.round(V.size * 0.55);
       const padY = Math.round(V.size * 0.28);
       return (

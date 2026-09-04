@@ -7228,6 +7228,7 @@ async function empresaAction(body) {
 }
 
 function wireEmpresas() {
+  wirePintarPresets();
   const cards = $("#empCards");
   if (cards && !cards.dataset.wired) {
     cards.dataset.wired = "1";
@@ -7525,6 +7526,44 @@ async function presetAction(action, body) {
   await loadPresetsUi();
   await loadImportPresets().catch(() => {});
   return res;
+}
+
+/* "Usar a cor da empresa" nos presets (5.0.23).
+ *
+ * Preset guarda uma copia inteira do estilo, e os criados antes da 5.0.22
+ * congelaram o vermelho de fabrica. Trocar a cor da empresa nao alcancava
+ * esses campos e o video saia vermelho — ele apagou e recriou a empresa
+ * varias vezes atras disso (04/09). Aqui ele diz "a cor e esta", e a
+ * escolha vale para todos os presets de uma vez. */
+function wirePintarPresets() {
+  const btn = $("#btnPresetsPintar");
+  if (!btn || btn.dataset.wired) return;
+  btn.dataset.wired = "1";
+  btn.onclick = async () => {
+    const bid = state.presetBrandId || (state.brandActive && state.brandActive.id);
+    if (!bid) { toast("Escolha uma empresa primeiro"); return; }
+    const ok = await pedirConfirmacao(
+      "Pintar os presets com a cor da empresa?",
+      "Todos os presets desta empresa passam a usar a cor de destaque dela na "
+      + "manchete e no realce da legenda. O resto de cada preset fica como está.",
+      "Pintar");
+    if (!ok) return;
+    btn.disabled = true;
+    try {
+      // pelo helper de sempre: POST cru para /api/brands e o que grava o
+      // corpo por cima da empresa ativa (guarda em test_criar_marca.py)
+      const r = await empresaAction({ action: "pintar", id: bid });
+      await loadPresetsUi();
+      loadImportPresets().catch(() => {});
+      toast(r.presets
+        ? `✓ ${r.presets} preset(s) agora usam ${r.cor}`
+        : "Os presets já estavam com a cor da empresa");
+    } catch (e) {
+      toast(e.message || "Não deu para pintar os presets");
+    } finally {
+      btn.disabled = false;
+    }
+  };
 }
 
 function wireIdentidade() {

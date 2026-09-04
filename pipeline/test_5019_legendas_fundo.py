@@ -42,15 +42,18 @@ def test_os_quatro_existem_nos_tres_motores():
 def test_cada_um_puxa_a_cor_do_lugar_certo():
     """Os tres de painel usam a cor da LEGENDA; o marca-texto usa a de
     ÊNFASE (amarela por padrão), como a caixa do `impacto`."""
-    for e in ("pilula", "etiqueta", "fitadegrade"):
-        assert e in caption_styles.USAM_COR_DA_LEGENDA, e
-        assert e not in caption_styles.USAM_COR_DA_ENFASE, e
-        assert f"'{e}'" in PJS.split("const CAP_BASE_STYLES")[1][:400], f"{e}: a tela nao mostra a cor da legenda"
-    assert "marcador" in caption_styles.USAM_COR_DA_ENFASE
-    assert "marcador" not in caption_styles.USAM_COR_DA_LEGENDA
-    assert "const CAP_EMPH_STYLES = ['stacked', 'scatter', 'impacto', 'marcador'];" in PJS
+    # 5.0.23: os quatro pintam uma SUPERFICIE (capsula, barra, fita, faixa),
+    # entao a cor sai da ENFASE — com a legenda branca de quase todo preset
+    # a capsula saia branca e o degrade sumia.
+    for e in ("pilula", "etiqueta", "fitadegrade", "marcador"):
+        assert e in caption_styles.USAM_COR_DA_ENFASE, e
+        assert e not in caption_styles.USAM_COR_DA_LEGENDA, e
+        assert f"'{e}'" in PJS.split("const CAP_EMPH_STYLES")[1][:400], f"{e}: a tela nao oferece a cor da enfase"
     assert 'caps_cfg.get("emphasisAccent") or self.MARCADOR_PADRAO' in PY
     assert "C.emphasisAccent || MARCADOR_PADRAO" in TSX
+    # os de painel leem a superficie pelo mesmo caminho
+    assert 'superficie = caps_cfg.get("emphasisAccent") or accent' in PY
+    assert "function corDaSuperficie(padrao: string): string {" in TSX
 
 
 def test_a_medida_bate_nos_tres():

@@ -49,9 +49,16 @@ def test_o_editor_nao_tem_mais_o_menu_de_marca():
 
 
 def test_trocar_o_preset_leva_estilo_e_cta():
+    """5.0.23: o que entra na tela e o estilo CHEIO daquele preset.
+
+    Passar o preset cru deixava o "Padrao" vazio de toda empresa sem
+    efeito nenhum — a tela seguia com a cor do video anterior e o Salvar
+    congelava essa cor no projeto.
+    """
     i = JS.index("function trocarPresetDoVideo")
-    trecho = JS[i:i + 1400]
-    assert "applyPresetToUi(p)" in trecho, trecho[:300]
+    trecho = JS[i:i + 1600]
+    assert "const est = p.resolved || p.style || {}" in trecho, trecho[:300]
+    assert "applyPresetToUi({ ...p, style: est })" in trecho
     assert "S.endCardCopy" in trecho, "o CTA ficaria o de antes"
     assert "S.presetUsed.brandPresetId = p.id" in trecho
 

@@ -182,18 +182,19 @@ def _gravar(bid: str, data: dict) -> None:
         json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
-def _estilo_semente() -> dict[str, Any]:
-    """O estilo com que uma empresa NOVA nasce: o padrao empacotado.
+# Uma empresa NOVA nasce so com a identidade. Ate a 5.0.22 ela levava uma
+# copia INTEIRA do estilo empacotado (`captions: stacked`, manchete, layout
+# e as cores vermelhas) — e como a cadeia e app -> EMPRESA -> preset ->
+# projeto, essa copia congelada passava por cima do estilo base que o
+# usuario salvava: ele escolhia marca-texto e azul, e o video saia
+# empilhado e vermelho, "sempre volta com a cor vermelho padrao e a legenda
+# empilhada" (04/09). O que a empresa guarda de estilo agora e so o que o
+# usuario escolheu nela.
 
-    Nao copia da marca ativa: o usuario cria "M Camp" para ser diferente da
-    "Prime Camp", e comecar do zero limpo e o que ele espera.
-    """
-    for path in (PKG_BRANDS / "padrao.json", PREVIEW / "default-style.json"):
-        try:
-            return json.loads(path.read_text(encoding="utf-8-sig"))
-        except (OSError, json.JSONDecodeError):
-            continue
-    return {"exportPreset": "reels", "endCardCopy": {"line1": "", "line2": ""}}
+
+def _estilo_semente() -> dict[str, Any]:
+    """So a identidade. O visual vem do padrao do app e dos presets."""
+    return {"exportPreset": "reels"}
 
 
 # A cor da empresa mora em DOIS campos do estilo: `accent` (manchete, e a
@@ -225,8 +226,7 @@ def create_brand(name: str, accent: str = "") -> dict[str, Any]:
     bid = _slug_livre(base, nome)
     if (BRANDS_DIR / f"{bid}.json").exists():
         raise ValueError("Já existe uma empresa com este nome")
-    data = {k: v for k, v in _estilo_semente().items()
-            if k not in ("brandId", "brandName", "empresa", "perfil")}
+    data = dict(_estilo_semente())
     data["brandId"] = bid
     data["brandName"] = nome
     data["exportPreset"] = data.get("exportPreset") or "reels"
@@ -277,6 +277,114 @@ def update_brand(brand_id: str, fields: dict[str, Any]) -> dict[str, Any]:
     if bid == get_active_id():
         write_user_preset(data)
     return {"id": bid, "name": data.get("brandName") or bid, "accent": data.get("accent")}
+
+
+# Campos que a empresa NAO guarda como estilo: identidade, perfil e o que
+# so faz sentido por projeto.
+_NAO_E_ESTILO = ("brandId", "brandName", "empresa", "perfil", "note",
+                 "brandFontFile")
+
+
+def _cascata_nos_presets(bid: str, seguia: tuple[dict, dict], base: dict) -> int:
+    """Leva o estilo base aos presets que nao tinham escolha propria.
+
+    Um preset nasce com uma COPIA INTEIRA do estilo do momento
+    (`brand_presets.create` faz `style_snapshot` do estilo base). Por isso
+    "Estilo base — vale para todos os presets" era mentira: o preset do
+    video trazia os ~30 campos congelados e passava por cima da base no
+    render. Ele trocava a cor, refazia o video e voltava vermelho
+    empilhado; chegou a apagar e recriar a empresa (04/09).
+
+    Um campo do preset so e reescrito quando ele ainda carrega o que
+    veio de cima — o valor da base ANTERIOR ou o de fabrica. Escolha
+    propria (o verde que ele pos naquele preset) continua mandando.
+    """
+    from app import brand_presets as bp
+
+    try:
+        pack = bp.load(bid)
+    except Exception:  # noqa: BLE001 — empresa sem presets ainda
+        return 0
+    n = 0
+    for p in pack.get("presets") or []:
+        est = p.get("style") or {}
+        for k, v in base.items():
+            if k not in est or est[k] == v:
+                continue
+            if any(est[k] == de.get(k) for de in seguia):
+                est[k] = v
+                n += 1
+        p["style"] = est
+    if n:
+        bp.save(bid, pack)
+    return n
+
+
+def pintar_presets(brand_id: str) -> dict[str, Any]:
+    """Poe a COR da empresa em todos os presets dela. Pedido explicito.
+
+    A cascata do estilo base so mexe no que o preset herdou. Os presets
+    criados antes da 5.0.22 congelaram vermelhos que nao batem nem com a
+    fabrica nem com a base (`#ff0004`, `#FF0000`), entao nenhuma regra
+    automatica sabe se aquilo foi escolha ou heranca — e "adivinhar" ali e
+    trocar a cor de um preset que o dono ajustou de proposito. Este botao
+    e o usuario dizendo qual e a cor; por isso pinta tudo e diz quantos.
+    """
+    from app import brand_presets as bp
+
+    ensure_brands_dir()
+    bid = _slug(brand_id)
+    cor = _cor_valida(load_brand(bid).get("accent"))
+    if not cor:
+        raise ValueError("esta empresa não tem cor de destaque")
+    pack = bp.load(bid)
+    n = 0
+    for p in pack.get("presets") or []:
+        est = dict(p.get("style") or {})
+        antes = dict(est)
+        _pintar(est, cor)
+        if est != antes:
+            n += 1
+        p["style"] = est
+    bp.save(bid, pack)
+    return {"ok": True, "brandId": bid, "cor": cor, "presets": n}
+
+
+def update_brand_style(brand_id: str, style: dict[str, Any]) -> dict[str, Any]:
+    """Grava o ESTILO BASE da empresa (a tela "Estilos" com ela ativa).
+
+    Vale para todos os presets dela — e o que a tela promete. Preserva
+    nome, logo, perfil e o texto da empresa: `save_brand` grava o corpo
+    inteiro e apagaria tudo isso.
+    """
+    ensure_brands_dir()
+    bid = _slug(brand_id)
+    path = BRANDS_DIR / f"{bid}.json"
+    if not path.exists():
+        raise ValueError("marca não encontrada")
+    antes = json.loads(path.read_text(encoding="utf-8-sig"))
+    # O preset congelou o estilo EFETIVO do momento (padrao do app por
+    # baixo da empresa), nao so o que estava escrito no arquivo da
+    # empresa — comparar so com o arquivo deixaria de fora justamente a
+    # empresa nova, que nao guarda estilo nenhum.
+    from app.style_defaults import load_shipped_style
+
+    fabrica = load_shipped_style()
+    efetivo = dict(fabrica)
+    efetivo.update(antes)
+    data = dict(antes)
+    base: dict[str, Any] = {}
+    for k, v in (style or {}).items():
+        if k in _NAO_E_ESTILO:
+            continue
+        base[k] = v
+        data[k] = v
+    data["brandId"] = bid
+    _gravar(bid, data)
+    tocados = _cascata_nos_presets(bid, (efetivo, fabrica), base)
+    if bid == get_active_id():
+        write_user_preset(data)
+    return {"ok": True, "brandId": bid, "presetsAtualizados": tocados}
 
 
 def delete_brand(brand_id: str) -> dict[str, Any]:

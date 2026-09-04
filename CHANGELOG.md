@@ -1,5 +1,41 @@
 # Changelog
 
+## 5.0.23
+
+- **A cor e a legenda da empresa não ficavam salvas.** Você escolhia o preset
+  do cliente, ajustava o estilo, refazia o vídeo — e ele voltava com a
+  legenda empilhada vermelha. Três coisas causavam isso, e as três foram
+  corrigidas:
+  - a empresa nova nascia com uma cópia inteira do estilo de fábrica
+    (empilhado + vermelho) e essa cópia passava por cima do que você salvava;
+  - "Salvar estilo base" gravava no padrão do aplicativo, não na empresa
+    aberta na tela — agora grava na empresa, como a tela sempre prometeu;
+  - cada preset guarda uma cópia completa do estilo, então o estilo base
+    nunca alcançava o preset do vídeo. Agora a mudança desce para os presets
+    que ainda estavam com o valor antigo. Preset com cor própria continua
+    mandando, e o Salvar diz quantos foram atualizados.
+- **Escolher um preset no editor não mudava nada.** Toda empresa nasce com um
+  preset "Padrão" vazio; escolhê-lo deixava a tela com a cor do vídeo
+  anterior, e o "Salvar e refazer" congelava essa cor no projeto — de onde
+  ela nunca mais saía. Agora o preset leva para a tela o estilo cheio que o
+  vídeo teria com ele.
+- **Botão "Voltar ao preset" no editor.** O estilo ajustado dentro de um
+  vídeo manda mais que a empresa e que o preset — então um vídeo editado
+  antes de você acertar a cor ficava com a cor velha presa, e escolher o
+  preset de novo não tirava. O botão fica ao lado de "Preset deste vídeo",
+  repõe o estilo do preset e vale depois de "Salvar e refazer a Fase 2".
+  O corte e a linha do tempo não são tocados.
+- **Botão "Usar a cor da empresa" em Empresas.** Conserta o que já está
+  gravado: os presets criados nas versões antigas congelaram o vermelho de
+  fábrica, e nenhuma regra automática sabe se aquele vermelho foi escolha
+  sua ou herança. O botão põe a cor de destaque da empresa na manchete e no
+  realce de todos os presets dela de uma vez. O resto de cada preset fica
+  como está.
+- **As legendas coloridas novas usam a cor de ÊNFASE.** Neon, degradê,
+  bandeira, pílula, etiqueta e fita degradê pintam uma superfície, não a
+  letra. Como quase todo preset tem a legenda branca, elas saíam sem cor: o
+  neon sem brilho e o degradê branco liso. A cor da marca aparece nas seis.
+
 ## 5.0.22
 
 - **A cor da empresa voltava para o vermelho no vídeo.** A cor escolhida em

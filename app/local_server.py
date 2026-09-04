@@ -1029,6 +1029,36 @@ def _shipped_preset() -> dict:
     return fill_end_card_copy(load_shipped_style())
 
 
+def _resolver_presets(pack: dict, brand_id: str) -> None:
+    """Poe em cada preset o estilo que o video REALMENTE teria com ele.
+
+    O preset guarda so o que foi escrito nele — e o "Padrao" que nasce
+    junto com a empresa esta VAZIO. Escolher esse preset no editor nao
+    mudava um pixel (`applyPresetToUi` faz `Object.assign` do que veio),
+    entao a tela seguia com a cor do video anterior e o "Salvar e refazer"
+    congelava essa cor no projeto — que e a camada mais forte de todas.
+    Era o vermelho voltando toda vez (04/09).
+    """
+    from app.brand_kits import load_brand
+    from app.brand_presets import style_snapshot
+    from app.preset_chain import resolve
+    from app.style_defaults import load_shipped_style
+
+    fora = ("brandId", "brandName", "note")
+    try:
+        app_layer = load_shipped_style()
+        brand_layer = style_snapshot(load_brand(brand_id))
+    except Exception:  # noqa: BLE001 — sem isso a tela de presets some
+        return
+    for p in pack.get("presets") or []:
+        try:
+            cheio = resolve(app_default=app_layer, brand=brand_layer or None,
+                            brand_preset=style_snapshot(p.get("style") or {}) or None)
+        except Exception:  # noqa: BLE001
+            continue
+        p["resolved"] = {k: v for k, v in cheio.items() if k not in fora}
+
+
 def load_preset() -> dict:
     shipped = _shipped_preset()
     if USER_PRESET_PATH.exists():
@@ -2134,6 +2164,7 @@ class StudioHandler(BaseHTTPRequestHandler):
             # marca.
             nome = next((str(b.get("name") or "") for b in brands
                          if str(b.get("id") or "") == brand_id), "")
+            _resolver_presets(pack, brand_id)
             self._json({"ok": True, **pack, "brandName": nome,
                         "active": get_active(brand_id)})
             return
@@ -3128,7 +3159,8 @@ class StudioHandler(BaseHTTPRequestHandler):
         if path == "/api/brands":
             from app.brand_kits import (
                 activate_brand, create_brand, delete_brand, remove_logo,
-                save_brand, set_export_preset, set_logo, update_brand,
+                pintar_presets, save_brand, set_export_preset, set_logo,
+                update_brand, update_brand_style,
             )
             body = self._read_json() or {}
             action = (body.get("action") or "save").strip().lower()
@@ -3154,6 +3186,13 @@ class StudioHandler(BaseHTTPRequestHandler):
                                         str(body.get("dataUrl") or "")))
                 elif action == "logo_remove":
                     self._json(remove_logo(str(body.get("id") or "")))
+                elif action == "pintar":
+                    # 5.0.23: a cor da empresa em TODOS os presets dela
+                    self._json(pintar_presets(str(body.get("id") or "")))
+                elif action == "estilo":
+                    # 5.0.23: o estilo BASE da empresa (tela Estilos)
+                    self._json(update_brand_style(
+                        str(body.get("id") or ""), body.get("style") or {}))
                 else:
                     saved = save_brand(body)
                     if body.get("activate"):

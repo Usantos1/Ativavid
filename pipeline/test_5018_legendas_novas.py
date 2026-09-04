@@ -29,7 +29,11 @@ NOVOS = ("neon", "degrade", "bandeira", "maquina")
 def test_os_quatro_existem_nos_tres_motores():
     for e in NOVOS:
         assert e in caption_styles.NOMES, e
-        assert e in caption_styles.USAM_COR_DA_LEGENDA, f"{e}: a cor da marca tem de pintar a legenda"
+        # 5.0.23: neon, degrade e bandeira pintam uma SUPERFICIE -> cor da ENFASE;
+        # a maquina de escrever pinta a LETRA -> cor da legenda
+        alvo = (caption_styles.USAM_COR_DA_LEGENDA if e == "maquina"
+                else caption_styles.USAM_COR_DA_ENFASE)
+        assert e in alvo, f"{e}: a cor da marca tem de chegar nele"
         assert e in Renderizador.SIMPLE_VARIANTES, f"{e}: o motor proprio nao desenha"
         assert f"  {e}: {{" in TSX, f"{e}: sem variante no template"
         assert f"  {e}: {{family:" in PJS, f"{e}: sem variante na previa"
