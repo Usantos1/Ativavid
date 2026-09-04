@@ -1,5 +1,14 @@
 # Changelog
 
+## 5.0.10
+
+- **Entregas: pacote caía em "Sem empresa".** Quando o pacote era montado a
+  partir da pasta do projeto (e não da `edit/`), a empresa saía vazia e a
+  cópia ia para `Entregas/Sem empresa/`. Aconteceu com 8 vídeos da Prime
+  Camp no primeiro dia. Corrigido, e o app adota sozinho o que ficou lá:
+  na próxima vez que o vídeo for tocado, a pasta é movida para a empresa
+  certa em vez de duplicar.
+
 ## 5.0.9
 
 - **Pasta de entregas configurável.** Em Configurações → Projetos e cache,

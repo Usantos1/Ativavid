@@ -90,3 +90,28 @@ def test_rotas_e_tela():
     assert 'id="empEntregas"' in SHTML and 'id="empEntregasReunir"' in SHTML
     assert 'await api("/api/entregas/abrir"' in SJS and 'await api("/api/entregas/reunir"' in SJS
     assert '"entregasRoot": None' in (REPO / "app" / "settings_store.py").read_text(encoding="utf-8")
+
+
+def test_a_pasta_do_projeto_como_entrada_tambem_acha_a_empresa(monkeypatch, tmp_path):
+    """5.0.10: o pack rebuildado com a pasta do PROJETO caia em 'Sem empresa'."""
+    _casa(monkeypatch, tmp_path)
+    proj, edit = _projeto(tmp_path, "prime")
+    pack = dp.ensure_delivery_pack(edit, stem_override="Troca de tela")
+    esp = dp.espelhar_na_entrega(proj, pack)
+    assert esp == tmp_path / "Entregas" / "Prime Camp Centro" / "Troca de tela"
+    assert not (tmp_path / "Entregas" / "Sem empresa").exists()
+
+
+def test_espelho_perdido_em_sem_empresa_e_adotado(monkeypatch, tmp_path):
+    _casa(monkeypatch, tmp_path)
+    proj, edit = _projeto(tmp_path, "prime")
+    pack = dp.ensure_delivery_pack(edit, stem_override="Troca de tela")
+    perdido = tmp_path / "Entregas" / "Sem empresa" / "Troca de tela"
+    perdido.mkdir(parents=True)
+    (perdido / "antigo.txt").write_text("x", encoding="utf-8")
+    # o espelho certo ainda nao existe: o perdido e MOVIDO, nao duplicado
+    import shutil
+    shutil.rmtree(tmp_path / "Entregas" / "Prime Camp Centro")
+    esp = dp.espelhar_na_entrega(edit, pack)
+    assert (esp / "antigo.txt").exists() and (esp / "Troca de tela.mp4").exists()
+    assert not perdido.exists()

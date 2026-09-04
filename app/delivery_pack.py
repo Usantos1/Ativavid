@@ -260,13 +260,18 @@ def espelhar_na_entrega(edit_dir: Path, pack_dir: Path, *, anterior: str = "",
     junto, senao cada correcao de manchete deixava uma pasta para tras
     (o mesmo problema que `publicar/` ja teve).
     """
-    edit = Path(edit_dir)
+    # O chamador pode mandar o `edit/` OU a pasta do projeto: normaliza
+    # antes de procurar a marca. Na 5.0.6 a busca saia de `edit_dir` cru e,
+    # quando vinha a pasta do projeto, a marca dava vazio: 8 pacotes da
+    # Prime Camp foram parar em "Sem empresa" no primeiro dia.
+    edit = project_dir(Path(edit_dir)) / "edit"
     pack = Path(pack_dir)
     if not pack.is_dir():
         return None
     from app.broll_library import marca_do_projeto
 
     brand = marca_do_projeto(edit / "remotion" / "public")
+    raiz = entregas_root(projects_root)
     base = pasta_de_entrega_da_empresa(brand, projects_root)
     dest = base / pack.name
     if anterior and anterior != pack.name:
@@ -276,6 +281,19 @@ def espelhar_na_entrega(edit_dir: Path, pack_dir: Path, *, anterior: str = "",
                 velho.rename(dest)
             except OSError as e:
                 print(f"[entrega] nao renomeei o espelho: {e}", flush=True)
+    # Adota o espelho que ficou em "Sem empresa" (ou o nome antigo la)
+    # quando a empresa agora e conhecida: mover, nao duplicar.
+    if brand and not dest.exists():
+        for nome in (pack.name, anterior or ""):
+            perdido = raiz / safe_pack_stem(SEM_EMPRESA) / nome if nome else None
+            if perdido and perdido.is_dir():
+                try:
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    perdido.rename(dest)
+                    print(f"[entrega] {nome!r} saiu de 'Sem empresa' para {base.name!r}", flush=True)
+                except OSError as e:
+                    print(f"[entrega] nao movi de 'Sem empresa': {e}", flush=True)
+                break
     dest.mkdir(parents=True, exist_ok=True)
     for f in pack.iterdir():
         if f.is_file():
