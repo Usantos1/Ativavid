@@ -136,3 +136,17 @@ def test_reunir_conta_antes_de_copiar():
     assert 'body: JSON.stringify({ brandId: b.id, dryRun: true })' in SJS
     assert "Vai copiar cerca de ${peso}" in SJS
     assert 'id="entregasAutoChk"' in SHTML and 'JSON.stringify({ entregasAuto: !!chkAuto.checked })' in SJS
+
+
+def test_renomear_a_empresa_renomeia_a_pasta_de_entregas(monkeypatch, tmp_path):
+    """5.0.14: a pasta e pelo nome; sem isto o rename deixava a velha para tras."""
+    _casa(monkeypatch, tmp_path)
+    (tmp_path / "Entregas" / "Prime Camp Centro" / "v1").mkdir(parents=True)
+    assert dp.renomear_pasta_da_empresa("Prime Camp: Centro", "Prime Camp Topo") is True
+    assert (tmp_path / "Entregas" / "Prime Camp Topo" / "v1").is_dir()
+    assert dp.renomear_pasta_da_empresa("nao-existe", "x") is False
+    (tmp_path / "Entregas" / "Ja Existe").mkdir()
+    assert dp.renomear_pasta_da_empresa("Prime Camp Topo", "Ja Existe") is False, "nunca atropela"
+    from app import brand_kits as bk
+    src = (REPO / "app" / "brand_kits.py").read_text(encoding="utf-8")
+    assert "renomear_pasta_da_empresa(antigo, nome)" in src

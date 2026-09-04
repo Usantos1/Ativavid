@@ -272,6 +272,24 @@ def tamanho_do_pack(pack_dir: Path) -> int:
         return 0
 
 
+def renomear_pasta_da_empresa(antigo: str, novo: str, projects_root: Path | None = None) -> bool:
+    """A empresa mudou de nome: Entregas/<antigo> vira Entregas/<novo>.
+
+    A pasta e pelo NOME (e o que ele entrega ao cliente); sem isto, renomear
+    a empresa deixava a pasta velha para tras e comecava outra.
+    """
+    a = entregas_root(projects_root) / safe_pack_stem(antigo or "")
+    b = entregas_root(projects_root) / safe_pack_stem(novo or "")
+    if a == b or not a.is_dir() or b.exists():
+        return False
+    try:
+        a.rename(b)
+        return True
+    except OSError as e:
+        print(f"[entrega] nao renomeei {a.name!r} -> {b.name!r}: {e}", flush=True)
+        return False
+
+
 def espelhar_na_entrega(edit_dir: Path, pack_dir: Path, *, anterior: str = "",
                         projects_root: Path | None = None) -> Path | None:
     """Copia o pacote para Entregas/<Empresa>/<nome>/ (so o que mudou).

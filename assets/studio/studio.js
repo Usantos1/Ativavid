@@ -6756,6 +6756,29 @@ function aulaAtual() {
   return (state.aulas.lista || []).find((a) => a.id === state.aulas.atualId) || null;
 }
 
+/* Aulas NOVAS (5.0.14): o que o admin publicou desde a ultima visita a
+ * tela vira um selo no menu, como a Fila. Abrir a tela marca tudo como
+ * visto. */
+const AULAS_VISTAS_KEY = "ativavid.aulas.vistas";
+function aulasVistas() {
+  try { return new Set(JSON.parse(localStorage.getItem(AULAS_VISTAS_KEY) || "[]")); } catch { return new Set(); }
+}
+function aulasMarcarVistas(lista) {
+  try { localStorage.setItem(AULAS_VISTAS_KEY, JSON.stringify((lista || []).map((a) => a.id))); } catch { /* ignore */ }
+  setCount("#countAulas", 0);
+}
+async function contarAulasNovas() {
+  try {
+    const r = await api("/api/aulas");
+    const vistas = aulasVistas();
+    // primeira vez (nada visto ainda): nao pinta tudo de "novo", so o que
+    // chegar daqui em diante
+    if (!vistas.size) { aulasMarcarVistas(r.aulas || []); return; }
+    const novas = (r.aulas || []).filter((a) => !vistas.has(a.id)).length;
+    setCount("#countAulas", novas);
+  } catch { /* sem rede, sem selo */ }
+}
+
 async function loadAulasUi() {
   const box = $("#aulasItens");
   if (!box) return;
@@ -6764,6 +6787,7 @@ async function loadAulasUi() {
     state.aulas.lista = r.aulas || [];
     state.aulas.origem = r.origem || "";
     state.aulas.erro = r.erro || "";
+    aulasMarcarVistas(state.aulas.lista);
   } catch (e) {
     state.aulas.lista = [];
     state.aulas.erro = e.message || "";
@@ -8131,6 +8155,7 @@ async function boot() {
   await refreshHealth();
   await refreshAuthUi().catch(() => {});
   await loadBrandsUi().catch(() => {});
+  contarAulasNovas().catch(() => {});
   try {
     const lic = await api("/api/license");
     renderLicense(lic);

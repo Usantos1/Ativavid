@@ -1,5 +1,13 @@
 # Changelog
 
+## 5.0.14
+
+- **Renomear a empresa renomeia a pasta de Entregas.** Antes a pasta velha
+  ficava para trás e os vídeos novos começavam outra.
+- **Aula nova aparece no menu.** Quando o admin publica uma aula, o item
+  "Aulas" mostra quantas são novas desde a sua última visita, como a Fila.
+  Abrir a tela zera o número.
+
 ## 5.0.13
 
 - **Entregas sem surpresa no disco.** "Reunir vídeos antigos" agora conta e

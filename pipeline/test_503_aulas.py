@@ -118,3 +118,11 @@ def test_a_tela_tem_lista_player_e_bloco_do_admin():
     assert '$("#aulasAdmin")?.classList.toggle("hidden", !admin);' in SJS
     assert 'aulaAdmin({\n          action: "upsert", id, titulo:' in SJS
     assert 'aulaAdmin({ action: "delete", id })' in SJS
+
+
+def test_aulas_novas_viram_selo_no_menu():
+    """5.0.14"""
+    assert 'id="countAulas"' in SHTML
+    assert "async function contarAulasNovas()" in SJS and "contarAulasNovas().catch(() => {});" in SJS
+    assert "aulasMarcarVistas(state.aulas.lista);" in SJS, "abrir a tela zera o selo"
+    assert 'if (!vistas.size) { aulasMarcarVistas(r.aulas || []); return; }' in SJS, "primeira vez nao pinta tudo de novo"

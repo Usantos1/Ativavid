@@ -235,7 +235,16 @@ def update_brand(brand_id: str, fields: dict[str, Any]) -> dict[str, Any]:
         nome = " ".join(str(fields.get("name") or fields.get("brandName") or "").split())[:60]
         if not nome:
             raise ValueError("Dê um nome para a empresa")
+        antigo = str(data.get("brandName") or "").strip()
         data["brandName"] = nome
+        if antigo and antigo != nome:
+            # 5.0.14: a pasta de Entregas leva o nome da empresa
+            try:
+                from app.delivery_pack import renomear_pasta_da_empresa
+
+                renomear_pasta_da_empresa(antigo, nome)
+            except Exception:  # noqa: BLE001 — rename da pasta nunca barra o da empresa
+                pass
     if "accent" in fields:
         cor = _cor_valida(fields.get("accent"))
         if cor:
