@@ -9696,8 +9696,16 @@ async function loadBrandPresets(opts) {
     const pack = await r.json();
     const presets = pack.presets || [];
     S.brandPresets = pack;
+    // Num projeto a barra comeca no preset DESTE VIDEO. Antes ela ficava
+    // sem selecao e o navegador mostrava o PRIMEIRO da lista: dois campos
+    // de preset na mesma tela apontando para presets diferentes ("porque 2
+    // campos de preset ai?", 04/09) — e pior, Renomear/Excluir/Definir
+    // como padrao agiam no que a barra mostrava, nao no do video.
+    const doVideo = String(
+      (S.presetUsed && (S.presetUsed.brandPresetId || S.presetUsed.presetId)) || ''
+    ).trim();
     const wantId = (!HOUSE_STYLE && !HUB_EMBED)
-      ? ''
+      ? (presets.some((p) => p.id === doVideo) ? doVideo : (pack.activeId || ''))
       : (pack.activeId || '');
     sel.innerHTML = presets.map((p) =>
       `<option value="${p.id}" ${p.id === wantId ? 'selected' : ''}>${p.name || p.id}</option>`

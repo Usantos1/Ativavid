@@ -196,6 +196,25 @@ def _estilo_semente() -> dict[str, Any]:
     return {"exportPreset": "reels", "endCardCopy": {"line1": "", "line2": ""}}
 
 
+# A cor da empresa mora em DOIS campos do estilo: `accent` (manchete, e a
+# legenda nos estilos que usam a cor da legenda) e `emphasisAccent` (o
+# realce: a caixa do impacto, a palavra acesa do stacked/scatter, a faixa
+# do marca-texto). O modelo empacotado traz `emphasisAccent: #FF0000`, e
+# ate a 5.0.22 so o `accent` recebia a cor escolhida — uma empresa nova
+# com cor bege saia com o realce VERMELHO no video, e nada na tela dizia
+# por que ("mudei a cor do estilo e voltou vermelho", 04/09).
+_CAMPOS_DA_COR = ("accent", "emphasisAccent")
+
+
+def _pintar(data: dict[str, Any], cor: str) -> None:
+    """A cor da empresa nos campos que o render le como 'a cor da marca'."""
+    for k in _CAMPOS_DA_COR:
+        data[k] = cor
+    # o circulo do `stacked` acompanha quando existe
+    if data.get("circleAccent"):
+        data["circleAccent"] = cor
+
+
 def create_brand(name: str, accent: str = "") -> dict[str, Any]:
     """Empresa nova (5.0.1). Nome obrigatorio; slug que nao atropela outra."""
     ensure_brands_dir()
@@ -213,7 +232,7 @@ def create_brand(name: str, accent: str = "") -> dict[str, Any]:
     data["exportPreset"] = data.get("exportPreset") or "reels"
     cor = _cor_valida(accent)
     if cor:
-        data["accent"] = cor
+        _pintar(data, cor)
     _gravar(bid, data)
     return {"id": bid, "name": nome, "accent": data.get("accent")}
 
@@ -248,7 +267,9 @@ def update_brand(brand_id: str, fields: dict[str, Any]) -> dict[str, Any]:
     if "accent" in fields:
         cor = _cor_valida(fields.get("accent"))
         if cor:
-            data["accent"] = cor
+            # pinta os DOIS campos: senao o realce fica com o vermelho que
+            # veio do modelo e a cor escolhida nao aparece no video
+            _pintar(data, cor)
         else:
             data.pop("accent", None)
     data["brandId"] = bid

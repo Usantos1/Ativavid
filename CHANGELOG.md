@@ -1,5 +1,19 @@
 # Changelog
 
+## 5.0.22
+
+- **A cor da empresa voltava para o vermelho no vídeo.** A cor escolhida em
+  Empresas pintava só a manchete; o realce da legenda continuava com o
+  vermelho que vem do modelo do app, então uma empresa nova saía com faixa
+  vermelha mesmo com outra cor escolhida. Agora a cor pinta os dois. Para
+  as empresas que você já criou, basta abrir Empresas e clicar em "Salvar
+  identidade" de novo.
+- **Dois campos de preset na tela de estilo.** O de cima é o preset DESTE
+  vídeo; o de baixo é o gerenciador (criar, duplicar, renomear, excluir).
+  O de baixo começava mostrando o primeiro preset da lista, que quase nunca
+  era o do vídeo — e os botões agiam nesse. Agora os dois começam no preset
+  do vídeo e andam juntos.
+
 ## 5.0.21
 
 - **A trilha sonora voltou a ser clicável.** O menu de trocar, ajustar o
