@@ -3321,8 +3321,19 @@ def _hook_end_sec(headline: str, preset: dict, duration: float) -> float:
     usando a janela clássica (clamp min(4.0,…) nos pontos de leitura)."""
     if not duration:
         return 4.0
+    if headline == "pilula":
+        return round(duration, 3)
+    # TEMPO EXATO em segundos, por preset/marca (4.100): "quero poder
+    # ajustar o tempo da headline na tela em segundos". Vazio/0 = as
+    # faixas de sempre (curta/media/inteira).
+    try:
+        exato = float(str(preset.get("headlineSeconds") or "0").replace(",", "."))
+    except ValueError:
+        exato = 0.0
+    if exato > 0:
+        return round(min(duration, max(0.5, exato)), 3)
     dur_pref = str(preset.get("headlineDuration") or "curta").lower().strip()
-    if headline == "pilula" or dur_pref in ("inteira", "sempre", "full"):
+    if dur_pref in ("inteira", "sempre", "full"):
         return round(duration, 3)
     base = min(4.0, max(1.5, duration * 0.25))
     if dur_pref in ("media", "média", "longa"):

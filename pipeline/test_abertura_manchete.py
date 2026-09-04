@@ -77,6 +77,24 @@ def test_quatro_segundos_no_video_do_usuario():
     assert _hook_end_sec("realce", {"headlineDuration": "curta"}, 8.0) == 2.0
 
 
+def test_tempo_exato_em_segundos_por_preset():
+    """"quero poder ajustar o tempo da headline na tela em segundos, por
+    preset / empresa" (03/09). `headlineSeconds` manda; vazio = faixas."""
+    assert _hook_end_sec("realce", {"headlineSeconds": 6}, 37.0) == 6.0
+    assert _hook_end_sec("realce", {"headlineSeconds": "2,5"}, 37.0) == 2.5, "virgula do BR"
+    assert _hook_end_sec("realce", {"headlineSeconds": 60}, 20.0) == 20.0, "nunca passa do video"
+    assert _hook_end_sec("realce", {"headlineSeconds": 0.1}, 20.0) == 0.5, "piso de meio segundo"
+    assert _hook_end_sec("realce", {"headlineSeconds": "", "headlineDuration": "curta"}, 37.0) == 4.0
+    assert _hook_end_sec("realce", {"headlineSeconds": "abc"}, 37.0) == 4.0
+    assert _hook_end_sec("pilula", {"headlineSeconds": 3}, 37.0) == 37.0, "pilula e barra de contexto: video todo"
+    from app.brand_presets import STYLE_KEYS
+    assert "headlineSeconds" in STYLE_KEYS, "sem isso o preset nao guarda o tempo"
+    html = (REPO / "assets" / "preview" / "index.html").read_text(encoding="utf-8")
+    js = (REPO / "assets" / "preview" / "app.js").read_text(encoding="utf-8")
+    assert 'id="autoHlSeconds"' in html
+    assert "['autoHlSeconds', 'headlineSeconds', '']" in js and "['autoHlSeconds', 'headlineSeconds']" in js
+
+
 def test_o_centro_chega_aos_dois_motores():
     ed = (REPO / "pipeline" / "run_fast.py").read_text(encoding="utf-8")
     assert '"centro": str(preset.get("headlinePos")' in ed

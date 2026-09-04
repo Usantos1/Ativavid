@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.100
+
+- **Tempo exato da headline, em segundos, por preset.** Em Estilo, ao lado
+  de "Headline fica na tela", entrou "Tempo exato da headline (s)". Com um
+  número ali (aceita vírgula), a headline fica exatamente esse tempo — nunca
+  mais que o vídeo, no mínimo meio segundo — e a legenda que espera a
+  headline respeita o mesmo tempo. Vazio, continua como antes (alguns
+  segundos / o dobro / o vídeo inteiro). Cada preset guarda o seu.
+
 ## 4.99
 
 - **Perfil da empresa com campos, por marca.** No Roteiro, "Perfil da
