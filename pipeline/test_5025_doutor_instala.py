@@ -1,0 +1,98 @@
+# -*- coding: utf-8 -*-
+"""5.0.25: o Diagnóstico diz o que falta instalar — e instala dali.
+
+Ele (04/09, com print do painel): "aqui não deveria mostrar se a IA local
+está instalada, se o motor próprio está instalado e tudo mais, porque assim
+o cliente poderia baixar por aqui nessa checagem".
+
+O instalador tem ~7 MB de propósito: transcrição local e IA de música são
+baixadas depois, sob demanda. Quem nunca abriu Configurações não sabe que
+existem — e o Diagnóstico, que é a primeira tela de quem desconfia que algo
+não está certo, não falava delas.
+
+`diz()` ganhou um campo `acao`: o ÚNICO que a tela transforma em botão. A
+instalação em si é a mesma de Configurações → Música dos vídeos.
+"""
+import sys
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parent.parent
+if str(REPO) not in sys.path:
+    sys.path.insert(0, str(REPO))
+# `doutor.py` importa `_utf8`, que mora na pasta dos helpers
+if str(REPO / "helpers") not in sys.path:
+    sys.path.insert(0, str(REPO / "helpers"))
+
+DOUTOR = (REPO / "helpers" / "doutor.py").read_text(encoding="utf-8")
+SJS = (REPO / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
+
+
+def _itens(monkeypatch, estado):
+    import helpers.doutor as dt
+    from app import musica_local
+
+    monkeypatch.setattr(musica_local, "estado", lambda *a, **k: estado)
+    dt._itens.clear()
+    dt.checar_pecas_opcionais()
+    return list(dt._itens)
+
+
+BASE = {"instalado": False, "incompleta": False, "gpu": True, "gpuNome": "",
+        "mbTotal": 4800, "gb": 0.0, "pasta": "X:/MotorMusica"}
+
+
+def test_instalada_aparece_como_ok_e_sem_botao(monkeypatch):
+    it = _itens(monkeypatch, {**BASE, "instalado": True, "gb": 4.5})[0]
+    assert it["nivel"] == "ok"
+    assert "4.5 GB" in it["detalhe"]
+    assert not it["acao"], "botão de instalar no que já está instalado"
+
+
+def test_faltando_vira_aviso_com_botao(monkeypatch):
+    it = _itens(monkeypatch, BASE)[0]
+    assert it["nivel"] == "aviso"
+    assert "4,8 GB" in it["detalhe"], "não diz o tamanho do download"
+    assert it["acao"] == "instalar_musica" and it["acaoTexto"]
+
+
+def test_pela_metade_oferece_continuar(monkeypatch):
+    it = _itens(monkeypatch, {**BASE, "incompleta": True})[0]
+    assert it["acao"] == "instalar_musica"
+    assert "ontinuar" in it["acaoTexto"]
+
+
+def test_sem_placa_nao_oferece_o_que_nao_da_para_instalar(monkeypatch):
+    it = _itens(monkeypatch, {**BASE, "gpu": False,
+                              "gpuNome": "AMD Radeon RX 6600"})[0]
+    assert it["nivel"] == "aviso"
+    assert "AMD Radeon RX 6600" in it["detalhe"], "não diz que placa achou"
+    assert not it["acao"], "ofereceria um download que seria recusado"
+    assert "Biblioteca/Trilhas" in it["solucao"], "não diz o plano B"
+
+
+def test_a_verificacao_entra_na_rodada():
+    i = DOUTOR.index("for fn in (checar_programas")
+    assert "checar_pecas_opcionais" in DOUTOR[i:i + 300], (
+        "a checagem existe mas nunca roda")
+
+
+def test_um_check_quebrado_nao_derruba_o_diagnostico(monkeypatch):
+    import helpers.doutor as dt
+    from app import musica_local
+
+    def explode(*a, **k):
+        raise RuntimeError("sem disco")
+    monkeypatch.setattr(musica_local, "estado", explode)
+    dt._itens.clear()
+    dt.checar_pecas_opcionais()
+    assert dt._itens and dt._itens[0]["nivel"] == "aviso"
+
+
+def test_a_tela_desenha_o_botao_e_chama_a_rota_certa():
+    assert 'class="ghost-btn ghost-btn--sm doutor-acao"' in SJS
+    assert 'data-acao="${escapeHtml(it.acao)}"' in SJS
+    i = SJS.index("function wireAcoesDoDoutor(")
+    corpo = SJS[i:i + 1400]
+    assert '"/api/musica/motor"' in corpo, "o botão não instala nada"
+    assert 'action: "instalar"' in corpo
+    assert "acompanharMotorMusica()" in corpo, "sem progresso, parece travado"

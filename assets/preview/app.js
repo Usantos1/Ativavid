@@ -299,6 +299,12 @@ const STYLE_CATALOG = {
     {id: 'neon', name: 'Neon', hl: 'neon'},
     {id: 'vazado', name: 'Vazado', hl: 'vazado'},
     {id: 'gradiente', name: 'Degradê na letra', hl: 'gradiente'},
+    // Os quatro de 04/09: ate aqui os estilos novos tinham chegado so a
+    // LEGENDA, e a lista de manchete estava igual a de 29/08.
+    {id: 'recorte', name: 'Recorte', hl: 'recorte'},
+    {id: 'etiqueta', name: 'Etiqueta', hl: 'etiqueta'},
+    {id: 'marcador', name: 'Marca-texto', hl: 'marcador'},
+    {id: 'linhas', name: 'Entre linhas', hl: 'linhas'},
     // opts out of the hook entirely (hook.enabled:false in edit-data.json) — a
     // real final look (talking-head cut, images placed by hand later), not a
     // placeholder, so it earns its own card and label like the mockups do.
@@ -547,6 +553,10 @@ const HL_STYLES = {
   neon: { weights: [900, 900], cap: 92, safeW: 880, lh: 1.02 },
   vazado: { weights: [900, 900], cap: 86, safeW: 820, lh: 1.04 },
   gradiente: { weights: [900, 900], cap: 96, safeW: 900, lh: 1.0 },
+  recorte: { weights: [900, 900], cap: 86, safeW: 860, lh: 1.04 },
+  etiqueta: { weights: [900, 900], cap: 82, safeW: 840, lh: 1.05 },
+  marcador: { weights: [900, 900], cap: 88, safeW: 880, lh: 1.06 },
+  linhas: { weights: [800, 800], cap: 80, safeW: 860, lh: 1.12 },
 };
 
 // Measured in RENDER units (1080-wide), scaled to the box only at the end — the
@@ -693,13 +703,51 @@ function buildHeadlineDemo(host, styleId) {
     }
     return;
   }
-  if (styleId === 'realce') {
+  if (styleId === 'realce' || styleId === 'recorte' || styleId === 'etiqueta') {
     for (const l of lines) {
       if (!l) continue;
       const b = el('div', 'hl-block', box);
       b.style.fontSize = `${size}px`;
-      b.style.borderRadius = `${12 * s}px`;
+      b.style.borderRadius = `${(styleId === 'etiqueta' ? 8 : 12) * s}px`;
+      if (styleId === 'recorte') {
+        // as cores trocadas: caixa branca, letra na cor da marca
+        b.style.background = '#ffffff';
+        b.style.color = 'var(--hl-accent)';
+      }
+      if (styleId === 'etiqueta') {
+        b.style.background = 'var(--hl-accent)';
+        b.style.boxShadow =
+          `inset 0 0 0 ${Math.max(2, size * 0.045)}px #fff, 0 10px 28px rgba(0,0,0,.45)`;
+      }
       b.textContent = l;
+    }
+    return;
+  }
+  if (styleId === 'marcador') {
+    // a faixa cobre o CORPO da letra; o texto passa por cima dela
+    for (const l of lines) {
+      if (!l) continue;
+      const holder = el('div', 'hl-under', box);
+      const bar = el('div', 'hl-under-bar', holder);
+      bar.style.height = `${Math.max(4, size * 0.72)}px`;
+      bar.style.bottom = `${size * 0.10}px`;
+      bar.style.borderRadius = `${4 * s}px`;
+      const t = el('div', 'hl-under-text', holder);
+      t.style.fontSize = `${size}px`;
+      t.textContent = l;
+    }
+    return;
+  }
+  if (styleId === 'linhas') {
+    const fio = Math.max(2, size * 0.06);
+    box.style.borderTop = `${fio}px solid var(--hl-accent)`;
+    box.style.borderBottom = `${fio}px solid var(--hl-accent)`;
+    box.style.padding = `${size * 0.12}px ${size * 0.06}px`;
+    for (const l of lines) {
+      if (!l) continue;
+      const d = el('div', '', box);
+      d.style.fontSize = `${size}px`;
+      d.textContent = l;
     }
     return;
   }
@@ -1445,6 +1493,11 @@ const fmt = (t) => {
   const s = t - m * 60;
   return `${m}:${s.toFixed(2).padStart(5, '0')}`;
 };
+// O que ele digitou em cada filtro de estilo. Fora do `radios` porque a
+// tela repinta a cada troca de preset — e perder o filtro no meio da busca
+// e o tipo de coisa que faz desistir de procurar.
+const FILTRO_DE_ESTILO = {};
+
 const el = (tag, cls, parent) => {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
@@ -3707,7 +3760,8 @@ const normHex = (v) => {
 // sombra paints its offset with the accent, sublinhado paints the bar — both
 // genuinely consume the pick, so leaving them out would have the Estilo tab
 // report "este estilo não usa destaque" while the render plainly used it
-const HL_ACCENT_USERS = ['realce', 'misto', 'sombra', 'sublinhado', 'pilula', 'manchete', 'carimbo', 'pergunta'];
+const HL_ACCENT_USERS = ['realce', 'misto', 'sombra', 'sublinhado', 'pilula', 'manchete', 'carimbo', 'pergunta',
+  'recorte', 'etiqueta', 'marcador', 'linhas'];
 const ACCENT_DEFAULT = '#FF0000';
 
 /* Three independent caption colour channels, each painting a different set of
@@ -4875,6 +4929,30 @@ function renderSetup() {
   const radios = (host, group, chosen) => {
     const opts = STYLE_CATALOG[group];
     host.innerHTML = '';
+    // Com mais de doze cartoes a lista deixa de ser uma vitrine e vira uma
+    // busca: 19 de manchete e 23 de legenda depois de 04/09. O filtro nasce
+    // DENTRO do grid (o host e limpo a cada pintura, entao nao duplica) e
+    // some sozinho quando o grupo e pequeno.
+    let filtro = null;
+    if (opts.length > 12) {
+      filtro = el('input', 'opt-filtro', host);
+      filtro.type = 'search';
+      filtro.placeholder = `Filtrar ${opts.length} estilos…`;
+      filtro.value = FILTRO_DE_ESTILO[group] || '';
+      filtro.oninput = () => {
+        const q = filtro.value.trim().toLowerCase();
+        FILTRO_DE_ESTILO[group] = filtro.value;
+        let vistos = 0;
+        for (const c of host.querySelectorAll('.opt')) {
+          const nome = (c.querySelector('.opt-name') || {}).textContent || '';
+          const bate = !q || nome.toLowerCase().includes(q);
+          c.hidden = !bate;
+          if (bate) vistos += 1;
+        }
+        const vazio = host.querySelector('.opt-filtro-vazio');
+        if (vazio) vazio.hidden = vistos > 0;
+      };
+    }
     for (const o of opts) {
       const card = el('div', `opt${o.id === chosen ? ' on' : ''}`, host);
       card.dataset.group = group;
@@ -4905,6 +4983,12 @@ function renderSetup() {
     }
     // the ghost only earns its space where there is a single option to explain
     if (opts.length < 2) el('div', 'opt ghost', host).textContent = 'mais estilos em breve';
+    if (filtro) {
+      const vazio = el('div', 'opt-filtro-vazio', host);
+      vazio.textContent = 'Nenhum estilo com esse nome.';
+      vazio.hidden = true;
+      if (filtro.value.trim()) filtro.oninput();   // reaplica o que ele digitou
+    }
   };
   // set BEFORE the demos are built: buildHeadlineDemo/the caption demos read
   // the accents through var(), so the variables have to be in place when the
@@ -5023,6 +5107,7 @@ function montarPayloadDeEstilo() {
     fastMode: !!S.fastMode,
     oneClick: !!S.fastMode,
     rhythm: S.style.rhythm || 'dinamico',
+    transicao: S.style.transicao || 'flash',
     intensity: S.style.intensity || 'medio',
     speechClean: S.style.speechClean || 'medio',
     videoGoal: S.style.videoGoal || 'reels',
@@ -5123,6 +5208,7 @@ $('setupGo').addEventListener('click', async () => {
       fastMode: !!S.fastMode,
       oneClick: !!S.fastMode,
       rhythm: S.style.rhythm || 'dinamico',
+      transicao: S.style.transicao || 'flash',
       intensity: S.style.intensity || 'medio',
       speechClean: S.style.speechClean || 'medio',
       videoGoal: S.style.videoGoal || 'reels',
@@ -5315,6 +5401,7 @@ $('setupSaveDefault').addEventListener('click', async () => {
     fastMode: !!S.fastMode,
     oneClick: !!S.fastMode,
     rhythm: S.style.rhythm || 'dinamico',
+    transicao: S.style.transicao || 'flash',
     intensity: S.style.intensity || 'medio',
     speechClean: S.style.speechClean || 'medio',
     videoGoal: S.style.videoGoal || 'reels',
@@ -8561,6 +8648,7 @@ function refreshAutoControls() {
   const st = S.style || {};
   const map = [
     ['autoRhythm', 'rhythm', 'dinamico'],
+    ['autoTransicao', 'transicao', 'flash'],
     ['autoIntensity', 'intensity', 'medio'],
     ['autoColorGrade', 'colorGrade', 'marca'],
     ['autoSpeech', 'speechClean', 'medio'],
@@ -8698,6 +8786,7 @@ function applyRhythmPreset(id) {
 function wireAutoControls() {
   const map = [
     ['autoRhythm', 'rhythm'],
+    ['autoTransicao', 'transicao'],
     ['autoIntensity', 'intensity'],
     ['autoColorGrade', 'colorGrade'],
     ['autoSpeech', 'speechClean'],

@@ -120,6 +120,17 @@ def _catalogo(grupo: str) -> list[str]:
             if x != "nenhuma"]
 
 
+def _transicoes() -> list[str]:
+    """Os tipos do catalogo. Ate a 5.0.24 a lista era `["flash"]` escrita a
+    mao aqui — com as tres novas (5.0.25) a varredura passaria por elas sem
+    olhar."""
+    import sys
+    if str(REPO) not in sys.path:
+        sys.path.insert(0, str(REPO))
+    from app.transicoes import NOMES
+    return list(NOMES)
+
+
 def _monta(rend, f: int, larg: int, alt: int):
     """Um quadro do motor próprio — com o `dim`, que é um passo à parte.
 
@@ -146,10 +157,10 @@ def _monta(rend, f: int, larg: int, alt: int):
     # 0,000 de tinta e acusaria o motor de nao desenhar nada — defeito do
     # arnes, nao do desenho. (Mesma armadilha do `leg.dim`, que fazia o
     # card final medir 0,087.)
-    for at in getattr(rend, "flashes", ()) or ():
-        a = rend._flash_quadro(at, f)
-        if a is not None:
-            rend._aplicar_flash(buf, sujo, a)
+    for at, tipo, k_tr in getattr(rend, "flashes", ()) or ():
+        got = rend._flash_quadro(at, f, tipo, k_tr)
+        if got is not None:
+            rend._aplicar_flash(buf, sujo, got[0], got[1])
     return buf
 
 
@@ -236,7 +247,7 @@ def varrer(edit: Path, grupo: str) -> int:
              # grupos zeram `transitions` para isolar o desenho, e ninguem
              # media o que sobrava. Ele aparece em quase todo video do
              # usuario (mediana de 8 por video).
-             "transicoes": lambda: ["flash"]}[grupo]()
+             "transicoes": _transicoes}[grupo]()
     # `--so`: rever UM desenho custa 20s; rever os quinze custa 5 minutos, e
     # depois do primeiro achado é sempre um que se quer olhar de novo.
     if SO:
@@ -259,7 +270,10 @@ def varrer(edit: Path, grupo: str) -> int:
                 ed["hook"]["style"] = nome
                 ed["hook"]["endSec"] = 12.0
             elif grupo == "transicoes":
-                pass          # o edit-data ja traz as transicoes reais
+                # O edit-data ja traz as emendas; o que varia e o TIPO. Sem
+                # trocar aqui, varrer os quatro media o `flash` quatro vezes.
+                for t in ed.get("transitions") or []:
+                    t["type"] = nome
             else:
                 ed["videoLayout"] = nome
             (pub / "edit-data.json").write_text(

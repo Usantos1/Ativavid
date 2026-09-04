@@ -48,7 +48,15 @@ const HL_FF = hookFamily(fontFamily);
 
 // ============ TYPES + DATA ====================================================
 type Caption = {text: string; startMs: number; endMs: number};
-type Insert = {src: string; start: number; end: number};
+type Insert = {
+  src: string;
+  start: number;
+  end: number;
+  // Ordem de pintura: quem tem `camada` maior entra por cima. O campo e
+  // escrito pelo editor e ja era LIDO aqui, so nao estava declarado — o
+  // `tsc` reclamava dele desde que a camada existe.
+  camada?: number;
+};
 type BehindImage = {kind: 'image'; src: string; matte: string; start: number; dur: number};
 type BehindWords = {kind: 'words'; words: {t: string; at: number}[]; matte: string; start: number; dur: number};
 type Behind = BehindImage | BehindWords;
@@ -77,9 +85,14 @@ export type EditData = {
     // "neon": letra branca com brilho da marca em volta.
     // "vazado": caixa cheia com a letra RECORTADA — o video aparece nela.
     // "gradiente": a letra vai de branco (topo) a cor da marca (base).
+    // "recorte": o realce com as cores trocadas — caixa branca, letra da marca.
+    // "etiqueta": caixa da marca com um fio branco por dentro da borda.
+    // "marcador": traço de marca-texto atrás do corpo da letra.
+    // "linhas": dois fios finos, um acima e um abaixo do bloco todo.
     style?: 'outline' | 'card' | 'realce' | 'misto' | 'sombra' | 'sublinhado'
       | 'pilula' | 'manchete' | 'carimbo' | 'pergunta'
-      | 'faixa' | 'fita' | 'neon' | 'vazado' | 'gradiente';
+      | 'faixa' | 'fita' | 'neon' | 'vazado' | 'gradiente'
+      | 'recorte' | 'etiqueta' | 'marcador' | 'linhas';
     // "pergunta": two-phase hook. `lines` is the QUESTION (shown from 0);
     // at answerAtSec the ANSWER pops in and holds until endSec. The pipeline
     // aims answerAtSec at the end of the first kept range — where the speech
@@ -913,6 +926,11 @@ const HL_STYLES: Record<string, HlStyle> = {
   neon: {weights: [900, 900], cap: 92, safeW: 880, lh: 1.02, top: 310},
   vazado: {weights: [900, 900], cap: 86, safeW: 820, lh: 1.04, top: 300},
   gradiente: {weights: [900, 900], cap: 96, safeW: 900, lh: 1.0, top: 305},
+  // Os quatro de 04/09.
+  recorte: {weights: [900, 900], cap: 86, safeW: 860, lh: 1.04, top: 300},
+  etiqueta: {weights: [900, 900], cap: 82, safeW: 840, lh: 1.05, top: 300},
+  marcador: {weights: [900, 900], cap: 88, safeW: 880, lh: 1.06, top: 302},
+  linhas: {weights: [800, 800], cap: 80, safeW: 860, lh: 1.12, top: 300},
 };
 
 const hlWidth = (text: string, size: number, weight: number) =>
@@ -1342,6 +1360,142 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
               {l}
             </div>
           ))}
+        </div>
+      </AbsoluteFill>
+    );
+  }
+
+  if (styleId === 'recorte') {
+    const ac = H.accent ?? '#ff5200';
+    return (
+      <AbsoluteFill style={envolucro}>
+        <Sfx src="whoosh.mp3" volume={0.1} />
+        <div style={{...shell, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10}}>
+          {lines.filter(Boolean).map((l, i) => (
+            <div
+              key={i}
+              style={{
+                background: '#fff',
+                color: ac,
+                fontWeight: hookWeight(900),
+                fontSize: size,
+                padding: '0.08em 0.3em 0.16em',
+                borderRadius: 12,
+                boxShadow: '0 10px 28px rgba(0,0,0,0.45)',
+              }}
+            >
+              {l}
+            </div>
+          ))}
+        </div>
+      </AbsoluteFill>
+    );
+  }
+
+  if (styleId === 'etiqueta') {
+    // O fio branco e `inset`: pintado para DENTRO, a partir da mesma aresta
+    // da caixa — assim a geometria bate com a do motor proprio, que desenha
+    // a borda no mesmo retangulo do fundo.
+    const ac = H.accent ?? '#ff5200';
+    const fio = Math.max(3, Math.round(size * 0.045));
+    return (
+      <AbsoluteFill style={envolucro}>
+        <Sfx src="whoosh.mp3" volume={0.1} />
+        <div style={{...shell, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10}}>
+          {lines.filter(Boolean).map((l, i) => (
+            <div
+              key={i}
+              style={{
+                background: ac,
+                color: '#fff',
+                fontWeight: hookWeight(900),
+                fontSize: size,
+                padding: '0.08em 0.3em 0.16em',
+                borderRadius: 8,
+                boxShadow: `inset 0 0 0 ${fio}px #fff, 0 10px 28px rgba(0,0,0,0.45)`,
+              }}
+            >
+              {l}
+            </div>
+          ))}
+        </div>
+      </AbsoluteFill>
+    );
+  }
+
+  if (styleId === 'marcador') {
+    // A faixa cobre o CORPO da letra, nao a caixa inteira — e o que separa
+    // este do `faixa` e do `realce`. Mesma montagem do sublinhado: a faixa e
+    // o irmao de baixo, entao o texto passa por cima dela.
+    const barH = Math.max(8, Math.round(size * 0.72));
+    return (
+      <AbsoluteFill style={envolucro}>
+        <Sfx src="whoosh.mp3" volume={0.1} />
+        <div style={{...shell, display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
+          {lines.filter(Boolean).map((l, i) => (
+            <div key={i} style={{position: 'relative', display: 'inline-block'}}>
+              <div
+                style={{
+                  position: 'absolute',
+                  left: '-0.06em',
+                  right: '-0.06em',
+                  bottom: Math.round(size * 0.10),
+                  height: barH,
+                  borderRadius: 4,
+                  background: H.accent ?? '#ff5200',
+                }}
+              />
+              <div
+                style={{
+                  position: 'relative',
+                  fontWeight: hookWeight(900),
+                  fontSize: size,
+                  color: '#fff',
+                  textShadow: '0 4px 16px rgba(0,0,0,0.55)',
+                }}
+              >
+                {l}
+              </div>
+            </div>
+          ))}
+        </div>
+      </AbsoluteFill>
+    );
+  }
+
+  if (styleId === 'linhas') {
+    // Os fios envolvem o BLOCO, nao cada linha: e a leitura de jornal.
+    const fio = Math.max(4, Math.round(size * 0.06));
+    const folga = Math.round(size * 0.12);
+    const ac = H.accent ?? '#ff5200';
+    return (
+      <AbsoluteFill style={envolucro}>
+        <Sfx src="whoosh.mp3" volume={0.1} />
+        <div style={{...shell, display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              borderTop: `${fio}px solid ${ac}`,
+              borderBottom: `${fio}px solid ${ac}`,
+              padding: `${folga}px ${Math.round(size * 0.06)}px`,
+            }}
+          >
+            {lines.filter(Boolean).map((l, i) => (
+              <div
+                key={i}
+                style={{
+                  fontWeight: hookWeight(800),
+                  fontSize: size,
+                  color: '#fff',
+                  textShadow: '0 6px 20px rgba(0,0,0,0.5)',
+                }}
+              >
+                {l}
+              </div>
+            ))}
+          </div>
         </div>
       </AbsoluteFill>
     );

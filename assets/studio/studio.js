@@ -5617,6 +5617,8 @@ async function runDoutor() {
         </header>
         <p class="d">${escapeHtml(it.detalhe || "")}</p>
         ${it.solucao ? `<p class="s">${escapeHtml(it.solucao)}</p>` : ""}
+        ${it.acao ? `<button type="button" class="ghost-btn ghost-btn--sm doutor-acao"
+          data-acao="${escapeHtml(it.acao)}">${escapeHtml(it.acaoTexto || "Instalar")}</button>` : ""}
       </article>`;
     })
     .join("") || "<p class='hint'>Sem itens.</p>";
@@ -5631,6 +5633,39 @@ async function runDoutor() {
     resumo.classList.toggle("doutor-atencao", !conta.bloqueio && conta.aviso > 0);
   }
   $("#btnDoutorCopy")?.classList.toggle("hidden", !itens.length);
+  wireAcoesDoDoutor(out);
+}
+
+/* O botao que o diagnostico desenha (5.0.25).
+ *
+ * Ele: "aqui nao deveria mostrar se a IA local esta instalada... porque
+ * assim o cliente poderia baixar por aqui nessa checagem". A instalacao e a
+ * MESMA de Configuracoes > Musica dos videos — a rota, o progresso e o
+ * acompanhamento sao os de la; o que muda e de onde se clica. */
+function wireAcoesDoDoutor(out) {
+  if (!out || out.dataset.acoesWired) return;
+  out.dataset.acoesWired = "1";
+  out.addEventListener("click", async (e) => {
+    const btn = e.target.closest(".doutor-acao");
+    if (!btn) return;
+    if (btn.dataset.acao !== "instalar_musica") return;
+    btn.disabled = true;
+    try {
+      await api("/api/musica/motor", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "instalar" }),
+      });
+      btn.textContent = "Baixando…";
+      toast("Baixando a IA local de música — pode deixar rodando", 6000);
+      // o card de Configuracoes ja sabe acompanhar; aqui basta reavaliar
+      // quando terminar
+      acompanharMotorMusica();
+      setTimeout(() => rodarDoutor().catch(() => {}), 4000);
+    } catch (err) {
+      toast(err.message || "Não deu para começar a instalação");
+      btn.disabled = false;
+    }
+  });
 }
 
 async function loadLicenca() {
@@ -7457,7 +7492,13 @@ const NOME_DO_ESTILO = {
     manchete: "Manchete", carimbo: "Carimbo",
     pergunta: "Pergunta → Resposta", faixa: "Faixa cheia", fita: "Fita",
     neon: "Neon", vazado: "Vazado", gradiente: "Degradê na letra",
+    recorte: "Recorte", etiqueta: "Etiqueta", marcador: "Marca-texto",
+    linhas: "Entre linhas",
     nenhuma: "Nenhuma",
+  },
+  transicao: {
+    flash: "Flash", brilho: "Brilho", escurece: "Escurece",
+    faixa: "Faixa da marca", nenhuma: "Sem transição",
   },
   ritmo: {
     natural: "Natural", dinamico: "Dinâmico", intenso: "Intenso",
@@ -7497,6 +7538,7 @@ function nomeDoEstilo(eixo, id) {
       chip("legenda", nomeDoEstilo("legenda", st.captions)),
       chip("manchete", nomeDoEstilo("manchete", st.headline)),
       chip("ritmo", nomeDoEstilo("ritmo", st.rhythm)),
+      chip("transição", nomeDoEstilo("transicao", st.transicao)),
       cor("cor", st.accent),
       cor("legenda", st.captionAccent),
     ].filter(Boolean).join("");

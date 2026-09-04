@@ -265,10 +265,23 @@ def test_a_imagem_pode_cobrir_a_tela_inteira():
 def test_altura_livre_nao_deforma_a_foto():
     """A foto é desenhada em `cover` nos dois motores: sobra recorte, nunca
     esticamento — por isso soltar a altura é seguro."""
+    # 5.0.25: o encaixe virou `_encaixar_no_cartao`, porque o quadro do take
+    # tinha de passar pelo MESMO cover da imagem parada (sem isso a máscara
+    # do cartão derrubava o motor rápido). A regra é a mesma; mudou o lugar.
+    from app.render_proprio import _encaixar_no_cartao
+
     py = (Path(__file__).resolve().parent.parent / "app"
           / "render_proprio.py").read_text(encoding="utf-8")
-    i = py.index("# objectFit: cover")
-    assert "esc = max(cw / im.width, ch / im.height)" in py[i:i + 600]
+    i = py.index("def _encaixar_no_cartao(")
+    assert "esc = max(cw / im.width, ch / im.height)" in py[i:i + 900]
+    assert "# objectFit: cover" in py, "o caminho da imagem parada mudou de regra"
+
+    # e a prova de que não estica: 1000x100 num cartão quadrado sai quadrado
+    from PIL import Image
+
+    r = _encaixar_no_cartao(Image.new("RGBA", (1000, 100)), 500, 500,
+                            0.5, 0.5, 1.0)
+    assert r.size == (500, 500)
     tsx = (Path(__file__).resolve().parent.parent / "assets" / "shortform"
            / "src" / "Main.tsx").read_text(encoding="utf-8")
     j = tsx.index("const InsertCard")

@@ -46,6 +46,10 @@ type SfxCfg = {
   clickVolume?: number;
   scratchVolume?: number;
   stackClickVolume?: number;
+  // Qual arquivo faz o clique do empilhado. Lido logo abaixo e ausente do
+  // tipo — o `tsc` acusava, e quem lesse o tipo nao sabia que da para
+  // trocar o som.
+  stackClickFile?: string;
 };
 type CapCfg = {
   emphasisAccent?: string;

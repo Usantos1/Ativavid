@@ -22,6 +22,10 @@ STYLE_KEYS = (
     "headlineSeconds",
     # Abertura com a manchete sozinha: onde ela fica e se a legenda espera
     "headlinePos", "legendaAposHeadline",
+    # Qual transicao entra no corte (5.0.25). Sem estar aqui o campo ficava
+    # guardado no preset e NUNCA chegava ao render — foi assim que a cor da
+    # empresa se perdeu em 04/09.
+    "transicao",
 )
 
 

@@ -1,5 +1,42 @@
 # Changelog
 
+## 5.0.25
+
+- **Quatro estilos de MANCHETE novos.** Os oito estilos novos do dia anterior
+  eram todos de legenda; a lista de manchete não mudava desde 29/08. Agora
+  tem **Recorte** (caixa branca com a letra na cor da empresa), **Etiqueta**
+  (caixa da cor com um fio branco por dentro), **Marca-texto** (traço atrás
+  do corpo da letra) e **Entre linhas** (dois fios finos, acima e abaixo).
+  Os quatro conferidos contra o desenho de referência: 1,014 a 1,042.
+- **Quatro transições de corte, no lugar de uma.** Além do **Flash** de
+  sempre: **Brilho** (clarão seco), **Escurece** (piscada preta) e **Faixa**
+  na cor da empresa. A escolha fica em "Transição no corte", ao lado do
+  Ritmo, e vale por preset.
+- **A "Intensidade" do estilo agora vale nas transições.** Sutil, Médio e
+  Forte mudavam o zoom e o corte e davam exatamente o mesmo flash.
+- **Vídeo com take dentro de um cartão derrubava o motor rápido.** Quando a
+  altura do cartão caía num número ímpar, o quadro do take saía um pixel
+  menor que a máscara e o render inteiro caía para o caminho lento — 88,9
+  segundos no lugar de uns 17, três vezes só em 01/09. Achado lendo o
+  `pipeline.log` dos seus próprios projetos.
+- **O Diagnóstico agora mostra o que dá para instalar — e instala dali.** A
+  IA local de música é baixada sob demanda (4,8 GB) e quem nunca abriu
+  Configurações não sabia que existe. O painel passa a dizer se ela está
+  instalada, se ficou pela metade ou se a placa não permite, com o botão de
+  baixar no próprio cartão.
+- **A bolha de conversa cortava a última palavra.** A caixa da bolha era
+  limitada à largura segura enquanto o texto quebrava na largura cheia: a
+  sobra saía para fora da bolha e sumia no recorte. Achado varrendo os 23
+  estilos de legenda contra o desenho de referência.
+- **Filtro nas listas de estilo.** Com 19 manchetes e 23 legendas, achar de
+  novo o que você gostou virou rolagem. O campo aparece só nas listas
+  grandes e guarda o que você digitou.
+- **O cartão de preset mostra a transição** junto com layout, legenda,
+  manchete, ritmo e cores.
+- **Correção de desenho antiga:** o feixe do flash saía espelhado desde
+  30/08 — o Pillow gira ao contrário do navegador, e o sinal do ângulo tinha
+  sido copiado igual. A mesma correção endireitou a faixa nova.
+
 ## 5.0.24
 
 - **"Precisa de placa NVIDIA" numa máquina que tem placa NVIDIA.** A IA local

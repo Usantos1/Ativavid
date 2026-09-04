@@ -475,8 +475,9 @@ def motivo_nao_suportado(edit_data: dict[str, Any], public: Path) -> str | None:
         return "emoji nas legendas (Segoe UI Emoji ausente)"
     if int(edit_data.get("width") or 1080) != 1080 or int(edit_data.get("height") or 1920) != 1920:
         return f"resolucao {edit_data.get('width')}x{edit_data.get('height')}"
+    from app.transicoes import NOMES as TRANSICOES
     for tr in edit_data.get("transitions") or []:
-        if tr.get("type") != "flash":
+        if (tr.get("type") or "flash") not in TRANSICOES:
             return f"transicao '{tr.get('type')}'"
     cues_p = public / "caption-cues.json"
     if cues_p.exists():
@@ -506,6 +507,27 @@ def _tem_transparencia(im) -> bool:
     except (ValueError, KeyError):
         return False
     return bool(faixa and faixa[0] < 250)
+
+
+def _encaixar_no_cartao(im, cw: int, ch: int, fx: float, fy: float,
+                        zoom: float = 1.0):
+    """`objectFit: cover` do template: preenche o cartao SEM deformar.
+
+    Recorta o excedente em vez de esticar; `fx`/`fy` dizem que parte do
+    excedente fica visivel (`object-position`, 0,5 = centro) e `zoom` amplia
+    alem do cover, que e o corte que o editor deixa fazer.
+
+    Existe como funcao porque a imagem parada e cada quadro do take TEM de
+    passar pelo mesmo encaixe: quando so a parada passava, o quadro do take
+    chegava na mascara com outro tamanho e o Pillow levantava "images do not
+    match" — derrubando o motor rapido do video inteiro.
+    """
+    esc = max(cw / im.width, ch / im.height) * (zoom or 1.0)
+    nw = max(1, round(im.width * esc))
+    nh = max(1, round(im.height * esc))
+    x0 = int(round((nw - cw) * fx))
+    y0 = int(round((nh - ch) * fy))
+    return im.resize((nw, nh), Image.LANCZOS).crop((x0, y0, x0 + cw, y0 + ch))
 
 
 def _cor_hex(h: str) -> np.ndarray:
@@ -1221,9 +1243,17 @@ class Renderizador:
         ec = self.ed.get("endCard") or {}
         if ec.get("enabled"):
             self.camadas.append(self._montar_endcard(ec, hook.get("accent")))
+        from app.transicoes import NOMES as TRANSICOES
         trs = [t for t in (self.ed.get("transitions") or [])
-               if t.get("type") == "flash"]
-        self.flashes = [float(t["at"]) for t in trs]
+               if (t.get("type") or "flash") in TRANSICOES]
+        # (quando, tipo). Ate a 5.0.24 era so uma lista de tempos, porque so
+        # existia o `flash`.
+        self.flashes = [(float(t["at"]), str(t.get("type") or "flash"),
+                         float(t.get("intensity") or 1.0)) for t in trs]
+        self._cor_transicao = str(
+            (self.ed.get("hook") or {}).get("accent")
+            or ((self.ed.get("captions") or {}).get("accent"))
+            or "#ff5200")
         # O flash TEM som no template (`<Sfx src={active.sfx ?? 'cut-click.mp3'}
         # volume={active.volume ?? 0.9}>` dentro de um Sequence que comeca no
         # quadro do corte). O motor proprio desenhava o clarao e o feixe e nao
@@ -1612,6 +1642,12 @@ class Renderizador:
         "neon":        ((900, 900), 92, 880, 1.02, 310),
         "vazado":      ((900, 900), 86, 820, 1.04, 300),
         "gradiente":   ((900, 900), 96, 900, 1.00, 305),
+        # Os quatro de 04/09. Ele: os estilos novos so tinham chegado a
+        # LEGENDA — "os novos estilos ali de headline, ta igual estava".
+        "recorte":     ((900, 900), 86, 860, 1.04, 300),
+        "etiqueta":    ((900, 900), 82, 840, 1.05, 300),
+        "marcador":    ((900, 900), 88, 880, 1.06, 302),
+        "linhas":      ((800, 800), 80, 860, 1.12, 300),
     }
     HL_MAIUSCULA = ("card", "manchete", "carimbo", "faixa", "vazado")
     # peso -> arquivo Poppins
@@ -2184,6 +2220,99 @@ class Renderizador:
                     tt = t[:, None, None]
                     pal.rgb[:] = (pal.rgb * (1 - tt)
                                   + self._cor(accent)[None, None, :] * tt)
+                y += alt
+            return leg
+
+        if estilo == "recorte":
+            # O `realce` com as cores trocadas: caixa BRANCA e a letra na cor
+            # da marca. Sobre imagem escura le melhor que qualquer caixa
+            # colorida, e e a unica headline em que a marca vira a LETRA.
+            y = top
+            for l in linhas:
+                pad = (0.3 * tam, 0.08 * tam, 0.16 * tam)
+                larg_b = self._larg_hl(l, tam, 900) + 2 * pad[0]
+                alt = self._hl_bloco_texto(
+                    leg, l, tam, 900, (self.w - larg_b) / 2, y, alt_cx,
+                    accent, [(0, 10, 28, 0.45)], fundo="#ffffff", raio=12,
+                    pad_xy=pad, sobe=sobe, enter=enter_hl)
+                y += alt + 10
+            return leg
+
+        if estilo == "etiqueta":
+            # Caixa na cor da marca com um fio branco por DENTRO da borda —
+            # `box-shadow: inset` no template, `borda` aqui (as duas pintam
+            # para dentro, a partir da mesma aresta).
+            esp = max(3, int(round(tam * 0.045)))
+            y = top
+            for l in linhas:
+                pad = (0.3 * tam, 0.08 * tam, 0.16 * tam)
+                larg_b = self._larg_hl(l, tam, 900) + 2 * pad[0]
+                alt = self._hl_bloco_texto(
+                    leg, l, tam, 900, (self.w - larg_b) / 2, y, alt_cx,
+                    "#ffffff", [(0, 10, 28, 0.45)], fundo=accent, raio=8,
+                    borda=("#ffffff", esp), pad_xy=pad, sobe=sobe,
+                    enter=enter_hl)
+                y += alt + 10
+            return leg
+
+        if estilo == "marcador":
+            # Traco de marca-texto: a faixa cobre o CORPO da letra, nao a
+            # caixa inteira — e o que separa este do `faixa` (caixa cheia) e
+            # do `realce` (caixa arredondada). Mesma mecanica do sublinhado:
+            # a faixa entra ANTES do texto, entao a letra passa por cima.
+            barra_h = max(8, round(tam * 0.72))
+            sobra = round(tam * 0.06)
+            y = top
+            for l in linhas:
+                larg = self._larg_hl(l, tam, 900)
+                larg_b = int(larg) + 2 * sobra
+                img = Image.new("L", (larg_b, barra_h), 0)
+                ImageDraw.Draw(img).rounded_rectangle(
+                    [0, 0, larg_b - 1, barra_h - 1], radius=4, fill=255)
+                a_b = np.asarray(img, dtype=np.float32) / 255.0
+                y_barra = int(y + alt_cx - round(tam * 0.10) - barra_h)
+                leg.palavras.append(Palavra(
+                    int((self.w - larg) / 2) - sobra, y_barra,
+                    np.broadcast_to(self._cor(accent), (*a_b.shape, 3)).copy(),
+                    a_b, np.zeros_like(a_b), inicio_f=0, enter=enter_hl,
+                    sobe=sobe))
+                alt = self._hl_bloco_texto(
+                    leg, l, tam, 900, (self.w - larg) / 2, y, alt_cx,
+                    "#ffffff", [(0, 4, 16, 0.55)], sobe=sobe, enter=enter_hl)
+                y += alt
+            return leg
+
+        if estilo == "linhas":
+            # Dois fios finos, um acima e um abaixo do BLOCO todo (nao de
+            # cada linha): leitura de jornal, a mais sobria das headlines.
+            fio_h = max(4, round(tam * 0.06))
+            folga_fio = round(tam * 0.12)
+            usadas = [l for l in linhas if l]
+            larg_max = max((self._larg_hl(l, tam, 800) for l in usadas),
+                           default=0)
+            larg_f = int(larg_max) + 2 * round(tam * 0.06)
+            alt_bloco = alt_cx * len(usadas)
+            # A borda do CSS fica DENTRO da caixa: o fio de cima e a primeira
+            # coisa do bloco e o texto comeca depois dele e do padding. Com os
+            # fios por FORA (a primeira tentativa) a tinta batia, 1,042, mas a
+            # forma nao: d_alfa 105,6 contra o teto de 80.
+            y_fio_topo = top
+            y_txt = top + fio_h + folga_fio
+            y_fio_base = y_txt + alt_bloco + folga_fio
+            for dy in (y_fio_topo, y_fio_base):
+                img = Image.new("L", (larg_f, fio_h), 255)
+                a_b = np.asarray(img, dtype=np.float32) / 255.0
+                leg.palavras.append(Palavra(
+                    int((self.w - larg_f) / 2), int(dy),
+                    np.broadcast_to(self._cor(accent), (*a_b.shape, 3)).copy(),
+                    a_b, np.zeros_like(a_b), inicio_f=0, enter=enter_hl,
+                    sobe=sobe))
+            y = y_txt
+            for l in usadas:
+                larg = self._larg_hl(l, tam, 800)
+                alt = self._hl_bloco_texto(
+                    leg, l, tam, 800, (self.w - larg) / 2, y, alt_cx,
+                    "#ffffff", [(0, 6, 20, 0.5)], sobe=sobe, enter=enter_hl)
                 y += alt
             return leg
 
@@ -3078,8 +3207,16 @@ class Renderizador:
             meta = hora + "  "
             larg_meta = f_meta.getlength(meta) + tam * 0.9  # + checks
             larg_txt = max((f.getlength(ln) for ln in linhas), default=0)
-            larg = int(min(safe_w, max(larg_txt + larg_meta * 0.0,
-                                       larg_txt) + 2 * pad_x))
+            # SEM teto. O `maxWidth` do template limita o CONTEUDO (padrao
+            # content-box), entao a bolha sai `texto + 2*padding` e pode
+            # passar de `safe_w`. Com `min(safe_w, ...)` a caixa era cortada
+            # nesse limite enquanto o texto continuava quebrando em `safe_w`
+            # cheio: a ultima palavra vazava para FORA da bolha e sumia no
+            # recorte — "antes de sai[r]" no par contra o Remotion (04/09),
+            # tinta 0,918 com a forma identica (d_alfa 0,2). Descontar o
+            # padding na QUEBRA foi medido e e pior (0,910, d_alfa 43,9): a
+            # quebra do template e mesmo em `safe_w` cheio.
+            larg = int(larg_txt + 2 * pad_x)
             # a meta divide a ultima linha; se nao couber, ganha linha propria
             ultima_com_meta = (f.getlength(linhas[-1]) + tam * 0.4
                                + larg_meta <= larg - 2 * pad_x) if linhas else False
@@ -4319,13 +4456,8 @@ class Renderizador:
                 # parte do excedente fica visivel; 0,5 = centro, o padrao.
                 # `zoom` amplia alem do cover (corte de um lado no editor).
                 fx, fy = foco_x, foco_y
-                esc = max(cw / im.width, ch / im.height) * _zoom_do_insert(it)
-                nw = max(1, round(im.width * esc))
-                nh = max(1, round(im.height * esc))
-                x0 = int(round((nw - cw) * fx))
-                y0 = int(round((nh - ch) * fy))
-                im = im.resize((nw, nh), Image.LANCZOS).crop(
-                    (x0, y0, x0 + cw, y0 + ch))
+                zoom_it = _zoom_do_insert(it)
+                im = _encaixar_no_cartao(im, cw, ch, fx, fy, zoom_it)
                 masc = Image.new("L", (cw, ch), 0)
                 ImageDraw.Draw(masc).rounded_rectangle(
                     [0, 0, cw - 1, ch - 1], radius=raio, fill=255)
@@ -4347,6 +4479,12 @@ class Renderizador:
             s_rgba[..., 3] = (sombra * 255).astype(np.uint8)   # preta
             leg.insert = (im, total, Image.fromarray(s_rgba, "RGBA"))
             leg.insert_quadros = (pasta, masc) if video else None
+            # Como encaixar CADA quadro do take no cartao. Sem isto o quadro
+            # era mascarado no tamanho em que saiu do ffmpeg, e uma mascara
+            # de outro tamanho derruba o Pillow com "images do not match" —
+            # o motor rapido inteiro caia e o video ia pelo caminho lento
+            # (3 jobs em 01/09, 88,9s de Remotion no lugar de ~17s).
+            leg.insert_encaixe = (foco_x, foco_y, _zoom_do_insert(it))
             # onde e de que tamanho: sem isto o desenho voltaria ao cartao fixo
             leg.insert_caixa = (cw, ch, ccx, ccy)
             # animacoes escolhidas pelo usuario no preview — espelho do
@@ -4375,6 +4513,11 @@ class Renderizador:
                 if getattr(leg, "_take_idx", None) != idx:
                     try:
                         q = Image.open(lista[idx]).convert("RGBA")
+                        if q.size != masc.size:
+                            fx, fy, zm = getattr(leg, "insert_encaixe",
+                                                 (0.5, 0.5, 1.0))
+                            q = _encaixar_no_cartao(q, masc.width,
+                                                    masc.height, fx, fy, zm)
                         q.putalpha(masc)
                         im = q
                         leg._take_idx = idx
@@ -4772,12 +4915,49 @@ class Renderizador:
     # 0,895 — nao paga o custo). E vale a ressalva: a varredura desenha o
     # overlay SEM o video por baixo, e o flash e a unica peca que compoe
     # contra o quadro existente.
-    def _flash_quadro(self, at_s: float, f: int) -> np.ndarray | None:
+    def _flash_quadro(self, at_s: float, f: int, tipo: str = "flash",
+                      k: float = 1.0):
+        """(mascara, cor) desta transicao neste quadro, ou None.
+
+        Os quatro tipos moram em `app/transicoes.py`. Todos pintam SO no
+        overlay: `brilho` e `escurece` sao o mesmo clarao com a cor trocada,
+        `faixa` e uma barra cheia na cor da marca cruzando o quadro, e
+        `flash` e o feixe de sempre.
+        """
         c = round(at_s * self.fps) + VIDEO_LAG
         if not (c - FLASH_LEAD <= f < c - FLASH_LEAD + FLASH_LEN):
             return None
+        if tipo in ("brilho", "escurece"):
+            pico = float(np.interp(f, [c - 2, c, c + 3], [0, 0.62 * k, 0]))
+            if pico <= 0.001:
+                return None
+            cor = (255.0, 255.0, 255.0) if tipo == "brilho" else (0.0, 0.0, 0.0)
+            return np.full((self.h, self.w), pico, dtype=np.float32), cor
+        if tipo == "faixa":
+            est = f - (c - FLASH_LEAD)
+            p = est / (FLASH_LEN - 1)
+            op = float(np.interp(p, [0, 0.2, 0.8, 1], [0, 0.92 * k, 0.92 * k, 0]))
+            if op <= 0.001:
+                return None
+            larg = int(self.w * 0.34)
+            bx = -larg + (self.w + 2 * larg) * p
+            img = Image.new("L", (self.w, self.h), 0)
+            # PIL gira ANTI-HORARIO com angulo positivo; o CSS gira HORARIO.
+            # `rotate(-12deg)` do template e, aqui, `.rotate(+12)`. Com o
+            # sinal copiado do CSS a barra saia espelhada: mesma tinta
+            # (0,997) e forma errada (d_alfa 165,3).
+            barra = Image.new("L", (larg, int(self.h * 1.6)), 255).rotate(
+                12, expand=True, resample=Image.BILINEAR)
+            cx = bx + larg / 2.0
+            cy = -0.3 * self.h + 1.6 * self.h / 2.0
+            img.paste(barra, (int(round(cx - barra.width / 2.0)),
+                              int(round(cy - barra.height / 2.0))), barra)
+            a = np.asarray(img, dtype=np.float32) / 255.0 * op
+            # `_cor` ja devolve 0..255 — o mesmo espaco do buffer.
+            return a, tuple(float(v) for v in self._cor(self._cor_transicao))
         est = f - (c - FLASH_LEAD)
         bloom = float(np.interp(f, [c - 1, c, c + 2], [0, 0.5, 0]))
+        # o cache guarda o feixe em forca 1; a intensidade entra na saida
         cache = getattr(self, "_flash_masks", None)
         if cache is None:
             cache = self._flash_masks = {}
@@ -4789,8 +4969,11 @@ class Renderizador:
             grad = np.abs(np.linspace(-1, 1, int(self.w * 0.46)))
             linha = ((1 - grad) * 0.95 * 255).astype(np.uint8)
             barra_np = np.repeat(linha[None, :], int(self.h * 1.6), axis=0)
+            # Mesmo acerto de sinal da `faixa` (5.0.25): o CSS gira horario,
+            # o PIL anti-horario. Este feixe media 0,892 desde 30/08 com uma
+            # sobra de 4% "sem explicacao" — era o giro espelhado.
             barra = Image.fromarray(barra_np, mode="L").rotate(
-                -18, expand=True, resample=Image.BILINEAR)
+                18, expand=True, resample=Image.BILINEAR)
             # A colagem parte do CENTRO. `expand=True` devolve uma imagem
             # maior que o retangulo, e colar essa imagem em `(x, -0.3h)`
             # tratava o canto dela como o canto do retangulo — o feixe
@@ -4805,13 +4988,15 @@ class Renderizador:
                        int(round(cy - barra.height / 2.0))), barra)
             cache[est] = np.clip(
                 np.asarray(img, dtype=np.float32) / 255.0 * beam, 0.0, 1.0)
-        return np.maximum(cache[est], np.float32(bloom))
+        return (np.clip(np.maximum(cache[est], np.float32(bloom)) * k, 0.0, 1.0),
+                (255.0, 255.0, 255.0))
 
-    def _aplicar_flash(self, buf, sujo, a):
+    def _aplicar_flash(self, buf, sujo, a, cor=(255.0, 255.0, 255.0)):
         a_b = buf[..., 3].astype(np.float32) / 255.0
         a_o = a + a_b * (1.0 - a)
         peso = (a_b * (1.0 - a))[..., None]
-        rgb = (255.0 * a[..., None] + buf[..., :3].astype(np.float32) * peso) \
+        c3 = np.asarray(cor, dtype=np.float32)[None, None, :]
+        rgb = (c3 * a[..., None] + buf[..., :3].astype(np.float32) * peso) \
             / np.maximum(a_o[..., None], 1e-6)
         buf[..., :3] = np.clip(rgb, 0, 255).astype(np.uint8)
         buf[..., 3] = (np.clip(a_o, 0, 1) * 255.0).astype(np.uint8)
@@ -4845,10 +5030,10 @@ class Renderizador:
                           round(blur_cue, 1), round(leg.dim * min(
                               1.0, fl / max(1, leg.dim_fade)), 3) if leg.dim else 0,
                           tuple(estados)))
-        for at in self.flashes:
+        for at, tipo, _k in self.flashes:
             c = round(at * self.fps) + VIDEO_LAG
             if c - FLASH_LEAD <= f < c - FLASH_LEAD + FLASH_LEN:
-                chave.append(("flash", f))
+                chave.append((tipo, f))
         return tuple(chave)
 
     def _gravar_video(self, alvo: Path, *, progresso=None) -> None:
@@ -4906,10 +5091,10 @@ class Renderizador:
                         self.desenhar(leg, f - leg.inicio_f, buf, sujo,
                                       mesclar=not primeira)
                         primeira = False
-                for at in self.flashes:
-                    a = self._flash_quadro(at, f)
-                    if a is not None:
-                        self._aplicar_flash(buf, sujo, a)
+                for at, tipo, k_tr in self.flashes:
+                    got = self._flash_quadro(at, f, tipo, k_tr)
+                    if got is not None:
+                        self._aplicar_flash(buf, sujo, got[0], got[1])
                 bytes_ant = buf.tobytes()
                 ff.stdin.write(bytes_ant)
         finally:
@@ -5209,10 +5394,10 @@ def render_final_uma_passada(
                         r.desenhar(leg, f - leg.inicio_f, buf, sujo,
                                    mesclar=not primeira)
                         primeira = False
-                for at in r.flashes:
-                    a = r._flash_quadro(at, f)
-                    if a is not None:
-                        r._aplicar_flash(buf, sujo, a)
+                for at, tipo, k_tr in r.flashes:
+                    got = r._flash_quadro(at, f, tipo, k_tr)
+                    if got is not None:
+                        r._aplicar_flash(buf, sujo, got[0], got[1])
                 bytes_ant = buf.tobytes()
                 ff.stdin.write(bytes_ant)
         except OSError:

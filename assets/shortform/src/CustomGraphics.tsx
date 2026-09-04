@@ -63,7 +63,15 @@ const LAYOUT = {
 // blooms, with a click on the cut. Data, not JSX — `transitions` in
 // edit-data.json — so the windows stay visible to the preview timeline and
 // retimeable without touching code.
-type CutFlash = {at: number; intensity?: number; sfx?: string; volume?: number};
+type CutFlash = {
+  at: number;
+  intensity?: number;
+  sfx?: string;
+  volume?: number;
+  // 5.0.25: ate aqui so existia o feixe. Os tipos vivem em app/transicoes.py.
+  type?: 'flash' | 'brilho' | 'escurece' | 'faixa';
+  accent?: string;
+};
 
 export const CustomGraphics: React.FC = () => {
   const d = editData as {splitInserts?: SplitInsert[]; transitions?: CutFlash[]};
@@ -111,6 +119,61 @@ const CutFlashes: React.FC<{items: CutFlash[]}> = ({items}) => {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
   });
+
+  const tipo = active.type ?? 'flash';
+  const ac = active.accent ?? '#ff5200';
+
+  // "brilho" e "escurece": so o clarao, sem feixe. O mesmo desenho com a
+  // cor trocada — branco bate na tela, preto pisca. O pico e mais alto que
+  // o do flash porque nao ha feixe para somar.
+  if (tipo === 'brilho' || tipo === 'escurece') {
+    const pico = interpolate(frame, [c - 2, c, c + 3], [0, 0.62 * k, 0], {
+      extrapolateLeft: 'clamp',
+      extrapolateRight: 'clamp',
+    });
+    return (
+      <AbsoluteFill style={{pointerEvents: 'none'}}>
+        <AbsoluteFill
+          style={{
+            backgroundColor: tipo === 'brilho' ? '#fff' : '#000',
+            opacity: pico,
+          }}
+        />
+        <Sequence from={c} durationInFrames={10} layout="none">
+          <Sfx src={active.sfx ?? 'cut-click.mp3'} volume={active.volume ?? 0.9} />
+        </Sequence>
+      </AbsoluteFill>
+    );
+  }
+
+  // "faixa": uma barra CHEIA na cor da marca cruza o quadro. Sem clarao —
+  // quem marca o corte e a barra passando, nao a luz.
+  if (tipo === 'faixa') {
+    const larg = width * 0.34;
+    const bx = interpolate(p, [0, 1], [-larg, width + larg]);
+    return (
+      <AbsoluteFill style={{pointerEvents: 'none', overflow: 'hidden'}}>
+        <div
+          style={{
+            position: 'absolute',
+            top: '-30%',
+            left: 0,
+            width: larg,
+            height: '160%',
+            transform: `translateX(${bx.toFixed(1)}px) rotate(-12deg)`,
+            background: ac,
+            opacity: interpolate(p, [0, 0.2, 0.8, 1], [0, 0.92 * k, 0.92 * k, 0], {
+              extrapolateLeft: 'clamp',
+              extrapolateRight: 'clamp',
+            }),
+          }}
+        />
+        <Sequence from={c} durationInFrames={10} layout="none">
+          <Sfx src={active.sfx ?? 'cut-click.mp3'} volume={active.volume ?? 0.9} />
+        </Sequence>
+      </AbsoluteFill>
+    );
+  }
 
   return (
     <AbsoluteFill style={{pointerEvents: 'none'}}>

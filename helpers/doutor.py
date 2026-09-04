@@ -41,8 +41,17 @@ OK, AVISO, BLOQUEIO = "ok", "aviso", "bloqueio"
 _itens: list[dict] = []
 
 
-def diz(nivel: str, titulo: str, detalhe: str = "", solucao: str = "") -> None:
-    _itens.append({"nivel": nivel, "titulo": titulo, "detalhe": detalhe, "solucao": solucao})
+def diz(nivel: str, titulo: str, detalhe: str = "", solucao: str = "",
+        acao: str = "", acao_texto: str = "") -> None:
+    """Uma linha do diagnostico.
+
+    `acao` e o unico campo que a TELA transforma em botao (5.0.25). Ele
+    pediu: "aqui nao deveria mostrar se a IA local esta instalada... porque
+    assim o cliente poderia baixar por aqui nessa checagem". Sem isso o
+    diagnostico so sabia dizer em que menu procurar.
+    """
+    _itens.append({"nivel": nivel, "titulo": titulo, "detalhe": detalhe,
+                   "solucao": solucao, "acao": acao, "acaoTexto": acao_texto})
 
 
 def versao(cmd: list[str]) -> str:
@@ -381,6 +390,54 @@ def checar_motor_rapido() -> None:
     diz(OK, f"Desenho rapido em modo {modo}")
 
 
+def checar_pecas_opcionais() -> None:
+    """O que da para instalar nesta maquina — e que ainda nao esta aqui.
+
+    O instalador tem ~7 MB de proposito: transcricao local e IA de musica
+    sao baixadas depois, sob demanda. Quem nunca abriu Configuracoes nao
+    sabe que existem, e o diagnostico — que e a primeira tela que o cliente
+    abre quando algo nao sai como esperava — nao falava delas.
+    """
+    try:
+        sys.path.insert(0, str(SKILL))
+        from app import musica_local
+    except Exception as e:  # noqa: BLE001
+        diz(AVISO, "Nao consegui checar a IA local de musica", str(e)[:120])
+        return
+
+    try:
+        est = musica_local.estado()
+    except Exception as e:  # noqa: BLE001
+        diz(AVISO, "Nao consegui checar a IA local de musica", str(e)[:120])
+        return
+
+    gb = f"{est.get('mbTotal', 4800) / 1000:.1f}".replace(".", ",")
+    placa = str(est.get("gpuNome") or "")
+    if est.get("instalado"):
+        diz(OK, "IA local de musica instalada",
+            f"{est.get('gb', 0)} GB em {est.get('pasta')}. "
+            "Compoe a trilha de cada video sem gastar creditos.")
+    elif not est.get("gpu"):
+        diz(AVISO, "IA local de musica indisponivel",
+            ("Precisa de placa NVIDIA"
+             + (f" — aqui encontrei {placa}." if placa
+                else " — nao encontrei placa aqui.")
+             + " Sem ela a trilha vem da sua Biblioteca."),
+            "Deixe MP3s em ATIVAVID/Biblioteca/Trilhas para o video nao "
+            "sair mudo de musica.")
+    elif est.get("incompleta"):
+        diz(AVISO, "IA local de musica pela metade",
+            "Um download anterior parou no meio; da para continuar de onde "
+            "parou.", acao="instalar_musica",
+            acao_texto="Continuar instalacao")
+    else:
+        diz(AVISO, "IA local de musica nao instalada",
+            f"Sao {gb} GB, baixados uma vez so"
+            + (f". Placa encontrada: {placa}." if placa else ".")
+            + " Sem ela a trilha vem da sua Biblioteca.",
+            acao="instalar_musica", acao_texto="Instalar aqui")
+
+
 def main() -> int:
     # Sem argparse (nao ha flags de verdade a parsear), mas --help tem de
     # responder como em todo helper daqui: o selftest cobra isso de todos, e
@@ -391,7 +448,7 @@ def main() -> int:
         return 0
 
     for fn in (checar_programas, checar_sistema, checar_motor_rapido,
-               checar_caminho_de_pagamento,
+               checar_pecas_opcionais, checar_caminho_de_pagamento,
                checar_chaves, checar_python, checar_espaco, checar_processos):
         try:
             fn()

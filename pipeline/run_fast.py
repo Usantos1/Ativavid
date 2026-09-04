@@ -2600,12 +2600,26 @@ def build_edit_data(cut: Path, preset: dict, hook: list[str], duration: float, f
         },
     }
     if elems.get("flashCut"):
-        # flash at each junction after the first
+        # Uma transicao em cada emenda depois da primeira. O TIPO vem do
+        # estilo (5.0.25) — ate a 5.0.24 so existia o `flash`, e a tela nem
+        # perguntava. `flashCut` continua sendo o liga/desliga.
+        from app.transicoes import TIPOS as TIPOS_TRANSICAO
+
+        # A "Intensidade" do estilo mandava no zoom e no corte e NUNCA na
+        # transicao: o template ja lia `intensity` (`const k = ...`) e o
+        # pipeline nunca escrevia o campo, entao "sutil" e "forte" davam o
+        # mesmo flash. 5.0.25.
+        forca = {"sutil": 0.6, "forte": 1.35}.get(
+            str(preset.get("intensity") or "medio").strip().lower(), 1.0)
+        tipo = str(preset.get("transicao") or "flash").strip().lower()
+        if tipo not in TIPOS_TRANSICAO:
+            tipo = "flash"
         segs = json.loads((cut.parent / "remotion" / "public" / "segments.json").read_text(encoding="utf-8-sig"))
         transitions = []
         for s in segs.get("segments", [])[1:]:
-            transitions.append({"at": s["start"], "type": "flash", "frames": 2})
-        if transitions:
+            transitions.append({"at": s["start"], "type": tipo, "frames": 2,
+                                "accent": accent, "intensity": forca})
+        if transitions and tipo != "nenhuma":
             ed["transitions"] = transitions
 
     ca = preset.get("captionAccent")

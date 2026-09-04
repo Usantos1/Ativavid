@@ -1573,6 +1573,26 @@ kbd {
    is the edit row. Small and light on purpose: at 12px/600 the words drove the
    card width. Two lines are reserved even for "Limpa" so every card is the same
    height. */
+/* Filtro dos grupos grandes (5.0.25): ocupa a linha inteira do grid. */
+.opt-filtro {
+  grid-column: 1 / -1;
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+  background: color-mix(in srgb, currentColor 6%, transparent);
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+}
+.opt-filtro::placeholder { color: var(--fg-soft); }
+.opt-filtro-vazio {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  color: var(--fg-soft);
+  padding: 6px 2px;
+}
+
 .opt-name {
   font-size: 10px;
   font-weight: 500;

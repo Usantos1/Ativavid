@@ -349,10 +349,10 @@ def _desenhar_fatia(
                         primeira = False
                     r.desenhar(leg, f - leg.inicio_f, buf, sujo, mesclar=not primeira)
                     primeira = False
-            for at in r.flashes:
-                a = r._flash_quadro(at, f)
-                if a is not None:
-                    r._aplicar_flash(buf, sujo, a)
+            for at, tipo, k_tr in r.flashes:
+                got = r._flash_quadro(at, f, tipo, k_tr)
+                if got is not None:
+                    r._aplicar_flash(buf, sujo, got[0], got[1])
             bytes_ant = buf.tobytes()
             ff.stdin.write(bytes_ant)
     except OSError:
