@@ -497,6 +497,7 @@ class DesktopHandler(ps.Handler):
             "/api/library/upload",
             "/api/library/categoria",
             "/api/library/remover",
+            "/api/library/mover",
             "/api/import-preview",
             "/api/musica/motor",
             "/api/update/open",

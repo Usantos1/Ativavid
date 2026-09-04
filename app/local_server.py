@@ -3136,9 +3136,24 @@ class StudioHandler(BaseHTTPRequestHandler):
                     Path(str(body.get("path") or "")),
                     kind=str(body.get("kind") or "image"),
                     projects_root=self.projects_root,
+                    empresa=str(body.get("empresa") or ""),
                 ))
             except ValueError as e:
                 self._json({"error": str(e)}, 400)
+            return
+
+        if path == "/api/library/mover":
+            # 5.0.2: muda o dono (empresa ou Comum) de uma imagem/video
+            from app.broll_library import mover_para_empresa
+            body = self._read_json() or {}
+            try:
+                self._json(mover_para_empresa(
+                    str(body.get("rel") or ""), str(body.get("empresa") or ""),
+                    projects_root=self.projects_root))
+            except ValueError as e:
+                self._json({"error": str(e)}, 400)
+            except OSError as e:
+                self._json({"error": f"Não consegui mover: {e}"}, 500)
             return
 
         if path == "/api/library/remover":
@@ -3215,10 +3230,12 @@ class StudioHandler(BaseHTTPRequestHandler):
                 _qs = parse_qs(urlparse(self.path).query)
                 _kind = (_qs.get("kind") or [""])[0].strip().lower() or None
                 _cat = (_qs.get("categoria") or [""])[0].strip()
+                _emp = (_qs.get("empresa") or [""])[0].strip()
                 try:
                     saved = add_bytes(filename, payload, kind=_kind,
                                       categoria=_cat or None,
-                                      projects_root=self.projects_root)
+                                      projects_root=self.projects_root,
+                                      empresa=_emp or None)
                 except ValueError as e:
                     self._json({"error": str(e)}, 400)
                     return

@@ -175,6 +175,56 @@ def sfx_do_app() -> list[dict[str, Any]]:
     return itens
 
 
+# Imagens e videos sao POR EMPRESA desde a 5.0.2: `images/<empresa>/` e
+# `clips/<empresa>/`. O que fica na raiz da pasta e "Comum" (vale para
+# todas — e e onde o acervo antigo ja estava, entao nada some). Som
+# (trilha, efeito) continua comum a todas, como ele pediu.
+VISUAIS = ("image", "clip")
+
+
+def _slug_empresa(empresa: str | None) -> str:
+    e = str(empresa or "").strip()
+    return _slug(e) if e else ""
+
+
+def _arquivos_visuais(folder: Path, sufixos: set[str]):
+    """(arquivo, empresa) da raiz e de cada subpasta de empresa."""
+    for p in folder.iterdir():
+        if p.is_file():
+            if p.suffix.lower() in sufixos:
+                yield p, ""
+        elif p.is_dir() and not p.name.startswith("."):
+            for q in p.iterdir():
+                if q.is_file() and q.suffix.lower() in sufixos:
+                    yield q, p.name
+
+
+def da_empresa(items: list[dict[str, Any]], brand_id: str | None) -> list[dict[str, Any]]:
+    """Os itens que um video DESTA empresa pode usar: os dela + os comuns.
+
+    Sem empresa (projeto antigo, sem marca) vale tudo — e o comportamento
+    de sempre, e nao ha como saber de quem o video e.
+    """
+    bid = _slug_empresa(brand_id)
+    if not bid:
+        return items
+    return [i for i in items if not i.get("empresa") or i.get("empresa") == bid]
+
+
+def marca_do_projeto(public_dir: Path | str) -> str:
+    """A empresa do projeto, lida do `edit/` (preset-used → job_intent)."""
+    edit = Path(public_dir).resolve().parent.parent
+    for nome in ("preset-used.json", "job_intent.json"):
+        try:
+            d = json.loads((edit / nome).read_text(encoding="utf-8-sig"))
+            bid = str((d or {}).get("brandId") or "").strip()
+            if bid:
+                return bid
+        except (OSError, json.JSONDecodeError, AttributeError):
+            continue
+    return ""
+
+
 def list_assets(projects_root: Path | None = None) -> dict[str, Any]:
     root = library_root(projects_root)
     items: list[dict[str, Any]] = []
@@ -183,11 +233,13 @@ def list_assets(projects_root: Path | None = None) -> dict[str, Any]:
                          ("sfx", root / "Efeitos")):
         folder.mkdir(parents=True, exist_ok=True)
         sufixos = AUDIO_EXTS if kind in ("track", "sfx") else IMG_EXTS | VID_EXTS
-        for p in sorted(folder.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True):
-            if not p.is_file():
-                continue
-            if p.suffix.lower() not in sufixos:
-                continue
+        if kind in VISUAIS:
+            pares = sorted(_arquivos_visuais(folder, sufixos),
+                           key=lambda x: x[0].stat().st_mtime, reverse=True)
+        else:
+            pares = [(p, "") for p in sorted(folder.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True)
+                     if p.is_file() and p.suffix.lower() in sufixos]
+        for p, empresa in pares:
             # A VAGA que este som ocupa no video — e vazia quando ele nao
             # ocupa nenhuma. Dos 234 efeitos do usuario, 133 sao de
             # categorias que o video nao toca (impacto, transicao, riser):
@@ -206,7 +258,9 @@ def list_assets(projects_root: Path | None = None) -> dict[str, Any]:
                               else categoria_de(p.name)),
                 "origem": "usuario",
                 "path": str(p),
-                "rel": f"{folder.name}/{p.name}",
+                "rel": p.relative_to(root).as_posix(),
+                # "" = Comum (vale para todas as empresas)
+                "empresa": empresa,
                 "bytes": p.stat().st_size,
                 "mtime": int(p.stat().st_mtime),
             })
@@ -248,12 +302,20 @@ def _com_as_da_pasta(curadas, items: list[dict[str, Any]], kind: str) -> list[st
     return list(curadas) + fora
 
 
-def add_file(src: Path, *, kind: str = "image", projects_root: Path | None = None) -> dict[str, Any]:
+def _pasta_da_empresa(base: Path, empresa: str | None) -> Path:
+    e = _slug_empresa(empresa)
+    folder = base / e if e else base
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder
+
+
+def add_file(src: Path, *, kind: str = "image", projects_root: Path | None = None,
+             empresa: str | None = None) -> dict[str, Any]:
     root = library_root(projects_root)
     src = Path(src)
     if not src.is_file():
         raise ValueError("arquivo não encontrado")
-    folder = root / ("clips" if kind == "clip" else "images")
+    folder = _pasta_da_empresa(root / ("clips" if kind == "clip" else "images"), empresa)
     dest = folder / f"{_slug(src.stem)}-{int(time.time())}{src.suffix.lower()}"
     shutil.copy2(src, dest)
     return {
@@ -262,8 +324,27 @@ def add_file(src: Path, *, kind: str = "image", projects_root: Path | None = Non
         "name": dest.name,
         "kind": "clip" if kind == "clip" else "image",
         "path": str(dest),
-        "rel": f"{folder.name}/{dest.name}",
+        "rel": dest.relative_to(root).as_posix(),
+        "empresa": _slug_empresa(empresa),
     }
+
+
+def mover_para_empresa(rel: str, empresa: str | None,
+                       projects_root: Path | None = None) -> dict[str, Any]:
+    """Muda o DONO de uma imagem/video: para uma empresa ou para o Comum."""
+    root = library_root(projects_root).resolve()
+    alvo = _dentro_da_biblioteca(rel, projects_root)
+    base = alvo.relative_to(root).parts[0]
+    if base not in ("images", "clips"):
+        raise ValueError("só imagens e vídeos são por empresa")
+    dest_dir = _pasta_da_empresa(root / base, empresa)
+    novo = dest_dir / alvo.name
+    if novo.resolve() != alvo:
+        if novo.exists():
+            novo = dest_dir / f"{alvo.stem}-{int(time.time())}{alvo.suffix}"
+        alvo.rename(novo)
+    return {"ok": True, "name": novo.name, "rel": novo.relative_to(root).as_posix(),
+            "empresa": _slug_empresa(empresa), "path": str(novo)}
 
 
 def add_bytes(
@@ -273,6 +354,7 @@ def add_bytes(
     kind: str | None = None,
     categoria: str | None = None,
     projects_root: Path | None = None,
+    empresa: str | None = None,
 ) -> dict[str, Any]:
     if not data:
         raise ValueError("arquivo vazio")
@@ -289,6 +371,8 @@ def add_bytes(
     root = library_root(projects_root)
     folder = {"track": root / "Trilhas", "sfx": root / "Efeitos",
               "clip": root / "clips"}.get(kind, root / "images")
+    if kind in VISUAIS:
+        folder = _pasta_da_empresa(folder, empresa)
     stem = Path(filename).stem
     rot = _slug(categoria) if categoria else categoria_de(stem)
     # EFEITO sem categoria: o nome costuma dizer qual e. Sem isto,
@@ -318,7 +402,8 @@ def add_bytes(
         "kind": kind,
         "categoria": categoria_de(dest.name),
         "path": str(dest),
-        "rel": f"{folder.name}/{dest.name}",
+        "rel": dest.relative_to(root).as_posix(),
+        "empresa": _slug_empresa(empresa) if kind in VISUAIS else "",
     }
 
 
@@ -433,7 +518,8 @@ def set_categoria(rel: str, categoria: str,
         "ok": True,
         "name": novo.name,
         "categoria": categoria_de(novo.name),
-        "rel": f"{novo.parent.name}/{novo.name}",
+        # relativo a RAIZ: dentro de `images/<empresa>/` o pai nao basta
+        "rel": novo.relative_to(root).as_posix(),
         "path": str(novo),
     }
 
@@ -646,14 +732,15 @@ def aplicar_sfx_do_usuario(public_dir: Path,
 CATEGORIAS_HUMOR = ("humor", "meme", "reacao", "viral")
 
 
-def clipes_de_humor(projects_root: Path | None = None) -> list[dict[str, Any]]:
+def clipes_de_humor(projects_root: Path | None = None,
+                    brand_id: str | None = None) -> list[dict[str, Any]]:
     """Os clipes guardados que servem a um video de humor.
 
     So VIDEO (`kind == "clip"`): uma foto no meio de uma piada nao e
     reacao, e o pedido era "takes e partes engracadas".
     """
     try:
-        itens = list_assets(projects_root)["items"]
+        itens = da_empresa(list_assets(projects_root)["items"], brand_id)
     except Exception:  # noqa: BLE001 — sem biblioteca, sem insercao
         return []
     return [i for i in itens
@@ -661,12 +748,17 @@ def clipes_de_humor(projects_root: Path | None = None) -> list[dict[str, Any]]:
             and str(i.get("categoria") or "").lower() in CATEGORIAS_HUMOR]
 
 
-def pick_for_query(query: str, projects_root: Path | None = None, limit: int = 3) -> list[dict[str, Any]]:
-    """Heurística simples: nome do arquivo contém palavra da query."""
+def pick_for_query(query: str, projects_root: Path | None = None, limit: int = 3,
+                   brand_id: str | None = None) -> list[dict[str, Any]]:
+    """Heurística simples: nome do arquivo contém palavra da query.
+
+    `brand_id` (5.0.2): so as imagens DESTA empresa e as comuns — a foto
+    da bancada da Prime Camp nunca entra num video da Ativa CRM.
+    """
     q = (query or "").lower()
     words = [w for w in re.findall(r"[a-zà-ÿ0-9]{3,}", q) if w]
     # b-roll e IMAGEM/CLIPE: som (trilha, efeito) nunca pode virar figura
-    items = [i for i in list_assets(projects_root)["items"]
+    items = [i for i in da_empresa(list_assets(projects_root)["items"], brand_id)
              if i["kind"] in ("image", "clip")]
     if not words:
         return items[:limit]
@@ -784,6 +876,7 @@ def resolve_query_to_public(
     *,
     projects_root: Path | None = None,
     prefer_library: bool = True,
+    brand_id: str | None = None,
 ) -> dict[str, Any] | None:
     """Resolve query → arquivo em public/: biblioteca local primeiro, depois Pexels."""
     public_dir = Path(public_dir)
@@ -793,7 +886,9 @@ def resolve_query_to_public(
         return None
 
     if prefer_library:
-        picks = pick_for_query(q, projects_root, limit=1)
+        if brand_id is None:
+            brand_id = marca_do_projeto(public_dir)
+        picks = pick_for_query(q, projects_root, limit=1, brand_id=brand_id)
         if picks:
             try:
                 out = copy_into_public(Path(picks[0]["path"]), public_dir)

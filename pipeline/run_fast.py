@@ -2784,7 +2784,8 @@ def _attach_auto_broll(edit_data: dict, public: Path, preset: dict, transcript: 
             from app.content_type import normalize_content_type
 
             if normalize_content_type(preset.get("contentType")) == "humor":
-                humor_com_acervo = bool(clipes_de_humor(raiz_projetos))
+                humor_com_acervo = bool(clipes_de_humor(
+                    raiz_projetos, brand_id=str(preset.get("brandId") or "")))
         except Exception as e:  # noqa: BLE001 — b-roll nunca derruba render
             print(f"[broll] nao consegui ler os clipes de humor: {e}", flush=True)
     if edit_style in _QUADRO_CHEIO and not explicit and not humor_com_acervo:
@@ -2827,8 +2828,10 @@ def _attach_auto_broll(edit_data: dict, public: Path, preset: dict, transcript: 
         if quantos < _mode_count(mode):
             print(f"[broll] video de {duration:.0f}s — no maximo {quantos} "
                   f"insert(s)", flush=True)
+        # So o acervo DESTA empresa + o comum (5.0.2)
         local = pick_for_query(query, projects_root=raiz_projetos,
-                               limit=max(8, quantos * 3))
+                               limit=max(8, quantos * 3),
+                               brand_id=str(preset.get("brandId") or ""))
         if local:
             # pilula estica endSec para o vídeo inteiro — para o espaço de b-roll
             # vale a janela clássica de gancho, nunca a persistência da barra.

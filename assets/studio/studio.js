@@ -4071,9 +4071,11 @@ async function ativarEmpresa(id) {
         body: JSON.stringify({ action: "activate", id }) });
     }
     setWsMarca("ativa");
+    state.libDono = "empresa";
     await loadBrandsUi();
     loadImportPresets().catch(() => {});
     if (state.view === "presets") loadEmpresaUi().catch(() => {});
+    if (state.view === "biblioteca") loadLibraryUi().catch(() => {});
     toast(`Empresa ativa: ${nomeDaMarca(id)}`);
   } catch (err) {
     toast(err.message || "Não consegui trocar a empresa");
@@ -6074,7 +6076,19 @@ function renderLibraryAba() {
   for (const b of document.querySelectorAll("#libraryTabs .lib-tab")) {
     b.classList.toggle("is-on", b.dataset.libtab === aba);
   }
-  const itens = (lib.items || []).filter((i) => cfg.kinds.includes(i.kind));
+  const visual = aba === "image" || aba === "clip";
+  const todosDaAba = (lib.items || []).filter((i) => cfg.kinds.includes(i.kind));
+  // 5.0.2: de quem e. "empresa" = os desta empresa + os comuns (e o que o
+  // video dela pode usar); "comum" = so os comuns; "todas" = tudo.
+  const ativa = (state.brandActive && state.brandActive.id) || "";
+  if (!state.libDono) state.libDono = state.wsMarca === "all" ? "todas" : "empresa";
+  const dono = visual ? state.libDono : "todas";
+  const itens = todosDaAba.filter((i) => {
+    if (dono === "todas") return true;
+    if (dono === "comum") return !i.empresa;
+    return !i.empresa || i.empresa === ativa;
+  });
+  renderLibraryDono(visual, todosDaAba, ativa);
   const contagem = new Map();
   for (const it of itens) {
     const k = it.categoria || "";
@@ -6123,10 +6137,14 @@ function renderLibraryAba() {
   if (swi) swi.classList.toggle("hidden", aba !== "sfx");
   const btn = $("#btnLibraryAdd");
   if (btn) {
-    btn.textContent = cfg.botao;
-    btn.title = filtro && filtro !== "\u2205"
+    const paraOnde = !visual ? "" : (state.libDono === "comum" || !ativa
+      ? " (Comum)" : ` (${nomeDaMarca(ativa)})`);
+    btn.textContent = cfg.botao + paraOnde;
+    btn.title = (filtro && filtro !== "\u2205"
       ? `Entra na categoria "${filtro}"`
-      : "Entra sem categoria \u2014 da para classificar depois";
+      : "Entra sem categoria \u2014 da para classificar depois")
+      + (visual ? (state.libDono === "comum" ? ". Vale para todas as empresas."
+                   : `. Só para ${nomeDaMarca(ativa) || "esta empresa"}.`) : "");
   }
   // O cabecalho de cada grupo diz o que aquela categoria FAZ: trilha
   // mostra o clima que o pipeline usa para escolher; efeito mostra se a
@@ -6154,6 +6172,33 @@ function renderLibraryAba() {
     ? libGradeImagens(filtrados, aba)
     : libListaAudio(filtrados, aba, notas, ordem);
   ligarPlayersDaBiblioteca(painel);
+}
+
+/* Seletor "de quem" da Biblioteca (5.0.2), so nas abas de imagem e video. */
+function renderLibraryDono(visual, itens, ativa) {
+  const box = $("#libraryDono");
+  if (!box) return;
+  box.classList.toggle("hidden", !visual);
+  if (!visual) return;
+  const nDesta = itens.filter((i) => !i.empresa || i.empresa === ativa).length;
+  const nComum = itens.filter((i) => !i.empresa).length;
+  const dono = state.libDono || "empresa";
+  const chip = (v, rot, n) => `<button type="button" class="lib-chip${dono === v ? " is-on" : ""}" data-libdono="${v}">${escapeHtml(rot)} <span class="lib-chip-n">${n}</span></button>`;
+  box.innerHTML = `<span class="lib-dono-rot">De quem</span>`
+    + chip("empresa", `${nomeDaMarca(ativa) || "Esta empresa"} + Comum`, nDesta)
+    + chip("comum", "Só Comum", nComum)
+    + chip("todas", "Todas as empresas", itens.length);
+}
+
+function libSeletorDono(it) {
+  if (it.origem === "app" || (it.kind !== "image" && it.kind !== "clip")) return "";
+  const ops = [`<option value=""${it.empresa ? "" : " selected"}>Comum</option>`]
+    .concat((state.brands || []).map((b) =>
+      `<option value="${escapeHtml(b.id)}"${b.id === it.empresa ? " selected" : ""}>${escapeHtml(b.name || b.id)}</option>`));
+  if (it.empresa && !(state.brands || []).some((b) => b.id === it.empresa)) {
+    ops.push(`<option value="${escapeHtml(it.empresa)}" selected>${escapeHtml(it.empresa)}</option>`);
+  }
+  return `<select class="lib-dono-sel" data-librel="${escapeHtml(it.rel)}" title="De quem é — move o arquivo">${ops.join("")}</select>`;
 }
 
 /* Guardar take nao basta: no layout limpo com o b-roll no padrao o
@@ -6219,10 +6264,11 @@ function libGradeImagens(itens, aba) {
     const midia = it.kind === "clip"
       ? `<video class="lib-thumb" src="${src}" controls preload="metadata"></video>`
       : `<img class="lib-thumb" src="${src}" alt="" loading="lazy">`;
+    const tag = it.empresa ? "" : `<span class="lib-tag-comum">Comum</span>`;
     return `<figure class="lib-item" title="${escapeHtml(it.name)}">
-      ${midia}
+      ${midia}${tag}
       <figcaption><span class="lib-name">${escapeHtml(it.name)}</span><span class="lib-size">${libTamanho(it.bytes)}</span></figcaption>
-      <div class="lib-item-cat">${libSeletorCategoria(it, opcoes)}${libBotaoApagar(it)}</div>
+      <div class="lib-item-cat">${libSeletorCategoria(it, opcoes)}${libSeletorDono(it)}${libBotaoApagar(it)}</div>
     </figure>`;
   }).join("")}</div>`;
 }
@@ -7069,6 +7115,16 @@ function wireBiblioteca() {
       renderLibraryAba();
     });
   }
+  const dono = $("#libraryDono");
+  if (dono && !dono.dataset.wired) {
+    dono.dataset.wired = "1";
+    dono.addEventListener("click", (ev) => {
+      const b = ev.target.closest("[data-libdono]");
+      if (!b) return;
+      state.libDono = b.dataset.libdono || "empresa";
+      renderLibraryAba();
+    });
+  }
   // Trocar a categoria RENOMEIA o arquivo no disco: e assim que o pipeline
   // le (o plano B da musica escolhe pelo prefixo do nome).
   const painel = $("#libraryPanel");
@@ -7087,6 +7143,23 @@ function wireBiblioteca() {
       }
     }, true);
     painel.addEventListener("change", async (ev) => {
+      const donoSel = ev.target.closest(".lib-dono-sel");
+      if (donoSel) {
+        donoSel.disabled = true;
+        try {
+          await api("/api/library/mover", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ rel: donoSel.dataset.librel, empresa: donoSel.value || "" }),
+          });
+          toast(donoSel.value ? `Agora é de ${nomeDaMarca(donoSel.value)}` : "Agora é Comum");
+          await loadLibraryUi();
+        } catch (err) {
+          toast(err.message || "Não consegui mover");
+          donoSel.disabled = false;
+        }
+        return;
+      }
       const sel = ev.target.closest(".lib-cat");
       if (!sel) return;
       const rel = sel.dataset.librel;
@@ -7126,8 +7199,14 @@ function wireBiblioteca() {
       const aba = state.libAba || "image";
       const kind = (aba === "image" || aba === "clip") ? "" : aba;  // pela extensao
       const cat = (state.libCat && state.libCat !== "\u2205") ? state.libCat : "";
+      // imagem/video entram para a empresa ativa, ou para o Comum se a
+      // vista "Só Comum" estiver marcada (5.0.2)
+      const visual = aba === "image" || aba === "clip";
+      const ativa = (state.brandActive && state.brandActive.id) || "";
+      const emp = visual && state.libDono !== "comum" ? ativa : "";
       const qs = [kind ? `kind=${kind}` : "",
-                  cat ? `categoria=${encodeURIComponent(cat)}` : ""]
+                  cat ? `categoria=${encodeURIComponent(cat)}` : "",
+                  emp ? `empresa=${encodeURIComponent(emp)}` : ""]
         .filter(Boolean).join("&");
       let ok = 0;
       for (const f of files) {

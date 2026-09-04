@@ -1,5 +1,19 @@
 # Changelog
 
+## 5.0.2
+
+- **Biblioteca de imagens e vídeos por empresa.** Nas abas Imagens e
+  Vídeos, um seletor "De quem" mostra o acervo desta empresa + o Comum, só
+  o Comum, ou todas. O que já estava na Biblioteca virou **Comum** (vale
+  para todas as empresas, nada some). Adicionar guarda para a empresa ativa
+  (ou para o Comum, se a vista "Só Comum" estiver marcada), e cada arquivo
+  tem um seletor para mudar de dono. Trilhas e efeitos continuam comuns.
+- O b-roll automático e o editor só oferecem as imagens da empresa do vídeo
+  e as comuns. O que sobe pela timeline entra na Biblioteca da empresa do
+  vídeo.
+- Na pasta: `Biblioteca/images/<empresa>/` e `Biblioteca/clips/<empresa>/`;
+  a raiz de cada uma é o Comum.
+
 ## 5.0.1
 
 - **Tela "Empresas" (era "Presets").** Um card por empresa em cima: clicar

@@ -7075,7 +7075,11 @@ async function subirArquivoParaTimeline(file, origemNome) {
   const fd = new FormData();
   fd.append('file', file, file.name || origemNome || 'colado.png');
   const folder = projectFolder();
-  const qs = folder ? `?use=1&folder=${encodeURIComponent(folder)}` : '';
+  // o que sobe pela timeline fica na Biblioteca DESTA empresa (5.0.2)
+  const bidProj = (S.presetUsed && S.presetUsed.brandId) || '';
+  const qs = folder
+    ? `?use=1&folder=${encodeURIComponent(folder)}${bidProj ? `&empresa=${encodeURIComponent(bidProj)}` : ''}`
+    : '';
   toast('Enviando…', 1500);
   try {
     const res = await fetch(`/api/library/upload${qs}`, { method: 'POST', body: fd });
@@ -7201,7 +7205,10 @@ async function loadLibraryResults() {
     box.innerHTML = '<div class="img-empty">falha ao listar biblioteca</div>';
     return;
   }
-  const items = (data.items || []).filter((it) => kindDoItem(it) === LIB_KIND);
+  // 5.0.2: imagem/video so desta empresa + os comuns (som e de todas)
+  const bidProj = (S.presetUsed && S.presetUsed.brandId) || '';
+  const items = (data.items || []).filter((it) => kindDoItem(it) === LIB_KIND)
+    .filter((it) => !bidProj || !it.empresa || it.empresa === bidProj);
   if (!items.length) {
     box.innerHTML = `<div class="img-empty">${{
       image: 'Nenhuma imagem na biblioteca — use Enviar arquivo ou abra a pasta',

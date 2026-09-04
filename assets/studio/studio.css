@@ -4252,3 +4252,15 @@ body.view-roteiro-on .ws-body { overflow: hidden; }
 /* na Identidade o formato fica em coluna, como o campo de cor ao lado */
 .emp-linha .preset-fmt { display: grid; gap: 6px; white-space: normal; color: inherit; font-size: inherit; }
 .emp-linha .preset-fmt select { width: 100%; }
+
+/* ---- Biblioteca por empresa (5.0.2) ---- */
+.lib-dono { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 0 0 8px; }
+.lib-dono-rot { font-size: 10.5px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); margin-right: 4px; }
+.lib-item { position: relative; }
+.lib-tag-comum {
+  position: absolute; top: 8px; left: 8px; z-index: 1;
+  font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
+  padding: 2px 6px; border-radius: 999px; color: #fff;
+  background: color-mix(in srgb, #000 55%, transparent); backdrop-filter: blur(4px);
+}
+.lib-dono-sel { max-width: 120px; }

@@ -73,7 +73,9 @@ def test_o_layout_limpo_abre_excecao_para_humor_COM_acervo():
     i = RUN.index("humor_com_acervo = False")
     bloco = RUN[i:i + 1400]
     assert 'normalize_content_type(preset.get("contentType")) == "humor"' in bloco
-    assert "clipes_de_humor(raiz_projetos)" in bloco
+    # 5.0.2: so os clipes da empresa do video (+ os comuns)
+    assert 'clipes_de_humor(\n                    raiz_projetos, brand_id=' in bloco
+    assert 'brand_id=str(preset.get("brandId") or ""))' in bloco
     assert "not humor_com_acervo" in bloco, (
         "a saida por layout limpo tem de olhar o tipo")
 
