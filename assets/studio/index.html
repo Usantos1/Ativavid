@@ -283,6 +283,14 @@
                      placeholder="Buscar pelo título, pelo arquivo ou pelo que foi dito…"
                      autocomplete="off">
             </label>
+            <label class="proj-sort">
+              <span class="sr-only">Ordenar vídeos prontos</span>
+              <select id="doneSort" aria-label="Ordenar por">
+                <option value="recentes">Mais recentes</option>
+                <option value="nota">Melhor nota</option>
+                <option value="duracao">Mais longos</option>
+              </select>
+            </label>
           </div>
           <div id="jobListDone" class="project-grid"></div>
           <div id="emptyDone" class="hub-empty hidden">Nenhum vídeo pronto ainda.</div>

@@ -1,5 +1,15 @@
 # Changelog
 
+## 5.0.48
+
+- **Concluídos com ordem à escolha:** mais recentes (padrão), melhor nota
+  do corte ou mais longos. A escolha fica guardada.
+- **O hub abre pedindo menos ao servidor.** Várias partes da tela pediam a
+  mesma informação ao mesmo tempo no arranque (configurações, empresas,
+  licença); agora um pedido em andamento é compartilhado.
+- A suíte passou a chamar também as rotas de envio (POST) nos dois
+  servidores de verdade, como já fazia com as de leitura desde a 5.0.45.
+
 ## 5.0.47
 
 - **Segurança: as chaves de API ficam cifradas no disco.** As chaves de

@@ -87,7 +87,9 @@ def test_quem_nao_e_admin_no_disco_nao_bate_no_servidor(monkeypatch, tmp_path):
 
 
 def test_a_tela_fecha_o_painel_no_forbidden():
-    i = SJS.index("async function api(path, opts)")
+    # 5.0.48: `api()` virou o invólucro que compartilha GET em voo e o corpo
+    # de verdade (fetch + 403) mora em `_apiCru` — é lá que a regra vive.
+    i = SJS.index("async function _apiCru(path, opts)")
     corpo = SJS[i:i + 1600]
     assert 'data.error === "forbidden"' in corpo
     assert "isAdmin: false" in corpo, "o painel de contas ficaria aberto por cima do 403"

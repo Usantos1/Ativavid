@@ -4382,3 +4382,4 @@ body.view-roteiro-on .ws-body { overflow: hidden; }
 .comece-txt { display: grid; gap: 2px; flex: 1; min-width: 0; }
 .comece-txt .hint { margin: 0; }
 @media (max-width: 720px) { .comece-passo { flex-wrap: wrap; } }
+

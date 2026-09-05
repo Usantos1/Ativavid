@@ -237,7 +237,26 @@ function jobDetail() {
   return "";
 }
 
+// 5.0.48: GET igual em voo e UM pedido so. No arranque o hub disparava o
+// mesmo /api/settings, /api/brands e /api/license varias vezes (44 pedidos
+// no lab; 11 chamadas a /api/settings no codigo), cada um remontando a
+// resposta no servidor. Quem chega enquanto o primeiro ainda nao voltou
+// recebe a MESMA promessa; quando ela assenta, o mapa esvazia — nao e
+// cache, e so "nao pedir duas vezes ao mesmo tempo".
+const _getEmVoo = new Map();
 async function api(path, opts) {
+  const metodo = String((opts && opts.method) || "GET").toUpperCase();
+  if (metodo === "GET") {
+    const emVoo = _getEmVoo.get(path);
+    if (emVoo) return emVoo;
+    const p = _apiCru(path, opts).finally(() => _getEmVoo.delete(path));
+    _getEmVoo.set(path, p);
+    return p;
+  }
+  return _apiCru(path, opts);
+}
+
+async function _apiCru(path, opts) {
   const res = await fetch(path, opts);
   const data = await res.json().catch(() => ({}));
   if (res.status === 403 && (data.error === "license_required" || data.error === "update_required")) {
@@ -489,6 +508,19 @@ function byRecency(a, b) {
   return jobRecency(b) - jobRecency(a) || String(b.id).localeCompare(String(a.id));
 }
 
+// 5.0.48: Concluidos ordenados por escolha — mais recentes (padrao), melhor
+// nota do corte, ou mais longos. Com 300 videos, "qual foi o melhor deste
+// mes" e uma pergunta que a lista tem de responder sem abrir um por um.
+const DONE_SORT_KEY = "ativavid.doneSort";
+state.doneSort = (() => { try { return localStorage.getItem(DONE_SORT_KEY) || "recentes"; } catch { return "recentes"; } })();
+function ordemDosProntos() {
+  const nota = (j) => Number(j.score && j.score.overall) || 0;
+  const dur = (j) => Number(j.durationSec) || 0;
+  if (state.doneSort === "nota") return (a, b) => nota(b) - nota(a) || byRecency(a, b);
+  if (state.doneSort === "duracao") return (a, b) => dur(b) - dur(a) || byRecency(a, b);
+  return byRecency;
+}
+
 /* Workspace por EMPRESA (5.0.0): "ativa" = so os videos da marca ativa
  * (o card do rodape); "all" = todas. Video sem marca (projeto antigo, nunca
  * renderizado) aparece em todos, para nao sumir de lugar nenhum. */
@@ -521,7 +553,7 @@ function filterJobs(kind) {
     // forma de achar um era rolar a lista.
     return jobsDoWorkspace().filter((j) => j.status === "done")
       .filter((j) => casaBusca(j, state.doneBusca))
-      .sort(byRecency);
+      .sort(ordemDosProntos());
   }
   if (kind === "projetos") {
     // Projetos é o acervo: TODO trabalho que ainda existe em disco, em
@@ -1554,6 +1586,16 @@ function wireProjetos() {
     busca.addEventListener("input", () => {
       state.projBusca = busca.value;
       buscarNaFala(busca.value);
+      renderJobs();
+    });
+  }
+  const ordem = $("#doneSort");
+  if (ordem && !ordem.dataset.wired) {
+    ordem.dataset.wired = "1";
+    ordem.value = state.doneSort;
+    ordem.addEventListener("change", () => {
+      state.doneSort = ordem.value;
+      try { localStorage.setItem(DONE_SORT_KEY, state.doneSort); } catch { /* sem storage */ }
       renderJobs();
     });
   }
