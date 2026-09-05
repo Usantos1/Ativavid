@@ -1840,6 +1840,28 @@ class StudioHandler(BaseHTTPRequestHandler):
     worker: Worker
     projects_root: Path
 
+    def end_headers(self) -> None:
+        """Cabeçalhos de documento em toda resposta — ver
+        `http_guard.CABECALHOS_DE_DOCUMENTO` (anti-clickjacking, 05/09)."""
+        for k, v in guard.CABECALHOS_DE_DOCUMENTO:
+            self.send_header(k, v)
+        super().end_headers()
+
+    def parse_request(self) -> bool:  # noqa: D401 — contrato do BaseHTTPRequestHandler
+        """Recusa `Host` que não é este endereço, ANTES de qualquer rota.
+
+        Um ponto só para GET, POST, HEAD e OPTIONS: o `handle_one_request`
+        da biblioteca só despacha para `do_*` quando isto devolve True.
+        Ver `http_guard.host_allowed` (DNS rebinding, 05/09).
+        """
+        if not super().parse_request():
+            return False
+        if not guard.host_allowed(self.headers):
+            self.close_connection = True
+            self.send_error(403, "forbidden_host")
+            return False
+        return True
+
     def log_message(self, fmt: str, *args: object) -> None:
         pass
 

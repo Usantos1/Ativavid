@@ -47,6 +47,39 @@ def _e_a_extensao(origin: str, caminho: str | None) -> bool:
             {r.rstrip("/") for r in ROTAS_DA_EXTENSAO})
 
 
+# Cabeçalhos que vão em TODA resposta dos servidores locais. Só o navegador
+# os lê, e só em documento (HTML): um site de fora não consegue pôr o hub
+# num <iframe> invisível e guiar cliques do dono ("clickjacking" — a rota
+# de liberar dias no painel de admin é um clique). O hub embute o editor
+# (`/p/<pasta>/fase1`) na MESMA origem, e `'self'` deixa isso passar.
+# Nada de `X-Content-Type-Options: nosniff`: o Windows às vezes registra
+# `.js` como `text/plain` e o nosniff barraria o próprio studio.js.
+CABECALHOS_DE_DOCUMENTO = (
+    ("X-Frame-Options", "SAMEORIGIN"),
+    ("Content-Security-Policy", "frame-ancestors 'self'"),
+)
+
+
+def host_allowed(headers) -> bool:
+    """O pedido foi feito para ESTE endereço (127.0.0.1 / localhost / ::1)?
+
+    A guarda de origem (`origin_allowed`) só entra no POST, e o GET ficava
+    aberto a um truque antigo: um site cujo DNS passa a apontar para
+    127.0.0.1 depois de carregado ("DNS rebinding"). Para o navegador a
+    página continua na origem dela, então NÃO manda `Origin` e o
+    `Sec-Fetch-Site` diz `same-origin` — e o servidor entregava
+    `/api/settings` (e-mail da conta), a lista de licenças do admin, os
+    projetos. O que denuncia o truque é o `Host`: vem `evil.com:4850`, e
+    este servidor só existe em 127.0.0.1.
+
+    Sem `Host` (HTTP/1.0, ferramenta local) passa: não é navegador.
+    """
+    host = str(headers.get("Host") or "").strip()
+    if not host:
+        return True
+    return _host_is_local(host)
+
+
 def origin_allowed(headers, *, host_header: str | None = None,
                    path: str | None = None) -> bool:
     """True se a requisição não veio de outro site.

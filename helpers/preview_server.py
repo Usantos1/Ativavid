@@ -86,6 +86,23 @@ except Exception:  # noqa: BLE001 — missing deps must not break the server
 _REPO = Path(__file__).resolve().parent.parent
 if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
+
+def _guard_cabecalhos():
+    try:
+        from app.http_guard import CABECALHOS_DE_DOCUMENTO
+        return CABECALHOS_DE_DOCUMENTO
+    except Exception:  # noqa: BLE001 — o preview solto, sem o pacote `app`
+        return (("X-Frame-Options", "SAMEORIGIN"),
+                ("Content-Security-Policy", "frame-ancestors 'self'"))
+
+
+try:
+    from app.http_guard import host_allowed as _guard_host_allowed
+except Exception:  # noqa: BLE001 — o preview solto, sem o pacote `app`
+    def _guard_host_allowed(headers) -> bool:  # type: ignore[misc]
+        host = str(headers.get("Host") or "").strip()
+        base = host.rsplit(":", 1)[0] if ":" in host and not host.endswith("]") else host
+        return (not host) or base.strip("[]").lower() in ("127.0.0.1", "localhost", "::1")
 try:
     from app.win_process import hide_console_kwargs
 except Exception:  # noqa: BLE001 — helpers can run outside the app package
@@ -471,6 +488,28 @@ class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
     # ---- helpers ----
+    def end_headers(self) -> None:
+        """Cabeçalhos de documento em toda resposta — ver
+        `http_guard.CABECALHOS_DE_DOCUMENTO` (anti-clickjacking, 05/09)."""
+        for k, v in _guard_cabecalhos():
+            self.send_header(k, v)
+        super().end_headers()
+
+    def parse_request(self) -> bool:  # noqa: D401 — contrato do BaseHTTPRequestHandler
+        """Recusa `Host` que não é este endereço, ANTES de qualquer rota.
+
+        Um ponto só para GET, POST, HEAD e OPTIONS: o `handle_one_request`
+        da biblioteca só despacha para `do_*` quando isto devolve True.
+        Ver `http__guard_host_allowed` (DNS rebinding, 05/09).
+        """
+        if not super().parse_request():
+            return False
+        if not _guard_host_allowed(self.headers):
+            self.close_connection = True
+            self.send_error(403, "forbidden_host")
+            return False
+        return True
+
     def _hdr(self, code: int, ctype: str, length: int | None = None,
              extra: dict[str, str] | None = None) -> None:
         self.send_response(code)

@@ -1,5 +1,22 @@
 # Changelog
 
+## 5.0.39
+
+- **Segurança: o app recusa pedidos que não vieram para o próprio
+  endereço.** O servidor local só conferia a origem em envios (POST); uma
+  página maliciosa aberta no navegador podia, por um truque de DNS, ler o
+  que o app responde a leituras (GET): e-mail da conta, configurações, a
+  lista de licenças de quem é administrador. Agora todo pedido — leitura,
+  envio, pré-voo — passa por uma checagem do endereço de destino antes de
+  chegar a qualquer rota, nos dois servidores (hub e editor). O uso normal
+  não muda: o app, o editor e a extensão do navegador falam sempre com
+  127.0.0.1.
+- **Segurança: o hub não pode ser embutido em página de outro site.** Uma
+  página maliciosa podia carregar o app numa moldura invisível e guiar
+  cliques de quem estiver logado (no painel de administrador, liberar dias
+  é um clique). Toda resposta agora avisa o navegador que só o próprio app
+  pode emoldurar as telas dele. Atualização obrigatória.
+
 ## 5.0.38
 
 - **Duas legendas novas com fundo colorido.** *Fita dupla*: a fita
