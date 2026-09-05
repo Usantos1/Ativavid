@@ -1,5 +1,20 @@
 # Changelog
 
+## 5.0.40
+
+- **A abertura do app que não chegou ao servidor tenta de novo.** O aviso
+  de abertura saía uma vez só, no arranque; num notebook que abre o app
+  antes de o Wi-Fi conectar ele morria em segundos e a abertura sumia para
+  sempre. Por isso o painel de Licença mostrava "0 aberturas" e versão
+  vazia para clientes que usam o app todo dia. Agora tenta de novo em 1 e
+  em 5 minutos, sem atrasar nada.
+- **A lista de vídeos responde mais rápido.** O caminho de cada projeto
+  era resolvido no disco a cada atualização da tela (a cada 2,5 s com
+  trabalho na fila); com centenas de projetos isso era um quarto do tempo
+  de resposta. Agora se resolve uma vez.
+- Varredura de regressão dos 22 estilos de manchete e 25 de legenda contra
+  o Remotion depois das mudanças da semana: todos dentro da faixa.
+
 ## 5.0.39
 
 - **Segurança: o app recusa pedidos que não vieram para o próprio

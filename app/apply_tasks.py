@@ -5,6 +5,7 @@ expõe a tarefa na Fila e detecta Apply interrompido após crash.
 """
 from __future__ import annotations
 
+import functools
 import json
 import os
 import sys
@@ -101,10 +102,23 @@ def _write_json(path: Path, obj: Any) -> None:
 def _norm(path: Path | str | None) -> str:
     if not path:
         return ""
+    # A mesma pasta chega como str do indice ("E:/x/edit") e como Path do
+    # job ("E:\x\edit"): normalizar a barra ANTES do cache faz as duas
+    # baterem na mesma entrada.
+    return _norm_cacheado(str(path).replace("\\", "/"))
+
+
+@functools.lru_cache(maxsize=4096)
+def _norm_cacheado(path: str) -> str:
+    """`Path.resolve()` e uma chamada de sistema (realpath) por caminho, e o
+    hub pede a lista de jobs a cada 2,5 s: com 331 projetos eram 332
+    resolves por pedido, 0,12 s dos 0,25-0,5 s do `/api/jobs` (perfil de
+    05/09). O caminho de um projeto nao muda de nome enquanto o app roda;
+    o cache vale a vida do processo."""
     try:
         return str(Path(path).resolve()).replace("\\", "/").lower()
     except (OSError, TypeError):
-        return str(path).replace("\\", "/").lower()
+        return path.replace("\\", "/").lower()
 
 
 def project_id_for(edit_dir: Path) -> str:

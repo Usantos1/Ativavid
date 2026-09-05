@@ -29,6 +29,7 @@ import os
 import platform
 import socket
 import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -110,8 +111,11 @@ def anotar(evento: str = "abriu", extra: dict[str, Any] | None = None) -> dict[s
     return linha
 
 
-def _avisar_servidor(linha: dict[str, Any]) -> None:
+def _avisar_servidor(linha: dict[str, Any]) -> bool:
     """Manda a abertura para o Supabase, se a funcao la souber receber.
+
+    Devolve True quando chegou (ou nao havia para onde mandar); False quando
+    a rede/servidor falhou — e ai `registrar_abertura` tenta de novo.
 
     Funcao PROPRIA (`ativavid_open`), e nao mais uma acao dentro da
     `ativavid_license`: duas assinaturas com parametros opcionais deixam o
@@ -123,7 +127,7 @@ def _avisar_servidor(linha: dict[str, Any]) -> None:
         from app import license as lic
 
         if not lic.configured():
-            return
+            return True
         payload = {
             "p_device_id": linha.get("device"),
             "p_app_version": linha.get("versao"),
@@ -140,13 +144,22 @@ def _avisar_servidor(linha: dict[str, Any]) -> None:
         if email:
             code, _ = lic._http_rpc(dict(payload, p_email=email), fn="ativavid_open")
             if 200 <= code < 300:
-                return
+                return True
             # Qualquer outra resposta cai no jeito antigo: so o 404 (RPC sem
             # `p_email`) era tratado, e um JWT vencido (401) numa maquina
             # bloqueada perdia a abertura em silencio.
-        lic._http_rpc(payload, fn="ativavid_open")
+        code, _ = lic._http_rpc(payload, fn="ativavid_open")
+        return 200 <= int(code or 0) < 300
     except Exception:  # noqa: BLE001 — nunca atrapalha a abertura
-        pass
+        return False
+
+
+# Quanto esperar entre tentativas quando o aviso nao chega. O caso comum e
+# o notebook que abre o app ANTES de o Wi-Fi conectar: a primeira tentativa
+# morre em segundos, e a abertura sumia para sempre — o painel de
+# Licenca mostrava "0 aberturas / versao vazia" para clientes que usam o
+# app todo dia (Vitor e Leandro, vistos as 00:30 e 23:40 de 04-05/09).
+ESPERAS_DA_RETENTATIVA = (60, 300)
 
 
 def registrar_abertura() -> None:
@@ -154,9 +167,16 @@ def registrar_abertura() -> None:
     def _trabalho() -> None:
         try:
             linha = anotar("abriu")
-            _avisar_servidor(linha)
         except Exception:  # noqa: BLE001
-            pass
+            return
+        for espera in (0,) + tuple(ESPERAS_DA_RETENTATIVA):
+            if espera:
+                time.sleep(espera)
+            try:
+                if _avisar_servidor(linha):
+                    return
+            except Exception:  # noqa: BLE001
+                pass
 
     threading.Thread(target=_trabalho, daemon=True,
                      name="registro-abertura").start()
