@@ -1,5 +1,13 @@
 # Changelog
 
+## 5.0.57
+
+- **A trilha abaixa sozinha quando alguém fala.** Como num podcast bem
+  feito: a música cede cerca de 9 dB enquanto há voz e volta nas pausas,
+  em vez de ficar sempre no mesmo volume baixo. Medido no áudio de um
+  vídeo real. Em Estilo dá para voltar ao volume constante.
+
+## 5.0.56
 ## 5.0.56
 
 - **Câmera lenta e acelerado por take, como no CapCut.** Clique num take e

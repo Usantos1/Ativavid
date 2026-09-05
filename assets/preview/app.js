@@ -1682,7 +1682,8 @@ function draftLayout() {
     // 5.0.56: camera lenta estica o trecho na linha do tempo; acelerado
     // encurta. Mesma conta do `_naive_spans` do mapa (fonte / velocidade).
     const vel = +(r.speed || 1) || 1;
-    const span = (r.end - r.start) / vel;
+    // 5.0.58: a cauda congelada soma tempo ao trecho (mesma conta do mapa)
+    const span = (r.end - r.start) / vel + (+(r.freeze || 0) || 0);
     const adur = Math.max(0, span - g.tail);
     const dur = Math.max(0, adur - g.lead);
     const item = { ...r, out: t, dur, aout: Math.max(0, at - g.lead), adur, lead: g.lead };
@@ -2213,7 +2214,8 @@ function redo() {
 function edlDirty() {
   return S.draft.some((r) => r.added || r.removed || r.start !== r.orig.start || r.end !== r.orig.end
     || +(r.gain_db || 0) !== +(r.orig.gain_db || 0) || (r.grade || '') !== (r.orig.grade || '')
-    || +(r.speed || 1) !== +(r.orig.speed || 1));
+    || +(r.speed || 1) !== +(r.orig.speed || 1)
+    || +(r.freeze || 0) !== +(r.orig.freeze || 0));
 }
 function geoDoInsert(c) {
   return JSON.stringify([+(+c.start).toFixed(3), +(+c.end).toFixed(3),
@@ -2573,6 +2575,8 @@ function camposDoTake(r) {
   if (r.grade) out.grade = String(r.grade);
   // 5.0.56: velocidade do take (camera lenta / acelerado)
   if (r.speed && +r.speed !== 1) out.speed = +r.speed;
+  // 5.0.58: quadro congelado no fim do take
+  if (r.freeze && +r.freeze > 0) out.freeze = +(+r.freeze).toFixed(2);
   return out;
 }
 
@@ -2589,7 +2593,7 @@ async function persistEdl() {
     S.draft.forEach((r) => {
       if (!r.removed) {
         r.orig = { start: r.start, end: r.end, gain_db: +(r.gain_db || 0),
-          grade: r.grade || '', speed: +(r.speed || 1) };
+          grade: r.grade || '', speed: +(r.speed || 1), freeze: +(r.freeze || 0) };
         r.added = false;
       }
     });
@@ -3149,9 +3153,10 @@ async function applyState(data) {
   S.draft = ranges.map((r, srcIdx) => ({
     source: r.source, start: +r.start, end: +r.end, beat: r.beat || '',
     gain_db: +(r.gain_db || 0), grade: r.grade || '', speed: +(r.speed || 1),
+    freeze: +(r.freeze || 0),
     removed: false, srcIdx,
     orig: { start: +r.start, end: +r.end, gain_db: +(r.gain_db || 0),
-      grade: r.grade || '', speed: +(r.speed || 1) },
+      grade: r.grade || '', speed: +(r.speed || 1), freeze: +(r.freeze || 0) },
   }));
   S.corteRelatorio = data.corteRelatorio || null;
   if (data.intent) {
@@ -4512,6 +4517,25 @@ function renderPainelDoTake(lane, r) {
         : `Take em ${rotulo} — vale no próximo "Aplicar"`, 2400);
     });
   }
+  // congelar o ultimo quadro
+  const congWrap = el('span', 'take-grupo', lane);
+  el('span', 'take-rotulo', congWrap).textContent = 'Congelar fim';
+  for (const [v, rotulo] of [[0, 'Não'], [0.5, '0,5s'], [1, '1s'], [2, '2s']]) {
+    const b = el('button', `ent-btn${(+(r.freeze || 0) === v) ? ' on' : ''}`, congWrap);
+    b.type = 'button';
+    b.textContent = rotulo;
+    b.title = v ? `O último quadro deste take fica parado por ${rotulo}`
+      : 'Sem quadro congelado';
+    b.addEventListener('click', () => {
+      pushHistory();
+      r.freeze = v;
+      renderAll();
+      refreshHeader();
+      persistEdl();
+      toast(v ? `Congela ${rotulo} no fim do take — vale no próximo "Aplicar"`
+        : 'Sem congelar', 2400);
+    });
+  }
   // cor do take
   const corWrap = el('span', 'take-grupo', lane);
   const manual = gradeManualDoTake(r);
@@ -5420,7 +5444,7 @@ function montarPayloadDeEstilo() {
     fastMode: !!S.fastMode,
     oneClick: !!S.fastMode,
     rhythm: S.style.rhythm || 'dinamico',
-    transicao: S.style.transicao || 'flash', sfxGain: S.style.sfxGain || '1',
+    transicao: S.style.transicao || 'flash', sfxGain: S.style.sfxGain || '1', musicDuck: S.style.musicDuck ?? '1',
     intensity: S.style.intensity || 'medio',
     speechClean: S.style.speechClean || 'medio',
     videoGoal: S.style.videoGoal || 'reels',
@@ -5521,7 +5545,7 @@ $('setupGo').addEventListener('click', async () => {
       fastMode: !!S.fastMode,
       oneClick: !!S.fastMode,
       rhythm: S.style.rhythm || 'dinamico',
-      transicao: S.style.transicao || 'flash', sfxGain: S.style.sfxGain || '1',
+      transicao: S.style.transicao || 'flash', sfxGain: S.style.sfxGain || '1', musicDuck: S.style.musicDuck ?? '1',
       intensity: S.style.intensity || 'medio',
       speechClean: S.style.speechClean || 'medio',
       videoGoal: S.style.videoGoal || 'reels',
@@ -5714,7 +5738,7 @@ $('setupSaveDefault').addEventListener('click', async () => {
     fastMode: !!S.fastMode,
     oneClick: !!S.fastMode,
     rhythm: S.style.rhythm || 'dinamico',
-    transicao: S.style.transicao || 'flash', sfxGain: S.style.sfxGain || '1',
+    transicao: S.style.transicao || 'flash', sfxGain: S.style.sfxGain || '1', musicDuck: S.style.musicDuck ?? '1',
     intensity: S.style.intensity || 'medio',
     speechClean: S.style.speechClean || 'medio',
     videoGoal: S.style.videoGoal || 'reels',
@@ -9165,6 +9189,7 @@ function refreshAutoControls() {
     ['autoTransicao', 'transicao', 'flash'],
     ['autoIntensity', 'intensity', 'medio'],
     ['autoSfxGain', 'sfxGain', '1'],
+    ['autoMusicDuck', 'musicDuck', '1'],
     ['autoColorGrade', 'colorGrade', 'marca'],
     ['autoSpeech', 'speechClean', 'medio'],
     ['autoGoal', 'videoGoal', 'reels'],
@@ -9304,6 +9329,7 @@ function wireAutoControls() {
     ['autoTransicao', 'transicao'],
     ['autoIntensity', 'intensity'],
     ['autoSfxGain', 'sfxGain'],
+    ['autoMusicDuck', 'musicDuck'],
     ['autoColorGrade', 'colorGrade'],
     ['autoSpeech', 'speechClean'],
     ['autoGoal', 'videoGoal'],
@@ -10054,9 +10080,10 @@ function applyRestoredEdl(edl) {
   S.draft = ranges.map((r, srcIdx) => ({
     source: r.source, start: +r.start, end: +r.end, beat: r.beat || '',
     gain_db: +(r.gain_db || 0), grade: r.grade || '', speed: +(r.speed || 1),
+    freeze: +(r.freeze || 0),
     removed: false, srcIdx,
     orig: { start: +r.start, end: +r.end, gain_db: +(r.gain_db || 0),
-      grade: r.grade || '', speed: +(r.speed || 1) },
+      grade: r.grade || '', speed: +(r.speed || 1), freeze: +(r.freeze || 0) },
   }));
   renderAll();
   refreshHeader();

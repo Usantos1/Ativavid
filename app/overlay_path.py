@@ -833,6 +833,7 @@ def try_overlay_final(
                         frames=frames, fps=fps, width=width, height=height,
                         trilha=trilha_up,
                         trilha_volume=float(st.get("volume") or 0.12),
+                        duck=st.get("duck") is not False,
                         progresso=progresso)
                     result = {
                         "overlay": None,
@@ -930,6 +931,7 @@ def try_overlay_final(
             fps=fps,
             trilha=trilha,
             trilha_volume=float(st.get("volume") or 0.12),
+            duck=st.get("duck") is not False,
         )
         compose_sec = time.perf_counter() - t1
         print(

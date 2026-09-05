@@ -390,6 +390,25 @@ def garantir_true_peak(
     return depois
 
 
+# 5.0.57: a trilha ABAIXA sozinha enquanto a pessoa fala ("ducking") e volta
+# nas pausas. E o que separa um video que soa profissional de um com musica
+# por cima da voz — e o motivo de o volume da trilha viver em 0,12: baixo o
+# bastante para nao atrapalhar, e por isso quase inaudivel nas pausas.
+# `sidechaincompress` usa a VOZ como gatilho do compressor da musica.
+# Medido no cut real dele + uma trilha da Biblioteca, com a musica em 0,12
+# (o volume padrao) e a queda medida durante a fala:
+#   ratio 8,0 / limiar 0,03 -> -18,1 dB (a musica some)
+#   ratio 4,0 / limiar 0,05 -> -12,0 dB
+#   ratio 3,0 / limiar 0,06 ->  -9,3 dB  <- escolhido
+#   ratio 2,5 / limiar 0,08 ->  -6,8 dB (pouco: a musica ainda briga)
+# 9 dB e a faixa de podcast: da para ouvir que ha musica, e ela nao disputa
+# com a voz. A trilha ja entra baixa; tirar 18 dB dela era silencio.
+DUCK_REDUCAO = 3.0      # ratio: quanto a musica cede quando ha voz
+DUCK_LIMIAR = 0.06      # nivel de voz que dispara (linear)
+DUCK_ATAQUE = 20        # ms para abaixar
+DUCK_SOLTA = 350        # ms para voltar — lento, senao "bombeia" entre palavras
+
+
 def _mix_audio_graph(
     *,
     sfx: bool,
@@ -397,6 +416,7 @@ def _mix_audio_graph(
     trilha_volume: float,
     duration_sec: float,
     fade_out_at: float,
+    duck: bool = True,
 ) -> list[str]:
     a_fmt = "aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo"
     a_len = (
@@ -413,7 +433,19 @@ def _mix_audio_graph(
             f"afade=t=in:st=0:d=0.4,afade=t=out:st={fade_out_at:.3f}:d=1.5,"
             f"{a_len}[music]"
         )
-        mix_in.append("[music]")
+        if duck:
+            # A voz e o gatilho: uma COPIA dela entra no sidechain (a
+            # original segue para o mix intacta). `[voice]` ja esta
+            # consumido pelo mix, entao a copia sai de um `asplit`.
+            parts[0] = f"[0:a]{a_len},asplit=2[voice][voiceduck]"
+            parts.append(
+                f"[music][voiceduck]sidechaincompress="
+                f"threshold={DUCK_LIMIAR}:ratio={DUCK_REDUCAO}:"
+                f"attack={DUCK_ATAQUE}:release={DUCK_SOLTA}:makeup=1[musicd]"
+            )
+            mix_in.append("[musicd]")
+        else:
+            mix_in.append("[music]")
     if len(mix_in) == 1:
         parts.append("[voice]anull[pre]")
     else:
@@ -434,6 +466,7 @@ def compose_overlay(
     fps: float | None = None,
     trilha: Path | None = None,
     trilha_volume: float = 0.12,
+    duck: bool = True,
 ) -> dict[str, Any]:
     """cut vídeo + overlay alpha; voz + SFX do overlay + trilha + loudnorm 2-pass."""
     from app.render_engine import encode_with_fallback
@@ -484,7 +517,7 @@ def compose_overlay(
     )
     audio_parts = _mix_audio_graph(
         sfx=sfx, music=music, trilha_volume=trilha_volume,
-        duration_sec=duration_sec, fade_out_at=fade_out_at,
+        duration_sec=duration_sec, fade_out_at=fade_out_at, duck=duck,
     )
 
     inputs = ["-i", str(cut), *dec, "-i", str(overlay)]

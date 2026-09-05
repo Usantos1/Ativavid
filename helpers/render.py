@@ -932,8 +932,12 @@ def extract_segment(
     prepared: Path | None = None,
     extra_vf: str = "",
     speed: float = 1.0,
+    freeze: float = 0.0,
 ) -> None:
     """Extract a cut range as its own MP4 with grade + 30ms audio fades baked in.
+
+    `freeze` (5.0.58): segundos de ultimo quadro parado no fim do take
+    (`tpad` no video, `apad` no audio) — o "congelar" do CapCut.
 
     `speed` (5.0.56): camera lenta (<1) ou acelerado (>1) deste take.
     Video por `setpts`, audio por `atempo` (encadeado quando sai da faixa
@@ -1026,10 +1030,16 @@ def extract_segment(
             vf_parts.append("format=yuv420p")
         vf_parts.append(extra_vf)
     vel = float(speed or 1.0)
+    cong = max(0.0, float(freeze or 0.0))
     if abs(vel - 1.0) > 1e-6 and streams != "a":
         # `setpts` DEPOIS do fps/scale/grade: mexer no relogio antes faria o
         # `fps=` reamostrar em cima do tempo ja esticado.
         vf_parts.append(f"setpts={1.0 / vel:.6f}*PTS")
+    if cong > 0.001 and streams != "a":
+        # `clone` repete o ULTIMO quadro; `stop_duration` e quanto tempo ele
+        # fica. Depois do setpts de proposito: congelar 1 s e 1 s de video
+        # pronto, nao 1 s de fonte que a velocidade ainda vai esticar.
+        vf_parts.append(f"tpad=stop_mode=clone:stop_duration={cong:.3f}")
     # Zoom no mesmo encode do extract — nunca cut.mp4 → zoomed.mp4.
     # `zoom_vf` anda por `t`, não por `n`, então o descarte de quadro acima
     # não mexe na geometria do push-in — só faz ele rodar 30x em vez de 60x.
@@ -1050,6 +1060,10 @@ def extract_segment(
     # so the edges still land at true silence. A boosted segment gets a limiter
     # so a loud syllable inside a quiet take cannot clip after the gain.
     af_parts: list[str] = []
+    if cong > 0.001 and streams != "v":
+        # silencio do mesmo tamanho da cauda congelada, para o audio nao
+        # acabar antes do video (o `-t` corta os dois no mesmo ponto)
+        af_parts.append(f"apad=pad_dur={cong:.3f}")
     if abs(float(speed or 1.0) - 1.0) > 1e-6 and streams != "v":
         # `atempo` so aceita 0,5-100 por instancia: 0,25x sai como dois de
         # 0,5. Encadear preserva o tom (o `asetrate` nao preservaria).
@@ -1101,7 +1115,7 @@ def extract_segment(
 
     # 30ms audio fades at both edges (Rule 3) — prevent pops.
     # Com velocidade, o fim e o da SAIDA (a fonte encolhe ou estica).
-    dur_saida = duration / vel if vel > 0 else duration
+    dur_saida = (duration / vel if vel > 0 else duration) + cong
     fade_out_start = max(0.0, dur_saida - 0.03)
     fades = (f"afade=t=in:st=0:d=0.03,"
              f"afade=t=out:st={fade_out_start:.3f}:d=0.03")
@@ -1314,6 +1328,9 @@ def extract_all_segments(
         from app.timeline_map import velocidade_do_range
 
         vel = velocidade_do_range(r)
+        from app.timeline_map import congelar_do_range
+
+        cong = congelar_do_range(r)
         # 5.0.54: cor por take — look do grade.py ou filtro cru do editor
         extra_vf = ""
         if r.get("grade"):
@@ -1332,6 +1349,8 @@ def extract_all_segments(
             gain_note += f"  cor: {str(r.get('grade'))[:40]}"
         if abs(vel - 1.0) > 1e-6:
             gain_note += f"  vel: {vel:g}x"
+        if cong > 0.001:
+            gain_note += f"  congela: {cong:g}s"
         if gain_windows:
             gain_note += f"  +{len(gain_windows)} janela(s)"
         if bleep_windows:
@@ -1346,6 +1365,7 @@ def extract_all_segments(
             prepared=prep_by_src.get(src_name),
             extra_vf=extra_vf,
             speed=vel,
+            freeze=cong,
         )
         return out_path
 
@@ -1914,6 +1934,9 @@ def extract_and_assemble_jcut(
         from app.timeline_map import velocidade_do_range
 
         vel = velocidade_do_range(r)
+        from app.timeline_map import congelar_do_range
+
+        cong = congelar_do_range(r)
         # 5.0.54: cor por take — look do grade.py ou filtro cru do editor
         extra_vf = ""
         if r.get("grade"):
@@ -1932,13 +1955,13 @@ def extract_and_assemble_jcut(
                             keep_resolution=keep_resolution, streams="v",
                             zoom=zoom_for_index(edl, i),
                             prepared=prep_by_src.get(r["source"]),
-                            extra_vf=extra_vf, speed=vel)
+                            extra_vf=extra_vf, speed=vel, freeze=cong)
         if not p.get("reuse_a"):
             extract_segment(p["src"], p["a_in"], p["a_out"] - p["a_in"], "",
                             apath, preview=preview, draft=draft,
                             keep_resolution=keep_resolution, gain_db=gain_db,
                             gain_windows=gain_windows, bleep_windows=bleep_windows,
-                            streams="a", speed=vel,
+                            streams="a", speed=vel, freeze=cong,
                             prepared=prep_by_src.get(r["source"]))
         p["video_path"], p["audio_path"] = vpath, apath
 
@@ -1953,6 +1976,8 @@ def extract_and_assemble_jcut(
             gain_note += f"  cor: {str(r.get('grade'))[:40]}"
         if abs(vel - 1.0) > 1e-6:
             gain_note += f"  vel: {vel:g}x"
+        if cong > 0.001:
+            gain_note += f"  congela: {cong:g}s"
         if gain_windows:
             gain_note += f"  +{len(gain_windows)} janela(s)"
         if bleep_windows:

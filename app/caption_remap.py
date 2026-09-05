@@ -83,7 +83,11 @@ def output_to_source(t: float, edl: Any, source: str | None = None) -> tuple[str
         if ov >= best_ov:
             best_ov = ov
             vel = float(span.get("speed") or 1.0) or 1.0
-            rel = max(0.0, min(x, b) - a) * vel
+            # 5.0.58: dentro da cauda congelada o tempo de FONTE nao anda —
+            # tudo ali e o ultimo quadro.
+            movel = (float(span["outputEnd"]) - float(span["outputStart"])
+                     - float(span.get("freeze") or 0.0))
+            rel = min(max(0.0, min(x, b) - a), max(0.0, movel)) * vel
             best = (str(span["source"]), float(span["sourceStart"]) + rel)
     return best
 

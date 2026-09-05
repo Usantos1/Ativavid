@@ -226,8 +226,25 @@ def velocidade_do_range(r: dict) -> float:
     return v if v in VELOCIDADES else 1.0
 
 
+CONGELAR_MAX = 5.0
+
+
+def congelar_do_range(r: dict) -> float:
+    """Segundos de quadro congelado no FIM deste take (5.0.58).
+
+    O "congelar" do CapCut: o ultimo quadro fica parado por um instante —
+    usado para carimbar um numero, uma seta, uma reacao. Teto de 5 s: acima
+    disso e um cartao, nao um efeito de corte.
+    """
+    try:
+        v = float(r.get("freeze") or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+    return round(min(max(v, 0.0), CONGELAR_MAX), 2)
+
+
 def tem_velocidade(ranges) -> bool:
-    return any(velocidade_do_range(r) != 1.0
+    return any(velocidade_do_range(r) != 1.0 or congelar_do_range(r) > 0
                for r in (ranges or []) if isinstance(r, dict))
 
 
@@ -238,13 +255,16 @@ def _naive_spans(ranges: list[dict]) -> list[dict]:
         start = float(r.get("start") or 0)
         end = float(r.get("end") or 0)
         vel = velocidade_do_range(r)
+        congelar = congelar_do_range(r)
         # camera lenta estica, acelerado encurta: a duracao na SAIDA e a da
-        # fonte dividida pela velocidade (0,5x dobra; 2x corta pela metade)
-        dur = max(0.0, end - start) / vel
+        # fonte dividida pela velocidade (0,5x dobra; 2x corta pela metade).
+        # O quadro congelado entra DEPOIS, como cauda parada.
+        dur = max(0.0, end - start) / vel + congelar
         src = str(r.get("source") or "SRC")
         out.append({
             "source": src,
             "speed": vel,
+            "freeze": congelar,
             "beat": r.get("beat"),
             "sourceStart": start,
             "sourceEnd": end,

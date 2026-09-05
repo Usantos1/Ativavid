@@ -28,6 +28,8 @@ STYLE_KEYS = (
     "transicao",
     # Volume geral dos efeitos sonoros (5.0.54)
     "sfxGain",
+    # Trilha abaixa sob a voz (5.0.57) — desligar deixa a musica constante
+    "musicDuck",
 )
 
 

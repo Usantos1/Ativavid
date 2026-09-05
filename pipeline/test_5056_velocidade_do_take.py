@@ -83,11 +83,13 @@ def test_ffmpeg_recebe_setpts_atempo_e_a_duracao_da_saida():
     assert 'af_parts.append("atempo=0.5")' in corpo and 'af_parts.append("atempo=2.0")' in corpo, (
         "atempo so aceita 0,5-2 por instancia — 0,25x precisa de dois")
     assert 'af_parts.append(f"atempo={_v:.6f}")' in corpo
-    assert "dur_saida = duration / vel" in RENDER
+    # 5.0.57: a cauda congelada entra na mesma conta da duracao de saida
+    assert "dur_saida = (duration / vel if vel > 0 else duration) + cong" in RENDER
     assert '"-t", f"{dur_saida:.6f}"' in RENDER, (
         "`-t` e opcao de SAIDA: com setpts ele cortava a camera lenta")
     assert "fade_out_start = max(0.0, dur_saida - 0.03)" in RENDER
     assert RENDER.count("speed=vel") == 3, "os dois lacos (video, audio e o normal)"
+    assert RENDER.count("freeze=cong") == 3, "e o congelar acompanha os mesmos tres"
 
 
 def test_o_editor_mostra_e_manda_a_velocidade():

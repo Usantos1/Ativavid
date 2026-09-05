@@ -1112,6 +1112,12 @@ def load_preview_edit_ranges(edit_dir: Path, source_key: str) -> list[dict] | No
         _v = velocidade_do_range(r)
         if _v != 1.0:
             item["speed"] = _v
+        # 5.0.58: quadro congelado no fim do take
+        from app.timeline_map import congelar_do_range
+
+        _c = congelar_do_range(r)
+        if _c > 0:
+            item["freeze"] = _c
         out.append(item)
     if not out:
         return None
@@ -1257,6 +1263,12 @@ def load_manual_edl_ranges(edit_dir: Path, source_key: str, preset: dict,
         _v = velocidade_do_range(r)
         if _v != 1.0:
             item["speed"] = _v
+        # 5.0.58: quadro congelado no fim do take
+        from app.timeline_map import congelar_do_range
+
+        _c = congelar_do_range(r)
+        if _c > 0:
+            item["freeze"] = _c
         out.append(item)
     return out or None
 
@@ -5079,6 +5091,10 @@ def run(
                     trilha, _ct_arq, edit_dir.parents[1],
                     "mg" if _fonte_atual.startswith("motor:") else "ia")
             edit_data["soundtrack"]["enabled"] = True
+            # 5.0.57: a trilha abaixa sozinha sob a voz. Ligado por padrao;
+            # o estilo pode desligar (`musicDuck: false`).
+            if str(preset.get("musicDuck") or "1") in ("0", "false", "False"):
+                edit_data["soundtrack"]["duck"] = False
             if _music_via.get("manual"):
                 _m = dict(_music_via["manual"])
                 if _m.get("volume") is None:
