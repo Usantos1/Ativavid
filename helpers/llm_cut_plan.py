@@ -378,11 +378,59 @@ def _extract_json(text: str) -> dict | list:
     # continua igual.
     try:
         return json.loads(raw, strict=False)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e_bruto:
         m = re.search(r"\{[\s\S]*\}|\[[\s\S]*\]", raw)
         if not m:
+            _guardar_resposta_quebrada(text, e_bruto)
             raise
-        return json.loads(m.group(0), strict=False)
+        trecho = m.group(0)
+        try:
+            return json.loads(trecho, strict=False)
+        except json.JSONDecodeError as e_trecho:
+            # 5.0.79: virgula faltando/sobrando e aspas curvas sao os erros
+            # que o Gemini web comete (censo de 85 pipeline.log de 03-05/09:
+            # 17 jobs com "JSON quebrado", cada um custando uma repeticao
+            # de ~10 s na sessao ou a queda para o Groq). O reparo so mexe
+            # em pontuacao entre elementos — nunca inventa conteudo — e o
+            # que continua quebrado levanta como antes.
+            try:
+                dado = json.loads(_reparar_json(trecho), strict=False)
+            except json.JSONDecodeError:
+                _guardar_resposta_quebrada(text, e_trecho)
+                raise e_trecho
+            print(f"[ia] JSON reparado ({str(e_trecho)[:50]})", flush=True)
+            return dado
+
+
+def _reparar_json(s: str) -> str:
+    """Consertos de pontuacao, sem inventar conteudo:
+    - aspas curvas viram aspas retas;
+    - virgula sobrando antes de `}` ou `]` sai;
+    - virgula faltando entre elementos em linhas diferentes entra
+      (`}` / `]` / `"` / digito no fim de uma linha seguido de `{` / `[` /
+      `"` no comeco da proxima)."""
+    s = s.replace("“", '"').replace("”", '"')
+    s = re.sub(r",(\s*[}\]])", r"\1", s)
+    s = re.sub(r'([}\]"\d])[ \t]*\n(\s*[{\["])', r"\1,\n\2", s)
+    return s
+
+
+def _guardar_resposta_quebrada(text: str, erro: Exception) -> None:
+    """Amostra da resposta que nem o reparo salvou, para melhorar o reparo
+    com casos reais. Nunca levanta; guarda no maximo 20 arquivos."""
+    try:
+        import time as _t
+
+        pasta = Path.home() / "ATIVAVID" / "ia-quebradas"
+        pasta.mkdir(parents=True, exist_ok=True)
+        antigos = sorted(pasta.glob("*.txt"))
+        for p in antigos[:-19]:
+            p.unlink(missing_ok=True)
+        (pasta / f"{_t.strftime('%Y%m%d-%H%M%S')}.txt").write_text(
+            f"# {type(erro).__name__}: {str(erro)[:200]}\n{(text or '')[:200_000]}",
+            encoding="utf-8")
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _snap_to_regions(

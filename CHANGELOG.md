@@ -1,5 +1,14 @@
 # Changelog
 
+## 5.0.79
+
+- **Plano da IA sem repetição por vírgula.** Em 1 a cada 5 vídeos o Gemini
+  devolvia o plano de corte com a pontuação errada (vírgula faltando ou
+  sobrando, aspas curvas) e o app repetia a pergunta — uns 10 segundos a
+  mais, ou o plano caía para o Groq. Agora esses erros de pontuação são
+  corrigidos na hora, sem mudar nada do conteúdo; o que continua
+  quebrado segue o caminho de antes.
+
 ## 5.0.78
 
 - **Aviso na Fila quando a sessão da IA expira.** Se o Gemini e o ChatGPT
