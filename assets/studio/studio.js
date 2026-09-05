@@ -2146,6 +2146,7 @@ function renderLicense(lic) {
   // ela usa o payload recem-chegado, e o clique ia buscar o link no estado
   // vazio — "Assinatura indisponivel agora" com o link configurado.
   state.license = lic;
+  renderQuemSou();
   renderSuporte(lic);
   mostrarCodigoDoPc(lic);
   const hint = $("#licenseHint");
@@ -5798,6 +5799,55 @@ function ligarRefazerDaAuditoria() {
 
 const DOUTOR_ROTULO = {ok: "ok", aviso: "atenção", bloqueio: "impede"};
 
+/* 5.0.71: os itens de hardware da checagem tambem aparecem DENTRO do card
+ * Desempenho — perfil automatico, jobs paralelos, encoder e cada GPU com a
+ * VRAM. Sao os dados reais do PC de cada cliente, os mesmos do Diagnostico
+ * la embaixo (uma fonte so: quem checou e quem fala). */
+function pintarDadosDeHardware(itens) {
+  const box = $("#perfDados");
+  if (!box) return;
+  const hw = (itens || []).filter((it) => {
+    const t = String(it.titulo || "");
+    return t.startsWith("Perfil automático") || t.startsWith("GPU:");
+  });
+  box.classList.toggle("hidden", !hw.length);
+  box.innerHTML = hw.map((it) => {
+    const nivel = it.nivel === "aviso" || it.nivel === "bloqueio" ? it.nivel : "ok";
+    return `<div class="perf-dado ${nivel}">
+      <span class="t">${escapeHtml(it.titulo || "")}</span>
+      ${it.detalhe ? `<span class="d">${escapeHtml(it.detalhe)}</span>` : ""}
+    </div>`;
+  }).join("");
+}
+
+/* 5.0.71: quem e este PC, ao lado de "Tudo funcionando corretamente". O
+ * e-mail da conta e o ID do dispositivo, cada um copiavel com um clique —
+ * e o que o suporte pede primeiro. O codigo curto e o mesmo da tela de
+ * maquinas (`codigoDoPc`); copiar leva o ID inteiro. */
+function renderQuemSou() {
+  const box = $("#sysQuem");
+  if (!box) return;
+  const email = String((state.auth && state.auth.email) || "").trim();
+  const id = String((state.license && state.license.deviceId) || "").trim();
+  box.innerHTML = "";
+  if (!email && !id) { box.classList.add("hidden"); return; }
+  box.classList.remove("hidden");
+  const pill = (rotulo, valor, copia, titulo) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "sys-quem-item";
+    b.title = titulo;
+    b.innerHTML = `<span>${escapeHtml(rotulo)}</span><span class="mono">${escapeHtml(valor)}</span>`;
+    b.onclick = async () => {
+      toast((await copiarTexto(copia)) ? `${rotulo} copiado` : "Não consegui copiar");
+    };
+    box.appendChild(b);
+  };
+  if (email) pill("Conta", email, email, "Clique para copiar o e-mail da conta");
+  if (id) pill("ID do dispositivo", codigoDoPc(id) || id, id,
+    `Clique para copiar o ID completo: ${id}`);
+}
+
 /* A checagem roda sozinha ao abrir Configuracoes e o resultado nasce
  * ABERTO. O resumo no topo diz o veredito em uma linha — e o unico numero
  * que a maioria vai ler. */
@@ -5817,6 +5867,8 @@ async function runDoutor() {
     out.classList.remove("carregando");
   }
   const itens = data.itens || [];
+  pintarDadosDeHardware(itens);
+  renderQuemSou();
   const conta = {ok: 0, aviso: 0, bloqueio: 0};
   out.innerHTML = itens
     .map((it) => {

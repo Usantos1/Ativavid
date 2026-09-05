@@ -1000,6 +1000,8 @@
             <header class="sys-top">
               <div class="sys-top-copy">
                 <p class="hint" id="sysStatusLine">Tudo funcionando corretamente</p>
+                <!-- 5.0.71: quem e este PC, para o cliente colar no suporte. -->
+                <p class="hint sys-quem hidden" id="sysQuem"></p>
                 <p class="hint hidden" id="sysMachineHint">Detectando…</p>
               </div>
               <!-- Estava com trava dupla (hidden + .hidden) que nenhum JS
@@ -1021,6 +1023,9 @@
                 <h4>Desempenho</h4>
                 <p class="hint" id="hwAccelHint">Detectando GPU…</p>
                 <p class="hint" id="sysPerfHint">Motor de render: Automático.</p>
+                <!-- 5.0.71: os dados REAIS da checagem (perfil, jobs, encoder,
+                     cada GPU e a VRAM) aqui dentro, nao so la embaixo. -->
+                <div class="perf-dados hidden" id="perfDados" aria-label="Hardware detectado"></div>
                 <p class="hint hidden" id="sysLaneHint">Acompanhe o processamento dos seus vídeos.</p>
                 <!-- Sem rótulo visível: o card já se chama Desempenho, e
                      "Perfil" aparecia três vezes na mesma tela. -->
@@ -1051,7 +1056,7 @@
                 </div>
               </div>
 
-              <div class="sys-card">
+              <div class="sys-card sys-card--largo">
                 <h4>Projetos e cache</h4>
                 <p class="hint" id="cacheHint">Cache: —</p>
                 <label class="ia-form">Pasta de projetos

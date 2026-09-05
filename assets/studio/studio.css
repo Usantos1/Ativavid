@@ -4413,3 +4413,59 @@ body.view-roteiro-on .ws-body { overflow: hidden; }
 }
 .lib-banco-credito { opacity: .7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lib-banco-card.is-salvo { outline: 1px solid var(--ok, #29c467); }
+
+/* ===== 5.0.71: Configuracoes ================================================
+   1) O card "Projetos e cache" e o ultimo da grade: com `auto-fill` sobrava
+      uma coluna vazia a direita dele, e o rotulo do interruptor ("Copiar
+      cada video pronto...") saia para fora do card, porque .lib-switch nao
+      quebra linha. O card passa a ir ate a ultima coluna e o rotulo quebra. */
+.sys-grid > .sys-card--largo { grid-column-end: -1; }
+.sys-card .lib-switch {
+  white-space: normal;
+  align-items: flex-start;
+  line-height: 1.35;
+}
+.sys-card .lib-switch > span { min-width: 0; }
+.sys-card .lib-switch > input { margin-top: 2px; flex: 0 0 auto; }
+
+/* 2) Dados da checagem dentro do card Desempenho. */
+.perf-dados { display: flex; flex-direction: column; gap: 6px; margin-top: 2px; }
+.perf-dado {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 8px;
+  row-gap: 1px;
+  align-items: baseline;
+  font-size: 12px;
+  color: var(--dim);
+}
+.perf-dado::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--teal);
+  align-self: center;
+}
+.perf-dado.aviso::before { background: var(--warn, #f0b429); }
+.perf-dado.bloqueio::before { background: var(--danger, #ff4d6d); }
+.perf-dado .t { color: var(--text); font-weight: 600; }
+.perf-dado .d { grid-column: 2; }
+
+/* 3) E-mail e ID do dispositivo ao lado de "Tudo funcionando". */
+.sys-quem { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.sys-quem-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  font-size: 12px;
+  color: var(--dim);
+  cursor: pointer;
+  border: 0;
+  font-family: inherit;
+}
+.sys-quem-item:hover { color: var(--text); background: color-mix(in srgb, var(--text) 10%, transparent); }
+.sys-quem-item .mono { font-family: ui-monospace, Consolas, monospace; letter-spacing: 0.02em; }

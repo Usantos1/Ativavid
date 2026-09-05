@@ -1,5 +1,15 @@
 # Changelog
 
+## 5.0.71
+
+- **Configurações arrumada.** O card *Projetos e cache* usa todo o espaço
+  à direita e o texto do interruptor de entregas não sai mais para fora.
+  O card *Desempenho* mostra os dados reais da sua máquina: perfil
+  automático, jobs paralelos, codificador e cada placa de vídeo com a
+  memória. E ao lado de "Tudo funcionando corretamente" aparecem o e-mail
+  da conta e o ID deste computador, cada um copiável com um clique, para
+  colar no suporte.
+
 ## 5.0.70
 
 - **Mais seis manchetes, agora são 28.** *Gigante* (Bebas), *Cartaz*
