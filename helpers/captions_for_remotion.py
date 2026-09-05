@@ -151,12 +151,56 @@ def transcript_timing_issue(
     return None
 
 
-def captions_coverage_ok(caps: list[dict], duration_sec: float, *, slack_end: float = 0.45) -> bool:
-    """True when captions roughly span the spoken cut (not just a prefix)."""
+# Quanta cauda SEM legenda ainda e normal. Um video que acaba num cartao de
+# CTA, num b-roll ou numa pausa termina em silencio de proposito — e ate a
+# 5.0.67 qualquer sobra acima de 0,45 s mandava transcrever o corte inteiro.
+#
+# MEDIDO em 133 jobs desde 01/09 e nos 332 projetos do disco:
+#
+#   - 29 dos 133 (22%) cairam nesse fallback. Em TODOS os 29 a transcricao
+#     do corte devolveu as MESMAS palavras do remap (razao mediana 1,00,
+#     faixa 0,91-1,09) e o mesmo fim (mediana -0,02 s). Custo: 27,8 s de
+#     CAPTIONS contra 0,4 s, e job mediano de 170,4 s contra 83,4 s — o
+#     dobro, para nao mudar nada.
+#   - Em 332 projetos so DOIS tiveram remap de fato incompleto (47% e 67%
+#     das palavras). Nos dois a cauda sem legenda foi de 10,41 s (26,7%) e
+#     9,92 s (30,3%).
+#   - Nos 29 falsos alarmes a cauda nunca passou de 8,05 s, e a fracao
+#     mediana foi 0,067.
+#
+# Dai a regra dupla: so vale transcrever quando a sobra e grande nos DOIS
+# sentidos. Ela pega os dois remaps ruins e deixa passar 28 dos 29 falsos
+# alarmes. Os limiares sao os mais BAIXOS (mais cautelosos) que ainda pegam
+# os dois — errar para o lado de transcrever custa 28 s, errar para o outro
+# entrega um video com legenda faltando no fim.
+CAUDA_SEM_LEGENDA_S = 6.0
+CAUDA_SEM_LEGENDA_FRACAO = 0.15
+
+
+def cauda_sem_legenda(caps: list[dict], duration_sec: float) -> tuple[float, float]:
+    """(segundos, fracao) do fim do video que ficou sem nenhuma legenda."""
+    if duration_sec <= 0 or not caps:
+        return (0.0, 0.0)
+    fim = max(int(c.get("endMs") or 0) for c in caps) / 1000.0
+    sobra = max(0.0, duration_sec - fim)
+    return (sobra, sobra / duration_sec)
+
+
+def captions_coverage_ok(caps: list[dict], duration_sec: float, *,
+                         slack_end: float | None = None) -> bool:
+    """True quando as legendas cobrem a FALA do corte.
+
+    `slack_end` (segundos) ainda e aceito para quem quiser a regra antiga de
+    "chega perto do fim do video"; sem ele vale a regra dupla acima.
+    """
     if duration_sec <= 0 or not caps:
         return False
-    last_ms = max(int(c.get("endMs") or 0) for c in caps)
-    return last_ms >= int((duration_sec - slack_end) * 1000)
+    if slack_end is not None:
+        last_ms = max(int(c.get("endMs") or 0) for c in caps)
+        return last_ms >= int((duration_sec - slack_end) * 1000)
+    sobra, fracao = cauda_sem_legenda(caps, duration_sec)
+    return not (sobra > CAUDA_SEM_LEGENDA_S
+                and fracao > CAUDA_SEM_LEGENDA_FRACAO)
 
 
 def captions_from_transcript(transcript_path: Path) -> list[dict]:

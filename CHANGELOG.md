@@ -1,5 +1,15 @@
 # Changelog
 
+## 5.0.68
+
+- **Um em cada cinco vídeos era transcrito duas vezes à toa — e levava o
+  dobro do tempo.** Quando o vídeo terminava em silêncio (um cartão final,
+  um b-roll, uma pausa), o ATIVAVID achava que as legendas estavam
+  incompletas e transcrevia o corte inteiro de novo. Nos 29 casos reais em
+  que isso aconteceu, a segunda transcrição devolveu exatamente as mesmas
+  palavras. Esses vídeos passam de 170 para 83 segundos, na mediana. A
+  proteção continua para o caso que ela realmente pega.
+
 ## 5.0.67
 
 - **Escrever um texto por cima do vídeo.** No botão de inserir mídia há uma

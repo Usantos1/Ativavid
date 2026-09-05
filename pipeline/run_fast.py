@@ -4720,12 +4720,21 @@ def run(
         def _coverage_ok() -> bool:
             try:
                 sys.path.insert(0, str(HELPERS))
-                from captions_for_remotion import captions_coverage_ok  # type: ignore
+                from captions_for_remotion import (  # type: ignore
+                    captions_coverage_ok, cauda_sem_legenda,
+                )
 
                 data = _caps_data()
                 if not data:
                     return False
-                return duration <= 1 or captions_coverage_ok(data, duration)
+                if duration <= 1:
+                    return True
+                sobra, fracao = cauda_sem_legenda(data, duration)
+                # O numero fica no log: a decisao de transcrever (ou nao) o
+                # corte e a mais cara desta fase e precisa ser auditavel.
+                print(f"[legenda] remap: {len(data)} palavras, "
+                      f"cauda sem legenda {sobra:.2f}s ({fracao:.0%})", flush=True)
+                return captions_coverage_ok(data, duration)
             except Exception as e:  # noqa: BLE001
                 print(f"[warn] caption coverage check: {e}", flush=True)
                 return True
