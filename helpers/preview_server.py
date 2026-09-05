@@ -271,7 +271,7 @@ def _bring_window_to_front(want_title_start: str, timeout_s: float = 2.0) -> boo
 # ffprobe costs ~40ms per file and the dashboard probes every delivery on
 # every refresh — cache on (path, mtime, size) so a re-scan is instant and a
 # re-rendered file still gets re-probed.
-_dur_cache: dict[tuple[str, float, int], float | None] = {}
+_dur_cache: dict[str, float | None] = {}
 
 
 def esquentar_painel(roots) -> None:
@@ -295,6 +295,8 @@ def esquentar_painel(roots) -> None:
                                         "cut_proxy.mp4", "final_proxy.mp4"):
                             continue
                         probe_duration_cached(mp4)
+            if _dur_sujo:
+                _dur_gravar()
         except Exception:  # noqa: BLE001 — conforto, nunca derruba o app
             pass
 
@@ -302,18 +304,69 @@ def esquentar_painel(roots) -> None:
                      name="painel-esquentar").start()
 
 
+# 5.0.44: o cache de duracoes vive em DISCO entre arranques. Era so memoria:
+# cada abertura do app refazia os ~190 ffprobes (31 s de CPU num notebook
+# de cliente, todo dia) para medir arquivos que nao mudaram. A chave leva
+# mtime e tamanho, entao um arquivo regravado mede de novo sozinho.
+_DUR_DISCO = Path.home() / "ATIVAVID" / "duracoes-cache.json"
+_DUR_MAX = 4000
+_dur_disco_lido = False
+_dur_sujo = 0
+
+
+def _dur_chave(p: Path, st) -> str:
+    return f"{p}|{int(st.st_mtime)}|{st.st_size}"
+
+
+def _dur_carregar() -> None:
+    global _dur_disco_lido
+    if _dur_disco_lido:
+        return
+    _dur_disco_lido = True
+    try:
+        dados = json.loads(_DUR_DISCO.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    if not isinstance(dados, dict):
+        return
+    for k, v in dados.items():
+        if isinstance(k, str) and (v is None or isinstance(v, (int, float))):
+            _dur_cache[k] = float(v) if v is not None else None
+
+
+def _dur_gravar() -> None:
+    """Grava atomicamente; guarda os ultimos _DUR_MAX (os mais novos ficam)."""
+    global _dur_sujo
+    _dur_sujo = 0
+    try:
+        itens = list(_dur_cache.items())[-_DUR_MAX:]
+        _DUR_DISCO.parent.mkdir(parents=True, exist_ok=True)
+        tmp = _DUR_DISCO.with_suffix(".part")
+        tmp.write_text(json.dumps(dict(itens)), encoding="utf-8")
+        tmp.replace(_DUR_DISCO)
+    except OSError:
+        pass
+
+
 def probe_duration_cached(p: Path) -> float | None:
+    global _dur_sujo
     try:
         st = p.stat()
     except OSError:
         return None
-    key = (str(p), st.st_mtime, st.st_size)
+    _dur_carregar()
+    key = _dur_chave(p, st)
     if key not in _dur_cache:
         d = probe_duration(p)
         # probe_duration returns 0.0 both for "unreadable" and "empty"; for the
         # dashboard the distinction matters (a truncated MP4 must read as
         # BROKEN, not as a 0-second video), so collapse 0 to None.
         _dur_cache[key] = d if d > 0 else None
+        _dur_sujo += 1
+        # Um arquivo por vez custaria 190 gravacoes no arranque; de 25 em 25
+        # e o esquentar_painel grava o resto no fim.
+        if _dur_sujo >= 25:
+            _dur_gravar()
     return _dur_cache[key]
 
 

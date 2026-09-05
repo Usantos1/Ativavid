@@ -1,5 +1,14 @@
 # Changelog
 
+## 5.0.44
+
+- **O app abre sem remedir todos os vídeos.** A cada abertura o app media
+  a duração de cada vídeo de cada projeto de novo — com centenas de
+  projetos, meio minuto de processador gasto em arquivos que não mudaram.
+  A medida agora fica guardada entre uma abertura e outra; um arquivo
+  regravado é medido de novo sozinho. Medido com 331 projetos: 67 s na
+  primeira abertura, 0,1 s nas seguintes.
+
 ## 5.0.43
 
 - **"Salvar legenda .srt" no menu do vídeo.** O vídeo sai com a legenda
