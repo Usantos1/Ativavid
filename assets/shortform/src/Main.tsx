@@ -42,7 +42,7 @@ const {fontFamily} = loadFont('normal', {weights: ['400', '600', '900']});
 // Fonte da marca (edit-data → captions/hook.fontFamily). CAP_FF veste o
 // karaokê; HL_FF veste todas as headlines. Elementos gráficos (contador,
 // end card) e o stacked mantêm a tipografia assinada do template.
-import {capFamily, capTransform, capWeight, hookFamily, hookSizeFactor, hookTransform, hookWeight} from './fonts';
+import {HOOK_FONT, capFamily, capTransform, capWeight, familyFor, hookFamily, hookSizeFactor, hookTransform, hookWeight} from './fonts';
 const CAP_FF = capFamily(fontFamily);
 const HL_FF = hookFamily(fontFamily);
 
@@ -93,7 +93,9 @@ export type EditData = {
       | 'pilula' | 'manchete' | 'carimbo' | 'pergunta'
       | 'faixa' | 'fita' | 'neon' | 'vazado' | 'gradiente'
       | 'recorte' | 'etiqueta' | 'marcador' | 'linhas'
-      | 'riscado' | 'caixas' | 'quadro';
+      | 'riscado' | 'caixas' | 'quadro'
+      // lote por fonte (5.0.70): fora do tipo, o tsc reprova o job
+      | 'gigante' | 'cartaz' | 'esportiva' | 'elegante' | 'estreita' | 'quadrinhos';
     // "pergunta": two-phase hook. `lines` is the QUESTION (shown from 0);
     // at answerAtSec the ANSWER pops in and holds until endSec. The pipeline
     // aims answerAtSec at the end of the first kept range — where the speech
@@ -902,7 +904,9 @@ const EndCard: React.FC = () => {
 // sentence and let this do the breaking — hand-broken `lines` get rejoined.
 const HL_MIN = 40;
 
-type HlStyle = {weights: [number, number]; cap: number; safeW: number; lh: number; top: number};
+// `family`/`paint` (5.0.70): estilo com fonte propria, pintando como outro.
+type HlStyle = {weights: [number, number]; cap: number; safeW: number; lh: number; top: number;
+  family?: string; paint?: string};
 const HL_STYLES: Record<string, HlStyle> = {
   outline: {weights: [800, 800], cap: 92, safeW: 900, lh: 1.02, top: 330},
   card: {weights: [900, 900], cap: 82, safeW: 820, lh: 1.06, top: 120},
@@ -941,18 +945,28 @@ const HL_STYLES: Record<string, HlStyle> = {
   riscado: {weights: [900, 900], cap: 88, safeW: 860, lh: 1.06, top: 302},
   caixas: {weights: [900, 900], cap: 84, safeW: 840, lh: 1.05, top: 300},
   quadro: {weights: [800, 800], cap: 82, safeW: 860, lh: 1.10, top: 300},
+  // ---- lote por FONTE (5.0.70): mesma linha da tabela do motor proprio ----
+  // Peso = o que a fonte TEM (Bebas/Titan/Bangers sao 400 unico); pedir 900
+  // nelas seria negrito falso no Chrome e 400 no Pillow — os dois motores
+  // divergiriam. `paint` diz com qual pintura ja aprovada o estilo desenha.
+  gigante: {weights: [400, 400], cap: 112, safeW: 900, lh: 0.98, top: 300, family: 'bebas', paint: 'outline'},
+  cartaz: {weights: [400, 400], cap: 76, safeW: 820, lh: 1.08, top: 120, family: 'titan', paint: 'card'},
+  esportiva: {weights: [900, 900], cap: 84, safeW: 830, lh: 1.04, top: 300, family: 'kanit', paint: 'realce'},
+  elegante: {weights: [700, 700], cap: 80, safeW: 850, lh: 1.04, top: 305, family: 'lora', paint: 'sublinhado'},
+  estreita: {weights: [700, 700], cap: 88, safeW: 900, lh: 1.04, top: 300, family: 'oswald', paint: 'faixa'},
+  quadrinhos: {weights: [400, 400], cap: 90, safeW: 860, lh: 1.02, top: 310, family: 'bangers', paint: 'sombra'},
 };
 
-const hlWidth = (text: string, size: number, weight: number) =>
+const hlWidth = (text: string, size: number, weight: number, family: string = HL_FF) =>
   text
-    ? measureText({text, fontFamily: HL_FF,
+    ? measureText({text, fontFamily: family,
     textTransform: hookTransform(), fontSize: size, fontWeight: hookWeight(weight), letterSpacing: '-1px'}).width
     : 0;
 
 // Balance by MEASURED width, not word count: "É assim que vai" and "ficar a sua
 // headline" are 4 words and 3 words but nearly the same width — counting words
 // would break it in the wrong place.
-function twoLines(text: string, weights: [number, number]): [string, string] {
+function twoLines(text: string, weights: [number, number], family: string = HL_FF): [string, string] {
   const words = text.trim().split(/\s+/).filter(Boolean);
   if (words.length < 2) return [words[0] ?? '', ''];
   let best: [string, string] = [words[0], words.slice(1).join(' ')];
@@ -960,7 +974,7 @@ function twoLines(text: string, weights: [number, number]): [string, string] {
   for (let i = 1; i < words.length; i++) {
     const a = words.slice(0, i).join(' ');
     const b = words.slice(i).join(' ');
-    const d = Math.abs(hlWidth(a, 100, weights[0]) - hlWidth(b, 100, weights[1]));
+    const d = Math.abs(hlWidth(a, 100, weights[0], family) - hlWidth(b, 100, weights[1], family));
     if (d < bestDiff) {
       bestDiff = d;
       best = [a, b];
@@ -972,9 +986,9 @@ function twoLines(text: string, weights: [number, number]): [string, string] {
 // Width scales with size, but letterSpacing (-1px per gap) does NOT — so the
 // first estimate is off by a few px on long lines. One refinement pass at the
 // estimated size fixes that; iterating further buys nothing.
-function fitHeadline(lines: [string, string], s: HlStyle): number {
+function fitHeadline(lines: [string, string], s: HlStyle, family: string = HL_FF): number {
   const widest = (size: number) =>
-    Math.max(hlWidth(lines[0], size, s.weights[0]), hlWidth(lines[1], size, s.weights[1]));
+    Math.max(hlWidth(lines[0], size, s.weights[0], family), hlWidth(lines[1], size, s.weights[1], family));
   let size = Math.floor((s.safeW / Math.max(1, widest(100))) * 100);
   size = clamp(Math.floor((s.safeW / Math.max(1, widest(size))) * size), HL_MIN, s.cap);
   // Altura normalizada por fonte (Anton 0,83) — mesmo fator do motor
@@ -1017,16 +1031,25 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
 
   const styleId = H.style ?? 'outline';
   const S = HL_STYLES[styleId] ?? HL_STYLES.outline;
+  // 5.0.70: a PINTURA vem do alias; a FONTE vem do estilo, salvo quando a
+  // marca escolheu a dela (HOOK_FONT manda, como sempre — `hookFamily`).
+  const paintId = S.paint ?? styleId;
+  const HLF = S.family ? familyFor(S.family) : null;
+  const hlFF = hookFamily(HLF?.family ?? fontFamily);
+  const hlW = (w: number) =>
+    (!HOOK_FONT && HLF?.weight != null) ? Math.min(w, HLF.weight) : hookWeight(w);
+  const weights: [number, number] = [hlW(S.weights[0]), hlW(S.weights[1])];
   const raw = (H.text ?? (H.lines || []).join(' ')).trim();
   const isUpper = styleId === 'card' || styleId === 'manchete' || styleId === 'carimbo'
-    || styleId === 'faixa' || styleId === 'vazado';
-  const lines = twoLines(isUpper ? raw.toUpperCase() : raw, S.weights);
+    || styleId === 'faixa' || styleId === 'vazado'
+    || styleId === 'gigante' || styleId === 'cartaz' || styleId === 'estreita';
+  const lines = twoLines(isUpper ? raw.toUpperCase() : raw, weights, hlFF);
   // fontSizePx is a CEILING, never a fixed size. As a hard override it silently
   // defeats the whole point: at a size the text cannot fit in, the line wraps and
   // the headline becomes three lines again — which is exactly what happened with
   // the uppercase "card" style at the project's inherited fontSizePx of 66.
   const cap = H.fontSizePx ?? H.maxFontPx ?? S.cap;
-  const size = fitHeadline(lines, {...S, cap, safeW: H.safeWidth ?? S.safeW});
+  const size = fitHeadline(lines, {...S, weights, cap, safeW: H.safeWidth ?? S.safeW}, hlFF);
   const lh = H.lineHeight ?? S.lh;
   const top = H.paddingTop ?? S.top;
   // CENTRO: abertura com a manchete SOZINHA no quadro (pedido de 29/08).
@@ -1040,7 +1063,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
     translate: `${slideX.toFixed(1)}px ${y}px`,
     scale: String(popScale.toFixed(3)),
     textAlign: 'center',
-    fontFamily: HL_FF,
+    fontFamily: hlFF,
     textTransform: hookTransform(),
     lineHeight: lh,
     letterSpacing: -1,
@@ -1053,7 +1076,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
   // plain white; at answerAtSec it hands off to the ANSWER, a realce-style
   // pill in the accent that pops in — timed by the pipeline to land where
   // the speech starts answering.
-  if (styleId === 'pergunta') {
+  if (paintId === 'pergunta') {
     const answerAt = Math.max(1, Math.round((H.answerAtSec ?? 2.5) * fps));
     const inAnswer = f >= answerAt;
     const aRaw = (H.answerLines || []).join(' ').trim() || raw;
@@ -1076,7 +1099,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
             style={{
               ...shell,
               opacity: Math.min(op, qOut),
-              fontWeight: hookWeight(800),
+              fontWeight: hlW(800),
               fontSize: size,
               color: '#fff',
               padding: '0 60px',
@@ -1100,7 +1123,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
               position: 'absolute',
               top,
               textAlign: 'center',
-              fontFamily: HL_FF,
+              fontFamily: hlFF,
     textTransform: hookTransform(),
               lineHeight: lh,
               letterSpacing: -1,
@@ -1113,7 +1136,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
                 style={{
                   background: H.accent ?? '#ff5200',
                   color: '#fff',
-                  fontWeight: hookWeight(900),
+                  fontWeight: hlW(900),
                   fontSize: aSize,
                   padding: '0.08em 0.3em 0.16em',
                   borderRadius: 12,
@@ -1132,7 +1155,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
   // "pilula": one compact line in a dark pill with an accent dot, pinned high
   // and PERSISTENT (endSec = whole video, set by the pipeline). No Sfx — a
   // context bar has no "moment"; a whoosh would announce one.
-  if (styleId === 'pilula') {
+  if (paintId === 'pilula') {
     const one = raw;
     const sz = fitHeadline([one, ''], {...S, cap, safeW: H.safeWidth ?? S.safeW});
     return (
@@ -1160,8 +1183,8 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
               flex: '0 0 auto',
             }}
           />
-          <div style={{fontFamily: HL_FF,
-    textTransform: hookTransform(), fontWeight: hookWeight(700), fontSize: sz, color: '#fff', letterSpacing: -0.5, whiteSpace: 'nowrap', lineHeight: 1.1}}>
+          <div style={{fontFamily: hlFF,
+    textTransform: hookTransform(), fontWeight: hlW(700), fontSize: sz, color: '#fff', letterSpacing: -0.5, whiteSpace: 'nowrap', lineHeight: 1.1}}>
             {one}
           </div>
         </div>
@@ -1172,7 +1195,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
   // "manchete": breaking-news band at the base — dark slab, accent bar on the
   // left, UPPERCASE left-aligned lines. Sits BELOW the caption band (430), so
   // the two never collide.
-  if (styleId === 'manchete') {
+  if (paintId === 'manchete') {
     return (
       <AbsoluteFill style={{justifyContent: 'flex-end', alignItems: 'center', paddingBottom: H.paddingBottom ?? 140}}>
         <Sfx src="whoosh.mp3" volume={0.1} />
@@ -1192,8 +1215,8 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
           }}
         >
           <div style={{width: 12, borderRadius: 6, background: H.accent ?? '#ff5200', flex: '0 0 auto'}} />
-          <div style={{fontFamily: HL_FF,
-    textTransform: hookTransform(), fontWeight: hookWeight(800), fontSize: size, color: '#fff', lineHeight: lh, letterSpacing: -1, textAlign: 'left', whiteSpace: 'nowrap'}}>
+          <div style={{fontFamily: hlFF,
+    textTransform: hookTransform(), fontWeight: hlW(800), fontSize: size, color: '#fff', lineHeight: lh, letterSpacing: -1, textAlign: 'left', whiteSpace: 'nowrap'}}>
             {lines.filter(Boolean).map((l, i) => (<div key={i}>{l}</div>))}
           </div>
         </div>
@@ -1204,7 +1227,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
   // "carimbo": accent-coloured stamp — thick border, slight rotation, and a
   // slam entrance (starts big and transparent, lands fast). The slam replaces
   // the shared fade+rise; the exit fade is shared.
-  if (styleId === 'carimbo') {
+  if (paintId === 'carimbo') {
     const slam = interpolate(f, [0, 7], [0, 1], {
       extrapolateLeft: 'clamp',
       extrapolateRight: 'clamp',
@@ -1234,7 +1257,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
   }
 
   // ---- os cinco de 29/08 (gemeos em render_proprio.py) ----
-  if (styleId === 'faixa') {
+  if (paintId === 'faixa') {
     return (
       <AbsoluteFill style={envolucro}>
         <Sfx src="whoosh.mp3" volume={0.1} />
@@ -1245,7 +1268,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
               style={{
                 background: H.accent ?? '#ff5200',
                 color: '#fff',
-                fontWeight: hookWeight(900),
+                fontWeight: hlW(900),
                 fontSize: size,
                 padding: '0.08em 24px 0.16em',
                 boxShadow: '0 10px 28px rgba(0,0,0,0.45)',
@@ -1259,7 +1282,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
     );
   }
 
-  if (styleId === 'fita') {
+  if (paintId === 'fita') {
     return (
       <AbsoluteFill style={envolucro}>
         <Sfx src="whoosh.mp3" volume={0.1} />
@@ -1270,7 +1293,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
               style={{
                 background: H.accent ?? '#ff5200',
                 color: '#fff',
-                fontWeight: hookWeight(900),
+                fontWeight: hlW(900),
                 fontSize: size,
                 padding: '0.08em 0.34em 0.16em',
                 borderRadius: 6,
@@ -1286,7 +1309,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
     );
   }
 
-  if (styleId === 'neon') {
+  if (paintId === 'neon') {
     const ac = H.accent ?? '#ff5200';
     return (
       <AbsoluteFill style={envolucro}>
@@ -1295,7 +1318,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
           style={{
             ...shell,
             color: '#fff',
-            fontWeight: hookWeight(900),
+            fontWeight: hlW(900),
             fontSize: size,
             textShadow: `0 0 12px ${ac}, 0 0 28px ${ac}, 0 0 52px ${ac}, 0 6px 16px rgba(0,0,0,0.45)`,
           }}
@@ -1306,7 +1329,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
     );
   }
 
-  if (styleId === 'vazado') {
+  if (paintId === 'vazado') {
     // A letra e um BURACO na caixa: o video aparece dentro dela. Em CSS isso
     // nao existe (mix-blend-mode nao recorta o fundo da pagina), entao o
     // desenho e uma mascara SVG — o retangulo e pintado onde a mascara e
@@ -1331,8 +1354,8 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
                       fill="#000"
                       textAnchor="middle"
                       dominantBaseline="central"
-                      fontFamily={HL_FF}
-                      fontWeight={hookWeight(900)}
+                      fontFamily={hlFF}
+                      fontWeight={hlW(900)}
                       fontSize={size}
                       letterSpacing={-1}
                     >
@@ -1349,7 +1372,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
     );
   }
 
-  if (styleId === 'gradiente') {
+  if (paintId === 'gradiente') {
     const ac = H.accent ?? '#ff5200';
     return (
       <AbsoluteFill style={envolucro}>
@@ -1359,7 +1382,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
             <div
               key={i}
               style={{
-                fontWeight: hookWeight(900),
+                fontWeight: hlW(900),
                 fontSize: size,
                 backgroundImage: `linear-gradient(180deg, #fff 0%, ${ac} 100%)`,
                 WebkitBackgroundClip: 'text',
@@ -1375,7 +1398,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
     );
   }
 
-  if (styleId === 'riscado') {
+  if (paintId === 'riscado') {
     // Um risco da marca atravessando a letra, um pouco acima do meio. A
     // mesma montagem do sublinhado/marcador: risco e o irmao de baixo.
     const riscoH = Math.max(6, Math.round(size * 0.14));
@@ -1399,7 +1422,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
               <div
                 style={{
                   position: 'relative',
-                  fontWeight: hookWeight(900),
+                  fontWeight: hlW(900),
                   fontSize: size,
                   color: '#fff',
                   textShadow: '0 4px 16px rgba(0,0,0,0.55)',
@@ -1414,7 +1437,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
     );
   }
 
-  if (styleId === 'caixas') {
+  if (paintId === 'caixas') {
     const ac = H.accent ?? '#ff5200';
     return (
       <AbsoluteFill style={envolucro}>
@@ -1426,7 +1449,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
               style={{
                 background: i === 0 ? ac : '#fff',
                 color: i === 0 ? '#fff' : ac,
-                fontWeight: hookWeight(900),
+                fontWeight: hlW(900),
                 fontSize: size,
                 padding: '0.08em 0.3em 0.16em',
                 borderRadius: 12,
@@ -1441,7 +1464,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
     );
   }
 
-  if (styleId === 'quadro') {
+  if (paintId === 'quadro') {
     // Moldura fina da marca em volta do bloco, fundo escuro translucido.
     // Padding e borda em PIXELS derivados de `size`, para o motor proprio
     // bater a geometria (em `em` o valor resolveria contra a fonte do shell).
@@ -1466,7 +1489,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
               <div
                 key={i}
                 style={{
-                  fontWeight: hookWeight(800),
+                  fontWeight: hlW(800),
                   fontSize: size,
                   color: '#fff',
                   textShadow: '0 4px 16px rgba(0,0,0,0.55)',
@@ -1481,7 +1504,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
     );
   }
 
-  if (styleId === 'recorte') {
+  if (paintId === 'recorte') {
     const ac = H.accent ?? '#ff5200';
     return (
       <AbsoluteFill style={envolucro}>
@@ -1493,7 +1516,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
               style={{
                 background: '#fff',
                 color: ac,
-                fontWeight: hookWeight(900),
+                fontWeight: hlW(900),
                 fontSize: size,
                 padding: '0.08em 0.3em 0.16em',
                 borderRadius: 12,
@@ -1508,7 +1531,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
     );
   }
 
-  if (styleId === 'etiqueta') {
+  if (paintId === 'etiqueta') {
     // O fio branco e `inset`: pintado para DENTRO, a partir da mesma aresta
     // da caixa — assim a geometria bate com a do motor proprio, que desenha
     // a borda no mesmo retangulo do fundo.
@@ -1524,7 +1547,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
               style={{
                 background: ac,
                 color: '#fff',
-                fontWeight: hookWeight(900),
+                fontWeight: hlW(900),
                 fontSize: size,
                 padding: '0.08em 0.3em 0.16em',
                 borderRadius: 8,
@@ -1539,7 +1562,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
     );
   }
 
-  if (styleId === 'marcador') {
+  if (paintId === 'marcador') {
     // A faixa cobre o CORPO da letra, nao a caixa inteira — e o que separa
     // este do `faixa` e do `realce`. Mesma montagem do sublinhado: a faixa e
     // o irmao de baixo, entao o texto passa por cima dela.
@@ -1564,7 +1587,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
               <div
                 style={{
                   position: 'relative',
-                  fontWeight: hookWeight(900),
+                  fontWeight: hlW(900),
                   fontSize: size,
                   color: '#fff',
                   textShadow: '0 4px 16px rgba(0,0,0,0.55)',
@@ -1579,7 +1602,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
     );
   }
 
-  if (styleId === 'linhas') {
+  if (paintId === 'linhas') {
     // Os fios envolvem o BLOCO, nao cada linha: e a leitura de jornal.
     const fio = Math.max(4, Math.round(size * 0.06));
     const folga = Math.round(size * 0.12);
@@ -1602,7 +1625,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
               <div
                 key={i}
                 style={{
-                  fontWeight: hookWeight(800),
+                  fontWeight: hlW(800),
                   fontSize: size,
                   color: '#fff',
                   textShadow: '0 6px 20px rgba(0,0,0,0.5)',
@@ -1617,7 +1640,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
     );
   }
 
-  if (styleId === 'realce') {
+  if (paintId === 'realce') {
     return (
       <AbsoluteFill style={envolucro}>
         <Sfx src="whoosh.mp3" volume={0.1} />
@@ -1628,7 +1651,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
               style={{
                 background: H.accent ?? '#ff5200',
                 color: '#fff',
-                fontWeight: hookWeight(900),
+                fontWeight: hlW(900),
                 fontSize: size,
                 padding: '0.08em 0.3em 0.16em',
                 borderRadius: 12,
@@ -1643,19 +1666,19 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
     );
   }
 
-  if (styleId === 'misto') {
+  if (paintId === 'misto') {
     return (
       <AbsoluteFill style={envolucro}>
         <Sfx src="whoosh.mp3" volume={0.1} />
         <div style={{...shell, filter: 'drop-shadow(0 6px 16px rgba(0,0,0,0.55))'}}>
-          <div style={{fontWeight: hookWeight(400), fontSize: size, color: '#fff'}}>{lines[0]}</div>
-          <div style={{fontWeight: hookWeight(900), fontSize: size, color: H.accent ?? '#ff5200'}}>{lines[1]}</div>
+          <div style={{fontWeight: hlW(400), fontSize: size, color: '#fff'}}>{lines[0]}</div>
+          <div style={{fontWeight: hlW(900), fontSize: size, color: H.accent ?? '#ff5200'}}>{lines[1]}</div>
         </div>
       </AbsoluteFill>
     );
   }
 
-  if (styleId === 'card') {
+  if (paintId === 'card') {
     return (
       <AbsoluteFill style={envolucro}>
         <Sfx src="whoosh.mp3" volume={0.1} />
@@ -1666,8 +1689,8 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
               {H.sign ? <Img src={staticFile(H.sign)} style={{width: 128, filter: 'drop-shadow(0 8px 20px rgba(0,0,0,0.45))'}} /> : null}
             </div>
           ) : null}
-          <div style={{background: '#232326', borderRadius: 24, padding: '28px 46px', textAlign: 'center', fontFamily: HL_FF,
-    textTransform: hookTransform(), fontWeight: hookWeight(900), fontSize: size, color: '#fff', lineHeight: lh, letterSpacing: -1, textShadow: '0 4px 20px rgba(0,0,0,0.55)', boxShadow: '0 18px 50px rgba(0,0,0,0.45)'}}>
+          <div style={{background: '#232326', borderRadius: 24, padding: '28px 46px', textAlign: 'center', fontFamily: hlFF,
+    textTransform: hookTransform(), fontWeight: hlW(900), fontSize: size, color: '#fff', lineHeight: lh, letterSpacing: -1, textShadow: '0 4px 20px rgba(0,0,0,0.55)', boxShadow: '0 18px 50px rgba(0,0,0,0.45)'}}>
             {lines.filter(Boolean).map((l, i) => (<div key={i}>{l}</div>))}
           </div>
         </div>
@@ -1679,7 +1702,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
   // a sticker/pop print rather than a lit object — the opposite of `outline`'s
   // stroke, which sits tight to the glyph. Offset scales with the type so it
   // holds at any fitted size instead of vanishing on small headlines.
-  if (styleId === 'sombra') {
+  if (paintId === 'sombra') {
     const off = Math.max(4, Math.round(size * 0.07));
     return (
       <AbsoluteFill style={envolucro}>
@@ -1687,7 +1710,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
         <div
           style={{
             ...shell,
-            fontWeight: hookWeight(900),
+            fontWeight: hlW(900),
             fontSize: size,
             color: '#fff',
             padding: '0 60px',
@@ -1705,7 +1728,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
   // "sublinhado": text stays white and readable; the accent is a thick bar
   // UNDER each line. The marker sits behind the descenders on purpose — a bar
   // clear of them reads as a separate rule rather than a highlight.
-  if (styleId === 'sublinhado') {
+  if (paintId === 'sublinhado') {
     // 0.13 rendered as a hairline rule that competed with busy footage instead
     // of anchoring the text; 0.19 reads as a marker stroke at the sizes the
     // headline actually fits to.
@@ -1730,7 +1753,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
               <div
                 style={{
                   position: 'relative',
-                  fontWeight: hookWeight(900),
+                  fontWeight: hlW(900),
                   fontSize: size,
                   color: '#fff',
                   textShadow: '0 4px 16px rgba(0,0,0,0.55)',
@@ -1752,7 +1775,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
       <div
         style={{
           ...shell,
-          fontWeight: hookWeight(800),
+          fontWeight: hlW(800),
           fontSize: size,
           color: '#fff',
           WebkitTextStroke: `${stroke}px #000`,

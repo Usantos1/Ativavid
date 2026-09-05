@@ -8009,6 +8009,9 @@ const NOME_DO_ESTILO = {
     recorte: "Recorte", etiqueta: "Etiqueta", marcador: "Marca-texto",
     linhas: "Entre linhas", riscado: "Riscado", caixas: "Duas caixas",
     quadro: "Quadro",
+    gigante: "Gigante (Bebas)", cartaz: "Cartaz (Titan One)",
+    esportiva: "Esportiva (Kanit)", elegante: "Elegante (Lora)",
+    estreita: "Estreita (Oswald)", quadrinhos: "Quadrinhos (Bangers)",
     nenhuma: "Nenhuma",
   },
   transicao: {

@@ -1654,8 +1654,35 @@ class Renderizador:
         "riscado":     ((900, 900), 88, 860, 1.06, 302),
         "caixas":      ((900, 900), 84, 840, 1.05, 300),
         "quadro":      ((800, 800), 82, 860, 1.10, 300),
+        # --- lote de manchetes por FONTE (5.0.70) ---------------------------
+        # Nos 331 projetos do disco so `realce` (198) e `fita` (133) foram
+        # usados; os outros vinte, nunca. O que muda a cara de um titulo e a
+        # LETRA, entao estes seis sao fontes ja carregadas (fonts.ts /
+        # MARCA_FONTES) sobre pinturas que ja passaram na varredura
+        # (HL_PINTURA diz qual). Peso = o que a fonte TEM: Bebas, Titan e
+        # Bangers sao de peso unico (400); pedir 900 nelas daria negrito
+        # falso — o mesmo teto que MARCA_FONTES ja aplica a fonte da marca.
+        "gigante":     ((400, 400), 112, 900, 0.98, 300),
+        "cartaz":      ((400, 400), 76, 820, 1.08, 120),
+        "esportiva":   ((900, 900), 84, 830, 1.04, 300),
+        "elegante":    ((700, 700), 80, 850, 1.04, 305),
+        "estreita":    ((700, 700), 88, 900, 1.04, 300),
+        "quadrinhos":  ((400, 400), 90, 860, 1.02, 310),
     }
-    HL_MAIUSCULA = ("card", "manchete", "carimbo", "faixa", "vazado")
+    # id novo -> pintura que ele usa. Quem nao esta aqui pinta com o proprio id.
+    HL_PINTURA = {
+        "gigante": "outline", "cartaz": "card", "esportiva": "realce",
+        "elegante": "sublinhado", "estreita": "faixa", "quadrinhos": "sombra",
+    }
+    # id -> fonte do CATALOGO (MARCA_FONTES) quando o estilo tem a sua. A
+    # fonte da MARCA, se escolhida, continua mandando — igual ao template
+    # (`hookFamily`: marca, senao o padrao do estilo).
+    HL_FONTE_DO_ESTILO = {
+        "gigante": "bebas", "cartaz": "titan", "esportiva": "kanit",
+        "elegante": "lora", "estreita": "oswald", "quadrinhos": "bangers",
+    }
+    HL_MAIUSCULA = ("card", "manchete", "carimbo", "faixa", "vazado",
+                    "gigante", "cartaz", "estreita")
     # peso -> arquivo Poppins
     # O Main.tsx so carrega Poppins 400/600/900. MEDIDO na varredura de
     # 31/08 (tinta contra o Remotion, projeto real): com 800->Black(900) os
@@ -1668,6 +1695,13 @@ class Renderizador:
     def _hl_fonte(self, peso: int, tam: int) -> ImageFont.FreeTypeFont:
         if self.marca_hook:
             arq, teto = self.marca_hook
+            eixo = min(peso, teto) if teto is not None else peso
+            return self._fonte_arquivo(arq, tam, eixo)
+        # 5.0.70: o estilo pode ter fonte propria (lote por fonte). Vale so
+        # sem fonte de marca, como no template.
+        fid = self.HL_FONTE_DO_ESTILO.get(getattr(self, "_hl_estilo_id", ""))
+        if fid and fid in MARCA_FONTES:
+            arq, teto = MARCA_FONTES[fid]
             eixo = min(peso, teto) if teto is not None else peso
             return self._fonte_arquivo(arq, tam, eixo)
         # `marca=None`: sem fonte de HEADLINE escolhida, a headline volta
@@ -2043,6 +2077,10 @@ class Renderizador:
         texto = (hook.get("text") or " ".join(hook.get("lines") or [])).strip()
         if estilo in self.HL_MAIUSCULA:
             texto = texto.upper()
+        # 5.0.70: a fonte vem do ID do estilo (`_hl_fonte` le isto); a
+        # PINTURA vem do alias. Daqui para baixo `estilo` e a pintura.
+        self._hl_estilo_id = estilo
+        estilo = self.HL_PINTURA.get(estilo, estilo)
         cap = int(hook.get("fontSizePx") or hook.get("maxFontPx") or cap0)
         safe_w = float(hook.get("safeWidth") or safe_w0)
         linhas, tam = self._hl_linhas(texto, pesos, cap, safe_w)
@@ -5326,15 +5364,32 @@ class Renderizador:
         return None
 
     def _aplicar_flash(self, buf, sujo, a, cor=(255.0, 255.0, 255.0)):
-        a_b = buf[..., 3].astype(np.float32) / 255.0
-        a_o = a + a_b * (1.0 - a)
-        peso = (a_b * (1.0 - a))[..., None]
+        # 5.0.70: so a caixa onde a mascara e maior que zero. Fora dela a
+        # conta abaixo devolve o proprio pixel (a=0 -> rgb_b*a_b/a_b), entao
+        # o recorte e pixel-identico — e o feixe do flash, que varre o
+        # quadro, fica parcialmente fora dele em boa parte dos 7 quadros.
+        # Perfil de 900 quadros: 0,18 s por quadro de flash, 23% do desenho.
+        vivo = a > (0.5 / 255.0)
+        linhas = np.flatnonzero(vivo.any(axis=1))
+        if linhas.size == 0:
+            return
+        colunas = np.flatnonzero(vivo.any(axis=0))
+        y0, y1 = int(linhas[0]), int(linhas[-1]) + 1
+        x0, x1 = int(colunas[0]), int(colunas[-1]) + 1
+        sub = buf[y0:y1, x0:x1]
+        a_c = a[y0:y1, x0:x1]
+        a_b = sub[..., 3].astype(np.float32) / 255.0
+        a_o = a_c + a_b * (1.0 - a_c)
+        peso = (a_b * (1.0 - a_c))[..., None]
         c3 = np.asarray(cor, dtype=np.float32)[None, None, :]
-        rgb = (c3 * a[..., None] + buf[..., :3].astype(np.float32) * peso) \
+        rgb = (c3 * a_c[..., None] + sub[..., :3].astype(np.float32) * peso) \
             / np.maximum(a_o[..., None], 1e-6)
-        buf[..., :3] = np.clip(rgb, 0, 255).astype(np.uint8)
-        buf[..., 3] = (np.clip(a_o, 0, 1) * 255.0).astype(np.uint8)
-        sujo[:] = [0, 0, buf.shape[1], buf.shape[0]]
+        sub[..., :3] = np.clip(rgb, 0, 255).astype(np.uint8)
+        sub[..., 3] = (np.clip(a_o, 0, 1) * 255.0).astype(np.uint8)
+        sujo[0] = min(sujo[0], x0) if sujo[2] > sujo[0] else x0
+        sujo[1] = min(sujo[1], y0) if sujo[3] > sujo[1] else y0
+        sujo[2] = max(sujo[2], x1)
+        sujo[3] = max(sujo[3], y1)
 
     # ------------------------------------------------------------- saída ----
     def _assinatura(self, f: int):
@@ -5429,7 +5484,7 @@ class Renderizador:
                     got = self._flash_quadro(at, f, tipo, k_tr)
                     if got is not None:
                         self._aplicar_flash(buf, sujo, got[0], got[1])
-                bytes_ant = buf.tobytes()
+                bytes_ant = memoryview(buf).cast("B")
                 ff.stdin.write(bytes_ant)
         finally:
             ff.stdin.close()
@@ -5761,7 +5816,7 @@ def render_final_uma_passada(
                     got = r._flash_quadro(at, f, tipo, k_tr)
                     if got is not None:
                         r._aplicar_flash(buf, sujo, got[0], got[1])
-                bytes_ant = buf.tobytes()
+                bytes_ant = memoryview(buf).cast("B")
                 ff.stdin.write(bytes_ant)
         except OSError:
             pass          # cano fechou: o returncode conta o que houve

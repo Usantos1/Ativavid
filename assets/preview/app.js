@@ -308,6 +308,13 @@ const STYLE_CATALOG = {
     {id: 'riscado', name: 'Riscado', hl: 'riscado'},
     {id: 'caixas', name: 'Duas caixas', hl: 'caixas'},
     {id: 'quadro', name: 'Quadro', hl: 'quadro'},
+    // lote por fonte (5.0.70)
+    {id: 'gigante', name: 'Gigante (Bebas)', hl: 'gigante'},
+    {id: 'cartaz', name: 'Cartaz (Titan One)', hl: 'cartaz'},
+    {id: 'esportiva', name: 'Esportiva (Kanit)', hl: 'esportiva'},
+    {id: 'elegante', name: 'Elegante (Lora)', hl: 'elegante'},
+    {id: 'estreita', name: 'Estreita (Oswald)', hl: 'estreita'},
+    {id: 'quadrinhos', name: 'Quadrinhos (Bangers)', hl: 'quadrinhos'},
     // opts out of the hook entirely (hook.enabled:false in edit-data.json) — a
     // real final look (talking-head cut, images placed by hand later), not a
     // placeholder, so it earns its own card and label like the mockups do.
@@ -585,7 +592,18 @@ const HL_STYLES = {
   riscado: { weights: [900, 900], cap: 88, safeW: 860, lh: 1.06 },
   caixas: { weights: [900, 900], cap: 84, safeW: 840, lh: 1.05 },
   quadro: { weights: [800, 800], cap: 82, safeW: 860, lh: 1.10 },
+  // lote por FONTE (5.0.70) — mesma linha da tabela do template e do motor
+  // proprio; `family` e a pilha CSS, `paint` a pintura que ele reaproveita.
+  gigante: { weights: [400, 400], cap: 112, safeW: 900, lh: 0.98, family: "'Bebas Neue',sans-serif", paint: 'outline' },
+  cartaz: { weights: [400, 400], cap: 76, safeW: 820, lh: 1.08, family: "'Titan One',cursive", paint: 'card' },
+  esportiva: { weights: [900, 900], cap: 84, safeW: 830, lh: 1.04, family: "'Kanit',sans-serif", paint: 'realce' },
+  elegante: { weights: [700, 700], cap: 80, safeW: 850, lh: 1.04, family: "'Lora',serif", paint: 'sublinhado' },
+  estreita: { weights: [700, 700], cap: 88, safeW: 900, lh: 1.04, family: "'Oswald',sans-serif", paint: 'faixa' },
+  quadrinhos: { weights: [400, 400], cap: 90, safeW: 860, lh: 1.02, family: "'Bangers',cursive", paint: 'sombra' },
 };
+// A familia do estilo em amostragem: `hlWidth` mede com ela (a quebra de
+// linha e o ajuste de tamanho dependem da largura da letra certa).
+let HL_FAMILIA_ATUAL = null;
 
 // Measured in RENDER units (1080-wide), scaled to the box only at the end — the
 // template's letterSpacing is -1px at 1080, which is NOT proportional once the
@@ -606,7 +624,7 @@ function measureType(text, size, weight, family, tracking) {
   hlMeter.textContent = text;
   return hlMeter.offsetWidth;
 }
-const hlWidth = (text, size, weight) => measureType(text, size, weight);
+const hlWidth = (text, size, weight) => measureType(text, size, weight, HL_FAMILIA_ATUAL);
 
 // Balance by MEASURED width, not word count: "É assim que vai" and "ficar a sua
 // headline" are 4 and 3 words but nearly the same width — counting words breaks
@@ -639,15 +657,20 @@ function buildHeadlineDemo(host, styleId) {
   host.innerHTML = '';
   const wrap = el('div', 'cap-demo', host);
   const upperHl = styleId === 'card' || styleId === 'manchete' || styleId === 'carimbo'
-    || styleId === 'faixa' || styleId === 'vazado';
+    || styleId === 'faixa' || styleId === 'vazado'
+    || styleId === 'gigante' || styleId === 'cartaz' || styleId === 'estreita';
   const raw = upperHl ? HEADLINE_TEXT.toUpperCase() : HEADLINE_TEXT;
+  // 5.0.70: mede e desenha com a fonte do estilo; pinta como o alias.
+  HL_FAMILIA_ATUAL = S.family || null;
+  const paintId = S.paint || styleId;
   const lines = hlTwoLines(raw, S.weights);
   const size = hlFit(lines, S) * s;
-  const box = el('div', `hl-demo hl-${styleId}`, wrap);
+  const box = el('div', `hl-demo hl-${paintId}`, wrap);
+  if (S.family) box.style.fontFamily = S.family;
   box.style.lineHeight = String(S.lh);
   box.style.letterSpacing = `${-1 * s}px`;
 
-  if (styleId === 'pilula') {
+  if (paintId === 'pilula') {
     // uma linha só, no pill escuro com o ponto na cor da headline
     const one = HEADLINE_TEXT;
     const sz = hlFit([one, ''], S) * s;
@@ -662,7 +685,7 @@ function buildHeadlineDemo(host, styleId) {
     t.textContent = one;
     return;
   }
-  if (styleId === 'manchete') {
+  if (paintId === 'manchete') {
     box.style.borderRadius = `${18 * s}px`;
     box.style.padding = `${26 * s}px ${44 * s}px`;
     box.style.gap = `${26 * s}px`;
@@ -678,7 +701,7 @@ function buildHeadlineDemo(host, styleId) {
     }
     return;
   }
-  if (styleId === 'carimbo') {
+  if (paintId === 'carimbo') {
     const bw = Math.max(3 * s, size * 0.09);
     box.style.border = `${bw}px solid var(--hl-accent)`;
     box.style.borderRadius = `${18 * s}px`;
@@ -693,7 +716,7 @@ function buildHeadlineDemo(host, styleId) {
     return;
   }
 
-  if (styleId === 'pergunta') {
+  if (paintId === 'pergunta') {
     // fase 1 (pergunta branca) + fase 2 (resposta na pílula do accent),
     // empilhadas no card para comunicar a virada
     const q = el('div', 'hl-pergunta-q', box);
@@ -706,23 +729,23 @@ function buildHeadlineDemo(host, styleId) {
     a.textContent = 'Aguenta. Olha isso';
     return;
   }
-  if (styleId === 'faixa' || styleId === 'fita' || styleId === 'vazado') {
+  if (paintId === 'faixa' || styleId === 'fita' || styleId === 'vazado') {
     // os tres sao caixa cheia; muda o corte, o giro e quem fica no buraco
     for (const [i, l] of lines.entries()) {
       if (!l) continue;
       const b = el('div', `hl-block hl-${styleId}-line`, box);
       b.style.fontSize = `${size}px`;
-      if (styleId === 'faixa') b.style.borderRadius = '0';
-      if (styleId === 'fita') {
+      if (paintId === 'faixa') b.style.borderRadius = '0';
+      if (paintId === 'fita') {
         b.style.borderRadius = `${6 * s}px`;
         b.style.transform = `rotate(${i === 0 ? -2.4 : 1.8}deg)`;
       }
-      if (styleId === 'vazado') b.style.borderRadius = `${10 * s}px`;
+      if (paintId === 'vazado') b.style.borderRadius = `${10 * s}px`;
       b.textContent = l;
     }
     return;
   }
-  if (styleId === 'gradiente') {
+  if (paintId === 'gradiente') {
     for (const l of lines) {
       if (!l) continue;
       const d = el('div', 'hl-gradiente-line', box);
@@ -731,18 +754,18 @@ function buildHeadlineDemo(host, styleId) {
     }
     return;
   }
-  if (styleId === 'realce' || styleId === 'recorte' || styleId === 'etiqueta') {
+  if (paintId === 'realce' || styleId === 'recorte' || styleId === 'etiqueta') {
     for (const l of lines) {
       if (!l) continue;
       const b = el('div', 'hl-block', box);
       b.style.fontSize = `${size}px`;
       b.style.borderRadius = `${(styleId === 'etiqueta' ? 8 : 12) * s}px`;
-      if (styleId === 'recorte') {
+      if (paintId === 'recorte') {
         // as cores trocadas: caixa branca, letra na cor da marca
         b.style.background = '#ffffff';
         b.style.color = 'var(--hl-accent)';
       }
-      if (styleId === 'etiqueta') {
+      if (paintId === 'etiqueta') {
         b.style.background = 'var(--hl-accent)';
         b.style.boxShadow =
           `inset 0 0 0 ${Math.max(2, size * 0.045)}px #fff, 0 10px 28px rgba(0,0,0,.45)`;
@@ -751,7 +774,7 @@ function buildHeadlineDemo(host, styleId) {
     }
     return;
   }
-  if (styleId === 'riscado') {
+  if (paintId === 'riscado') {
     for (const l of lines) {
       if (!l) continue;
       const holder = el('div', 'hl-under', box);
@@ -767,7 +790,7 @@ function buildHeadlineDemo(host, styleId) {
     }
     return;
   }
-  if (styleId === 'caixas') {
+  if (paintId === 'caixas') {
     for (const [i, l] of lines.entries()) {
       if (!l) continue;
       const b = el('div', 'hl-block', box);
@@ -783,7 +806,7 @@ function buildHeadlineDemo(host, styleId) {
     }
     return;
   }
-  if (styleId === 'quadro') {
+  if (paintId === 'quadro') {
     const fio = Math.max(2, size * 0.06);
     box.style.border = `${fio}px solid var(--hl-accent)`;
     box.style.borderRadius = `${10 * s}px`;
@@ -797,7 +820,7 @@ function buildHeadlineDemo(host, styleId) {
     }
     return;
   }
-  if (styleId === 'marcador') {
+  if (paintId === 'marcador') {
     // a faixa cobre o CORPO da letra; o texto passa por cima dela
     for (const l of lines) {
       if (!l) continue;
@@ -812,7 +835,7 @@ function buildHeadlineDemo(host, styleId) {
     }
     return;
   }
-  if (styleId === 'linhas') {
+  if (paintId === 'linhas') {
     const fio = Math.max(2, size * 0.06);
     box.style.borderTop = `${fio}px solid var(--hl-accent)`;
     box.style.borderBottom = `${fio}px solid var(--hl-accent)`;
@@ -825,7 +848,7 @@ function buildHeadlineDemo(host, styleId) {
     }
     return;
   }
-  if (styleId === 'sublinhado') {
+  if (paintId === 'sublinhado') {
     box.style.gap = `${Math.round(size * 0.16)}px`;
     for (const l of lines) {
       if (!l) continue;
@@ -841,18 +864,18 @@ function buildHeadlineDemo(host, styleId) {
     }
     return;
   }
-  if (styleId === 'card') {
+  if (paintId === 'card') {
     box.style.borderRadius = `${24 * s}px`;
     box.style.padding = `${28 * s}px ${46 * s}px`;
   }
-  if (styleId === 'outline') {
+  if (paintId === 'outline') {
     box.style.webkitTextStroke = `${12 * s}px #000`;
   }
-  if (styleId === 'neon') {
+  if (paintId === 'neon') {
     const g = Math.max(4 * s, size * 0.16);
     box.style.textShadow = `0 0 ${g}px var(--hl-accent), 0 0 ${g * 2.3}px var(--hl-accent), 0 0 ${g * 4.3}px var(--hl-accent)`;
   }
-  if (styleId === 'sombra') {
+  if (paintId === 'sombra') {
     // same offset formula as the template, scaled to the card
     const off = Math.max(4 * s, size * 0.07);
     box.style.textShadow = `${off}px ${off}px 0 var(--hl-accent), 0 ${6 * s}px ${18 * s}px rgba(0,0,0,0.5)`;
@@ -864,7 +887,7 @@ function buildHeadlineDemo(host, styleId) {
     d.style.fontWeight = String(S.weights[i]);
     // var(), not a literal — an inline colour would beat the accent variable and
     // this preview would keep painting orange while the others followed the pick
-    if (styleId === 'misto') d.style.color = i === 1 ? 'var(--hl-accent)' : '#fff';
+    if (paintId === 'misto') d.style.color = i === 1 ? 'var(--hl-accent)' : '#fff';
     d.textContent = l;
   });
 }

@@ -119,6 +119,11 @@ function load(id: string): Resolved | null {
   }
 }
 
+/** Fonte de um estilo (lote de manchetes por fonte, 5.0.70). */
+export function familyFor(id: string): Resolved | null {
+  return id ? load(id) : null;
+}
+
 export const CAPTION_FONT: Resolved | null = load(CAP_ID);
 export const HOOK_FONT: Resolved | null = load(HOOK_ID);
 

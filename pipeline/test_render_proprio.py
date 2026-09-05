@@ -259,7 +259,9 @@ def test_headline_quebra_em_duas_linhas_por_largura(tmp_path):
 def test_headline_maiuscula_bate_com_o_template():
     """Caixa alta e escolha de ESTILO, e tem de ser a mesma nos dois motores:
     o mesmo texto sairia "É assim" num caminho e "É ASSIM" no outro."""
-    esperado = {"card", "manchete", "carimbo", "faixa", "vazado"}
+    # 5.0.70: gigante (Bebas), cartaz (Titan) e estreita (Oswald) tambem sobem
+    esperado = {"card", "manchete", "carimbo", "faixa", "vazado",
+                "gigante", "cartaz", "estreita"}
     assert set(Renderizador.HL_MAIUSCULA) == esperado
     tsx = (Path(__file__).resolve().parent.parent / "assets" / "shortform"
            / "src" / "Main.tsx").read_text(encoding="utf-8")

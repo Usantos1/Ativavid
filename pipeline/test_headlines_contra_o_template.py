@@ -40,7 +40,7 @@ def test_drop_shadow_usa_o_raio_inteiro():
         # e o template confirma que ali é drop-shadow, não text-shadow — o
         # ramo é o `if styleId === ...`, não a primeira menção do nome (que
         # aparece antes, na união de tipos e no teste de caixa alta)
-        i = TSX.index(f"if (styleId === '{estilo}')")
+        i = TSX.index(f"if (paintId === '{estilo}')")
         assert "drop-shadow" in TSX[i:i + 1600], estilo
 
 

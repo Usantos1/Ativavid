@@ -85,7 +85,7 @@ def test_o_tamanho_e_a_largura_batem_nos_dois_motores():
         assert f"lines: {lin}," in bloco, f"{e}: linhas"
         assert f"maxW: {max_w}," in bloco, f"{e}: largura"
         # o editor desenha a demonstração com a MESMA geometria
-        demo = PJS.split(f"  {e}: {{", 1)[1][:300]
+        demo = PJS.split("const STATIC_VARIANTS = {", 1)[1].split(f"  {e}: {{", 1)[1][:300]
         assert f"size: {tam}," in demo, f"{e}: tamanho no editor"
         assert f"maxWords: {max_p}," in demo, f"{e}: palavras no editor"
         assert f"maxW: {max_w}" in demo, f"{e}: largura no editor"

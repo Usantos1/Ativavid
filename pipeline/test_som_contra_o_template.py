@@ -32,8 +32,8 @@ def _whoosh_do_template(estilo: str):
         i = TSX.index("const stroke = H.strokePx ?? 12;")
         fim = i + 400
     else:
-        i = TSX.index(f"if (styleId === '{estilo}')")
-        seguinte = TSX.find("if (styleId ===", i + 20)
+        i = TSX.index(f"if (paintId === '{estilo}')")
+        seguinte = TSX.find("if (paintId ===", i + 20)
         fim = seguinte if seguinte > 0 else i + 2500
     m = re.search(r'<Sfx src="whoosh\.mp3"(?: volume=\{([0-9.]+)\})?',
                   TSX[i:fim])
@@ -46,7 +46,10 @@ def test_o_whoosh_da_manchete_bate_estilo_a_estilo():
     from app.render_proprio import WHOOSH_HL, WHOOSH_VOL, Renderizador
 
     for estilo in Renderizador.HL_STYLES:
-        esperado = _whoosh_do_template(estilo)
+        # 5.0.70: estilo por FONTE desenha (e toca) pela pintura do alias; o
+        # motor proprio escolhe o whoosh pelo id original — se alguem aliasar
+        # um estilo novo para  (0,12) ou  (nada), isto pega.
+        esperado = _whoosh_do_template(Renderizador.HL_PINTURA.get(estilo, estilo))
         nosso = WHOOSH_HL.get(estilo, WHOOSH_VOL)
         assert nosso == esperado, (
             f"{estilo}: template {esperado}, motor próprio {nosso}")

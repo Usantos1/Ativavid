@@ -46,7 +46,7 @@ def test_a_headline_nova_existe_nos_tres_lugares():
     tela = _ids_da_tela("headlines")
     for nome in NOVAS_HL:
         assert nome in tela, f"{nome}: falta o cartão na tela"
-        assert f"styleId === '{nome}'" in MAIN, f"{nome}: falta desenho no Remotion"
+        assert f"paintId === '{nome}'" in MAIN, f"{nome}: falta desenho no Remotion"
         assert nome in Renderizador.HL_STYLES, f"{nome}: falta no motor próprio"
 
 
@@ -59,7 +59,8 @@ def test_toda_headline_do_catalogo_existe_nos_dois_motores():
         if nome == "nenhuma":            # opta por NAO ter headline
             continue
         assert nome in Renderizador.HL_STYLES, f"{nome}: falta no motor próprio"
-        desenha = (f"styleId === '{nome}'" in MAIN
+        desenha = (f"paintId === '{nome}'" in MAIN
+                   or nome in Renderizador.HL_PINTURA   # 5.0.70: pinta por alias
                    or f"HL_STYLES.{nome}" in MAIN)
         assert desenha, f"{nome}: falta desenho no Remotion"
 

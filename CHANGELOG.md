@@ -1,5 +1,18 @@
 # Changelog
 
+## 5.0.70
+
+- **Mais seis manchetes, agora são 28.** *Gigante* (Bebas), *Cartaz*
+  (Titan One), *Esportiva* (Kanit), *Elegante* (Lora), *Estreita*
+  (Oswald) e *Quadrinhos* (Bangers). Cada uma usa uma fonte diferente
+  sobre um desenho que já existia, e todas foram medidas contra o desenho
+  de referência. A fonte da sua marca, se você escolheu uma, continua
+  valendo por cima.
+- **O desenho das legendas e efeitos ficou 1,3x mais rápido.** Num vídeo
+  real de 30 segundos, de 16,3 para 12,4 segundos. O flash de transição
+  só toca a parte do quadro por onde ele passa, e o quadro deixa de ser
+  copiado antes de ir para o codificador. Nenhum pixel visível muda.
+
 ## 5.0.69
 
 - **O contador de Aulas mostrava 0 com aula publicada.** Ele contava só as

@@ -58,8 +58,8 @@ def test_a_geometria_e_a_mesma_nos_tres_motores():
 def test_cada_motor_sabe_desenhar_os_quatro():
     for e in NOVAS:
         assert f'if estilo == "{e}":' in PROPRIO, f"motor próprio não desenha `{e}`"
-        assert f"styleId === '{e}'" in TSX, f"o template não desenha `{e}`"
-        assert f"styleId === '{e}'" in PJS, f"o cartão do editor não mostra `{e}`"
+        assert f"paintId === '{e}'" in TSX, f"o template não desenha `{e}`"
+        assert f"paintId === '{e}'" in PJS, f"o cartão do editor não mostra `{e}`"
 
 
 def test_o_template_aceita_os_quatro_no_tipo():

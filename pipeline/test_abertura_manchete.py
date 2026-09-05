@@ -109,7 +109,7 @@ def test_o_centro_chega_aos_dois_motores():
     # So o corpo do HookInner: `flex-end` tambem aparece em outras partes
     # do arquivo, que nao tem nada com a manchete.
     corpo = tsx[tsx.index("const HookInner"):tsx.index("const HookIntro")]
-    ramos = corpo.count("if (styleId === '")
+    ramos = corpo.count("if (paintId === '")
     # um envolucro por ramo, mais o caso de sobra, menos a `manchete` — que
     # ancora na BASE de proposito
     assert corpo.count("<AbsoluteFill style={envolucro}>") == ramos, (
