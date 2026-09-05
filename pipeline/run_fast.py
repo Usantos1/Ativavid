@@ -567,6 +567,14 @@ _MARCADORES_TRANSCRICAO = (
     "REVISAO_GEMINI",
     "REVISAO_GEMINI_PULADA",
     "REVISAO_GEMINI_FALHOU",
+    # 5.0.72: a revisao saiu do caminho critico. `REVISAO_ADIADA` e o
+    # helper avisando que devolveu o Whisper puro e a revisao fica para a
+    # segunda chamada (`--revisao so`), cujo desfecho sao as linhas acima
+    # ou uma destas.
+    "REVISAO_ADIADA",
+    "REVISAO_JA_FEITA",
+    "REVISAO_SEM_BASE",
+    "REVISAO_DESLIGADA",
 )
 
 
@@ -4062,6 +4070,63 @@ def run(
         12,
     )
 
+    # 5.0.72: a revisao textual da IA sai do caminho critico. O helper
+    # devolve o Whisper puro (`--revisao depois`) e a revisao roda numa
+    # segunda chamada, em paralelo com o plano e o corte; so as legendas
+    # esperam por ela (`_fechar_revisoes`, dentro de `_write_caps_from_edl`).
+    # MEDIDO na telemetria real (79 jobs): a revisao custava 13 s de mediana
+    # em dias normais e 24 s num lote, com casos de 84 s — tudo com o job
+    # parado. O plano le o texto puro (as correcoes sao de grafia e nao
+    # mudam onde cortar) e o EDL guarda TEMPOS, nao texto: as legendas saem
+    # das palavras revisadas, como antes.
+    import threading as _threading_rev
+
+    _revisoes: list[dict] = []
+
+    def _revisar_em_paralelo(src_: Path, stem_: str, key_: str) -> None:
+        item: dict = {"stem": stem_, "key": key_, "proc": None}
+
+        def _rodar() -> None:
+            try:
+                item["proc"] = _helper(
+                    "transcribe.py", str(src_), "--edit-dir", str(edit_dir),
+                    "--language", language, "--backend", _backend_transcricao(),
+                    "--revisao", "so", check=False)
+            except Exception as e:  # noqa: BLE001
+                print(f"REVISAO_ADIADA_FALHOU {type(e).__name__}: {str(e)[:120]}",
+                      flush=True)
+
+        th = _threading_rev.Thread(target=_rodar, daemon=True,
+                                   name=f"revisao-{stem_[:16]}")
+        item["thread"] = th
+        th.start()
+        _revisoes.append(item)
+
+    def _fechar_revisoes() -> None:
+        """Espera as revisoes adiadas e recopia stem -> key. Idempotente.
+
+        `REVISAO_WAIT` mede so o que SOBROU da espera (como `MUSIC_WAIT`):
+        quando a revisao terminou durante o corte, marca ~0.
+        """
+        if not _revisoes:
+            return
+        t0 = time.perf_counter()
+        pendentes, _revisoes[:] = list(_revisoes), []
+        for item in pendentes:
+            item["thread"].join()
+            _ecoar_transcricao(item.get("proc"))
+            if item["stem"] != item["key"]:
+                # captions_for_remotion prefere `<key>.json` — a copia feita
+                # na analise era do Whisper puro e precisa acompanhar.
+                a = edit_dir / "transcripts" / f"{item['stem']}.json"
+                b = edit_dir / "transcripts" / f"{item['key']}.json"
+                if a.exists():
+                    try:
+                        shutil.copy2(a, b)
+                    except OSError:
+                        pass
+        _timing_mark("REVISAO_WAIT", t0)
+
     for idx, src in enumerate(sources):
         w, h = _display_wh(src)
         dur_i = _ffprobe_duration(src)
@@ -4099,6 +4164,7 @@ def run(
                 _helper, "transcribe.py", str(src),
                 "--edit-dir", str(edit_dir), "--language", language,
                 "--backend", _backend_transcricao(),
+                "--revisao", "depois",
             )
             _f_sr = _an_ex.submit(_helper, "speech_regions.py", str(src))
             _f_vl = _an_ex.submit(
@@ -4106,7 +4172,8 @@ def run(
                 "--edit-dir", str(edit_dir), "--json",
             )
             _f_color = _an_ex.submit(_helper, "detect_color.py", str(src), "--json")
-            _ecoar_transcricao(_f_tr.result())
+            _proc_tr = _f_tr.result()
+            _ecoar_transcricao(_proc_tr)
             sr = _f_sr.result()
             vl = _f_vl.result()
             _color_proc = _f_color.result()
@@ -4117,6 +4184,9 @@ def run(
                 shutil.copy2(stem_tr, key_tr)
             except OSError:
                 pass
+        if "REVISAO_ADIADA" in ((getattr(_proc_tr, "stdout", "") or "")
+                                + (getattr(_proc_tr, "stderr", "") or "")):
+            _revisar_em_paralelo(src, stem, key)
 
         spoken_i = transcript_text(edit_dir, stem) or transcript_text(edit_dir, key)
         if transcript_looks_bad(spoken_i):
@@ -4210,6 +4280,9 @@ def run(
         status["status"] = "clips_planned"
         status["clips"] = len(clips)
         print(f"[clips] {len(clips)} clipes planejados", flush=True)
+        # A mae sai cedo: espera a revisao adiada para que cada filho ache
+        # o transcript revisado no cache em vez de pagar a IA de novo.
+        _fechar_revisoes()
         return status
 
     print("[2b/9] montando corte", flush=True)
@@ -4696,6 +4769,9 @@ def run(
         force_cut_tr = os.environ.get("ATIVAVID_TRANSCRIBE_CUT") == "1"
 
         def _write_caps_from_edl() -> None:
+            # As legendas sao a UNICA etapa que precisa das palavras
+            # revisadas: e aqui que a revisao adiada e esperada (5.0.72).
+            _fechar_revisoes()
             _helper(
                 "captions_for_remotion.py",
                 str(edl_path),
@@ -5428,6 +5504,9 @@ def run(
                 _RENDER_META["LUFS"] = _au_final.get("integratedLufs")
         except Exception as e:  # noqa: BLE001
             print(f"[warn] true peak: {e}", flush=True)
+    # Longform e os caminhos que nao passam pelo remap: o transcript tem de
+    # estar final quando o job acaba, porque o editor abre ele em seguida.
+    _fechar_revisoes()
     other = time.perf_counter() - _t_job - sum(_TIMING.values())
     if other > 0.05:
         _TIMING["OTHER"] = round(other, 3)

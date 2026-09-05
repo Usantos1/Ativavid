@@ -50,7 +50,9 @@ def test_nenhum_ponto_que_transcreve_cai_no_auto():
 
     s = apenas_codigo(RUN_FAST)
     pontos = [m.start() for m in re.finditer(r'"transcribe\.py"', s)]
-    assert len(pontos) == 3, f"achei {len(pontos)} chamadas; o arquivo mudou"
+    # 5.0.72: o quarto ponto e a segunda metade da transcricao da fonte
+    # (`--revisao so`, em paralelo com o plano e o corte) — mesma regra.
+    assert len(pontos) == 4, f"achei {len(pontos)} chamadas; o arquivo mudou"
     for i in pontos:
         trecho = s[i:i + 300]
         assert "--backend" in trecho, (

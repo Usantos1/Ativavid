@@ -988,6 +988,98 @@ def _revisar_payload(rev, payload: dict, marca: str, marca_revisada: str
     return novo, marca_revisada, meta
 
 
+def _gravar_json_atomico(path: Path, payload: dict) -> None:
+    """Escreve num temporario e troca de uma vez.
+
+    A revisao ADIADA (5.0.72) reescreve o transcript enquanto o pipeline pode
+    estar lendo o arquivo (o `spoken` do plano, por exemplo). Uma escrita
+    direta deixaria um leitor ver meio JSON. No Windows o `replace` falha se
+    alguem esta com o arquivo aberto naquele instante — as leituras aqui sao
+    de milissegundos, entao tentar de novo resolve.
+    """
+    tmp = path.with_name(f"{path.name}.tmp{os.getpid()}")
+    tmp.write_text(json.dumps(payload, indent=2, ensure_ascii=False),
+                   encoding="utf-8")
+    ultimo: Exception | None = None
+    for _ in range(25):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError as e:
+            ultimo = e
+            time.sleep(0.2)
+    tmp.unlink(missing_ok=True)
+    raise RuntimeError(f"nao consegui trocar {path.name}: {ultimo}")
+
+
+def _so_revisar(
+    video: Path, transcripts_dir: Path, out_path: Path, *,
+    rev, motor, marca: str, marca_revisada: str, verbose: bool,
+) -> Path:
+    """A segunda metade de uma transcricao com `--revisao depois`.
+
+    O pipeline mandou o Whisper puro para o disco e seguiu para o plano e o
+    corte; esta chamada roda em paralelo com eles e so as legendas esperam
+    por ela. Reusa o que ja existe: o revisado em cache (nada a fazer), ou o
+    puro em cache/no arquivo (revisa e troca).
+    """
+    from app.transcricao import telemetria
+
+    t0 = time.time()
+    if not (rev and rev.ligada()):
+        print("REVISAO_DESLIGADA nada a revisar", flush=True)
+        return out_path
+    gravada = marca_da_assinatura(transcripts_dir, video.stem)
+    if gravada == marca_revisada:
+        print("REVISAO_JA_FEITA transcript ja esta revisado", flush=True)
+        return out_path
+
+    pronto = buscar_no_cache(video, marca_revisada, motor.modelo.chave)
+    if pronto is not None:
+        _gravar_json_atomico(out_path, pronto)
+        try:
+            write_source_signature(transcripts_dir, video, marca_revisada)
+        except OSError:
+            pass
+        print(f"TRANSCRIPTION CACHE HIT {video.name} motor={marca_revisada} "
+              f"modelo={motor.modelo.chave} — revisao ja estava no cache", flush=True)
+        telemetria.registrar(
+            video=telemetria.identificador(video), motor="whisper-local",
+            modelo=motor.modelo.chave, cache="HIT",
+            seg_total=round(time.time() - t0, 3), revisao="ok",
+            revisao_motivo="revisada em outro projeto")
+        return out_path
+
+    base = buscar_no_cache(video, marca, motor.modelo.chave)
+    if base is None and out_path.is_file():
+        try:
+            base = json.loads(out_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            base = None
+    if base is None:
+        print("REVISAO_SEM_BASE nao achei o Whisper puro para revisar", flush=True)
+        return out_path
+
+    payload, marca_final, meta = _revisar_payload(rev, base, marca, marca_revisada)
+    if marca_final == marca_revisada:
+        guardar_no_cache(video, marca_revisada, motor.modelo.chave, payload)
+        _gravar_json_atomico(out_path, payload)
+        try:
+            write_source_signature(transcripts_dir, video, marca_final)
+        except OSError:
+            pass
+    telemetria.registrar(
+        video=telemetria.identificador(video), motor="whisper-local",
+        modelo=motor.modelo.chave, cache="REVISAO-ADIADA",
+        seg_total=round(time.time() - t0, 3),
+        palavras=sum(1 for w in payload.get("words") or [] if w.get("type") == "word"),
+        **_telemetria_da_revisao(meta))
+    if verbose:
+        print(f"  revisao adiada: {out_path.name} marca={marca_final} "
+              f"em {time.time() - t0:.1f}s")
+    return out_path
+
+
 def _transcrever_local(
     video: Path,
     transcripts_dir: Path,
@@ -996,6 +1088,7 @@ def _transcrever_local(
     language: str | None,
     verbose: bool,
     modelo: str | None = None,
+    revisao: str = "junto",
 ) -> Path:
     """Ponte para `app.transcricao`: transcreve nesta maquina e grava o JSON.
 
@@ -1039,6 +1132,22 @@ def _transcrever_local(
     quer_revisar = bool(rev and rev.ligada())
     marca = f"local-{motor.modelo.chave}"
     marca_revisada = f"{marca}{rev.SUFIXO}" if rev else marca
+
+    # 5.0.72: `--revisao so` e a segunda metade de um `--revisao depois`.
+    if revisao == "so":
+        return _so_revisar(video, transcripts_dir, out_path, rev=rev, motor=motor,
+                           marca=marca, marca_revisada=marca_revisada, verbose=verbose)
+    # `--revisao depois`: o Whisper puro sai AGORA e a revisao fica para
+    # depois, em paralelo com o plano e o corte. MEDIDO na telemetria real:
+    # a revisao e uma ida a IA de 13 s (mediana em dias normais) a 24 s (num
+    # lote), com casos de 84 s — e o job ficava parado esperando por ela,
+    # sendo que so as legendas usam as palavras revisadas. Se o revisado JA
+    # esta no cache entre projetos, nao ha o que adiar.
+    if revisao == "depois" and quer_revisar:
+        if buscar_no_cache(video, marca_revisada, motor.modelo.chave) is None:
+            quer_revisar = False
+            print("REVISAO_ADIADA o Whisper puro segue; a revisao roda em paralelo",
+                  flush=True)
     # A variante PEDIDA. E so ela: servir um transcript revisado para quem
     # desligou a revisao -- ou o contrario -- e o que faz `ATIVAVID_REVISAO`
     # deixar de ser rollback.
@@ -1193,6 +1302,7 @@ def transcribe_one(
     chunk_seconds: float | None = None,
     elevenlabs_key: str | None = None,
     backend: str = "auto",
+    revisao: str = "junto",
     whisper_model: str | None = None,
 ) -> Path:
     """Transcribe a single video. Returns path to transcript JSON.
@@ -1212,7 +1322,9 @@ def transcribe_one(
     transcripts_dir.mkdir(parents=True, exist_ok=True)
     out_path = transcripts_dir / f"{video.stem}.json"
 
-    if transcript_cache_hit(out_path, video, backend):
+    # `--revisao so` SEMPRE entra: o arquivo existe (e o puro) e a saida
+    # antecipada por cache o deixaria sem revisao para sempre.
+    if revisao != "so" and transcript_cache_hit(out_path, video, backend):
         if verbose:
             print(f"cached: {out_path.name}")
         return out_path
@@ -1233,7 +1345,7 @@ def transcribe_one(
     if resolved == "local":
         return _transcrever_local(
             video, transcripts_dir, out_path, language=language,
-            verbose=verbose, modelo=whisper_model,
+            verbose=verbose, modelo=whisper_model, revisao=revisao,
         )
 
     wcpp: tuple[Path, Path] | None = None
@@ -1383,6 +1495,14 @@ def main() -> None:
              "local, no API key, no upload cap — needs whisper.cpp built and a "
              "ggml model downloaded).",
     )
+    ap.add_argument(
+        "--revisao",
+        default="junto",
+        choices=["junto", "depois", "so"],
+        help="5.0.72: 'junto' revisa antes de devolver (padrao); 'depois' devolve o "
+             "Whisper puro e deixa a revisao para uma segunda chamada; 'so' e essa "
+             "segunda chamada. So vale no backend local.",
+    )
     args = ap.parse_args()
 
     video = args.video.resolve()
@@ -1408,6 +1528,7 @@ def main() -> None:
         elevenlabs_key=elevenlabs_key,
         backend=args.backend,
         whisper_model=args.whisper_model,
+        revisao=args.revisao,
     )
 
 

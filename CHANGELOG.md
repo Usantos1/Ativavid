@@ -1,5 +1,16 @@
 # Changelog
 
+## 5.0.72
+
+- **Vídeo pronto mais cedo: a revisão do texto saiu da fila.** Depois de
+  transcrever, o app pedia à IA uma revisão das palavras (nomes, grafia) e
+  o vídeo ficava parado esperando a resposta — 13 s em média, 24 s em dias
+  de lote, com casos de mais de 1 minuto. Agora a transcrição segue direto
+  para o plano e o corte, e a revisão roda ao mesmo tempo; só as legendas
+  esperam por ela, e quase sempre ela já terminou (no teste com um vídeo
+  real, espera de 0,0 s). O resultado é o mesmo de antes, palavra por
+  palavra — conferido contra um vídeo já publicado.
+
 ## 5.0.71
 
 - **Configurações arrumada.** O card *Projetos e cache* usa todo o espaço
