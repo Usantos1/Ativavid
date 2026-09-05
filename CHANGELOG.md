@@ -1,5 +1,12 @@
 # Changelog
 
+## 5.0.77
+
+- **Render final ~30 % mais rápido.** O desenho das legendas e a montagem
+  do vídeo final rodavam um esperando o outro; agora rodam ao mesmo tempo.
+  Num vídeo real de 45 s a etapa caiu de 32 s para 22 s, com o vídeo
+  saindo pixel a pixel igual.
+
 ## 5.0.76
 
 - **A checagem avisa quando a sessão da IA expirou.** Se o Gemini ou o

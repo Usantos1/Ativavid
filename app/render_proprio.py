@@ -40,6 +40,10 @@ REPO = Path(__file__).resolve().parent.parent
 FONTES = REPO / "assets" / "fonts-render"
 NOWIN = {"creationflags": subprocess.CREATE_NO_WINDOW} if hasattr(subprocess, "CREATE_NO_WINDOW") else {}
 
+# Quadros RGBA (8,3 MB cada em 1080x1920) que o ffmpeg pode ler adiantado do
+# cano antes de filtrar/encodar. 5.0.77 — ver o comentario na passada unica.
+PIPE_FILA_QUADROS = 16
+
 # ---- constantes do template (StackedCaptions/Main/PencilOutline) ------------
 LETTER_SPACING = -1.5
 LINE_HEIGHT = 1.12
@@ -5453,6 +5457,7 @@ class Renderizador:
     def _gravar_video(self, alvo: Path, *, progresso=None) -> None:
         ff = subprocess.Popen(
             ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+             "-thread_queue_size", str(PIPE_FILA_QUADROS),   # ver passada unica
              "-f", "rawvideo", "-pix_fmt", "rgba",
              "-s", f"{self.w}x{self.h}", "-r", f"{self.fps:g}", "-i", "-",
              # qtrle: RGBA com RLE — para overlay esparso e ~3x mais rapido
@@ -5759,7 +5764,15 @@ def render_final_uma_passada(
         inputs += ["-i", str(trilha)]
         prox += 1
     idx_pipe = prox
-    inputs += ["-f", "rawvideo", "-pix_fmt", "rgba",
+    # 5.0.77: `-thread_queue_size` no cano. MEDIDO no C005 real (1347
+    # quadros, maquina livre): o desenho sozinho leva 11,8 s e o grafo do
+    # compose ~22 s, mas juntos pelo cano levavam 32 s — o ffmpeg le um
+    # quadro, filtra, encoda e so entao le o proximo, e o desenho fica
+    # parado esperando. Com fila de 8 quadros os dois se sobrepoem: 22,4 s
+    # (fila de 16/32/64: 22,9/22,2/22,1 — o ganho ja vem com 8). Saida
+    # bit a bit igual (PSNR infinito entre filas). 16 quadros = 133 MB.
+    inputs += ["-thread_queue_size", str(PIPE_FILA_QUADROS),
+               "-f", "rawvideo", "-pix_fmt", "rgba",
                "-s", f"{width}x{height}", "-r", f"{fps:g}", "-i", "-"]
 
     vid = (
