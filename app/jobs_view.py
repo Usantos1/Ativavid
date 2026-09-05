@@ -306,7 +306,12 @@ def _pedido_nao_aplicado(job: dict, edit: Path) -> None:
     mais velho que a entrega já foi aplicado, e o arquivo é sobra.
     """
     alvos = [(edit / "preview_edits.json", "marcações no editor"),
-             (edit / "preview_style.json", "troca de estilo")]
+             (edit / "preview_style.json", "troca de estilo"),
+             # 5.0.38: as correções RÁPIDAS (texto de legenda, manchete,
+             # trecho) moram em `corrections.json` e nunca entravam aqui.
+             # Medido em 05/09: **7 projetos** com correção salva e nunca
+             # aplicada, o mais velho de 18/08 — nenhum aparecia.
+             (edit / "corrections.json", "correções rápidas")]
     try:
         from app.local_server import resolve_delivery_mp4
 
@@ -320,11 +325,32 @@ def _pedido_nao_aplicado(job: dict, edit: Path) -> None:
                 continue
             if t_final and caminho.stat().st_mtime <= t_final:
                 continue
+            if caminho.name == "corrections.json" and not _correcao_suja(caminho):
+                continue
         except OSError:
             continue
         job["pedidoNota"] = (f"há {oque} salvas neste projeto que ainda não "
                              f"foram aplicadas ao vídeo")
         return
+
+
+def _correcao_suja(caminho: Path) -> bool:
+    """`corrections.json` com algo por aplicar.
+
+    O arquivo existe em quase todo projeto (o render o reescreve para
+    rebatizar o relógio — `_clear_dirty`), então existir não diz nada; o
+    que diz é o `dirty` com alguma chave ligada ou o `finalStale`.
+    """
+    try:
+        d = json.loads(caminho.read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        return False
+    if not isinstance(d, dict):
+        return False
+    sujo = d.get("dirty")
+    if isinstance(sujo, dict) and any(sujo.values()):
+        return True
+    return bool(d.get("finalStale"))
 
 
 # O que o caminho RAPIDO sabe desenhar (`overlayReasons` do

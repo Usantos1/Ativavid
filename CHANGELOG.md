@@ -1,5 +1,20 @@
 # Changelog
 
+## 5.0.38
+
+- **Duas legendas novas com fundo colorido.** *Fita dupla*: a fita
+  degradê na cor da empresa com uma segunda fita mais escura por baixo,
+  como um adesivo em relevo. *Etiqueta recortada*: a etiqueta escura com a
+  barra colorida e o canto superior direito cortado. As duas estão na lista
+  de legendas do editor e do preset, e saem iguais no motor rápido e no
+  Remotion (medido: 1,08 e 1,07 de tinta).
+- **Correção rápida salva e nunca aplicada agora aparece na Fila e nos
+  Concluídos.** Texto de legenda, manchete ou trecho corrigido no editor e
+  não "Aplicado" ficava invisível: sete projetos estavam assim, o mais
+  velho desde 18 de agosto. A linha "Pendente" do cartão passa a cobrir
+  também essas correções, com a mesma regra das marcações — só conta o que
+  é mais novo que o vídeo entregue.
+
 ## 5.0.37
 
 - **Transição escolhida corte a corte, no editor.** A régua da linha do

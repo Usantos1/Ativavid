@@ -56,12 +56,13 @@ type Variant = {
   // continuam como flags proprias porque ja estavam no contrato.
   modo?: 'metal' | 'vidro' | 'traco' | 'moldura' | 'eco'
     | 'neon' | 'degrade' | 'bandeira' | 'maquina'
-    | 'pilula' | 'etiqueta' | 'fitadegrade' | 'marcador';
+    | 'pilula' | 'etiqueta' | 'fitadegrade' | 'marcador'
+    | 'fitadupla' | 'etiquetacanto';
 };
 
 // Quem desenha em CAIXA ALTA. Muda a MEDIDA das linhas, entao os tres
 // motores (este, o render_proprio e a previa) tem de concordar.
-const MAIUSCULA = new Set(['metal', 'moldura', 'eco', 'degrade', 'bandeira', 'fitadegrade']);
+const MAIUSCULA = new Set(['metal', 'moldura', 'eco', 'degrade', 'bandeira', 'fitadegrade', 'fitadupla']);
 
 // Opacidades do Vidro e do Metálico — os MESMOS números do render_proprio
 // (VIDRO_OPACO / VIDRO_FIO / METAL_OPACO). Um 0,32 que vira 0,30 aqui sai
@@ -200,6 +201,17 @@ export const SIMPLE_VARIANTS: Record<string, Variant> = {
     squeeze: 1, squeezeY: 1, tracking: 0, bottom: 430, maxW: 760,
     modo: 'fitadegrade',
   },
+  // ---- os dois de 05/09 ---------------------------------------------------
+  fitadupla: {
+    family: POPPINS, weight: 800, size: 62, maxWords: 4, lines: 1,
+    squeeze: 1, squeezeY: 1, tracking: 0, bottom: 430, maxW: 760,
+    modo: 'fitadupla',
+  },
+  etiquetacanto: {
+    family: INTER, weight: 600, size: 52, maxWords: 8, lines: 2,
+    squeeze: 1, squeezeY: 1, tracking: 0, bottom: 430, maxW: 780,
+    modo: 'etiquetacanto',
+  },
   marcador: {
     family: POPPINS, weight: 800, size: 74, maxWords: 3, lines: 1,
     squeeze: 1, squeezeY: 1, tracking: -1, bottom: 430, maxW: 800,
@@ -218,6 +230,8 @@ const BANDEIRA_SKEW = 8;      // graus; o motor proprio usa tan(8deg)
 const ETIQUETA_FUNDO = 'rgba(11,13,16,0.86)';
 const ETIQUETA_BARRA = 10;    // px da barra colorida na borda esquerda
 const FITA_ESCURO = 0.55;     // fator da cor no PE do degrade da fita
+const FITA_DUPLA_DY = 10;     // a segunda fita, px abaixo
+const FITA_DUPLA_ESCURO = 0.45; // fator da cor da segunda fita
 const MARCADOR_PADRAO = '#ffd400';
 // A faixa e o FUNDO da linha com folga em volta — nao uma listra por dentro
 // dela. A listra de 26%-96% (5.0.19) cortava a letra: com line-height 1,16 a
@@ -439,6 +453,7 @@ export const SimpleCaptions: React.FC<{variant: string}> = ({variant}) => {
       metal: 1.1, vidro: 1.16, traco: 1.16, moldura: 1.2, eco: 1.14,
       neon: 1.16, degrade: 1.14, bandeira: 1.2, maquina: 1.3,
       pilula: 1.2, etiqueta: 1.25, fitadegrade: 1.2, marcador: 1.16,
+      fitadupla: 1.2, etiquetacanto: 1.25,
     };
     const tipo = {
       fontFamily: V.family,
@@ -613,6 +628,63 @@ export const SimpleCaptions: React.FC<{variant: string}> = ({variant}) => {
       );
     }
 
+    if (V.modo === 'fitadupla') {
+      // A fita degrade com uma segunda fita escura por baixo: um box-shadow
+      // DURO (0 10px 0) na cor do pe, mais a sombra macia de sempre.
+      const topo = corDaSuperficie('#ff6a00');
+      const padX = Math.round(V.size * 0.55);
+      const padY = Math.round(V.size * 0.30);
+      return (
+        <AbsoluteFill style={fora}>
+          <div
+            style={{
+              ...tipo,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              padding: `${padY}px ${padX}px`,
+              backgroundImage: `linear-gradient(180deg, ${topo} 0%, ${escurecer(topo, FITA_ESCURO)} 100%)`,
+              color: inkOn(topo),
+              borderRadius: Math.round(V.size * 0.14),
+              boxShadow: `0 ${FITA_DUPLA_DY}px 0 ${escurecer(topo, FITA_DUPLA_ESCURO)}, 0 20px 32px rgba(0,0,0,0.45)`,
+            }}
+          >
+            {lines.map((ln, i) => <div key={i}>{txt(ln)}</div>)}
+          </div>
+        </AbsoluteFill>
+      );
+    }
+    if (V.modo === 'etiquetacanto') {
+      // A etiqueta com o canto superior direito cortado. O clip-path cortaria
+      // o box-shadow junto, entao a sombra e um drop-shadow no ELEMENTO DE
+      // FORA, que ve a forma ja recortada.
+      const barra = corDaSuperficie('#ffffff');
+      const padX = Math.round(V.size * 0.55);
+      const padY = Math.round(V.size * 0.34);
+      const canto = Math.round(V.size * 0.5);
+      return (
+        <AbsoluteFill style={fora}>
+          <div style={{filter: 'drop-shadow(0 16px 36px rgba(0,0,0,0.45))'}}>
+            <div
+              style={{
+                ...tipo,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                padding: `${padY}px ${padX}px`,
+                background: ETIQUETA_FUNDO,
+                borderLeft: `${ETIQUETA_BARRA}px solid ${barra}`,
+                borderRadius: 6,
+                color: '#ffffff',
+                clipPath: `polygon(0 0, calc(100% - ${canto}px) 0, 100% ${canto}px, 100% 100%, 0 100%)`,
+              }}
+            >
+              {lines.map((ln, i) => <div key={i}>{txt(ln)}</div>)}
+            </div>
+          </div>
+        </AbsoluteFill>
+      );
+    }
     if (V.modo === 'fitadegrade') {
       // A fita da bandeira, sem inclinacao e com o fundo em degrade.
       const topo = corDaSuperficie('#ff6a00');

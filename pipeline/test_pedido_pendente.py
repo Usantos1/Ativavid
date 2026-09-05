@@ -81,3 +81,51 @@ def test_a_tela_mostra_a_linha():
     js = (REPO / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
     assert 'linhas.push(["Pendente", j.pedidoNota])' in js
     assert 'j.pedidoNota || "",' in js
+
+
+# ---------------------------------------------------------------- 5.0.38
+# As correções RÁPIDAS (texto de legenda, manchete, trecho) moram em
+# `corrections.json`, não em `preview_edits.json` — e nunca entravam na
+# regra. Medido em 05/09: 7 projetos reais com `dirty` ligado e o arquivo
+# mais novo que o vídeo entregue, o mais velho de 18/08; nenhum aparecia.
+
+
+def _com_correcoes(tmp_path: Path, *, dirty: dict, mais_novo: bool,
+                   final_stale: bool = False) -> Path:
+    ed = _projeto(tmp_path, pedido_mais_novo=False)
+    (ed / "preview_edits.json").unlink()
+    c = ed / "corrections.json"
+    c.write_text(json.dumps({"dirty": dirty, "finalStale": final_stale}),
+                 encoding="utf-8")
+    t = (ed / "final.mp4").stat().st_mtime + (60 if mais_novo else -60)
+    os.utime(c, (t, t))
+    return ed
+
+
+def test_correcao_rapida_suja_e_mais_nova_avisa(tmp_path):
+    j = {}
+    _pedido_nao_aplicado(j, _com_correcoes(
+        tmp_path, dirty={"captions": True, "edl": False}, mais_novo=True))
+    assert "correções rápidas" in j["pedidoNota"]
+
+
+def test_corrections_limpo_nao_e_pedido(tmp_path):
+    # O render reescreve o arquivo (relógio) — existir não diz nada.
+    j = {}
+    _pedido_nao_aplicado(j, _com_correcoes(
+        tmp_path, dirty={"captions": False, "edl": False}, mais_novo=True))
+    assert "pedidoNota" not in j
+
+
+def test_correcao_suja_mas_mais_velha_que_o_video_ja_foi(tmp_path):
+    j = {}
+    _pedido_nao_aplicado(j, _com_correcoes(
+        tmp_path, dirty={"headline": True}, mais_novo=False))
+    assert "pedidoNota" not in j
+
+
+def test_final_stale_sozinho_basta(tmp_path):
+    j = {}
+    _pedido_nao_aplicado(j, _com_correcoes(
+        tmp_path, dirty={}, mais_novo=True, final_stale=True))
+    assert "correções rápidas" in j["pedidoNota"]

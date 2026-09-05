@@ -164,7 +164,8 @@ export type EditData = {
       | 'simples' | 'serifada' | 'classica' | 'bloco' | 'recorte'
       | 'metal' | 'vidro' | 'traco' | 'moldura' | 'eco'
       | 'neon' | 'degrade' | 'bandeira' | 'maquina'
-      | 'pilula' | 'etiqueta' | 'fitadegrade' | 'marcador';
+      | 'pilula' | 'etiqueta' | 'fitadegrade' | 'marcador'
+      | 'fitadupla' | 'etiquetacanto';
     scatterOffsetY?: number;   // scatter: block centre, fraction of height
     scatterFontSize?: number;  // scatter: ordinary word size (default 74)
     scatterSafeWidth?: number; // scatter: layout width budget (default 940)

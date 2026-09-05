@@ -3101,18 +3101,22 @@ class Renderizador:
         "etiqueta": ("Inter[opsz,wght].ttf", "SemiBold", 52, 8, 2, 1.0, 1.0, 0, 430, 780, "etiqueta"),
         "fitadegrade": ("Poppins-ExtraBold.ttf", None, 62, 4, 1, 1.0, 1.0, 0, 430, 760, "fitadegrade"),
         "marcador": ("Poppins-ExtraBold.ttf", None, 74, 3, 1, 1.0, 1.0, -1, 430, 800, "marcador"),
+        # --- os dois de 05/09 ---------------------------------------------
+        "fitadupla": ("Poppins-ExtraBold.ttf", None, 62, 4, 1, 1.0, 1.0, 0, 430, 760, "fitadupla"),
+        "etiquetacanto": ("Inter[opsz,wght].ttf", "SemiBold", 52, 8, 2, 1.0, 1.0, 0, 430, 780, "etiquetacanto"),
     }
     # Modos que desenham em CAIXA ALTA. Isso muda a MEDIDA das linhas, entao
     # os tres motores tem de concordar sobre quem esta nesta lista.
     SIMPLE_MAIUSCULA = ("sticker", "metal", "moldura", "eco", "degrade",
-                        "bandeira", "fitadegrade")
+                        "bandeira", "fitadegrade", "fitadupla")
     # Modos com um painel em volta do cue INTEIRO (e nao por linha, como o
     # bloco): a caixa e uma so para as duas linhas. O `vidro` saiu daqui —
     # ele virou uma LETRA de vidro, nao uma caixa atras da letra.
-    SIMPLE_PAINEL = ("moldura", "bandeira", "pilula", "etiqueta", "fitadegrade")
+    SIMPLE_PAINEL = ("moldura", "bandeira", "pilula", "etiqueta", "fitadegrade",
+                     "fitadupla", "etiquetacanto")
     # Estilos em que a cor pinta uma SUPERFICIE, e por isso sai da ENFASE
     SIMPLE_SUPERFICIE = ("neon", "degrade", "bandeira", "pilula", "etiqueta",
-                         "fitadegrade")
+                         "fitadegrade", "fitadupla", "etiquetacanto")
     # Peso que cada variante estatica tem no template (`capWeight(base.weight)`
     # em SimpleCaptions.tsx:218). Aqui ele fica implicito no ARQUIVO —
     # `Poppins-SemiBold.ttf` E o 600 — entao, quando a fonte da marca
@@ -3123,7 +3127,7 @@ class Renderizador:
                    "moldura": 600, "eco": 800,
                    "neon": 800, "degrade": 800, "bandeira": 800, "maquina": 600,
                    "pilula": 800, "etiqueta": 600, "fitadegrade": 800,
-                   "marcador": 800}
+                   "marcador": 800, "fitadupla": 800, "etiquetacanto": 600}
     # Os MESMOS padroes do SimpleCaptions.tsx (NEON_PADRAO etc.)
     NEON_PADRAO = "#4de1ff"
     DEGRADE_PADRAO = "#ff6a00"
@@ -3134,6 +3138,8 @@ class Renderizador:
     ETIQUETA_OPACO = 0.86
     ETIQUETA_BARRA = 10
     FITA_ESCURO = 0.55
+    FITA_DUPLA_DY = 10        # a segunda fita, px abaixo (box-shadow 0 10px 0)
+    FITA_DUPLA_ESCURO = 0.45  # fator da cor da segunda fita
     MARCADOR_PADRAO = "#ffd400"
     # folga da faixa em volta da linha (fracao do corpo) — os MESMOS numeros
     # do SimpleCaptions.tsx. Ver o comentario de la: a listra por dentro da
@@ -3632,7 +3638,8 @@ class Renderizador:
               "traco": 1.16, "moldura": 1.20, "eco": 1.14,
               "neon": 1.16, "degrade": 1.14, "bandeira": 1.20,
               "maquina": 1.30, "pilula": 1.20, "etiqueta": 1.25,
-              "fitadegrade": 1.20, "marcador": 1.16}.get(modo, 1.18)
+              "fitadegrade": 1.20, "marcador": 1.16,
+              "fitadupla": 1.20, "etiquetacanto": 1.25}.get(modo, 1.18)
         for ci, cue in enumerate(cues):
             ini_f = int(round(cue[0]["startMs"] / 1000 * self.fps))
             nxt = cues[ci + 1] if ci + 1 < len(cues) else None
@@ -4010,21 +4017,31 @@ class Renderizador:
         """
         import numpy as np
 
+        # "etiquetacanto" e a etiqueta com o canto superior direito cortado;
+        # "fitadupla" e a fita degrade com uma segunda fita escura por baixo.
+        familia = {"etiquetacanto": "etiqueta", "fitadupla": "fitadegrade"}.get(modo, modo)
         pad_x = round(tam * 0.55)
-        pad_y = round(tam * (0.34 if modo == "etiqueta" else 0.30))
-        barra = self.ETIQUETA_BARRA if modo == "etiqueta" else 0
+        pad_y = round(tam * (0.34 if familia == "etiqueta" else 0.30))
+        barra = self.ETIQUETA_BARRA if familia == "etiqueta" else 0
         cw = int(w_txt + 2 * pad_x + barra)
         ch = int(h_txt + 2 * pad_y)
         raio = (ch // 2 if modo == "pilula"
-                else 6 if modo == "etiqueta" else round(tam * 0.14))
+                else 6 if familia == "etiqueta" else round(tam * 0.14))
         L, A = cw + 2 * folga, ch + 2 * folga
 
         cheio = Image.new("L", (L, A), 0)
         ImageDraw.Draw(cheio).rounded_rectangle(
             [folga, folga, folga + cw, folga + ch], radius=raio, fill=255)
+        if modo == "etiquetacanto":
+            # O `clip-path: polygon(...)` do template: um triangulo fora no
+            # canto superior direito, de lado `tam * 0.5`.
+            canto = int(round(tam * 0.5))
+            ImageDraw.Draw(cheio).polygon(
+                [(folga + cw - canto, folga), (folga + cw + 1, folga),
+                 (folga + cw + 1, folga + canto)], fill=0)
         a_cheio = np.asarray(cheio, dtype=np.float32) / 255.0
 
-        if modo == "etiqueta":
+        if familia == "etiqueta":
             base = self._cor(self.ETIQUETA_FUNDO)
             rgb = np.broadcast_to(base, (A, L, 3)).copy()
             alpha = a_cheio * self.ETIQUETA_OPACO
@@ -4035,7 +4052,7 @@ class Renderizador:
             rgb = rgb * (1 - a_barra[..., None]) + cor_b * a_barra[..., None]
             alpha = np.maximum(alpha, a_barra)
             cor_txt = self._cor("#ffffff")
-        elif modo == "fitadegrade":
+        elif familia == "fitadegrade":
             topo = self._cor(accent or "#ff6a00")
             pe = self._escurecer(topo, self.FITA_ESCURO)
             tt = np.linspace(0.0, 1.0, ch, dtype=np.float32)[:, None]
@@ -4045,6 +4062,17 @@ class Renderizador:
             rgb[:folga] = faixa[0]
             rgb[folga + ch:] = faixa[-1]
             alpha = a_cheio
+            if modo == "fitadupla":
+                # A segunda fita: a mesma forma, `FITA_DUPLA_DY` abaixo, na cor
+                # do pe mais escuro — o `box-shadow: 0 10px 0 <cor>` do
+                # template. Entra POR BAIXO da fita principal.
+                dy = self.FITA_DUPLA_DY
+                escura = self._escurecer(topo, self.FITA_DUPLA_ESCURO)
+                a_baixo = np.zeros_like(a_cheio)
+                a_baixo[dy:, :] = a_cheio[:-dy, :]
+                so_baixo = np.clip(a_baixo - a_cheio, 0.0, 1.0)
+                rgb = rgb * (1 - so_baixo[..., None]) + escura[None, None, :] * so_baixo[..., None]
+                alpha = np.maximum(a_cheio, a_baixo)
             cor_txt = self._cor(self._tinta_na_caixa(accent or "#ff6a00"))
         else:                                   # pilula
             fundo = accent or "#ffffff"
@@ -4072,10 +4100,17 @@ class Renderizador:
             y += alt_l + gap
 
         # box-shadow de cada um: (deslocamento y, raio, alfa)
-        dy, raio_s = {"etiqueta": (16, 36), "fitadegrade": (14, 32)}.get(
+        dy, raio_s = {"etiqueta": (16, 36), "fitadegrade": (14, 32),
+                      "fitadupla": (20, 32), "etiquetacanto": (16, 36)}.get(
             modo, (12, 30))
-        sombra = self._sombra_de(a_cheio, [(0, dy, raio_s, 0.45)],
-                                 k=0.5, caixa=True)
+        # A sombra sai da FORMA visivel: na fita dupla, das duas fitas; na
+        # etiqueta recortada, ja sem o canto (e `filter: drop-shadow` no
+        # template — raio inteiro, k=BLUR_K — porque o clip-path cortaria o
+        # box-shadow junto).
+        base_s = alpha if modo == "fitadupla" else a_cheio
+        k_s = BLUR_K if modo == "etiquetacanto" else 0.5
+        sombra = self._sombra_de(base_s, [(0, dy, raio_s, 0.45)],
+                                 k=k_s, caixa=True)
         x0 = int((self.w - cw) / 2) - folga
         y0 = int(self.h - bottom - ch) - folga
         return Palavra(x0, y0, rgb, alpha, sombra, inicio_f=-1, enter=1,
@@ -4198,7 +4233,7 @@ class Renderizador:
         if modo == "bandeira":
             return self._bandeira(masks, w_txt, h_txt, alt_l, gap, tam,
                                   bottom, accent, folga)
-        if modo in ("pilula", "etiqueta", "fitadegrade"):
+        if modo in ("pilula", "etiqueta", "fitadegrade", "fitadupla", "etiquetacanto"):
             return self._painel_colorido(modo, masks, w_txt, h_txt, alt_l,
                                          gap, tam, bottom, accent, folga)
         pad_x = round(tam * (0.62 if modo == "vidro" else 0.72))

@@ -44,6 +44,9 @@ NOMES = {
     "pilula": "Pílula",
     "etiqueta": "Etiqueta",
     "fitadegrade": "Fita degradê",
+    # os dois de 05/09 (pedido de 04/09: "fita dupla, etiqueta com canto recortado")
+    "fitadupla": "Fita dupla",
+    "etiquetacanto": "Etiqueta recortada",
     "marcador": "Marca-texto",
 }
 
@@ -69,7 +72,8 @@ USAM_COR_DA_LEGENDA = frozenset({
 # marca nao aparecia em nenhum deles.
 USAM_COR_DA_ENFASE = frozenset({"stacked", "scatter", "impacto", "marcador",
                                 "neon", "degrade", "bandeira", "pilula",
-                                "etiqueta", "fitadegrade"})
+                                "etiqueta", "fitadegrade",
+                                "fitadupla", "etiquetacanto"})
 
 
 def valido(estilo: str | None) -> bool:
