@@ -1120,6 +1120,10 @@ def load_preview_edit_ranges(edit_dir: Path, source_key: str) -> list[dict] | No
             item["reframe"] = {"z": _rq[0], "x": _rq[1], "y": _rq[2]}
         if r.get("flip"):
             item["flip"] = True
+        from app.ffmpeg_zoom import zoom_do_range
+        _z = zoom_do_range(r)
+        if _z:
+            item["zoom"] = _z
         _c = congelar_do_range(r)
         if _c > 0:
             item["freeze"] = _c
@@ -1276,6 +1280,10 @@ def load_manual_edl_ranges(edit_dir: Path, source_key: str, preset: dict,
             item["reframe"] = {"z": _rq[0], "x": _rq[1], "y": _rq[2]}
         if r.get("flip"):
             item["flip"] = True
+        from app.ffmpeg_zoom import zoom_do_range
+        _z = zoom_do_range(r)
+        if _z:
+            item["zoom"] = _z
         _c = congelar_do_range(r)
         if _c > 0:
             item["freeze"] = _c

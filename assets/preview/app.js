@@ -2260,7 +2260,8 @@ function edlDirty() {
     || +(r.speed || 1) !== +(r.orig.speed || 1)
     || +(r.freeze || 0) !== +(r.orig.freeze || 0)
     || JSON.stringify(reenqDoTake(r)) !== JSON.stringify(reenqDoTake(r.orig))
-    || !!r.flip !== !!r.orig.flip);
+    || !!r.flip !== !!r.orig.flip
+    || (r.zoom || '') !== (r.orig.zoom || ''));
 }
 function geoDoInsert(c) {
   return JSON.stringify([+(+c.start).toFixed(3), +(+c.end).toFixed(3),
@@ -2627,6 +2628,8 @@ function camposDoTake(r) {
   if (rq) out.reframe = { z: +rq.z.toFixed(3), x: +rq.x.toFixed(3), y: +rq.y.toFixed(3) };
   // 5.0.61: espelhado da esquerda para a direita
   if (r.flip) out.flip = true;
+  // 5.0.66: zoom escolhido na mão para este take
+  if (r.zoom) out.zoom = String(r.zoom);
   return out;
 }
 
@@ -2644,7 +2647,7 @@ async function persistEdl() {
       if (!r.removed) {
         r.orig = { start: r.start, end: r.end, gain_db: +(r.gain_db || 0),
           grade: r.grade || '', speed: +(r.speed || 1), freeze: +(r.freeze || 0),
-          reframe: r.reframe || null, flip: !!r.flip };
+          reframe: r.reframe || null, flip: !!r.flip, zoom: r.zoom || '' };
         r.added = false;
       }
     });
@@ -3205,10 +3208,11 @@ async function applyState(data) {
     source: r.source, start: +r.start, end: +r.end, beat: r.beat || '',
     gain_db: +(r.gain_db || 0), grade: r.grade || '', speed: +(r.speed || 1),
     freeze: +(r.freeze || 0), reframe: r.reframe || null, flip: !!r.flip,
+    zoom: r.zoom || '',
     removed: false, srcIdx,
     orig: { start: +r.start, end: +r.end, gain_db: +(r.gain_db || 0),
       grade: r.grade || '', speed: +(r.speed || 1), freeze: +(r.freeze || 0),
-      reframe: r.reframe || null, flip: !!r.flip },
+      reframe: r.reframe || null, flip: !!r.flip, zoom: r.zoom || '' },
   }));
   S.corteRelatorio = data.corteRelatorio || null;
   if (data.intent) {
@@ -4516,6 +4520,11 @@ const VELOCIDADES_DO_TAKE = [
 /* 5.0.60: reenquadrar o take — o "reframe" do CapCut. Aproxima e escolhe
  * que pedaco do quadro fica na tela. O corte recorta a FONTE antes de
  * escalar, entao 2x numa fonte 4K ainda entrega 1080p de verdade. */
+/* 5.0.66: o zoom deste take. Vazio = como o estilo decidiu (o que sempre
+ * foi). Os numeros vivem em app/ffmpeg_zoom.py — aqui so os rotulos. */
+const ZOOMS_DO_TAKE = [
+  ['', 'Zoom automático'], ['nenhum', 'Sem zoom'], ['suave', 'Zoom suave'], ['forte', 'Zoom forte'],
+];
 const REENQ_DO_TAKE = [
   [1, 'Cheio'], [1.2, '1,2x'], [1.5, '1,5x'], [2, '2x'], [2.5, '2,5x'], [3, '3x'],
 ];
@@ -4655,6 +4664,25 @@ function renderPainelDoTake(lane, r) {
     });
   }
   rqSliders();
+  const zoomWrap = el('span', 'take-grupo', lane);
+  el('span', 'take-rotulo', zoomWrap).textContent = 'Zoom';
+  for (const [v, rotulo] of ZOOMS_DO_TAKE) {
+    const b = el('button', `ent-btn${(r.zoom || '') === v ? ' on' : ''}`, zoomWrap);
+    b.type = 'button';
+    b.textContent = rotulo;
+    b.title = v === '' ? 'O movimento que o estilo escolheu para este take'
+      : v === 'nenhum' ? 'Este take fica parado, sem aproximação'
+        : `Aproximação ${v === 'suave' ? 'discreta' : 'marcada'} durante o take`;
+    b.addEventListener('click', () => {
+      pushHistory();
+      if (v) r.zoom = v; else delete r.zoom;
+      renderPainelDoTake(lane, r);
+      refreshHeader();
+      persistEdl();
+      toast(v ? `${rotulo} neste take — vale no próximo "Aplicar"`
+        : 'Zoom do take volta ao automático', 2200);
+    });
+  }
   const esp = el('button', `ent-btn${r.flip ? ' on' : ''}`, rqWrap);
   esp.type = 'button';
   esp.textContent = 'Espelhar';
@@ -4705,7 +4733,7 @@ function renderPainelDoTake(lane, r) {
     if (!outros.length) { toast('Só há este take', 1800); return; }
     pushHistory();
     for (const x of outros) {
-      for (const k of ['gain_db', 'grade', 'speed', 'freeze', 'reframe', 'flip']) {
+      for (const k of ['gain_db', 'grade', 'speed', 'freeze', 'reframe', 'flip', 'zoom']) {
         delete x[k];
       }
       Object.assign(x, JSON.parse(JSON.stringify(campos)));
@@ -10261,10 +10289,11 @@ function applyRestoredEdl(edl) {
     source: r.source, start: +r.start, end: +r.end, beat: r.beat || '',
     gain_db: +(r.gain_db || 0), grade: r.grade || '', speed: +(r.speed || 1),
     freeze: +(r.freeze || 0), reframe: r.reframe || null, flip: !!r.flip,
+    zoom: r.zoom || '',
     removed: false, srcIdx,
     orig: { start: +r.start, end: +r.end, gain_db: +(r.gain_db || 0),
       grade: r.grade || '', speed: +(r.speed || 1), freeze: +(r.freeze || 0),
-      reframe: r.reframe || null, flip: !!r.flip },
+      reframe: r.reframe || null, flip: !!r.flip, zoom: r.zoom || '' },
   }));
   renderAll();
   refreshHeader();

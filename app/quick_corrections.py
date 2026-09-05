@@ -533,6 +533,7 @@ def _norm_range(r: dict) -> tuple:
         cong,
         reenquadrar_do_range(r),
         bool(r.get("flip")),
+        str(r.get("zoom") or ""),
     )
 
 
@@ -546,7 +547,7 @@ def _same_ranges(a: list, b: list) -> bool:
 # devolver. `quote` e a fala daquele trecho: a nota de clareza conta
 # trechos com fala, e o texto do post e montado a partir dela.
 _HERDAVEIS = ("quote", "reason", "beat", "gain_db", "grade", "speed",
-              "freeze", "reframe", "flip")
+              "freeze", "reframe", "flip", "zoom")
 
 
 def _herdar_do_anterior(novo: dict, antigos: list[dict]) -> dict:

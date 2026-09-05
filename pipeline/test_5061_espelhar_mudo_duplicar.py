@@ -95,7 +95,8 @@ def test_o_editor_tem_os_tres_e_manda_o_espelho():
     assert "esp.textContent = 'Espelhar';" in PJS
     assert "dup.textContent = 'Duplicar';" in PJS
     assert "if (r.flip) out.flip = true;" in PJS, "camposDoTake precisa mandar"
-    assert "|| !!r.flip !== !!r.orig.flip);" in PJS, "senao o Aplicar nao acende"
+    # sem o `);` no fim: o `edlDirty` cresce a cada campo novo do take
+    assert "|| !!r.flip !== !!r.orig.flip" in PJS, "senao o Aplicar nao acende"
 
 
 def test_a_copia_nao_herda_a_geometria_do_original():

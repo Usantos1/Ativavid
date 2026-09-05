@@ -29,10 +29,47 @@ def zoom_enabled(edl: dict[str, Any] | None) -> bool:
     return isinstance(z, dict) and bool(z.get("enabled"))
 
 
+# 5.0.66: zoom escolhido POR TAKE no editor. O que o planejador escreve
+# continua sendo o padrao ("automatico"); estas quatro opcoes so mandam
+# quando o usuario pediu alguma coisa naquele trecho.
+#
+# Os numeros saem do que os projetos reais ja usam: 313 de 317 tem
+# `pushIn` 0,04 e as bases alternam entre 1,10 e 1,22. "Suave" fica abaixo
+# dessa faixa e "forte" acima, para as duas serem visiveis ao lado do
+# automatico.
+ZOOMS_DO_TAKE: dict[str, dict[str, float] | None] = {
+    "nenhum": None,
+    "suave": {"base": 1.06, "push": 0.03},
+    "forte": {"base": 1.20, "push": 0.12},
+}
+
+
+def zoom_do_range(r: Any) -> str:
+    """O pedido de zoom deste trecho: "" (automatico) ou uma chave."""
+    if not isinstance(r, dict):
+        return ""
+    v = str(r.get("zoom") or "").strip().lower()
+    return v if v in ZOOMS_DO_TAKE else ""
+
+
 def zoom_for_index(edl: dict[str, Any], index: int) -> dict[str, Any] | None:
     z = edl.get("ffmpegZoom")
     if not isinstance(z, dict) or not z.get("enabled"):
         return None
+    ranges = edl.get("ranges") or []
+    pedido = zoom_do_range(ranges[index] if 0 <= index < len(ranges) else None)
+    if pedido:
+        escolha = ZOOMS_DO_TAKE[pedido]
+        if escolha is None:
+            return None          # este take fica parado
+        return {
+            "base": escolha["base"],
+            "push": escolha["push"],
+            "cx": float(z.get("targetX") or 0.5),
+            "cy": float(z.get("targetY") or 0.4),
+            "outW": int(z.get("width") or 1080),
+            "outH": int(z.get("height") or 1920),
+        }
     zooms = list(z.get("zooms") or [1.0])
     if not zooms:
         zooms = [1.0]

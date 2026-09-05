@@ -1,12 +1,20 @@
 # Changelog
 
+## 5.0.66
+
+- **O zoom vira escolha sua, take a take.** No painel do take: *Zoom
+  automático* (como sempre foi), *Sem zoom* para segurar a imagem parada
+  num detalhe, *Zoom suave* ou *Zoom forte*. O automático continua sendo o
+  padrão, então nada muda nos vídeos que você já tem.
+
 ## 5.0.65
 
 - **A edição fica mais rápida.** A parte mais lenta de criar o vídeo é
   aplicar a cor, e ela era refeita conta por conta em cada quadro. Agora o
   ATIVAVID monta uma tabela do seu look uma única vez e consulta essa
   tabela. No teste com um vídeo real, o trecho mais pesado caiu de 20,4
-  para 15,4 segundos. A cor é a mesma: medida quadro a quadro, a diferença
+  para 15,4 segundos, e a etapa inteira, num corte real de quatro trechos,
+  de 33,7 para 28,7. A cor é a mesma: medida quadro a quadro, a diferença
   é de no máximo 2 tons em 255.
 
 ## 5.0.64
