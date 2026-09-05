@@ -21,7 +21,7 @@ import sys
 import threading
 from http.server import ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 REPO = Path(__file__).resolve().parent.parent
 HELPERS = REPO / "helpers"
@@ -334,9 +334,8 @@ class DesktopHandler(ps.Handler):
             self._json({"jobs": jobs, "busy": self.worker.busy_id})
             return
         if raw == "/api/jobs/buscar":
-            # 5.0.43: busca pelo que foi DITO (transcricao + legenda do post).
-            from urllib.parse import parse_qs
-
+            # 5.0.42: busca pelo que foi DITO (transcricao + legenda do post).
+            # `parse_qs` vem do topo do modulo — ver a nota no local_server.
             from app.busca_de_fala import buscar
 
             q = (parse_qs(urlparse(self.path).query).get("q") or [""])[0]

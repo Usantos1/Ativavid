@@ -1,5 +1,15 @@
 # Changelog
 
+## 5.0.45
+
+- **Conserto urgente: logos, presets, perfil da empresa e miniaturas da
+  Biblioteca voltaram.** Da 5.0.42 à 5.0.44 a tela Empresas dizia "Não deu
+  para ler os presets" e as imagens apareciam quebradas. A causa foi um
+  erro na rota de busca nova, que derrubava toda leitura com parâmetros
+  antes de responder. Atualização obrigatória.
+- O menu "⋯" dos cards volta a fechar quando a lista rola (um erro
+  silencioso a cada rolagem, desde a 5.0.2x).
+
 ## 5.0.44
 
 - **O app abre sem remedir todos os vídeos.** A cada abertura o app media

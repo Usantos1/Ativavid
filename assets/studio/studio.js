@@ -3759,7 +3759,10 @@ function wireList() {
   // e `$$("[data-menu-host]", event)` estoura (TypeError em todo resize,
   // visto no laboratorio em 03/09)
   window.addEventListener("resize", () => closeCardMenus());
-  window.addEventListener("scroll", closeCardMenus, true);
+  // O scroll tambem entrega o Event como `scope` (TypeError a cada rolagem,
+  // 31 no console do lab em 05/09) — mesma armadilha do resize, corrigida
+  // na 5.0.45. Sem isto os menus dos cards nao fechavam ao rolar.
+  window.addEventListener("scroll", () => closeCardMenus(), true);
 
   const formRename = $("#formRename");
   if (formRename) {

@@ -2399,9 +2399,13 @@ class StudioHandler(BaseHTTPRequestHandler):
             self._json({"ok": True, "text": "\n".join(lines)})
             return
         if path == "/api/jobs/buscar":
-            # 5.0.43: busca pelo que foi DITO (transcricao + legenda do post).
-            from urllib.parse import parse_qs
-
+            # 5.0.42: busca pelo que foi DITO (transcricao + legenda do post).
+            # ATENCAO (5.0.45): nada de `from urllib.parse import parse_qs`
+            # AQUI DENTRO — um import local faz o Python tratar `parse_qs`
+            # como variavel local do do_GET inteiro, e toda rota acima que
+            # usa parse_qs (logo, presets, perfil, miniaturas) estoura com
+            # UnboundLocalError antes de responder. Foi o que quebrou
+            # Empresas e Biblioteca da 5.0.42 a 5.0.44.
             from app.busca_de_fala import buscar
 
             q = (parse_qs(urlparse(self.path).query).get("q") or [""])[0]
