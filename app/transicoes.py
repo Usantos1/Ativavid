@@ -24,3 +24,29 @@ TIPOS = tuple(NOMES) + ("nenhuma",)
 
 # Quem usa a cor da marca em vez de branco/preto
 USAM_A_COR_DA_MARCA = frozenset({"faixa"})
+
+# A chave, no edit-data do projeto, das escolhas POR CORTE feitas no editor:
+# {"<indice da emenda>": "<tipo>"}. Indice 0 = entre o 1o e o 2o trecho.
+CHAVE_POR_CORTE = "transicoesPorCorte"
+
+
+def aplicar_por_corte(transicoes: list, escolhas: dict | None) -> list:
+    """As transicoes de um render com as escolhas do editor por cima.
+
+    `transicoes` e a lista que o pipeline monta (uma por emenda, na ordem);
+    `escolhas` e o que ele marcou na regua do editor. Quem nao foi marcado
+    fica como o estilo manda; "nenhuma" tira a emenda; tipo desconhecido e
+    ignorado (o motor rapido recusaria o job inteiro).
+    """
+    if not escolhas:
+        return list(transicoes)
+    fora = []
+    for i, tr in enumerate(transicoes):
+        tipo = str((escolhas or {}).get(str(i)) or "").strip().lower()
+        if not tipo or tipo not in TIPOS:
+            fora.append(dict(tr))
+            continue
+        if tipo == "nenhuma":
+            continue
+        fora.append(dict(tr, type=tipo))
+    return fora

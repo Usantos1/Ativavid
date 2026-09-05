@@ -311,6 +311,42 @@ def set_headline_pos(edit_dir: Path, valor: Any, *, base: str = "top") -> dict[s
     return {"ok": True, campo: hook[campo], "corrections": corr}
 
 
+def set_transicao_corte(edit_dir: Path, indice: Any, tipo: Any) -> dict[str, Any]:
+    """A transicao de UMA emenda, escolhida na regua do editor (5.0.37).
+
+    Grava `transicoesPorCorte[indice] = tipo` no edit-data; `tipo` vazio
+    volta a emenda ao que o estilo manda. O render le isto ao montar as
+    transicoes (run_fast preserva a chave entre renders, como faz com os
+    inserts). Marca `style` sujo: e desenho, precisa refazer.
+    """
+    from app.transicoes import CHAVE_POR_CORTE, TIPOS
+
+    try:
+        i = int(indice)
+    except (TypeError, ValueError):
+        return {"ok": False, "error": "emenda invalida"}
+    if i < 0 or i > 500:
+        return {"ok": False, "error": "emenda invalida"}
+    t = str(tipo or "").strip().lower()
+    if t and t not in TIPOS:
+        return {"ok": False, "error": f"transicao desconhecida: {t}"}
+    path = edit_data_path(edit_dir)
+    data = _read_json(path, {})
+    if not isinstance(data, dict):
+        data = {}
+    por = dict(data.get(CHAVE_POR_CORTE) or {}) if isinstance(data.get(CHAVE_POR_CORTE), dict) else {}
+    if t:
+        por[str(i)] = t
+    else:
+        por.pop(str(i), None)
+    prepare_correction(edit_dir)
+    data[CHAVE_POR_CORTE] = por
+    _write_json(path, data)
+    corr = mark_dirty(edit_dir, "style")
+    return {"ok": True, "indice": i, "tipo": t or None,
+            CHAVE_POR_CORTE: por, "corrections": corr}
+
+
 def set_caption_pos(edit_dir: Path, y_px: Any, altura: int = 1920) -> dict[str, Any]:
     """Altura da legenda, pela ancora do estilo que o projeto usa.
 
@@ -732,6 +768,8 @@ def handle(
         if body.get("reset"):
             return limpar_caption_pos(edit)
         return set_caption_pos(edit, body.get("y"))
+    if op in ("set_transicao_corte", "transicao_corte"):
+        return set_transicao_corte(edit, body.get("i"), body.get("tipo"))
     if op in ("set_headline_pos", "headline_pos"):
         if body.get("reset"):
             return limpar_headline_pos(edit)

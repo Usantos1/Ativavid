@@ -54,7 +54,10 @@ def test_o_pipeline_usa_o_tipo_escolhido():
     i = FAST.index('if elems.get("flashCut"):')
     bloco = FAST[i:i + 1200]
     assert 'preset.get("transicao")' in bloco, "o pipeline ignora a escolha"
-    assert 'tipo != "nenhuma"' in bloco, "`nenhuma` ainda escreveria transições"
+    # 5.0.37: a forma virou `if tipo == "nenhuma": transitions = []` para
+    # as escolhas por corte terem onde entrar; o que se cobra e a regra.
+    assert 'if tipo == "nenhuma":' in bloco and "transitions = []" in bloco, (
+        "`nenhuma` ainda escreveria transições")
     assert '"accent": accent' in bloco, (
         "a faixa sairia laranja de fábrica em vez da cor da empresa")
 

@@ -2446,6 +2446,33 @@ async function persistCaptionFix(from, to, extra) {
   return data;
 }
 
+/* Onde caem as emendas na linha do tempo do rascunho: o fim acumulado de
+ * cada trecho mantido, menos o ultimo. E o que a regua marca e o que o
+ * pipeline numera (indice 0 = entre o 1o e o 2o trecho). */
+function fronteirasDoRascunho() {
+  const out = [];
+  let t = 0;
+  const vivos = S.draft.filter((r) => !r.removed);
+  vivos.forEach((r, i) => {
+    t += Math.max(0, r.end - r.start);
+    if (i < vivos.length - 1) out.push(t);
+  });
+  return out;
+}
+
+function tipoDaEmenda(i) {
+  const por = (S.editData && S.editData.transicoesPorCorte) || {};
+  const escolhido = por[String(i)];
+  if (escolhido) return { tipo: escolhido, proprio: true };
+  const doEstilo = (S.style && S.style.transicao) || 'flash';
+  const ligado = !(S.style && S.style.elements && S.style.elements.flashCut === false);
+  return { tipo: ligado ? doEstilo : 'nenhuma', proprio: false };
+}
+
+const COR_DA_TRANSICAO = {
+  flash: '#ffd166', brilho: '#ffffff', escurece: '#8b94a3', faixa: 'var(--hl-accent, #ff5200)', nenhuma: 'transparent',
+};
+
 function draftRangesPayload() {
   return S.draft.filter((r) => !r.removed).map((r) => ({
     source: r.source, start: +r.start.toFixed(3), end: +r.end.toFixed(3), beat: r.beat,
@@ -5855,6 +5882,71 @@ function drawRuler() {
       ctx.stroke();
     }
   }
+  // TRANSICAO POR CORTE (5.0.37): um losango em cada emenda, na cor do tipo.
+  // Escolha propria ganha borda cheia; "nenhuma" e so o contorno. Clicar
+  // nele abre o menu — o hit-test mora no pointerdown da regua.
+  if (S.draft && S.draft.length) {
+    fronteirasDoRascunho().forEach((tb, i) => {
+      const x = tb * S.pps - laneX0;
+      if (x < -8 || x > w + 8) return;
+      const { tipo, proprio } = tipoDaEmenda(i);
+      const cy = 9, r = 5;
+      ctx.beginPath();
+      ctx.moveTo(x, cy - r); ctx.lineTo(x + r, cy); ctx.lineTo(x, cy + r); ctx.lineTo(x - r, cy);
+      ctx.closePath();
+      const cor = COR_DA_TRANSICAO[tipo] || '#ffd166';
+      ctx.fillStyle = tipo === 'nenhuma' ? 'rgba(0,0,0,0)' : cor;
+      ctx.fill();
+      ctx.lineWidth = proprio ? 2 : 1;
+      ctx.strokeStyle = tipo === 'nenhuma' ? 'rgba(139,148,163,0.9)' : cor;
+      ctx.stroke();
+    });
+  }
+}
+
+/* Menu da emenda: os tipos vem do MESMO <select> do estilo (autoTransicao),
+ * para nao existir um segundo catalogo em JS. */
+function abrirMenuDaEmenda(i, clientX, clientY) {
+  fecharMenuDaEmenda();
+  const sel = $('autoTransicao');
+  const tipos = sel ? [...sel.options].map((o) => [o.value, o.textContent]) : [['flash', 'Flash']];
+  const atual = tipoDaEmenda(i);
+  const menu = el('div', 'menu-emenda', document.body);
+  menu.id = 'menuEmenda';
+  const titulo = el('div', 'menu-emenda-titulo', menu);
+  titulo.textContent = `Transição no corte ${i + 1}`;
+  const linhas = [...tipos, ['nenhuma', 'Nenhuma neste corte'], ['', 'Como o estilo manda']];
+  for (const [valor, rotulo] of linhas) {
+    const b = el('button', 'menu-emenda-item', menu);
+    b.type = 'button';
+    b.textContent = rotulo;
+    const marcado = valor ? (atual.proprio && atual.tipo === valor) : !atual.proprio;
+    if (marcado) b.classList.add('on');
+    b.onclick = async () => {
+      fecharMenuDaEmenda();
+      const data = await persistCorrection({ op: 'set_transicao_corte', i, tipo: valor });
+      if (data && data.ok) {
+        if (!S.editData) S.editData = {};
+        S.editData.transicoesPorCorte = data.transicoesPorCorte || {};
+        drawRuler();
+        toast(valor ? `✓ Corte ${i + 1}: ${rotulo} — aplique em "Salvar e refazer"` : `✓ Corte ${i + 1} volta ao estilo`, 3000);
+      }
+    };
+  }
+  menu.style.left = `${Math.min(clientX, window.innerWidth - 240)}px`;
+  menu.style.top = `${clientY + 8}px`;
+  setTimeout(() => document.addEventListener('pointerdown', fecharMenuDaEmendaFora, { once: true }), 0);
+}
+function fecharMenuDaEmendaFora(e) {
+  if (e.target.closest && e.target.closest('#menuEmenda')) {
+    document.addEventListener('pointerdown', fecharMenuDaEmendaFora, { once: true });
+    return;
+  }
+  fecharMenuDaEmenda();
+}
+function fecharMenuDaEmenda() {
+  const m = document.getElementById('menuEmenda');
+  if (m) m.remove();
 }
 
 function drawWave() {
@@ -6640,6 +6732,14 @@ panel.addEventListener('pointerdown', (e) => {
   if (!e.target.closest('.ruler-track')) return;
   const rect = timelineEl.getBoundingClientRect();
   const t = (e.clientX - rect.left - LABEL_W) / S.pps;
+  // Clique num losango de emenda abre o menu da transicao, nao move a
+  // agulha (5.0.37). 7px de tolerancia: o losango tem 10.
+  const emendas = fronteirasDoRascunho();
+  const perto = emendas.findIndex((tb) => Math.abs(tb - t) * S.pps <= 7);
+  if (perto >= 0) {
+    abrirMenuDaEmenda(perto, e.clientX, e.clientY);
+    return;
+  }
   drag = { type: 'scrub' };
   seekDraft(t);
   try { panel.setPointerCapture(e.pointerId); } catch (err) { /* synthetic/touch */ }

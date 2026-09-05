@@ -2619,7 +2619,34 @@ def build_edit_data(cut: Path, preset: dict, hook: list[str], duration: float, f
         for s in segs.get("segments", [])[1:]:
             transitions.append({"at": s["start"], "type": tipo, "frames": 2,
                                 "accent": accent, "intensity": forca})
-        if transitions and tipo != "nenhuma":
+        if tipo == "nenhuma":
+            transitions = []
+        # As escolhas POR CORTE feitas na regua do editor (5.0.37). Vivem no
+        # edit-data ANTERIOR — o que esta no disco neste momento ainda e o do
+        # render passado; o novo so e gravado la na frente. Mesma logica dos
+        # inserts manuais: o render refaz tudo, mas o que foi pedido na mao
+        # sobrevive. Sem preservar a chave, uma escolha durava um render.
+        from app.transicoes import CHAVE_POR_CORTE, aplicar_por_corte
+
+        escolhas = {}
+        try:
+            _ant = json.loads((cut.parent / "remotion" / "public" / "edit-data.json")
+                              .read_text(encoding="utf-8-sig"))
+            if isinstance(_ant.get(CHAVE_POR_CORTE), dict):
+                escolhas = dict(_ant[CHAVE_POR_CORTE])
+        except (OSError, json.JSONDecodeError, AttributeError):
+            escolhas = {}
+        if escolhas:
+            ed[CHAVE_POR_CORTE] = escolhas
+            # sem transicao do estilo ("nenhuma") a emenda escolhida ainda
+            # ganha a sua: monta a lista base para as escolhas terem onde entrar
+            if not transitions:
+                transitions = [{"at": s["start"], "type": "nenhuma", "frames": 2,
+                                "accent": accent, "intensity": forca}
+                               for s in segs.get("segments", [])[1:]]
+            transitions = aplicar_por_corte(transitions, escolhas)
+            transitions = [t for t in transitions if t.get("type") != "nenhuma"]
+        if transitions:
             ed["transitions"] = transitions
 
     ca = preset.get("captionAccent")

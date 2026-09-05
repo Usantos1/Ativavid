@@ -1,5 +1,14 @@
 # Changelog
 
+## 5.0.37
+
+- **Transição escolhida corte a corte, no editor.** A régua da linha do
+  tempo ganhou um losango em cada emenda entre trechos. Clique nele e
+  escolha a transição daquele corte — Flash, Brilho, Escurece, Faixa da
+  marca, "Nenhuma neste corte" ou "Como o estilo manda". A escolha fica
+  gravada no projeto e sobrevive aos próximos "Salvar e refazer"; os cortes
+  que você não mexeu continuam seguindo o estilo.
+
 ## 5.0.36
 
 - **O Diagnóstico avisa quando a Biblioteca de trilhas está vazia** numa

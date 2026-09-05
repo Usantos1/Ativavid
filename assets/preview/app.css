@@ -4320,3 +4320,39 @@ body > .fx-drop { position: fixed; bottom: auto; }
 .music-menu { position: fixed; z-index: 140; display: grid; gap: 4px; padding: 6px; background: var(--overlay-bg); border: 1px solid var(--stroke); border-radius: 10px; box-shadow: 0 12px 30px rgba(0,0,0,.45); }
 .music-menu button { font: inherit; font-size: 13px; text-align: left; color: var(--text, #eee); background: transparent; border: 0; padding: 7px 10px; border-radius: 7px; cursor: pointer; }
 .music-menu button:hover { background: rgba(255,255,255,.08); }
+
+
+/* Menu da transicao por corte (5.0.37) — aberto ao clicar no losango da regua. */
+.menu-emenda {
+  position: fixed;
+  z-index: 300;
+  min-width: 220px;
+  padding: 6px;
+  border-radius: 10px;
+  background: var(--panel, #15171c);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.menu-emenda-titulo {
+  font-size: 11px;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--fg-soft, #8b94a3);
+  padding: 4px 8px 6px;
+}
+.menu-emenda-item {
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  padding: 7px 10px;
+  cursor: pointer;
+}
+.menu-emenda-item:hover { background: rgba(255, 255, 255, 0.07); }
+.menu-emenda-item.on { background: rgba(255, 209, 102, 0.16); }
