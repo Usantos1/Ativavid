@@ -1,5 +1,18 @@
 # Changelog
 
+## 5.0.59
+
+- **Conserto: o render tinha ficado bem mais lento na 5.0.57.** A trilha
+  que abaixa sob a voz quebrou o caminho rápido de desenho sem avisar, e
+  todo vídeo caía no caminho antigo — que nos projetos reais leva 4,8
+  segundos por segundo de vídeo em vez de 3,0, e chega a 1 GB de arquivos
+  temporários em vez de nenhum. E ainda saía sem a trilha abaixando.
+  Corrigido, com uma trava contra esse tipo de defeito mudo.
+- **A música é composta enquanto o vídeo é desenhado.** Antes o render
+  parava para esperar a trilha da IA ficar pronta: em 30 dos últimos 132
+  vídeos essa parada foi de 99 segundos na mediana (a pior, 164), num
+  vídeo que leva 118 no total. Agora a espera corre por baixo do desenho.
+
 ## 5.0.58
 
 - **Mais seis legendas:** *Contorno duplo* (preto grosso por fora, a cor da
@@ -8,14 +21,12 @@
   legenda, todos medidos contra o Remotion.
 
 ## 5.0.57
-## 5.0.57
 
 - **A trilha abaixa sozinha quando alguém fala.** Como num podcast bem
   feito: a música cede cerca de 9 dB enquanto há voz e volta nas pausas,
   em vez de ficar sempre no mesmo volume baixo. Medido no áudio de um
   vídeo real. Em Estilo dá para voltar ao volume constante.
 
-## 5.0.56
 ## 5.0.56
 
 - **Câmera lenta e acelerado por take, como no CapCut.** Clique num take e
@@ -24,7 +35,6 @@
   áudio muda de duração sem ficar com voz de desenho. Vale no próximo
   "Aplicar alterações".
 
-## 5.0.55
 ## 5.0.55
 
 - **Banco de imagens dentro da Biblioteca.** Nas abas Imagens e Vídeos,
@@ -39,7 +49,6 @@
   `+`, `−` e `0` controlam o zoom com a agulha parada no lugar. Tudo na
   lista de atalhos.
 
-## 5.0.54
 ## 5.0.54
 
 - **Volume da voz e cor por take, no editor.** Clique num take e a faixa de
@@ -56,7 +65,6 @@
   Pexels e Freepik respondiam "chave inválida" e o b-roll automático parava
   sem avisar. Agora todas leem pelo mesmo caminho, que decifra.
 
-## 5.0.53
 ## 5.0.53
 
 - **Oito legendas novas, no nível do Captions e do CapCut.** Quatro

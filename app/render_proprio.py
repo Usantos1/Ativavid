@@ -5553,10 +5553,14 @@ def camada_do_layout(layout: str, w: int, h: int,
 # ------------------------------------------------------- passada única ------
 def _grafo_audio(idx_voz: int, idx_sfx: int | None, idx_trilha: int | None,
                  trilha_volume: float, duration_sec: float,
-                 fade_out_at: float) -> list[str]:
+                 fade_out_at: float, duck: bool = True) -> list[str]:
     """O grafo de áudio do compose (overlay_compose._mix_audio_graph), com os
     índices de entrada parametrizados — aqui o vídeo vem por cano e os índices
-    dos arquivos de áudio mudam de posição."""
+    dos arquivos de áudio mudam de posição.
+
+    `duck` (5.0.59) tem de existir aqui também: a passada única é o caminho
+    NORMAL do motor próprio, e sem ela a trilha da 5.0.57 só abaixava sob a
+    voz no caminho de duas etapas — que quase nunca roda."""
     a_fmt = "aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo"
     a_len = f"{a_fmt},atrim=0:{duration_sec:.6f},asetpts=PTS-STARTPTS"
     parts = [f"[{idx_voz}:a]{a_len}[voice]"]
@@ -5569,7 +5573,19 @@ def _grafo_audio(idx_voz: int, idx_sfx: int | None, idx_trilha: int | None,
             f"[{idx_trilha}:a]volume={trilha_volume:.4f},"
             f"afade=t=in:st=0:d=0.4,afade=t=out:st={fade_out_at:.3f}:d=1.5,"
             f"{a_len}[music]")
-        mix_in.append("[music]")
+        if duck:
+            from app.overlay_compose import (
+                DUCK_ATAQUE, DUCK_LIMIAR, DUCK_REDUCAO, DUCK_SOLTA)
+            # Mesma receita do compose: uma CÓPIA da voz dispara o
+            # sidechain; a original segue intacta para o mix.
+            parts[0] = f"[{idx_voz}:a]{a_len},asplit=2[voice][voiceduck]"
+            parts.append(
+                f"[music][voiceduck]sidechaincompress="
+                f"threshold={DUCK_LIMIAR}:ratio={DUCK_REDUCAO}:"
+                f"attack={DUCK_ATAQUE}:release={DUCK_SOLTA}:makeup=1[musicd]")
+            mix_in.append("[musicd]")
+        else:
+            mix_in.append("[music]")
     if len(mix_in) == 1:
         parts.append("[voice]anull[pre]")
     else:
@@ -5584,6 +5600,8 @@ def render_final_uma_passada(
     cut: Path, dest: Path, frames: int, fps: float,
     width: int = 1080, height: int = 1920,
     trilha: Path | None = None, trilha_volume: float = 0.12,
+    duck: bool = True,
+    resolver_trilha=None,
     progresso=None,
 ) -> dict[str, Any]:
     """Desenha, compõe e encoda numa passada — sem overlay.mov intermediário.
@@ -5610,6 +5628,15 @@ def render_final_uma_passada(
                      width=width, height=height)
     sfx_wav = dest.with_name(dest.stem + "._sfx.wav")
     tem_sfx = r._gravar_sfx(sfx_wav)
+    # 5.0.59: a trilha é cobrada AQUI, e não no caller. O ffmpeg desta passada
+    # abre o mp3 logo no começo, então o mais tarde que dá para perguntar por
+    # ela é depois do layout e do SFX — que é justamente o pedaço que o
+    # pipeline pode sobrepor à espera da música.
+    if resolver_trilha is not None:
+        try:
+            trilha, trilha_volume, duck = resolver_trilha()
+        except Exception as e:  # noqa: BLE001 — sem trilha o vídeo sai mudo, não quebrado
+            print(f"[warn] trilha tardia: {e}", flush=True)
     music = bool(trilha and trilha.exists())
     duration_sec = frames / fps
     fade_out_at = max(0.0, duration_sec - 1.5)
@@ -5654,7 +5681,8 @@ def render_final_uma_passada(
         "setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv[vid]"
     )
     fc = vid + ";" + ";".join(_grafo_audio(
-        0, idx_sfx, idx_trilha, trilha_volume, duration_sec, fade_out_at))
+        0, idx_sfx, idx_trilha, trilha_volume, duration_sec, fade_out_at,
+        duck=duck))
 
     prenorm = dest.with_name(dest.stem + "._prenorm.mp4")
     primary, flags = encoder_args()

@@ -69,8 +69,15 @@ def test_os_numeros_sao_os_medidos():
 
 def test_ligado_por_padrao_e_desligavel_pelo_estilo():
     assert "musicDuck" in STYLE_KEYS
-    assert 'duck=st.get("duck") is not False' in OP, "sem o campo, liga"
-    assert OP.count('duck=st.get("duck") is not False') == 2, "os dois caminhos de composicao"
+    assert 'st.get("duck") is not False' in OP, "sem o campo, liga"
+    # 5.0.59: o valor é decidido UMA vez, no `_resolver_trilha`, e chega aos
+    # dois caminhos de composição — a passada única (pelo `resolver_trilha`)
+    # e o compose de duas etapas (pelo `_tduck`).
+    assert OP.count('st.get("duck") is not False') == 1, "uma decisão só"
+    assert "resolver_trilha=_resolver_trilha," in OP
+    assert "duck=_tduck," in OP
+    rp = (REPO / "app" / "render_proprio.py").read_text(encoding="utf-8")
+    assert "duck=duck))" in rp, "a passada única repassa para o grafo de áudio"
     src = (REPO / "pipeline" / "run_fast.py").read_text(encoding="utf-8")
     assert 'edit_data["soundtrack"]["duck"] = False' in src
     assert 'id="autoMusicDuck"' in HTML

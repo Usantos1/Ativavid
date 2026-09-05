@@ -79,3 +79,23 @@ def test_o_changelog_de_verdade_tem_a_versao_atual():
     """Release sem seção no CHANGELOG sai com aviso mudo."""
     versao = (REPO / "VERSION").read_text(encoding="utf-8").strip()
     assert secao(versao), f"CHANGELOG.md sem seção `## {versao}`"
+
+
+def test_nenhuma_secao_do_changelog_esta_vazia():
+    """Cabeçalho repetido some do aviso sem dar erro.
+
+    Cinco versões (5.0.53 a 5.0.57) saíram com `## X` escrito duas vezes
+    seguidas. O `secao()` casa o PRIMEIRO e para no `##` seguinte — que era
+    a cópia —, então devolvia string vazia e o aviso de versão nova ficava
+    mudo justamente nas versões com novidade. Só a versão publicada naquele
+    dia era conferida; as anteriores, nunca mais.
+    """
+    import re
+
+    texto = (REPO / "CHANGELOG.md").read_text(encoding="utf-8")
+    versoes = re.findall(r"^##\s+(\d+\.\d+\.\d+)\s*$", texto, re.M)
+    assert len(versoes) == len(set(versoes)), (
+        f"cabeçalho repetido: "
+        f"{sorted({v for v in versoes if versoes.count(v) > 1})}")
+    vazias = [v for v in versoes if not secao(v, texto)]
+    assert not vazias, f"seções sem texto no CHANGELOG: {vazias}"

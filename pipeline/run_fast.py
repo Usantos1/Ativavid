@@ -4996,130 +4996,171 @@ def run(
     _timing_mark("SEGMENTS", _t_phase)  # segments.json + broll + proxy + track
     _t_phase = time.perf_counter()
     music = bool(elems.get("musicAI"))
-    if music:
-        print("[7/9] soundtrack")
-        trilha = public / "trilha.mp3"
-        if music_thread is not None:
-            music_thread.join(timeout=240)
-        if music_tmp.exists() and music_tmp.stat().st_size > 1000:
-            os.replace(music_tmp, trilha)
-            if _music_via.get("motor"):
-                _RENDER_META["musicaFonte"] = "motor: MusicGen local"
-                _RENDER_META["musicaMotivo"] = str(
-                    _music_via.get("motivo") or "reserva")
-            elif reuso:
-                # Reaproveitada do render anterior: nao foi composta agora e
-                # nao gastou credito — dizer "ElevenLabs" aqui seria mentira
-                # sobre o custo desta geracao.
-                _RENDER_META["musicaFonte"] = "reuso: render anterior"
-            else:
-                # O caminho que DEU CERTO tambem precisa se identificar: a
-                # ficha so sabia dizer a trilha quando algo tinha desviado
-                # do normal. So o motor local compoe (a nuvem saiu em
-                # 02/09/2026), entao um arquivo sem marca de motor/reuso e
-                # anomalia — dizer de onde veio evita a ficha muda.
-                _RENDER_META["musicaFonte"] = "motor: MusicGen local"
-        else:
-            # Antecipada nao entregou (planned<3s, motor recusou ou fio
-            # estourou o prazo) — uma tentativa sincrona do motor local.
-            if not trilha.exists():
-                if _tentar_musicgen(trilha, music_vibe,
-                                    int(duration) + 2,
-                                    edit_dir.parents[1]):
-                    _RENDER_META["musicaFonte"] = "motor: MusicGen local"
-                    _RENDER_META["musicaMotivo"] = "escolha"
-                    print("[7/9] trilha composta pelo MOTOR LOCAL "
-                          "(MusicGen)", flush=True)
-                else:
-                    _RENDER_META["musicaSkip"] = (
-                        str(_RENDER_META.get("musicaMotorRecusa") or "")
-                        or "o motor local não compôs")
-                try:
-                    from app.content_type import normalize_content_type
-                    _ct_bib = "longform" if is_longform else (
-                        normalize_content_type(preset.get("contentType"))
-                        or "")
-                except Exception:
-                    _ct_bib = ""
-                if not trilha.exists():
-                    _nome_bib = _trilha_da_biblioteca(
-                        trilha, float(duration), _ct_bib,
-                        raiz_projetos=edit_dir.parents[1])
-                else:
-                    _nome_bib = None
-                if _nome_bib:
-                    _RENDER_META.pop("musicaSkip", None)
-                    _RENDER_META["musicaFonte"] = _nome_bib
-                    print(f"[7/9] trilha da BIBLIOTECA: {_nome_bib}",
-                          flush=True)
-                elif not trilha.exists():
-                    # so quando NADA salvou a trilha — com o motor tendo
-                    # composto, o musicaSkip ja foi removido e nao ha o
-                    # que anexar (KeyError, pego em revisao 26/08)
-                    _RENDER_META["musicaSkip"] += (
-                        " · plano B: deixe MP3s em "
-                        "ATIVAVID/Biblioteca/Trilhas")
-        if trilha.exists():
-            # Rede de seguranca do rotulo: todo caminho acima ja se
-            # identifica; se algum deixou passar, o unico compositor que
-            # resta e o motor local.
-            if not _RENDER_META.get("musicaFonte"):
-                _RENDER_META["musicaFonte"] = "motor: MusicGen local"
-            try:
-                trilha.with_suffix(".vibe.txt").write_text(
-                    music_vibe.strip(), encoding="utf-8")
-            except OSError:
-                pass
-            # Trilha NOVA (nao reaproveitada e nao vinda da biblioteca) vai
-            # para o acervo com a etiqueta do clima deste video.
-            _fonte_atual = str(_RENDER_META.get("musicaFonte") or "")
-            # O que NAO se arquiva e a trilha que ja veio da biblioteca (o
-            # nome dela e um arquivo de la). "motor:" e "nuvem:" sao trilhas
-            # novas e vao para o acervo — checar so o "motor:" pararia de
-            # arquivar tudo que a nuvem compoe assim que ela se identifica.
-            _veio_da_biblioteca = bool(_fonte_atual) and not (
-                _fonte_atual.startswith(("motor:", "nuvem:", "reuso:")))
-            if not reuso and not _veio_da_biblioteca:
-                try:
-                    from app.content_type import normalize_content_type
-                    _ct_arq = "longform" if is_longform else (
-                        normalize_content_type(preset.get("contentType"))
-                        or "")
-                except Exception:
-                    _ct_arq = ""
-                _arquivar_trilha(
-                    trilha, _ct_arq, edit_dir.parents[1],
-                    "mg" if _fonte_atual.startswith("motor:") else "ia")
-            edit_data["soundtrack"]["enabled"] = True
-            # 5.0.57: a trilha abaixa sozinha sob a voz. Ligado por padrao;
-            # o estilo pode desligar (`musicDuck: false`).
-            if str(preset.get("musicDuck") or "1") in ("0", "false", "False"):
-                edit_data["soundtrack"]["duck"] = False
-            if _music_via.get("manual"):
-                _m = dict(_music_via["manual"])
-                if _m.get("volume") is None:
-                    _m.pop("volume", None)
-                edit_data["soundtrack"].update(_m)
-            (public / "edit-data.json").write_text(
-                json.dumps(edit_data, indent=2, ensure_ascii=False), encoding="utf-8"
-            )
-        else:
-            music = False
-            _RENDER_META.setdefault(
-                "musicaSkip", "geração falhou (sem detalhe)")
-            print(f"[7/9] SEM trilha: {_RENDER_META['musicaSkip']}",
-                  flush=True)
-    else:
-        music_tmp.unlink(missing_ok=True)
-        print("[7/9] soundtrack skipped")
+    # 5.0.59: a espera pela trilha sai da frente do render.
+    #
+    # MEDIDO em 132 projetos desde 01/09: 30 deles esperaram a musica, com
+    # MEDIANA de 99,4 s (maior: 164 s) — 45 minutos somados, num job cuja
+    # mediana inteira e 118 s. O desenho do overlay NAO usa a trilha (ela
+    # entra so na mistura), o que a nota de 30/08 neste arquivo ja apontava
+    # como o ganho real: sobrepor, nao encurtar.
+    #
+    # Entao: se o fio da musica ainda esta vivo, o bloco [7/9] fica GUARDADO
+    # e roda entre o desenho e a mistura (`antes_do_compose`). Se o caminho
+    # cair no Remotion completo — que renderiza o audio junto —, o guardado
+    # roda antes, como sempre foi.
+    _trilha_pendente = {"fn": None}
 
-    _timing_mark("MUSIC_WAIT", _t_phase)  # espera da trilha antecipada (0s ideal)
+    def _fechar_trilha():
+        """Cobra a espera guardada. Idempotente: quem chegar depois nao paga."""
+        fn = _trilha_pendente.get("fn")
+        if fn is None:
+            return
+        _trilha_pendente["fn"] = None
+        fn()
+        # MUSIC_WAIT passa a medir o que SOBROU da espera depois do desenho —
+        # que e exatamente o numero que esta otimizacao existe para derrubar.
+        _timing_mark("MUSIC_WAIT", _trilha_pendente.get("t0") or time.perf_counter())
+
+    def _bloco_da_trilha():
+        # 5.0.59: corpo do antigo [7/9] — espera do fio, promocao do arquivo
+        # e atualizacao do edit-data. `music` e a unica saida que o resto do
+        # job le (o encode final pergunta se ha trilha).
+        nonlocal music
+        if music:
+            print("[7/9] soundtrack")
+            trilha = public / "trilha.mp3"
+            if music_thread is not None:
+                music_thread.join(timeout=240)
+            if music_tmp.exists() and music_tmp.stat().st_size > 1000:
+                os.replace(music_tmp, trilha)
+                if _music_via.get("motor"):
+                    _RENDER_META["musicaFonte"] = "motor: MusicGen local"
+                    _RENDER_META["musicaMotivo"] = str(
+                        _music_via.get("motivo") or "reserva")
+                elif reuso:
+                    # Reaproveitada do render anterior: nao foi composta agora e
+                    # nao gastou credito — dizer "ElevenLabs" aqui seria mentira
+                    # sobre o custo desta geracao.
+                    _RENDER_META["musicaFonte"] = "reuso: render anterior"
+                else:
+                    # O caminho que DEU CERTO tambem precisa se identificar: a
+                    # ficha so sabia dizer a trilha quando algo tinha desviado
+                    # do normal. So o motor local compoe (a nuvem saiu em
+                    # 02/09/2026), entao um arquivo sem marca de motor/reuso e
+                    # anomalia — dizer de onde veio evita a ficha muda.
+                    _RENDER_META["musicaFonte"] = "motor: MusicGen local"
+            else:
+                # Antecipada nao entregou (planned<3s, motor recusou ou fio
+                # estourou o prazo) — uma tentativa sincrona do motor local.
+                if not trilha.exists():
+                    if _tentar_musicgen(trilha, music_vibe,
+                                        int(duration) + 2,
+                                        edit_dir.parents[1]):
+                        _RENDER_META["musicaFonte"] = "motor: MusicGen local"
+                        _RENDER_META["musicaMotivo"] = "escolha"
+                        print("[7/9] trilha composta pelo MOTOR LOCAL "
+                              "(MusicGen)", flush=True)
+                    else:
+                        _RENDER_META["musicaSkip"] = (
+                            str(_RENDER_META.get("musicaMotorRecusa") or "")
+                            or "o motor local não compôs")
+                    try:
+                        from app.content_type import normalize_content_type
+                        _ct_bib = "longform" if is_longform else (
+                            normalize_content_type(preset.get("contentType"))
+                            or "")
+                    except Exception:
+                        _ct_bib = ""
+                    if not trilha.exists():
+                        _nome_bib = _trilha_da_biblioteca(
+                            trilha, float(duration), _ct_bib,
+                            raiz_projetos=edit_dir.parents[1])
+                    else:
+                        _nome_bib = None
+                    if _nome_bib:
+                        _RENDER_META.pop("musicaSkip", None)
+                        _RENDER_META["musicaFonte"] = _nome_bib
+                        print(f"[7/9] trilha da BIBLIOTECA: {_nome_bib}",
+                              flush=True)
+                    elif not trilha.exists():
+                        # so quando NADA salvou a trilha — com o motor tendo
+                        # composto, o musicaSkip ja foi removido e nao ha o
+                        # que anexar (KeyError, pego em revisao 26/08)
+                        _RENDER_META["musicaSkip"] += (
+                            " · plano B: deixe MP3s em "
+                            "ATIVAVID/Biblioteca/Trilhas")
+            if trilha.exists():
+                # Rede de seguranca do rotulo: todo caminho acima ja se
+                # identifica; se algum deixou passar, o unico compositor que
+                # resta e o motor local.
+                if not _RENDER_META.get("musicaFonte"):
+                    _RENDER_META["musicaFonte"] = "motor: MusicGen local"
+                try:
+                    trilha.with_suffix(".vibe.txt").write_text(
+                        music_vibe.strip(), encoding="utf-8")
+                except OSError:
+                    pass
+                # Trilha NOVA (nao reaproveitada e nao vinda da biblioteca) vai
+                # para o acervo com a etiqueta do clima deste video.
+                _fonte_atual = str(_RENDER_META.get("musicaFonte") or "")
+                # O que NAO se arquiva e a trilha que ja veio da biblioteca (o
+                # nome dela e um arquivo de la). "motor:" e "nuvem:" sao trilhas
+                # novas e vao para o acervo — checar so o "motor:" pararia de
+                # arquivar tudo que a nuvem compoe assim que ela se identifica.
+                _veio_da_biblioteca = bool(_fonte_atual) and not (
+                    _fonte_atual.startswith(("motor:", "nuvem:", "reuso:")))
+                if not reuso and not _veio_da_biblioteca:
+                    try:
+                        from app.content_type import normalize_content_type
+                        _ct_arq = "longform" if is_longform else (
+                            normalize_content_type(preset.get("contentType"))
+                            or "")
+                    except Exception:
+                        _ct_arq = ""
+                    _arquivar_trilha(
+                        trilha, _ct_arq, edit_dir.parents[1],
+                        "mg" if _fonte_atual.startswith("motor:") else "ia")
+                edit_data["soundtrack"]["enabled"] = True
+                # 5.0.57: a trilha abaixa sozinha sob a voz. Ligado por padrao;
+                # o estilo pode desligar (`musicDuck: false`).
+                if str(preset.get("musicDuck") or "1") in ("0", "false", "False"):
+                    edit_data["soundtrack"]["duck"] = False
+                if _music_via.get("manual"):
+                    _m = dict(_music_via["manual"])
+                    if _m.get("volume") is None:
+                        _m.pop("volume", None)
+                    edit_data["soundtrack"].update(_m)
+                (public / "edit-data.json").write_text(
+                    json.dumps(edit_data, indent=2, ensure_ascii=False), encoding="utf-8"
+                )
+            else:
+                music = False
+                _RENDER_META.setdefault(
+                    "musicaSkip", "geração falhou (sem detalhe)")
+                print(f"[7/9] SEM trilha: {_RENDER_META['musicaSkip']}",
+                      flush=True)
+        else:
+            music_tmp.unlink(missing_ok=True)
+            print("[7/9] soundtrack skipped")
+
+    # So adianta adiar se o fio ainda esta vivo: com a musica ja pronta a
+    # espera e zero e o desvio nao pagaria a complexidade.
+    if music and music_thread is not None and music_thread.is_alive():
+        _trilha_pendente["fn"] = _bloco_da_trilha
+        _trilha_pendente["t0"] = _t_phase
+        print("[7/9] soundtrack: esperando EM PARALELO com o desenho",
+              flush=True)
+    else:
+        _bloco_da_trilha()
+        _timing_mark("MUSIC_WAIT", _t_phase)  # trilha ja pronta: ~0s
     print("[8/9] Remotion render")
     set_stage(edit_dir, "waiting_render", "Aguardando slot Remotion…", 82)
     _helper("check_template_integrity.py", str(remotion), "--track", track)
 
     overlay_final = False
     if is_longform:
+        # O compose do longform ja mistura o audio: a trilha precisa existir.
+        _fechar_trilha()
         _RENDER_META["overlaySkip"] = "longform"
         # Caminho RÁPIDO do longform (02/09): o template só põe lower third,
         # capítulo, callout e trilha por cima do cut (legenda vai em .srt) —
@@ -5218,6 +5259,7 @@ def run(
                             edit_data=edit_data,
                             duration=duration,
                             dest=edit_dir / "final.mp4",
+                            antes_do_compose=_fechar_trilha,
                         )
                         _timing_mark("REMOTION_RENDER", _t_ov)
                         bad = _canary_validate_overlay(
@@ -5259,6 +5301,9 @@ def run(
         final = edit_dir / "final.mp4"
         _timing_mark("FINAL_ENCODE", _t_enc)
     else:
+        # Caminho COMPLETO: o Remotion renderiza o audio junto, entao a trilha
+        # tem de estar no edit-data antes de ele comecar.
+        _fechar_trilha()
         (remotion / "out").mkdir(exist_ok=True)
         comp_id = "Longform" if is_longform else "Reels"
         conc = remotion_concurrency()

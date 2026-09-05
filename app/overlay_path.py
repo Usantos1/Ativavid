@@ -741,9 +741,34 @@ def try_overlay_final(
     duration: float | None = None,
     dest: Path,
     progresso=None,
+    antes_do_compose=None,
 ) -> dict[str, Any]:
-    """Render Overlay + compose. Levanta se não der — o caller faz fallback FULL."""
+    """Render Overlay + compose. Levanta se não der — o caller faz fallback FULL.
+
+    `antes_do_compose` (5.0.59) roda entre o DESENHO e a MISTURA. O desenho
+    nao usa a trilha (ela entra so no compose), entao o pipeline manda aqui
+    a espera pela musica: quem esperava 99 s em media passa a esperar o que
+    sobrar depois dos ~24 s de desenho.
+    """
     from app.overlay_compose import compose_overlay, validate_overlay_alpha
+
+    def _resolver_trilha():
+        """Cobra a espera guardada e só então lê a trilha do edit-data.
+
+        Chamado o mais TARDE possível nos dois caminhos do motor próprio: o
+        desenho não usa a trilha, então cada segundo de desenho é um segundo
+        a menos de espera pela música.
+        """
+        if antes_do_compose is not None:
+            try:
+                antes_do_compose()
+            except Exception as e:  # noqa: BLE001 — sem trilha sai mudo, não quebrado
+                print(f"[warn] trilha antecipada: {e}", flush=True)
+        st = edit_data.get("soundtrack") or {}
+        alvo = public / str(st.get("file") or "trilha.mp3")
+        if not (st.get("enabled") and alvo.exists()):
+            alvo = None
+        return alvo, float(st.get("volume") or 0.12), st.get("duck") is not False
     from app.timeline import timeline_from_edit_data
 
     public = remotion / "public"
@@ -824,16 +849,10 @@ def try_overlay_final(
                 try:
                     from app.render_proprio import render_final_uma_passada
 
-                    st = edit_data.get("soundtrack") or {}
-                    trilha_up = public / str(st.get("file") or "trilha.mp3")
-                    if not (st.get("enabled") and trilha_up.exists()):
-                        trilha_up = None
                     mix = render_final_uma_passada(
                         public, edit_data, cut=cut, dest=dest,
                         frames=frames, fps=fps, width=width, height=height,
-                        trilha=trilha_up,
-                        trilha_volume=float(st.get("volume") or 0.12),
-                        duck=st.get("duck") is not False,
+                        resolver_trilha=_resolver_trilha,
                         progresso=progresso)
                     result = {
                         "overlay": None,
@@ -920,18 +939,15 @@ def try_overlay_final(
             duration_in_frames=frames,
             fps=fps,
         )
-        st = edit_data.get("soundtrack") or {}
-        trilha = public / str(st.get("file") or "trilha.mp3")
-        if not (st.get("enabled") and trilha.exists()):
-            trilha = None
+        trilha, _tvol, _tduck = _resolver_trilha()
         t1 = time.perf_counter()
         mix = compose_overlay(
             cut, overlay, dest,
             duration_in_frames=frames,
             fps=fps,
             trilha=trilha,
-            trilha_volume=float(st.get("volume") or 0.12),
-            duck=st.get("duck") is not False,
+            trilha_volume=_tvol,
+            duck=_tduck,
         )
         compose_sec = time.perf_counter() - t1
         print(
