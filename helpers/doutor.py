@@ -114,6 +114,35 @@ def _ler_env(arq: Path, valores: dict[str, str]) -> None:
                                    v.strip().strip('"').strip("'"))
 
 
+def _chaves_do_app(env: Path) -> tuple[dict[str, str], int, int]:
+    """(valores decifrados, segredos cifrados, segredos em texto claro).
+
+    5.0.49: desde a 5.0.47 as chaves ficam cifradas (DPAPI) no .env; o
+    Doutor lia o arquivo cru e veria `dpapi:...`. Decifra com o mesmo
+    `secret_store` do app e conta quantos segredos ainda estao em texto
+    claro — o app converte sozinho na primeira abertura.
+    """
+    cifrados = claros = 0
+    crus: dict[str, str] = {}
+    _ler_env(env, crus)
+    try:
+        from app import secret_store
+    except Exception:  # noqa: BLE001 — Doutor solto, sem o pacote app
+        secret_store = None
+    valores: dict[str, str] = {}
+    for k, v in crus.items():
+        segredo = k.upper().endswith(("_KEY", "_TOKEN", "_SECRET", "_PASSWORD"))
+        if str(v).startswith("dpapi:"):
+            if segredo:
+                cifrados += 1
+            valores[k] = secret_store.unprotect(v) if secret_store else v
+        else:
+            if segredo and v:
+                claros += 1
+            valores[k] = v
+    return valores, cifrados, claros
+
+
 def checar_chaves() -> None:
     # ORDEM DO APP: %USERPROFILE%\ATIVAVID\.env primeiro (Program Files e
     # so leitura, entao e ali que a tela de Integracoes grava), depois o
@@ -122,9 +151,16 @@ def checar_chaves() -> None:
     # chave da ElevenLabs" com a chave configurada e funcionando. Aviso
     # falso no diagnostico e pior que aviso nenhum — manda o cliente (e a
     # mim) caçar fantasma.
-    valores: dict[str, str] = {}
-    _ler_env(Path.home() / "ATIVAVID" / ".env", valores)
+    valores, cifrados, claros = _chaves_do_app(Path.home() / "ATIVAVID" / ".env")
     _ler_env(SKILL / ".env", valores)
+    if claros:
+        diz(AVISO, f"{claros} chave(s) de API em texto claro no disco",
+            "O app cifra as chaves (DPAPI) na primeira abertura depois da 5.0.47; "
+            "se este aviso continuar, a cifra do Windows nao esta disponivel.",
+            "Abra o ATIVAVID uma vez e rode o Diagnostico de novo")
+    elif cifrados:
+        diz(OK, "Chaves de API protegidas no disco",
+            f"{cifrados} chave(s) cifradas com a DPAPI do Windows, amarradas a esta conta.")
     for k in ("GROQ_API_KEY", "PEXELS_API_KEY"):
         if os.environ.get(k):
             valores.setdefault(k, os.environ[k])

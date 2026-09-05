@@ -602,6 +602,27 @@ def _aliviar_card(j: dict) -> None:
         j["score"] = {"overall": sc.get("overall"), "tips": [d for d in dicas if d][:1]}
 
 
+def esquentar(store: Any, projects_root: Path):
+    """Monta a lista uma vez em segundo plano, no arranque.
+
+    A primeira `/api/jobs` pagava o build FRIO (4 s com 331 projetos,
+    05/09) — e ela e a primeira coisa que o hub pede ao abrir. Depois
+    disso o cache dos prontos (`_CACHE_PRONTOS`) e o do SO respondem em
+    0,25 s. So leitura; falhar aqui nao muda nada.
+    """
+    import threading
+
+    def _trabalho() -> None:
+        try:
+            build(store, projects_root, com_links=True)
+        except Exception:  # noqa: BLE001 — conforto, nunca derruba o app
+            pass
+
+    t = threading.Thread(target=_trabalho, daemon=True, name="jobs-esquentar")
+    t.start()
+    return t
+
+
 def build(store: Any, projects_root: Path, *, com_links: bool = False) -> list[dict]:
     """Cards prontos para a tela, do mais recente para o mais antigo."""
     import copy

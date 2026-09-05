@@ -258,6 +258,10 @@
               <h3>Recentes</h3>
               <button type="button" class="ghost-btn" data-view="fila" id="btnVerFila">Ver fila</button>
             </div>
+            <!-- 5.0.50: o que espera por alguem, num lugar so. Correcao salva e
+                 nao aplicada ficava escondida no card de cada video (7
+                 projetos, o mais velho de 18/08); video parado idem. -->
+            <p id="homePendencias" class="hint hidden"></p>
             <div id="jobListRecent" class="project-grid"></div>
             <!-- A unica lista do app que nao tinha texto de vazio:
                  o Inicio de quem acabou de instalar ficava com o
@@ -304,6 +308,7 @@
               <button type="button" class="seg-btn" role="tab" aria-selected="false" data-proj="ativos">Em andamento</button>
               <button type="button" class="seg-btn" role="tab" aria-selected="false" data-proj="prontos">Prontos</button>
               <button type="button" class="seg-btn" role="tab" aria-selected="false" data-proj="parados">Parados</button>
+              <button type="button" class="seg-btn" role="tab" aria-selected="false" data-proj="pendentes">Com pendência</button>
             </div>
             <label class="proj-search">
               <span class="sr-only">Buscar projeto</span>

@@ -1,5 +1,21 @@
 # Changelog
 
+## 5.0.50
+
+- **O Início diz o que está esperando por você.** Uma linha acima dos
+  Recentes conta os vídeos com correção salva e não aplicada e os vídeos
+  parados, com atalho para a lista certa. Antes só quem abria o menu de
+  cada card descobria.
+- **Projetos ganhou o filtro "Com pendência".**
+
+## 5.0.49
+
+- **A primeira lista de vídeos ao abrir vem pronta.** O app monta a lista
+  em segundo plano logo no arranque; a tela deixa de esperar os 4 segundos
+  da primeira montagem com centenas de projetos.
+- **O Diagnóstico confere se as chaves de API estão protegidas** e avisa
+  se alguma ainda estiver em texto claro no disco.
+
 ## 5.0.48
 
 - **Concluídos com ordem à escolha:** mais recentes (padrão), melhor nota

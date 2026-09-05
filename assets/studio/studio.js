@@ -564,6 +564,8 @@ function filterJobs(kind) {
         if (f === "ativos") return jobInFila(j) && j.status !== "error";
         if (f === "prontos") return j.status === "done";
         if (f === "parados") return j.status === "error" || j.status === "needs_review";
+        // 5.0.50: correcao/marcacao salva no editor e nunca aplicada
+        if (f === "pendentes") return !!j.pedidoTipo;
         return true;
       })
       .filter((j) => casaBusca(j, state.projBusca))
@@ -1552,6 +1554,7 @@ function renderJobs() {
   }
 
   renderHomeNow();
+  renderPendencias();
   renderInto("jobListRecent", "emptyRecent", filterJobs("recent"),
              { compact: true, view: "recent" });
   renderInto("jobListFila", "emptyFila", fila, { view: "fila" });
@@ -1564,7 +1567,51 @@ function renderJobs() {
   }
 }
 
+// 5.0.50: uma linha no Inicio com o que espera por alguem — correcoes
+// salvas e nao aplicadas, videos parados — com atalho para o filtro certo
+// em Projetos. Sem isto so quem abria o menu de cada card descobria.
+function renderPendencias() {
+  const el = $("#homePendencias");
+  if (!el) return;
+  const todos = jobsDoWorkspace();
+  const pend = todos.filter((j) => j.pedidoTipo).length;
+  const parados = todos.filter((j) => j.status === "error" || j.status === "needs_review").length;
+  const sig = `${pend}|${parados}`;
+  if (el.dataset.sig === sig) return;
+  el.dataset.sig = sig;
+  if (!pend && !parados) {
+    el.classList.add("hidden");
+    el.innerHTML = "";
+    return;
+  }
+  const partes = [];
+  if (pend) partes.push(`<button type="button" class="link-btn" data-ir-projetos="pendentes">${pend} vídeo${pend === 1 ? "" : "s"} com correção pendente</button>`);
+  if (parados) partes.push(`<button type="button" class="link-btn" data-ir-projetos="parados">${parados} parado${parados === 1 ? "" : "s"}</button>`);
+  el.innerHTML = `Esperando por você: ${partes.join(" · ")}`;
+  el.classList.remove("hidden");
+}
+
+function irParaProjetosCom(filtro) {
+  state.projFilter = filtro;
+  $("#projFilter")?.querySelectorAll("[data-proj]").forEach((x) => {
+    const on = x.dataset.proj === filtro;
+    x.classList.toggle("on", on);
+    x.setAttribute("aria-selected", on ? "true" : "false");
+  });
+  const nav = document.querySelector('[data-view="projetos"]');
+  if (nav) nav.click();
+  renderJobs();
+}
+
 function wireProjetos() {
+  const pend = $("#homePendencias");
+  if (pend && !pend.dataset.wired) {
+    pend.dataset.wired = "1";
+    pend.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-ir-projetos]");
+      if (b) irParaProjetosCom(b.dataset.irProjetos);
+    });
+  }
   const seg = $("#projFilter");
   if (seg && !seg.dataset.wired) {
     seg.dataset.wired = "1";

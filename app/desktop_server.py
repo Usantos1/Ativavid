@@ -668,6 +668,13 @@ def build_server(projects_root: Path, port: int) -> tuple[ThreadingHTTPServer, s
         ps.esquentar_painel(DesktopHandler.projects_roots)
     except Exception:  # noqa: BLE001
         pass
+    # 5.0.49: a lista de jobs tambem — a primeira /api/jobs pagava 4 s.
+    try:
+        from app.jobs_view import esquentar as _esquentar_jobs
+
+        _esquentar_jobs(store, projects_root)
+    except Exception:  # noqa: BLE001
+        pass
 
     srv = QuietThreadingHTTPServer(("127.0.0.1", port), DesktopHandler)
     url = f"http://127.0.0.1:{port}/"
