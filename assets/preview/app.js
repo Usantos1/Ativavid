@@ -2245,7 +2245,8 @@ function edlDirty() {
   return S.draft.some((r) => r.added || r.removed || r.start !== r.orig.start || r.end !== r.orig.end
     || +(r.gain_db || 0) !== +(r.orig.gain_db || 0) || (r.grade || '') !== (r.orig.grade || '')
     || +(r.speed || 1) !== +(r.orig.speed || 1)
-    || +(r.freeze || 0) !== +(r.orig.freeze || 0));
+    || +(r.freeze || 0) !== +(r.orig.freeze || 0)
+    || JSON.stringify(reenqDoTake(r)) !== JSON.stringify(reenqDoTake(r.orig)));
 }
 function geoDoInsert(c) {
   return JSON.stringify([+(+c.start).toFixed(3), +(+c.end).toFixed(3),
@@ -2607,6 +2608,9 @@ function camposDoTake(r) {
   if (r.speed && +r.speed !== 1) out.speed = +r.speed;
   // 5.0.58: quadro congelado no fim do take
   if (r.freeze && +r.freeze > 0) out.freeze = +(+r.freeze).toFixed(2);
+  // 5.0.60: reenquadramento manual (aproximacao + posicao no quadro)
+  const rq = reenqDoTake(r);
+  if (rq) out.reframe = { z: +rq.z.toFixed(3), x: +rq.x.toFixed(3), y: +rq.y.toFixed(3) };
   return out;
 }
 
@@ -2623,7 +2627,8 @@ async function persistEdl() {
     S.draft.forEach((r) => {
       if (!r.removed) {
         r.orig = { start: r.start, end: r.end, gain_db: +(r.gain_db || 0),
-          grade: r.grade || '', speed: +(r.speed || 1), freeze: +(r.freeze || 0) };
+          grade: r.grade || '', speed: +(r.speed || 1), freeze: +(r.freeze || 0),
+          reframe: r.reframe || null };
         r.added = false;
       }
     });
@@ -3183,10 +3188,11 @@ async function applyState(data) {
   S.draft = ranges.map((r, srcIdx) => ({
     source: r.source, start: +r.start, end: +r.end, beat: r.beat || '',
     gain_db: +(r.gain_db || 0), grade: r.grade || '', speed: +(r.speed || 1),
-    freeze: +(r.freeze || 0),
+    freeze: +(r.freeze || 0), reframe: r.reframe || null,
     removed: false, srcIdx,
     orig: { start: +r.start, end: +r.end, gain_db: +(r.gain_db || 0),
-      grade: r.grade || '', speed: +(r.speed || 1), freeze: +(r.freeze || 0) },
+      grade: r.grade || '', speed: +(r.speed || 1), freeze: +(r.freeze || 0),
+      reframe: r.reframe || null },
   }));
   S.corteRelatorio = data.corteRelatorio || null;
   if (data.intent) {
@@ -4491,6 +4497,22 @@ const GANHOS_DO_TAKE = [[-6, '−6 dB'], [-3, '−3 dB'], [0, 'Voz normal'], [3,
 const VELOCIDADES_DO_TAKE = [
   [0.25, '0,25x'], [0.5, '0,5x'], [1, 'Normal'], [1.5, '1,5x'], [2, '2x'], [4, '4x'],
 ];
+/* 5.0.60: reenquadrar o take — o "reframe" do CapCut. Aproxima e escolhe
+ * que pedaco do quadro fica na tela. O corte recorta a FONTE antes de
+ * escalar, entao 2x numa fonte 4K ainda entrega 1080p de verdade. */
+const REENQ_DO_TAKE = [
+  [1, 'Cheio'], [1.2, '1,2x'], [1.5, '1,5x'], [2, '2x'], [2.5, '2,5x'], [3, '3x'],
+];
+function reenqDoTake(r) {
+  const v = (r && r.reframe) || null;
+  const z = v ? Math.min(Math.max(+v.z || 1, 1), 3) : 1;
+  if (!(z > 1.001)) return null;
+  return {
+    z,
+    x: Math.min(Math.max(+(v.x || 0), -1), 1),
+    y: Math.min(Math.max(+(v.y || 0), -1), 1),
+  };
+}
 const LOOKS_DO_TAKE = [
   ['', 'Cor: como o estilo'], ['marca', 'Marca'], ['neutral_punch', 'Neutro'], ['subtle', 'Sutil'],
   ['warm_cinematic', 'Cinemático'], ['frio_limpo', 'Frio limpo'], ['vibrante', 'Vibrante'],
@@ -4566,6 +4588,53 @@ function renderPainelDoTake(lane, r) {
         : 'Sem congelar', 2400);
     });
   }
+  // reenquadramento do take
+  const rqWrap = el('span', 'take-grupo', lane);
+  el('span', 'take-rotulo', rqWrap).textContent = 'Enquadrar';
+  const rqAtual = () => reenqDoTake(r);
+  const rqSliders = () => {
+    rqWrap.querySelectorAll('.take-slider').forEach((x) => x.remove());
+    const m = rqAtual();
+    if (!m) return;
+    for (const [campo, rotulo] of [['x', 'Horizontal'], ['y', 'Vertical']]) {
+      const lab = el('label', 'take-slider', rqWrap);
+      el('span', '', lab).textContent = rotulo;
+      const inp = el('input', '', lab);
+      inp.type = 'range'; inp.min = -1; inp.max = 1; inp.step = 0.05;
+      inp.value = m[campo];
+      inp.title = campo === 'x'
+        ? 'Para a esquerda ou para a direita dentro do quadro'
+        : 'Para cima ou para baixo dentro do quadro';
+      inp.addEventListener('input', () => {
+        r.reframe = { ...(r.reframe || {}), z: m.z, [campo]: +inp.value };
+      });
+      inp.addEventListener('change', () => {
+        pushHistory();
+        r.reframe = { ...(r.reframe || {}), z: m.z, [campo]: +inp.value };
+        refreshHeader();
+        persistEdl();
+      });
+    }
+  };
+  for (const [v, rotulo] of REENQ_DO_TAKE) {
+    const atualZ = (rqAtual() || { z: 1 }).z;
+    const b = el('button', `ent-btn${Math.abs(atualZ - v) < 0.01 ? ' on' : ''}`, rqWrap);
+    b.type = 'button';
+    b.textContent = rotulo;
+    b.title = v === 1 ? 'Quadro inteiro, como foi filmado'
+      : `Aproxima ${rotulo} e deixa escolher que pedaço aparece`;
+    b.addEventListener('click', () => {
+      pushHistory();
+      if (v === 1) delete r.reframe;
+      else r.reframe = { z: v, x: (r.reframe && +r.reframe.x) || 0, y: (r.reframe && +r.reframe.y) || 0 };
+      renderPainelDoTake(lane, r);
+      refreshHeader();
+      persistEdl();
+      toast(v === 1 ? 'Take volta ao quadro cheio'
+        : `Take aproximado ${rotulo} — vale no próximo "Aplicar"`, 2200);
+    });
+  }
+  rqSliders();
   // cor do take
   const corWrap = el('span', 'take-grupo', lane);
   const manual = gradeManualDoTake(r);
@@ -10110,10 +10179,11 @@ function applyRestoredEdl(edl) {
   S.draft = ranges.map((r, srcIdx) => ({
     source: r.source, start: +r.start, end: +r.end, beat: r.beat || '',
     gain_db: +(r.gain_db || 0), grade: r.grade || '', speed: +(r.speed || 1),
-    freeze: +(r.freeze || 0),
+    freeze: +(r.freeze || 0), reframe: r.reframe || null,
     removed: false, srcIdx,
     orig: { start: +r.start, end: +r.end, gain_db: +(r.gain_db || 0),
-      grade: r.grade || '', speed: +(r.speed || 1), freeze: +(r.freeze || 0) },
+      grade: r.grade || '', speed: +(r.speed || 1), freeze: +(r.freeze || 0),
+      reframe: r.reframe || null },
   }));
   renderAll();
   refreshHeader();

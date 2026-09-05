@@ -931,6 +931,7 @@ def extract_segment(
     zoom: dict | None = None,
     prepared: Path | None = None,
     extra_vf: str = "",
+    reframe: str = "",
     speed: float = 1.0,
     freeze: float = 0.0,
 ) -> None:
@@ -997,6 +998,13 @@ def extract_segment(
     cedo = "" if keep_resolution or streams == "a" else _fps_cedo(source)
     if cedo:
         vf_parts.append(f"fps={cedo}")
+    # 5.0.60: reenquadramento manual ANTES do downscale — recortar a fonte
+    # e so entao escalar mantem o detalhe (2x numa fonte 4K ainda entrega
+    # 1080p). Depois do `scale` seria ampliar pixel ja descartado. Sem
+    # `scale` (longform/keep_resolution) o crop mudaria a resolucao de
+    # saida, entao ali ele nao entra.
+    if reframe and streams != "a" and scale:
+        vf_parts.append(reframe)
     # Downscale FIRST, before any HDR tonemap / wide-gamut colour conversion.
     # TONEMAP_CHAIN runs a full-precision float pipeline (zscale linear-light +
     # gbrpf32le, i.e. 32-bit float, full chroma resolution, no subsampling) —
@@ -1342,6 +1350,9 @@ def extract_all_segments(
                 print(f"  [{i:02d}] cor do take ignorada: {e}", flush=True)
                 extra_vf = ""
 
+        from app.timeline_map import reenquadrar_do_range, reenquadrar_vf
+        reframe_vf = reenquadrar_vf(*reenquadrar_do_range(r))
+
         note = r.get("beat") or r.get("note") or ""
         grade_note = f"  grade: {seg_filter or '(none)'}" if is_auto else ""
         gain_note = f"  gain: {gain_db:+.1f}dB" if abs(gain_db) > 0.05 else ""
@@ -1364,6 +1375,7 @@ def extract_all_segments(
             zoom=zoom_for_index(edl, i),
             prepared=prep_by_src.get(src_name),
             extra_vf=extra_vf,
+            reframe=reframe_vf,
             speed=vel,
             freeze=cong,
         )
@@ -1839,6 +1851,12 @@ def extract_and_assemble_jcut(
             sort_keys=True, default=str,
         )
 
+    from app.timeline_map import (
+        congelar_do_range as _congelar_key,
+        reenquadrar_do_range as _reenq_key,
+        velocidade_do_range as _velocidade_key,
+    )
+
     try:
         from app.ffmpeg_zoom import zoom_for_index as _zoom_key_fn
     except ImportError:
@@ -1867,7 +1885,12 @@ def extract_and_assemble_jcut(
             # quando a fonte preparada existe, então não pode reusar o antigo.
             [str(edl.get("grade") or ""), _zoom_key_fn(edl, i),
              preview, draft, keep_resolution, encoder_env,
-             bool(prep_by_src.get(r["source"]))],
+             bool(prep_by_src.get(r["source"])),
+             # 5.0.60: o que o usuario ajustou NESTE take. Sem isto o clipe
+             # guardado do render anterior volta sem a cor, sem a
+             # velocidade, sem o congelar e sem o enquadramento novos.
+             str(r.get("grade") or ""),
+             _velocidade_key(r), _congelar_key(r), _reenq_key(r)],
         )
         akey = _seg_key(
             "a", p["src"], p["a_in"], p["a_out"],
@@ -1947,6 +1970,8 @@ def extract_and_assemble_jcut(
             except Exception as e:  # noqa: BLE001
                 print(f"  [{i:02d}] cor do take ignorada: {e}", flush=True)
                 extra_vf = ""
+        from app.timeline_map import reenquadrar_vf
+        reframe_vf = reenquadrar_vf(*_reenq_key(r))
         vpath = clips_dir / f"seg_{i:02d}_{r['source']}_v.mp4"
         apath = clips_dir / f"seg_{i:02d}_{r['source']}_a.wav"
         if not p.get("reuse_v"):
@@ -1955,7 +1980,8 @@ def extract_and_assemble_jcut(
                             keep_resolution=keep_resolution, streams="v",
                             zoom=zoom_for_index(edl, i),
                             prepared=prep_by_src.get(r["source"]),
-                            extra_vf=extra_vf, speed=vel, freeze=cong)
+                            extra_vf=extra_vf, reframe=reframe_vf,
+                            speed=vel, freeze=cong)
         if not p.get("reuse_a"):
             extract_segment(p["src"], p["a_in"], p["a_out"] - p["a_in"], "",
                             apath, preview=preview, draft=draft,

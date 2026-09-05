@@ -519,6 +519,9 @@ def _norm_range(r: dict) -> tuple:
         cong = round(float(r.get("freeze") or 0.0), 2)
     except (TypeError, ValueError):
         cong = 0.0
+    # 5.0.60: o reenquadramento manual muda o QUADRO, então dois trechos
+    # com o mesmo tempo e enquadramentos diferentes não são o mesmo corte.
+    from app.timeline_map import reenquadrar_do_range
     return (
         str(r.get("source") or "SRC"),
         round(float(r.get("start") or 0), 3),
@@ -528,6 +531,7 @@ def _norm_range(r: dict) -> tuple:
         str(r.get("grade") or ""),
         vel,
         cong,
+        reenquadrar_do_range(r),
     )
 
 
@@ -540,7 +544,8 @@ def _same_ranges(a: list, b: list) -> bool:
 # O que o planejador escreve em cada trecho e que a tela nao tem como
 # devolver. `quote` e a fala daquele trecho: a nota de clareza conta
 # trechos com fala, e o texto do post e montado a partir dela.
-_HERDAVEIS = ("quote", "reason", "beat", "gain_db", "grade", "speed", "freeze")
+_HERDAVEIS = ("quote", "reason", "beat", "gain_db", "grade", "speed",
+              "freeze", "reframe")
 
 
 def _herdar_do_anterior(novo: dict, antigos: list[dict]) -> dict:

@@ -243,6 +243,57 @@ def congelar_do_range(r: dict) -> float:
     return round(min(max(v, 0.0), CONGELAR_MAX), 2)
 
 
+REENQ_MAX = 3.0
+
+
+def reenquadrar_do_range(r: dict) -> tuple[float, float, float]:
+    """Reenquadramento manual deste take (5.0.60): (zoom, x, y).
+
+    O "reframe" do CapCut: aproximar e escolher que pedaço do quadro fica
+    na tela. `x`/`y` vão de -1 (esquerda/topo) a +1 (direita/base); 0 é o
+    centro. Teto de 3x porque acima disso até uma fonte 4K entrega menos
+    que 1080p de detalhe real.
+    """
+    v = r.get("reframe") if isinstance(r, dict) else None
+    if not isinstance(v, dict):
+        return (1.0, 0.0, 0.0)
+
+    def _num(chave, lo, hi, padrao):
+        try:
+            n = float(v.get(chave, padrao))
+        except (TypeError, ValueError):
+            return padrao
+        if n != n:                    # NaN
+            return padrao
+        return round(min(max(n, lo), hi), 3)
+
+    z = _num("z", 1.0, REENQ_MAX, 1.0)
+    if z <= 1.001:
+        return (1.0, 0.0, 0.0)
+    return (z, _num("x", -1.0, 1.0, 0.0), _num("y", -1.0, 1.0, 0.0))
+
+
+def reenquadrar_vf(z: float, x: float = 0.0, y: float = 0.0) -> str:
+    """O `crop` do reenquadramento, para entrar ANTES do `scale`.
+
+    Recortar na fonte e só então escalar é o que mantém o detalhe: um take
+    2x numa fonte 4K ainda entrega 1080p de verdade. Recortar depois seria
+    ampliar pixel já jogado fora.
+
+    `trunc(.../2)*2` nas duas medidas: um crop ímpar faz o ffmpeg devolver
+    uma altura a menos, e uma dimensão inesperada derruba o motor rápido do
+    vídeo inteiro (medido em 460x865 -> 460x864).
+    """
+    if z <= 1.001:
+        return ""
+    z = min(max(float(z), 1.0), REENQ_MAX)
+    cw = f"trunc(iw/{z:.4f}/2)*2"
+    ch = f"trunc(ih/{z:.4f}/2)*2"
+    fx = (min(max(float(x), -1.0), 1.0) + 1.0) / 2.0
+    fy = (min(max(float(y), -1.0), 1.0) + 1.0) / 2.0
+    return f"crop={cw}:{ch}:(iw-{cw})*{fx:.4f}:(ih-{ch})*{fy:.4f}"
+
+
 def tem_velocidade(ranges) -> bool:
     return any(velocidade_do_range(r) != 1.0 or congelar_do_range(r) > 0
                for r in (ranges or []) if isinstance(r, dict))

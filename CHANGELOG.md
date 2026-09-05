@@ -1,5 +1,16 @@
 # Changelog
 
+## 5.0.60
+
+- **Reenquadrar o take, como no CapCut.** Clique num take e escolha
+  *Enquadrar*: aproxima de 1,2x a 3x e dois controles escolhem que pedaço
+  do quadro fica na tela. O corte recorta o arquivo original antes de
+  reduzir, então 2x numa filmagem 4K ainda entrega 1080p de verdade.
+- **Conserto: ajuste de take sumia no render seguinte.** Cor, velocidade e
+  quadro congelado escolhidos num take podiam voltar sem efeito quando o
+  vídeo era refeito, porque o corte reaproveitava o trecho guardado do
+  render anterior. Agora cada ajuste tem sua própria cópia.
+
 ## 5.0.59
 
 - **Conserto: o render tinha ficado bem mais lento na 5.0.57.** A trilha
