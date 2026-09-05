@@ -5671,6 +5671,18 @@ async function runDoutor() {
     resumo.classList.toggle("doutor-ruim", conta.bloqueio > 0);
     resumo.classList.toggle("doutor-atencao", !conta.bloqueio && conta.aviso > 0);
   }
+  // O cabecalho da tela ("Tudo funcionando corretamente") vinha do
+  // /api/system e nao do Diagnostico: na maquina de uma cliente (04/09) o
+  // topo dizia tudo certo enquanto o cartao logo abaixo pedia ATENCAO. Quem
+  // acabou de checar e quem fala.
+  const topo = $("#sysStatusLine");
+  if (topo) {
+    topo.textContent = conta.bloqueio
+      ? `${conta.bloqueio} item(ns) impedem o funcionamento — veja o Diagnóstico`
+      : conta.aviso
+        ? `Tudo funciona; ${conta.aviso} ponto(s) merecem atenção — veja o Diagnóstico`
+        : "Tudo funcionando corretamente";
+  }
   $("#btnDoutorCopy")?.classList.toggle("hidden", !itens.length);
   wireAcoesDoDoutor(out);
 }
@@ -5687,21 +5699,33 @@ function wireAcoesDoDoutor(out) {
   out.addEventListener("click", async (e) => {
     const btn = e.target.closest(".doutor-acao");
     if (!btn) return;
-    if (btn.dataset.acao !== "instalar_musica") return;
+    const acao = btn.dataset.acao;
+    if (acao !== "instalar_musica" && acao !== "baixar_pacote") return;
     btn.disabled = true;
     try {
-      await api("/api/musica/motor", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "instalar" }),
-      });
+      if (acao === "instalar_musica") {
+        await api("/api/musica/motor", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "instalar" }),
+        });
+        toast("Baixando a IA local de música — pode deixar rodando", 6000);
+        acompanharMotorMusica();
+      } else {
+        // Biblioteca de trilhas vazia numa maquina sem NVIDIA: o video sai
+        // mudo de musica. O mesmo pacote do cartao de Configuracoes.
+        await api("/api/biblioteca/pacote", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "baixar" }),
+        });
+        toast("Baixando trilhas e efeitos — pode deixar rodando", 6000);
+        acompanharPacote();
+      }
       btn.textContent = "Baixando…";
-      toast("Baixando a IA local de música — pode deixar rodando", 6000);
       // o card de Configuracoes ja sabe acompanhar; aqui basta reavaliar
       // quando terminar
-      acompanharMotorMusica();
       setTimeout(() => rodarDoutor().catch(() => {}), 4000);
     } catch (err) {
-      toast(err.message || "Não deu para começar a instalação");
+      toast(err.message || "Não deu para começar o download");
       btn.disabled = false;
     }
   });
@@ -6018,6 +6042,10 @@ function acompanharPacote() {
       clearInterval(acompanharPacote._t);
       if (d.estado === "pronto") {
         toast(`Biblioteca completa — ${d.novos || 0} arquivo(s) novos`, 6000);
+        // Se ele estiver olhando a Biblioteca, a lista ganha os arquivos na
+        // hora; sem isto parecia que o download nao tinha trazido nada.
+        if (state.view === "biblioteca") loadLibraryUi().catch(() => {});
+        rodarDoutor().catch(() => {});
       }
     }
   }, 2000);

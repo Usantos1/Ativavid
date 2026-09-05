@@ -124,3 +124,44 @@ def test_com_tudo_no_lugar_o_botao_aparece(monkeypatch):
                         lambda p: type("U", (), {"free": 40 * 1024 ** 3})())
     it = _itens(monkeypatch, {**BASE, "uv": True, "pasta": str(REPO)})[0]
     assert it["acao"] == "instalar_musica"
+
+
+def test_biblioteca_de_trilhas_vazia_sem_ia_local_vira_aviso_com_botao(monkeypatch, tmp_path):
+    """5.0.36: máquina sem NVIDIA e sem MP3 = vídeo mudo de música, e a tela
+    não dizia isso em lugar nenhum. O botão baixa o pacote da 5.0.29."""
+    from app import broll_library
+
+    (tmp_path / "Biblioteca" / "Trilhas").mkdir(parents=True)
+    monkeypatch.setattr(broll_library, "library_root", lambda *a, **k: tmp_path / "Biblioteca")
+    itens = _itens(monkeypatch, {**BASE, "gpu": False, "gpuNome": "Intel(R) UHD Graphics"})
+    vazia = [i for i in itens if "trilhas vazia" in i["titulo"].lower()]
+    assert vazia and vazia[0]["acao"] == "baixar_pacote"
+
+
+def test_com_trilhas_na_pasta_nao_avisa(monkeypatch, tmp_path):
+    from app import broll_library
+
+    p = tmp_path / "Biblioteca" / "Trilhas"
+    p.mkdir(parents=True)
+    (p / "uma.mp3").write_bytes(b"x" * 10)
+    monkeypatch.setattr(broll_library, "library_root", lambda *a, **k: tmp_path / "Biblioteca")
+    itens = _itens(monkeypatch, {**BASE, "gpu": False})
+    assert not [i for i in itens if "trilhas vazia" in i["titulo"].lower()]
+
+
+def test_com_ia_local_instalada_a_pasta_vazia_nao_importa(monkeypatch, tmp_path):
+    from app import broll_library
+
+    (tmp_path / "Biblioteca" / "Trilhas").mkdir(parents=True)
+    monkeypatch.setattr(broll_library, "library_root", lambda *a, **k: tmp_path / "Biblioteca")
+    itens = _itens(monkeypatch, {**BASE, "instalado": True, "gb": 4.5})
+    assert not [i for i in itens if "trilhas vazia" in i["titulo"].lower()]
+
+
+def test_a_tela_liga_o_botao_do_pacote_e_o_cabecalho_ao_diagnostico():
+    js = (REPO / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
+    i = js.index("function wireAcoesDoDoutor(")
+    corpo = js[i:i + 2200]
+    assert '"baixar_pacote"' in corpo and '"/api/biblioteca/pacote"' in corpo
+    j = js.index("const topo = $(\"#sysStatusLine\")")
+    assert "veja o Diagnóstico" in js[j:j + 500], "o cabeçalho continua discordando do cartão"

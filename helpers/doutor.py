@@ -429,6 +429,25 @@ def checar_pecas_opcionais() -> None:
 
     gb = f"{est.get('mbTotal', 4800) / 1000:.1f}".replace(".", ",")
     placa = str(est.get("gpuNome") or "")
+    # Sem a IA local, a trilha vem da Biblioteca — e a pasta nasce VAZIA.
+    # Maquina sem NVIDIA e sem MP3 = video mudo de musica, e a tela nao
+    # dizia isso em lugar nenhum (cliente com Intel UHD, 04/09). O pacote de
+    # trilhas e efeitos (5.0.29) resolve com um clique.
+    if not est.get("instalado"):
+        try:
+            from app.broll_library import library_root
+
+            pasta = library_root() / "Trilhas"
+            faixas = sum(1 for f in pasta.rglob("*")
+                         if f.is_file() and f.suffix.lower()
+                         in (".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"))
+        except Exception:  # noqa: BLE001 — pasta ilegivel nao derruba o check
+            faixas = -1
+        if faixas == 0:
+            diz(AVISO, "Biblioteca de trilhas vazia",
+                "Sem a IA local de musica, a trilha de cada video vem daqui — "
+                "e nao ha nenhuma. O video sai sem musica.",
+                acao="baixar_pacote", acao_texto="Baixar trilhas e efeitos")
     if est.get("instalado"):
         diz(OK, "IA local de musica instalada",
             f"{est.get('gb', 0)} GB em {est.get('pasta')}. "

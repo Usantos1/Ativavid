@@ -1,5 +1,21 @@
 # Changelog
 
+## 5.0.36
+
+- **O Diagnóstico avisa quando a Biblioteca de trilhas está vazia** numa
+  máquina sem a IA local de música — nesse caso o vídeo sairia sem música
+  nenhuma, e nada na tela dizia isso. O aviso traz o botão de baixar as
+  trilhas e os efeitos prontos ali mesmo.
+- **O cabeçalho de Configurações agora concorda com o Diagnóstico.** Dizia
+  "Tudo funcionando corretamente" por cima de um cartão pedindo atenção,
+  porque lia outra fonte. Quem acabou de checar é quem fala.
+- **A Biblioteca se atualiza sozinha quando o pacote termina de baixar** —
+  antes parecia que o download não tinha trazido nada até trocar de tela.
+- **"Comece por aqui" avisa quem não tem placa NVIDIA** onde baixar as
+  trilhas antes do primeiro vídeo.
+- Guarda nova na suíte: toda rota de administrador confere a sessão no
+  servidor, e qualquer rota nova nasce cobrada disso.
+
 ## 5.0.35
 
 - **"Corpo" virou "Conteúdo".** No Multiplicador de criativos a parte do
