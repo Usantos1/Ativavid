@@ -710,6 +710,8 @@ class Renderizador:
         self.scratch_vol = _pos(sfx, "scratchVolume", SCRATCH_VOL)
         self.stack_vol = _pos(sfx, "stackClickVolume",
                               min(0.28, self.click_vol * 0.5))
+        # 5.0.54: ganho geral dos efeitos — aplicado no mixer, em TODO evento
+        self.sfx_gain = max(0.0, min(2.0, _pos(sfx, "gain", 1.0)))
         # O som da legenda EMPILHADA e um tique de digitar (30ms), nao o
         # clique cheio de 0,406s: num video de 33s sao ~42 legendas, uma a
         # cada 0,8s. "cliques de digitando leves nao tantos whosh"
@@ -5386,9 +5388,10 @@ class Renderizador:
 
     def _gravar_sfx(self, alvo: Path) -> bool:
         """Mixa os eventos de SFX num wav. False se não houver eventos."""
-        eventos = [(self.public / "sfx" / nome, t, vol)
+        ganho = float(getattr(self, "sfx_gain", 1.0))
+        eventos = [(self.public / "sfx" / nome, t, vol * ganho)
                    for nome, t, vol in self.eventos_sfx
-                   if (self.public / "sfx" / nome).exists()]
+                   if (self.public / "sfx" / nome).exists() and vol * ganho > 0.0005]
         if not eventos:
             return False
         dur = self.frames / self.fps

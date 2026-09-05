@@ -138,24 +138,17 @@ def load_api_key() -> str:
     # so existe na maquina de quem desenvolve. Sem esta linha o helper
     # depende de o app injetar a chave no ambiente, e quando isso falha
     # o sintoma e MUDO (a 3.26 consertou o mesmo no Groq).
-    for candidate in [Path.home() / "ATIVAVID" / ".env",
-                      Path(__file__).resolve().parent.parent / ".env",
-                      Path(".env")]:
-        if candidate.exists():
-            found: dict[str, str] = {}
-            for line in candidate.read_text(encoding="utf-8").splitlines():
-                line = line.strip()
-                if not line or line.startswith("#") or "=" not in line:
-                    continue
-                k, v = line.split("=", 1)
-                k = k.strip()
-                if k in wanted:
-                    found[k] = v.strip().strip('"').strip("'")
-            if found.get("GROQ_API_KEY"):
-                return found["GROQ_API_KEY"]
-            legacy = found.get("ELEVENLABS_API_KEY", "")
-            if legacy.startswith("gsk_"):
-                return legacy
+    # 5.0.54: `chave_do_env` DECIFRA o que a 5.0.47 cifrou (DPAPI). Lendo o
+    # arquivo cru, a chave virava `dpapi:...` e a API respondia 401.
+    from chave_do_env import chave
+
+    v = chave("GROQ_API_KEY")
+    if v:
+        return v
+    # legado: uma chave `gsk_` gravada no campo do ElevenLabs
+    legado = chave("ELEVENLABS_API_KEY")
+    if legado.startswith("gsk_"):
+        return legado
     v = os.environ.get("GROQ_API_KEY", "")
     if not v:
         sys.exit("GROQ_API_KEY not found in .env or environment")
@@ -173,20 +166,11 @@ def load_elevenlabs_key() -> str:
     # so existe na maquina de quem desenvolve. Sem esta linha o helper
     # depende de o app injetar a chave no ambiente, e quando isso falha
     # o sintoma e MUDO (a 3.26 consertou o mesmo no Groq).
-    for candidate in [Path.home() / "ATIVAVID" / ".env",
-                      Path(__file__).resolve().parent.parent / ".env",
-                      Path(".env")]:
-        if candidate.exists():
-            for line in candidate.read_text(encoding="utf-8").splitlines():
-                line = line.strip()
-                if not line or line.startswith("#") or "=" not in line:
-                    continue
-                k, val = line.split("=", 1)
-                if k.strip() == "ELEVENLABS_API_KEY":
-                    val = val.strip().strip('"').strip("'")
-                    if val:
-                        return val
-    return os.environ.get("ELEVENLABS_API_KEY", "")
+    # 5.0.54: `chave_do_env` DECIFRA o que a 5.0.47 cifrou (DPAPI). Lendo o
+    # arquivo cru, a chave virava `dpapi:...` e a API respondia 401.
+    from chave_do_env import chave
+
+    return chave("ELEVENLABS_API_KEY") or os.environ.get("ELEVENLABS_API_KEY", "")
 
 
 class ModelLoadError(RuntimeError):
@@ -201,20 +185,12 @@ def _env_value(name: str) -> str:
     # so existe na maquina de quem desenvolve. Sem esta linha o helper
     # depende de o app injetar a chave no ambiente, e quando isso falha
     # o sintoma e MUDO (a 3.26 consertou o mesmo no Groq).
-    for candidate in [Path.home() / "ATIVAVID" / ".env",
-                      Path(__file__).resolve().parent.parent / ".env",
-                      Path(".env")]:
-        if candidate.exists():
-            for line in candidate.read_text(encoding="utf-8").splitlines():
-                line = line.strip()
-                if not line or line.startswith("#") or "=" not in line:
-                    continue
-                k, val = line.split("=", 1)
-                if k.strip() == name:
-                    val = val.strip().strip('"').strip("'")
-                    if val:
-                        return val
-    return os.environ.get(name, "")
+    # 5.0.54: `chave_do_env` DECIFRA o que a 5.0.47 cifrou (DPAPI) e conhece a
+    # ordem dos arquivos. Valor que nao e segredo (caminho do whisper.cpp,
+    # modelo) passa igual — nao tem prefixo `dpapi:`.
+    from chave_do_env import chave
+
+    return chave(name) or os.environ.get(name, "")
 
 
 def resolve_whispercpp() -> tuple[Path, Path]:

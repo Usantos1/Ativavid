@@ -1102,6 +1102,10 @@ def load_preview_edit_ranges(edit_dir: Path, source_key: str) -> list[dict] | No
                 item["gain_db"] = float(r["gain_db"])
             except (TypeError, ValueError):
                 pass
+        # 5.0.54: cor por take (nome de look do grade.py ou filtro eq=...)
+        _g = _grade_do_trecho(r.get("grade"))
+        if _g:
+            item["grade"] = _g
         out.append(item)
     if not out:
         return None
@@ -1123,6 +1127,33 @@ def load_preview_edit_ranges(edit_dir: Path, source_key: str) -> list[dict] | No
 # Knobs que definem O CORTE (não o visual): se algum mudou, o usuário está
 # pedindo um plano novo e o reuso do EDL manual não se aplica.
 _CUT_STYLE_KEYS = ("rhythm", "intensity", "editingIntent", "contentType", "speechClean")
+
+_GRADE_CRU = re.compile(r"^(eq|colorbalance|curves|hue)=[A-Za-z0-9=:.,'/ _+\-]+$")
+
+
+def _grade_do_trecho(valor) -> str:
+    """Cor pedida para UM take no editor (5.0.54).
+
+    Aceita um nome de look do `helpers/grade.py` (marca, vibrante, ...) ou um
+    filtro cru comecando em eq=/colorbalance=/curves=/hue= com caracteres
+    seguros — e o que os controles manuais (brilho/contraste/saturacao)
+    geram. Qualquer outra coisa e descartada: o render.py aplicaria "como
+    filtro cru" e o ffmpeg derrubaria o corte inteiro.
+    """
+    s = str(valor or "").strip()
+    if not s or s == "auto":
+        return ""
+    if re.fullmatch(r"[a-z0-9_]+", s):
+        try:
+            import sys as _sys
+            _h = str(REPO / "helpers")
+            if _h not in _sys.path:
+                _sys.path.insert(0, _h)
+            from grade import PRESETS as _P  # type: ignore
+            return s if s in _P else ""
+        except Exception:  # noqa: BLE001 — sem o modulo, so o cru passa
+            return ""
+    return s if _GRADE_CRU.match(s) and len(s) <= 200 else ""
 
 
 def load_manual_edl_ranges(edit_dir: Path, source_key: str, preset: dict,
@@ -1210,6 +1241,10 @@ def load_manual_edl_ranges(edit_dir: Path, source_key: str, preset: dict,
                 item["gain_db"] = float(r["gain_db"])
             except (TypeError, ValueError):
                 pass
+        # 5.0.54: cor por take (nome de look do grade.py ou filtro eq=...)
+        _g = _grade_do_trecho(r.get("grade"))
+        if _g:
+            item["grade"] = _g
         out.append(item)
     return out or None
 
@@ -2668,6 +2703,16 @@ def build_edit_data(cut: Path, preset: dict, hook: list[str], duration: float, f
         ed["captions"]["emphasisStyle"] = "marker"
     _apply_caption_geometry(ed, preset)
     _apply_brand_fonts(ed, preset)
+    # 5.0.54: volume geral dos efeitos sonoros (cliques, whoosh, sons postos
+    # na mao). 1 = como sempre; 0 = mudo. Template e motor proprio leem
+    # `captions.sfx.gain`.
+    try:
+        _sg = float(preset.get("sfxGain")) if preset.get("sfxGain") not in (None, "") else 1.0
+    except (TypeError, ValueError):
+        _sg = 1.0
+    if abs(_sg - 1.0) > 1e-6:
+        ed["captions"]["sfx"] = {**(ed["captions"].get("sfx") or {}),
+                                 "gain": max(0.0, min(2.0, _sg))}
 
     chunk = (preset.get("captionChunk") or "frase_curta").lower()
     if chunk in ("palavra", "word"):

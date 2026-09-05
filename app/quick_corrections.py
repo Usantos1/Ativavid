@@ -505,11 +505,19 @@ def read_edl_ranges(edit_dir: Path) -> list[dict]:
 
 
 def _norm_range(r: dict) -> tuple:
+    # 5.0.54: ganho de voz e cor POR TAKE entram na comparacao. Sem isto, um
+    # take com +3 dB era "o mesmo trecho" e o apply nao refazia o corte.
+    try:
+        ganho = round(float(r.get("gain_db") or 0), 1)
+    except (TypeError, ValueError):
+        ganho = 0.0
     return (
         str(r.get("source") or "SRC"),
         round(float(r.get("start") or 0), 3),
         round(float(r.get("end") or 0), 3),
         str(r.get("beat") or ""),
+        ganho,
+        str(r.get("grade") or ""),
     )
 
 
@@ -522,7 +530,7 @@ def _same_ranges(a: list, b: list) -> bool:
 # O que o planejador escreve em cada trecho e que a tela nao tem como
 # devolver. `quote` e a fala daquele trecho: a nota de clareza conta
 # trechos com fala, e o texto do post e montado a partir dela.
-_HERDAVEIS = ("quote", "reason", "beat", "gain_db")
+_HERDAVEIS = ("quote", "reason", "beat", "gain_db", "grade")
 
 
 def _herdar_do_anterior(novo: dict, antigos: list[dict]) -> dict:

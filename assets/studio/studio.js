@@ -6536,6 +6536,126 @@ const LIB_ABAS = {
  * musica com o tipo do video. Trocar aqui renomeia o arquivo - e muda a
  * escolha do render.
  */
+/* ===================================================================
+ * BANCO DE IMAGENS na Biblioteca (5.0.55)
+ * "ali em biblioteca deve deixar pesquisar no magnific ou pexels e salvar
+ *  na biblioteca pra usos futuros" (05/09). A busca e do servidor (a chave
+ *  nunca sai dele); o download tambem — a tela so manda id/url do
+ *  resultado que a pessoa escolheu.
+ * =================================================================== */
+const _bancoEstado = { termo: "", fonte: "pexels", itens: [], salvos: new Set() };
+
+function bancoVisivel() {
+  return (state.libAba || "image") === "image" || (state.libAba || "") === "clip";
+}
+
+function pintarBanco() {
+  const caixa = $("#libraryBanco");
+  if (!caixa) return;
+  caixa.classList.toggle("hidden", !bancoVisivel());
+  const grade = $("#libraryBancoGrade");
+  const hint = $("#libraryBancoHint");
+  if (!grade) return;
+  $("#libraryBancoFechar")?.classList.toggle("hidden", !_bancoEstado.itens.length);
+  if (!_bancoEstado.itens.length) { grade.innerHTML = ""; return; }
+  const empresa = state.brandActive && state.brandActive.id ? state.brandActive.id : "";
+  grade.innerHTML = _bancoEstado.itens.map((it, i) => {
+    const salvo = _bancoEstado.salvos.has(String(it.id));
+    return `<figure class="lib-banco-card${salvo ? " is-salvo" : ""}" data-banco-i="${i}">
+      <img src="${escapeHtml(it.thumb)}" alt="" loading="lazy">
+      <figcaption>
+        <span class="lib-banco-credito">${escapeHtml(it.credit || "")}</span>
+        <button type="button" class="export-btn export-btn--sm" data-banco-salvar="${i}"${salvo ? " disabled" : ""}>${salvo ? "Salvo ✓" : "Salvar"}</button>
+      </figcaption>
+    </figure>`;
+  }).join("");
+  if (hint) {
+    hint.textContent = `${_bancoEstado.itens.length} resultado(s) — "Salvar" guarda na sua biblioteca`
+      + (empresa ? ` (empresa ${nomeDaMarca(empresa) || empresa})` : "");
+  }
+}
+
+async function buscarNoBanco(termo, fonte) {
+  const grade = $("#libraryBancoGrade");
+  const hint = $("#libraryBancoHint");
+  const kind = (state.libAba || "image") === "clip" ? "video" : "image";
+  if (hint) hint.textContent = "Procurando…";
+  if (grade) grade.innerHTML = "";
+  try {
+    const r = await api(`/api/library/buscar?q=${encodeURIComponent(termo)}`
+      + `&fonte=${encodeURIComponent(fonte)}&kind=${kind}`);
+    _bancoEstado.termo = termo;
+    _bancoEstado.fonte = fonte;
+    _bancoEstado.itens = r.results || [];
+    if (!_bancoEstado.itens.length && hint) {
+      hint.textContent = `Nada encontrado para “${termo}” em ${fonte}.`;
+    }
+    pintarBanco();
+  } catch (e) {
+    _bancoEstado.itens = [];
+    pintarBanco();
+    if (hint) hint.textContent = e.message || "O banco de imagens não respondeu.";
+  }
+}
+
+async function salvarDoBanco(i) {
+  const it = _bancoEstado.itens[i];
+  if (!it) return;
+  const empresa = state.brandActive && state.brandActive.id ? state.brandActive.id : null;
+  const r = await api("/api/library/salvar", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      fonte: it.fonte, kind: it.kind, id: it.id, url: it.full || "",
+      query: _bancoEstado.termo, credit: it.credit || "", empresa,
+    }),
+  });
+  _bancoEstado.salvos.add(String(it.id));
+  pintarBanco();
+  toast(`Guardado na biblioteca: ${(r.item && r.item.name) || "arquivo"}`, 4000);
+  await loadLibraryUi().catch(() => {});
+}
+
+function wireBancoDeImagens() {
+  const form = $("#libraryBancoForm");
+  if (form && !form.dataset.wired) {
+    form.dataset.wired = "1";
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const termo = ($("#libraryBancoQ")?.value || "").trim();
+      if (termo.length < 2) { toast("Escreva o que procurar", 1800); return; }
+      buscarNoBanco(termo, $("#libraryBancoFonte")?.value || "pexels").catch(() => {});
+    });
+  }
+  const fechar = $("#libraryBancoFechar");
+  if (fechar && !fechar.dataset.wired) {
+    fechar.dataset.wired = "1";
+    fechar.addEventListener("click", () => {
+      _bancoEstado.itens = [];
+      pintarBanco();
+      const h = $("#libraryBancoHint");
+      if (h) h.textContent = "";
+    });
+  }
+  const grade = $("#libraryBancoGrade");
+  if (grade && !grade.dataset.wired) {
+    grade.dataset.wired = "1";
+    grade.addEventListener("click", async (e) => {
+      const b = e.target.closest("[data-banco-salvar]");
+      if (!b) return;
+      b.disabled = true;
+      b.textContent = "Salvando…";
+      try {
+        await salvarDoBanco(Number(b.dataset.bancoSalvar));
+      } catch (err) {
+        b.disabled = false;
+        b.textContent = "Salvar";
+        toast(err.message || "Não deu para guardar", 4000);
+      }
+    });
+  }
+}
+
 async function loadLibraryUi() {
   const painel = $("#libraryPanel");
   if (!painel) return;
@@ -6552,6 +6672,8 @@ async function loadLibraryUi() {
   }
   state.libraryRoot = lib.root || "";
   state.libraryData = lib;
+  wireBancoDeImagens();
+  pintarBanco();
   // O estilo decide se o b-roll entra. Sem isto a tela deixava o usuario
   // guardar take achando que ia aparecer no video — e no estilo dele
   // (layout limpo + b-roll no padrao) o pipeline zera os inserts.
@@ -8248,6 +8370,7 @@ function wireBiblioteca() {
       const b = ev.target.closest(".lib-tab");
       if (!b) return;
       state.libAba = b.dataset.libtab || "image";
+      pintarBanco();
       state.libCat = "";          // filtro de outra aba nao vale nesta
       renderLibraryAba();
     });

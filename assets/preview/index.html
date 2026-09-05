@@ -376,6 +376,14 @@
               <option value="forte">Forte</option>
             </select>
           </label>
+          <label class="auto-field">Efeitos sonoros
+            <select id="autoSfxGain" title="Volume geral dos cliques, whoosh e sons postos na mão">
+              <option value="0">Mudo</option>
+              <option value="0.5">Baixo</option>
+              <option value="1" selected>Normal</option>
+              <option value="1.5">Alto</option>
+            </select>
+          </label>
           <label class="auto-field">Cor
             <select id="autoColorGrade" title="Look de cor no corte (Rec.709). LOG usa a detecção automática.">
               <option value="marca" selected>Marca (punch)</option>
@@ -635,6 +643,7 @@
     <button id="btnPlay" class="btn icon" title="Play/Pause (espaço)"></button>
     <button id="btnMute" class="btn icon" title="Mudo"></button>
     <span id="timeNow" class="time">0:00.00</span>
+    <span id="jklChip" class="time jkl-chip hidden" aria-live="polite"></span>
     <span class="time dim">/</span>
     <span id="timeTotal" class="time dim">0:00.00</span>
     <button id="btnMark" class="btn mark" title="Marcar o trecho a corrigir: uma vez no começo, outra no fim (tecla M)">
@@ -817,6 +826,10 @@
       <ul class="help-list">
         <li><span class="help-keys"><kbd>espaço</kbd></span><span>play / pause</span></li>
         <li><span class="help-keys"><kbd>←</kbd><kbd>→</kbd></span><span>frame a frame · com <kbd>shift</kbd>, 1 segundo</span></li>
+        <li><span class="help-keys"><kbd>J</kbd><kbd>K</kbd><kbd>L</kbd></span><span>voltar · parar · avançar — cada toque acelera (1x, 1,5x, 2x, 4x)</span></li>
+        <li><span class="help-keys"><kbd>↑</kbd><kbd>↓</kbd></span><span>corte anterior / próximo (e seleciona o take)</span></li>
+        <li><span class="help-keys"><kbd>home</kbd><kbd>end</kbd></span><span>começo / fim do vídeo</span></li>
+        <li><span class="help-keys"><kbd>+</kbd><kbd>−</kbd><kbd>0</kbd></span><span>zoom da linha do tempo · <kbd>0</kbd> mostra tudo</span></li>
       </ul>
     </section>
     <section class="help-section">

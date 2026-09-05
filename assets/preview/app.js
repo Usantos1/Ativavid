@@ -2047,8 +2047,8 @@ function splitAtPlayhead() {
   pushHistory();
   // srcIdx:null on both halves — neither is the original take any more, so
   // neither inherits its J-cut lead/tail (see jcutGeom)
-  const halfA = { source: r.source, start: r.start, end: sourceSplit, beat: r.beat, removed: false, srcIdx: null, orig: { start: r.start, end: r.end } };
-  const halfB = { source: r.source, start: sourceSplit, end: r.end, beat: r.beat, removed: false, srcIdx: null, orig: { start: r.start, end: r.end } };
+  const halfA = { source: r.source, start: r.start, end: sourceSplit, beat: r.beat, ...camposDoTake(r), removed: false, srcIdx: null, orig: { start: r.start, end: r.end } };
+  const halfB = { source: r.source, start: sourceSplit, end: r.end, beat: r.beat, ...camposDoTake(r), removed: false, srcIdx: null, orig: { start: r.start, end: r.end } };
   S.draft.splice(S.selected, 1, halfA, halfB);
   S.selected = S.selected + 1;
   renderAll(); refreshHeader();
@@ -2098,11 +2098,11 @@ function deleteClipRange(i, xA, xB) {
   pushHistory();
   const pieces = [];
   if (selStart - r.start >= MIN_SEG) {
-    pieces.push({ source: r.source, start: r.start, end: selStart, beat: r.beat, removed: false, srcIdx: null, orig: { start: r.start, end: r.end } });
+    pieces.push({ source: r.source, start: r.start, end: selStart, beat: r.beat, ...camposDoTake(r), removed: false, srcIdx: null, orig: { start: r.start, end: r.end } });
   }
   pieces.push({ source: r.source, start: selStart, end: selEnd, beat: r.beat, removed: true, srcIdx: null, orig: { start: r.start, end: r.end } });
   if (r.end - selEnd >= MIN_SEG) {
-    pieces.push({ source: r.source, start: selEnd, end: r.end, beat: r.beat, removed: false, srcIdx: null, orig: { start: r.start, end: r.end } });
+    pieces.push({ source: r.source, start: selEnd, end: r.end, beat: r.beat, ...camposDoTake(r), removed: false, srcIdx: null, orig: { start: r.start, end: r.end } });
   }
   S.draft.splice(i, 1, ...pieces);
   S.selected = -1;
@@ -2208,7 +2208,8 @@ function redo() {
 
 // ---------- dirty tracking ----------
 function edlDirty() {
-  return S.draft.some((r) => r.added || r.removed || r.start !== r.orig.start || r.end !== r.orig.end);
+  return S.draft.some((r) => r.added || r.removed || r.start !== r.orig.start || r.end !== r.orig.end
+    || +(r.gain_db || 0) !== +(r.orig.gain_db || 0) || (r.grade || '') !== (r.orig.grade || ''));
 }
 function geoDoInsert(c) {
   return JSON.stringify([+(+c.start).toFixed(3), +(+c.end).toFixed(3),
@@ -2561,9 +2562,18 @@ const COR_DA_TRANSICAO = {
   cortinalado: 'var(--hl-accent, #ff5200)', pulso: 'var(--hl-accent, #ff5200)',
 };
 
+// 5.0.54: ganho de voz (dB) e cor do take viajam com o trecho
+function camposDoTake(r) {
+  const out = {};
+  if (r.gain_db) out.gain_db = +(+r.gain_db).toFixed(1);
+  if (r.grade) out.grade = String(r.grade);
+  return out;
+}
+
 function draftRangesPayload() {
   return S.draft.filter((r) => !r.removed).map((r) => ({
     source: r.source, start: +r.start.toFixed(3), end: +r.end.toFixed(3), beat: r.beat,
+    ...camposDoTake(r),
   }));
 }
 
@@ -2572,7 +2582,7 @@ async function persistEdl() {
   if (data && data.ok) {
     S.draft.forEach((r) => {
       if (!r.removed) {
-        r.orig = { start: r.start, end: r.end };
+        r.orig = { start: r.start, end: r.end, gain_db: +(r.gain_db || 0), grade: r.grade || '' };
         r.added = false;
       }
     });
@@ -3121,7 +3131,8 @@ async function applyState(data) {
   // SHORTER than end-start and the takes do not simply abut. Without this the
   // filmstrip and the needle drift a little further at each junction.
   S.jcut = (edlPending && timedTo) ? null : ((data.edl && data.edl.jcut_timeline) || null);
-  S.rendered = cutClock.map((r) => ({ source: r.source, start: +r.start, end: +r.end, beat: r.beat || '' }));
+  S.rendered = cutClock.map((r) => ({ source: r.source, start: +r.start, end: +r.end, beat: r.beat || '',
+    gain_db: +(r.gain_db || 0), grade: r.grade || '' }));
   // srcIdx: this entry's position in S.rendered/S.jcut — jcutGeom() reads
   // lead/tail through THIS, not the entry's current S.draft position, so a
   // split earlier in the array can't shift an untouched later take's
@@ -3130,7 +3141,9 @@ async function applyState(data) {
   // for those until the skill re-renders and writes a fresh jcut_timeline.
   S.draft = ranges.map((r, srcIdx) => ({
     source: r.source, start: +r.start, end: +r.end, beat: r.beat || '',
-    removed: false, srcIdx, orig: { start: +r.start, end: +r.end },
+    gain_db: +(r.gain_db || 0), grade: r.grade || '',
+    removed: false, srcIdx,
+    orig: { start: +r.start, end: +r.end, gain_db: +(r.gain_db || 0), grade: r.grade || '' },
   }));
   S.corteRelatorio = data.corteRelatorio || null;
   if (data.intent) {
@@ -4427,6 +4440,96 @@ function _nomeDaAnim(lista, id, padrao) {
  * cartao tapavam o conteudo (feedback ao vivo de 01/09). Ele aparece quando
  * um bloco de midia posto na mao esta selecionado (clique no bloco da linha
  * do tempo ou no proprio cartao). */
+/* 5.0.54: ferramentas do TAKE selecionado ("falta ... ajuste de cor manual
+ * no take selecionado, ajustar volume do audio principal", 05/09). Volume
+ * da voz em dB e cor (um look do catalogo ou brilho/contraste/saturacao
+ * na mao). Tudo viaja no trecho (gain_db, grade) e o apply refaz o corte. */
+const GANHOS_DO_TAKE = [[-6, '−6 dB'], [-3, '−3 dB'], [0, 'Voz normal'], [3, '+3 dB'], [6, '+6 dB']];
+const LOOKS_DO_TAKE = [
+  ['', 'Cor: como o estilo'], ['marca', 'Marca'], ['neutral_punch', 'Neutro'], ['subtle', 'Sutil'],
+  ['warm_cinematic', 'Cinemático'], ['frio_limpo', 'Frio limpo'], ['vibrante', 'Vibrante'],
+  ['preto_branco', 'Preto e branco'], ['vintage', 'Vintage'], ['teal_laranja', 'Teal & laranja'],
+  ['pastel_suave', 'Pastel suave'], ['manual', 'Manual…'],
+];
+function gradeManualDoTake(r) {
+  const m = /^eq=brightness=(-?[\d.]+):contrast=([\d.]+):saturation=([\d.]+)$/.exec(String(r.grade || ''));
+  return m ? { b: +m[1], c: +m[2], s: +m[3] } : null;
+}
+function renderPainelDoTake(lane, r) {
+  lane.innerHTML = '';
+  const nome = el('span', 'fx-nome', lane);
+  nome.textContent = `Take: ${friendlyBeatLabel(r.beat, r.source)} · ${(r.end - r.start).toFixed(1)}s`;
+  // volume da voz
+  const volWrap = el('span', 'take-grupo', lane);
+  el('span', 'take-rotulo', volWrap).textContent = 'Voz';
+  for (const [db, rotulo] of GANHOS_DO_TAKE) {
+    const b = el('button', `ent-btn${(+(r.gain_db || 0) === db) ? ' on' : ''}`, volWrap);
+    b.type = 'button';
+    b.textContent = rotulo;
+    b.title = db === 0 ? 'Volume original deste take' : `Voz deste take ${db > 0 ? 'mais alta' : 'mais baixa'} em ${Math.abs(db)} dB`;
+    b.addEventListener('click', () => {
+      pushHistory();
+      r.gain_db = db;
+      renderPainelDoTake(lane, r);
+      refreshHeader();
+      persistEdl();
+      toast(db === 0 ? 'Voz do take no volume original' : `Voz do take: ${db > 0 ? '+' : ''}${db} dB — vale no próximo "Aplicar"`, 2200);
+    });
+  }
+  // cor do take
+  const corWrap = el('span', 'take-grupo', lane);
+  const manual = gradeManualDoTake(r);
+  const sel = el('select', 'take-select', corWrap);
+  sel.title = 'Cor só deste take, por cima do look do estilo';
+  const atual = manual ? 'manual' : String(r.grade || '');
+  for (const [v, rotulo] of LOOKS_DO_TAKE) {
+    const o = el('option', '', sel);
+    o.value = v; o.textContent = rotulo;
+    if (v === atual) o.selected = true;
+  }
+  if (atual && !LOOKS_DO_TAKE.some(([v]) => v === atual)) {
+    const o = el('option', '', sel); o.value = atual; o.textContent = `Cor: ${atual}`; o.selected = true;
+  }
+  const aplicarManual = (b, c, s) => {
+    r.grade = `eq=brightness=${(+b).toFixed(2)}:contrast=${(+c).toFixed(2)}:saturation=${(+s).toFixed(2)}`;
+  };
+  const montarSliders = () => {
+    corWrap.querySelectorAll('.take-slider').forEach((x) => x.remove());
+    const m = gradeManualDoTake(r) || { b: 0, c: 1, s: 1 };
+    for (const [campo, rotulo, min, max, passo] of [['b', 'Brilho', -0.3, 0.3, 0.01], ['c', 'Contraste', 0.6, 1.6, 0.01], ['s', 'Saturação', 0, 2, 0.01]]) {
+      const lab = el('label', 'take-slider', corWrap);
+      el('span', '', lab).textContent = rotulo;
+      const inp = el('input', '', lab);
+      inp.type = 'range'; inp.min = min; inp.max = max; inp.step = passo; inp.value = m[campo];
+      inp.addEventListener('input', () => {
+        m[campo] = +inp.value;
+        aplicarManual(m.b, m.c, m.s);
+      });
+      inp.addEventListener('change', () => {
+        pushHistory();
+        aplicarManual(m.b, m.c, m.s);
+        refreshHeader();
+        persistEdl();
+      });
+    }
+  };
+  sel.addEventListener('change', () => {
+    pushHistory();
+    if (sel.value === 'manual') {
+      const m = gradeManualDoTake(r) || { b: 0, c: 1, s: 1 };
+      aplicarManual(m.b, m.c, m.s);
+      montarSliders();
+    } else {
+      r.grade = sel.value;
+      corWrap.querySelectorAll('.take-slider').forEach((x) => x.remove());
+    }
+    refreshHeader();
+    persistEdl();
+    toast(r.grade ? 'Cor do take escolhida — vale no próximo "Aplicar"' : 'Take volta à cor do estilo', 2200);
+  });
+  if (manual) montarSliders();
+}
+
 function renderFxPanel() {
   const painel = $('fxPanel');
   const lane = $('fxLane');
@@ -4436,6 +4539,12 @@ function renderFxPanel() {
   document.querySelectorAll('body > .fx-drop').forEach((d) => d.remove());
   const c = S.blocoSel >= 0 ? S.insertsDraft[S.blocoSel] : null;
   const mostrar = !!(c && c.kind === 'insert' && (c.isNew || c.manual));
+  if (!mostrar && S.blocoSel < 0 && S.selected >= 0 && S.tab === 1 && S.draft[S.selected]
+      && !S.draft[S.selected].removed) {
+    painel.classList.remove('hidden');
+    renderPainelDoTake(lane, S.draft[S.selected]);
+    return;
+  }
   painel.classList.toggle('hidden', !mostrar);
   if (!mostrar) { lane.innerHTML = ''; return; }
   lane.innerHTML = '';
@@ -5275,7 +5384,7 @@ function montarPayloadDeEstilo() {
     fastMode: !!S.fastMode,
     oneClick: !!S.fastMode,
     rhythm: S.style.rhythm || 'dinamico',
-    transicao: S.style.transicao || 'flash',
+    transicao: S.style.transicao || 'flash', sfxGain: S.style.sfxGain || '1',
     intensity: S.style.intensity || 'medio',
     speechClean: S.style.speechClean || 'medio',
     videoGoal: S.style.videoGoal || 'reels',
@@ -5376,7 +5485,7 @@ $('setupGo').addEventListener('click', async () => {
       fastMode: !!S.fastMode,
       oneClick: !!S.fastMode,
       rhythm: S.style.rhythm || 'dinamico',
-      transicao: S.style.transicao || 'flash',
+      transicao: S.style.transicao || 'flash', sfxGain: S.style.sfxGain || '1',
       intensity: S.style.intensity || 'medio',
       speechClean: S.style.speechClean || 'medio',
       videoGoal: S.style.videoGoal || 'reels',
@@ -5569,7 +5678,7 @@ $('setupSaveDefault').addEventListener('click', async () => {
     fastMode: !!S.fastMode,
     oneClick: !!S.fastMode,
     rhythm: S.style.rhythm || 'dinamico',
-    transicao: S.style.transicao || 'flash',
+    transicao: S.style.transicao || 'flash', sfxGain: S.style.sfxGain || '1',
     intensity: S.style.intensity || 'medio',
     speechClean: S.style.speechClean || 'medio',
     videoGoal: S.style.videoGoal || 'reels',
@@ -7041,7 +7150,43 @@ document.addEventListener('keydown', (e) => {
   }
   if (e.code === 'Space') {
     e.preventDefault();
+    pararJkl();
+    mostrarJkl();
     togglePlay();
+  } else if ((e.key === 'l' || e.key === 'L') && !e.ctrlKey && !e.metaKey) {
+    e.preventDefault();
+    shuttle(1);
+  } else if ((e.key === 'j' || e.key === 'J') && !e.ctrlKey && !e.metaKey) {
+    e.preventDefault();
+    shuttle(-1);
+  } else if ((e.key === 'k' || e.key === 'K') && !e.ctrlKey && !e.metaKey) {
+    e.preventDefault();
+    pararJkl();
+    mostrarJkl();
+    try { video.pause(); } catch { /* ignore */ }
+  } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+    // ↑/↓ = corte anterior / proximo (o mesmo do Premiere e do Resolve)
+    e.preventDefault();
+    irParaCorte(e.key === 'ArrowDown' ? 1 : -1);
+  } else if (e.key === 'Home') {
+    e.preventDefault();
+    pararJkl(); mostrarJkl();
+    seekDraft(0);
+  } else if (e.key === 'End') {
+    e.preventDefault();
+    pararJkl(); mostrarJkl();
+    seekDraft(Math.max(0, draftTotal() - 1 / S.fps));
+  } else if ((e.key === '+' || e.key === '=') && !e.ctrlKey && !e.metaKey) {
+    e.preventDefault();
+    zoomNaAgulha(1.35);
+  } else if ((e.key === '-' || e.key === '_') && !e.ctrlKey && !e.metaKey) {
+    e.preventDefault();
+    zoomNaAgulha(1 / 1.35);
+  } else if (e.key === '0' && !e.ctrlKey && !e.metaKey) {
+    e.preventDefault();
+    fitZoom();
+    renderAll();
+    drawRuler();
   } else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && e.altKey && S.selected >= 0 && S.tab === 1) {
     // Alt+arrows nudge the SELECTED take's edge instead of the playhead.
     // A drag cannot land a single frame reliably at any useful zoom — this is
@@ -7100,6 +7245,97 @@ document.addEventListener('keydown', (e) => {
 });
 
 // transport
+/* ===================================================================
+ * TRANSPORTE PROFISSIONAL (5.0.55) — "mais recursos profissionais na tela
+ * de edicao, pra um cara que e mais avancado" (05/09).
+ *
+ * J K L e a memoria muscular de todo editor (Premiere, Resolve, Avid):
+ * L acelera para frente a cada toque, J para tras, K para. Aqui o "para
+ * tras" e por passos de tempo (o <video> nao toca ao contrario), no mesmo
+ * relogio do RASCUNHO — o que o usuario ve na regua.
+ * =================================================================== */
+const VELOCIDADES_JKL = [1, 1.5, 2, 4];
+let _jkl = { dir: 0, passo: 0, timer: null };
+
+function pararJkl() {
+  if (_jkl.timer) { clearInterval(_jkl.timer); _jkl.timer = null; }
+  _jkl = { dir: 0, passo: 0, timer: null };
+  try { video.playbackRate = 1; } catch { /* fonte trocando */ }
+}
+
+function rotuloJkl() {
+  if (!_jkl.dir) return '';
+  const v = VELOCIDADES_JKL[Math.min(_jkl.passo, VELOCIDADES_JKL.length - 1)];
+  return `${_jkl.dir > 0 ? '▶' : '◀'} ${v}x`;
+}
+
+function mostrarJkl() {
+  const el = $('timeNow');
+  if (el) el.dataset.jkl = rotuloJkl();
+  const chip = $('jklChip');
+  if (chip) {
+    chip.textContent = rotuloJkl();
+    chip.classList.toggle('hidden', !_jkl.dir);
+  }
+}
+
+function shuttle(dir) {
+  if (_jkl.dir === dir) {
+    _jkl.passo = Math.min(_jkl.passo + 1, VELOCIDADES_JKL.length - 1);
+  } else {
+    _jkl.dir = dir;
+    _jkl.passo = 0;
+  }
+  const v = VELOCIDADES_JKL[_jkl.passo];
+  if (dir > 0) {
+    if (_jkl.timer) { clearInterval(_jkl.timer); _jkl.timer = null; }
+    try { video.playbackRate = v; } catch { /* ignore */ }
+    video.play().catch(() => {});
+  } else {
+    // para tras: o <video> nao toca ao contrario — anda por passos de 1/10 s
+    try { video.pause(); video.playbackRate = 1; } catch { /* ignore */ }
+    if (_jkl.timer) clearInterval(_jkl.timer);
+    _jkl.timer = setInterval(() => {
+      const t = renderedToDraft(video.currentTime) - v / 10;
+      if (t <= 0) { seekDraft(0); pararJkl(); mostrarJkl(); return; }
+      seekDraft(t);
+    }, 100);
+  }
+  mostrarJkl();
+}
+
+/* Cortes do rascunho, em ordem — os pontos que ↑/↓ visitam. */
+function bordasDoRascunho() {
+  const pontos = [0];
+  for (const it of draftLayout()) {
+    pontos.push(+it.out.toFixed(3));
+    pontos.push(+(it.out + it.dur).toFixed(3));
+  }
+  return [...new Set(pontos)].sort((a, b) => a - b);
+}
+
+/* Zoom pelas teclas + e -, com a AGULHA parada no lugar (o mesmo contrato
+ * do zoom pela roda do mouse). */
+function zoomNaAgulha(fator) {
+  const t = renderedToDraft(video.currentTime);
+  const anchorX = Math.max(80, Math.min(panel.clientWidth - 40,
+    LABEL_W + t * S.pps - panel.scrollLeft));
+  applyZoom(S.pps * fator, Math.max(0, t), anchorX);
+}
+
+function irParaCorte(dir) {
+  const t = renderedToDraft(video.currentTime);
+  const pontos = bordasDoRascunho();
+  const alvo = dir > 0
+    ? pontos.find((x) => x > t + 0.02)
+    : [...pontos].reverse().find((x) => x < t - 0.02);
+  if (alvo == null) { toast(dir > 0 ? 'Último corte' : 'Começo do vídeo', 1200); return; }
+  seekDraft(alvo);
+  // seleciona o take que comeca ali (o pro edita o que esta sob a agulha)
+  const i = draftLayout().findIndex((it) => Math.abs(it.out - alvo) < 0.02);
+  if (i >= 0) { S.selected = i; renderClips(); refreshTransportActions(); }
+}
+
 function togglePlay() {
   if (!video || !video.src) return;
   if (video.paused) video.play().catch(() => {});
@@ -8348,6 +8584,7 @@ async function saveEditsAndReturnToQueue() {
     payload.edl = {
       ranges: S.draft.filter((r) => !r.removed).map((r) => ({
         source: r.source, start: +r.start.toFixed(3), end: +r.end.toFixed(3), beat: r.beat,
+        ...camposDoTake(r),
       })),
       removed: S.draft.filter((r) => r.removed).map((r) => ({
         source: r.source, beat: r.beat, start: r.orig.start, end: r.orig.end,
@@ -8891,6 +9128,7 @@ function refreshAutoControls() {
     ['autoRhythm', 'rhythm', 'dinamico'],
     ['autoTransicao', 'transicao', 'flash'],
     ['autoIntensity', 'intensity', 'medio'],
+    ['autoSfxGain', 'sfxGain', '1'],
     ['autoColorGrade', 'colorGrade', 'marca'],
     ['autoSpeech', 'speechClean', 'medio'],
     ['autoGoal', 'videoGoal', 'reels'],
@@ -9029,6 +9267,7 @@ function wireAutoControls() {
     ['autoRhythm', 'rhythm'],
     ['autoTransicao', 'transicao'],
     ['autoIntensity', 'intensity'],
+    ['autoSfxGain', 'sfxGain'],
     ['autoColorGrade', 'colorGrade'],
     ['autoSpeech', 'speechClean'],
     ['autoGoal', 'videoGoal'],
@@ -9778,7 +10017,9 @@ function applyRestoredEdl(edl) {
   pushHistory();
   S.draft = ranges.map((r, srcIdx) => ({
     source: r.source, start: +r.start, end: +r.end, beat: r.beat || '',
-    removed: false, srcIdx, orig: { start: +r.start, end: +r.end },
+    gain_db: +(r.gain_db || 0), grade: r.grade || '',
+    removed: false, srcIdx,
+    orig: { start: +r.start, end: +r.end, gain_db: +(r.gain_db || 0), grade: r.grade || '' },
   }));
   renderAll();
   refreshHeader();

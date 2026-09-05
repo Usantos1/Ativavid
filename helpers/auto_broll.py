@@ -28,23 +28,12 @@ def _pexels_key() -> str | None:
     # so existe na maquina de quem desenvolve. Sem esta linha o helper
     # depende de o app injetar a chave no ambiente, e quando isso falha
     # o sintoma e MUDO (a 3.26 consertou o mesmo no Groq).
-    for candidate in [Path.home() / "ATIVAVID" / ".env",
-                      Path(__file__).resolve().parent.parent / ".env",
-                      Path(".env")]:
-        if candidate.exists():
-            try:
-                for line in candidate.read_text(encoding="utf-8").splitlines():
-                    line = line.strip()
-                    if not line or line.startswith("#") or "=" not in line:
-                        continue
-                    k, v = line.split("=", 1)
-                    if k.strip() == "PEXELS_API_KEY":
-                        val = v.strip().strip('"').strip("'")
-                        if val:
-                            return val
-            except OSError:
-                pass
-    return os.environ.get("PEXELS_API_KEY") or None
+    # 5.0.55: decifra o que a 5.0.47 cifrou (DPAPI). Lendo o arquivo cru, a
+    # chave virava `dpapi:...` e o b-roll automatico parava CALADO — o video
+    # saia sem imagem de apoio e nada na tela dizia por que.
+    from chave_do_env import chave
+
+    return chave("PEXELS_API_KEY") or None
 
 
 def keywords_from_text(text: str, limit: int = 4) -> list[str]:

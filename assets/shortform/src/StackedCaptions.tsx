@@ -46,6 +46,8 @@ type SfxCfg = {
   clickVolume?: number;
   scratchVolume?: number;
   stackClickVolume?: number;
+  // 5.0.54: ganho geral dos efeitos (multiplica todos)
+  gain?: number;
   // Qual arquivo faz o clique do empilhado. Lido logo abaixo e ausente do
   // tipo — o `tsc` acusava, e quem lesse o tipo nao sabia que da para
   // trocar o som.
@@ -99,9 +101,11 @@ const OFFSET_Y = CAP.stackedOffsetY ?? 0.156; // fraction of height, below cente
 const FONT_SCALE = CAP.fontScale ?? 1;
 const SFX = CAP.sfx ?? {};
 const SFX_ON = SFX.enabled !== false;
-const CLICK_VOL = SFX.clickVolume ?? 0.55;
-const SCRATCH_VOL = SFX.scratchVolume ?? 0.28;
-const STACK_CLICK_VOL = SFX.stackClickVolume ?? Math.min(0.28, CLICK_VOL * 0.5);
+// 5.0.54: ganho geral dos efeitos (o mesmo do `Sfx` do Main e do motor proprio)
+const SFX_GAIN = Math.max(0, Math.min(2, Number(SFX.gain ?? 1) || 0));
+const CLICK_VOL = (SFX.clickVolume ?? 0.55) * SFX_GAIN;
+const SCRATCH_VOL = (SFX.scratchVolume ?? 0.28) * SFX_GAIN;
+const STACK_CLICK_VOL = (SFX.stackClickVolume ?? Math.min(0.28, (SFX.clickVolume ?? 0.55) * 0.5)) * SFX_GAIN;
 /* O som da legenda EMPILHADA: um tique de digitar, nao o clique cheio.
  * "cliques de digitando leves nao tantos whosh" (30/08). Um video de 33s
  * tem ~42 legendas — uma a cada 0,8s — e o `caption-click.mp3` tem 0,406s

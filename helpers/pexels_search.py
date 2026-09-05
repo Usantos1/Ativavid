@@ -31,18 +31,11 @@ def load_api_key() -> str:
     # so existe na maquina de quem desenvolve. Sem esta linha o helper
     # depende de o app injetar a chave no ambiente, e quando isso falha
     # o sintoma e MUDO (a 3.26 consertou o mesmo no Groq).
-    for candidate in [Path.home() / "ATIVAVID" / ".env",
-                      Path(__file__).resolve().parent.parent / ".env",
-                      Path(".env")]:
-        if candidate.exists():
-            for line in candidate.read_text(encoding="utf-8").splitlines():
-                line = line.strip()
-                if not line or line.startswith("#") or "=" not in line:
-                    continue
-                k, v = line.split("=", 1)
-                if k.strip() == "PEXELS_API_KEY":
-                    return v.strip().strip('"').strip("'")
-    v = os.environ.get("PEXELS_API_KEY", "")
+    # 5.0.55: le por `chave_do_env`, que DECIFRA o que a 5.0.47 cifrou. Lendo
+    # o arquivo cru, a chave virava `dpapi:AQAAA...` e a Pexels respondia 401.
+    from chave_do_env import chave
+
+    v = chave("PEXELS_API_KEY")
     if not v:
         sys.exit("PEXELS_API_KEY not found in .env or environment "
                  "(get one at https://www.pexels.com/api/)")

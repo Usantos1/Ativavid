@@ -2407,6 +2407,30 @@ class StudioHandler(BaseHTTPRequestHandler):
             self._file(alvo)
             return
 
+        if path == "/api/library/buscar":
+            # 5.0.55: banco de imagens DENTRO da Biblioteca — o cliente monta
+            # o proprio acervo sem passar por um projeto.
+            from app.banco_de_imagens import BancoIndisponivel, buscar, fontes_disponiveis
+
+            qs = parse_qs(urlparse(self.path).query)
+            termo = (qs.get("q") or [""])[0].strip()
+            if not termo:
+                self._json({"ok": True, "fontes": fontes_disponiveis(), "results": []})
+                return
+            try:
+                itens = buscar(termo, (qs.get("fonte") or ["pexels"])[0],
+                               (qs.get("kind") or ["image"])[0])
+            except BancoIndisponivel as e:
+                self._json({"ok": False, "error": str(e)}, 400)
+                return
+            except ValueError as e:
+                self._json({"ok": False, "error": str(e)}, 400)
+                return
+            except Exception as e:  # noqa: BLE001 — rede/API e problema da tela
+                self._json({"ok": False, "error": str(e)[:200]}, 502)
+                return
+            self._json({"ok": True, "results": itens, "fontes": fontes_disponiveis()})
+            return
         if path == "/api/library/file":
             from app.broll_library import library_root
             from urllib.parse import unquote
@@ -3454,6 +3478,30 @@ class StudioHandler(BaseHTTPRequestHandler):
                 self._json({"error": str(e)}, 400)
             return
 
+        if path == "/api/library/salvar":
+            # 5.0.55: guarda no acervo o que veio do banco de imagens.
+            from app.banco_de_imagens import BancoIndisponivel, salvar_na_biblioteca
+
+            body = self._read_json() or {}
+            try:
+                item = salvar_na_biblioteca(
+                    fonte=str(body.get("fonte") or "pexels"),
+                    kind=str(body.get("kind") or "image"),
+                    rid=str(body.get("id") or ""),
+                    url=str(body.get("url") or ""),
+                    query=str(body.get("query") or ""),
+                    credit=str(body.get("credit") or ""),
+                    empresa=body.get("empresa") or None,
+                    projects_root=self.projects_root,
+                )
+            except (BancoIndisponivel, ValueError) as e:
+                self._json({"ok": False, "error": str(e)}, 400)
+                return
+            except Exception as e:  # noqa: BLE001
+                self._json({"ok": False, "error": str(e)[:200]}, 502)
+                return
+            self._json({"ok": True, "item": item})
+            return
         if path == "/api/library/upload":
             from app.broll_library import add_bytes, copy_into_public
             # multipart: field "file"; optional query ?use=1&folder=

@@ -70,5 +70,10 @@ def test_os_volumes_da_legenda_batem():
           / "StackedCaptions.tsx").read_text(encoding="utf-8")
     assert f"?? {CLICK_VOL}" in st.split("const CLICK_VOL")[1][:60]
     assert f"?? {SCRATCH_VOL}" in st.split("const SCRATCH_VOL")[1][:60]
-    assert "Math.min(0.28, CLICK_VOL * 0.5)" in st
+    # 5.0.54: os tres passaram a ser multiplicados pelo ganho geral dos
+    # efeitos (`captions.sfx.gain`), entao a formula do STACK deixou de
+    # citar `CLICK_VOL` (que ja vem com o ganho) e cita a leitura crua. A
+    # regra e a mesma: metade do clique, com teto de 0,28.
+    assert "Math.min(0.28, (SFX.clickVolume ?? 0.55) * 0.5)" in st
+    assert "* SFX_GAIN" in st, "o ganho geral tem de multiplicar os tres"
     assert STACK_CLICK_VOL == min(0.28, CLICK_VOL * 0.5)

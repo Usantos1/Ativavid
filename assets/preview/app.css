@@ -4356,3 +4356,13 @@ body > .fx-drop { position: fixed; bottom: auto; }
 }
 .menu-emenda-item:hover { background: rgba(255, 255, 255, 0.07); }
 .menu-emenda-item.on { background: rgba(255, 209, 102, 0.16); }
+
+/* 5.0.54: ferramentas do take selecionado (faixa fx) */
+.take-grupo { display: inline-flex; align-items: center; gap: 6px; margin-left: 14px; }
+.take-rotulo { opacity: .7; font-size: 12px; }
+.take-select { background: transparent; color: inherit; border: 1px solid rgba(255,255,255,.18); border-radius: 6px; padding: 3px 6px; font: inherit; }
+.take-slider { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; margin-left: 8px; }
+.take-slider input { width: 90px; }
+
+/* 5.0.55: velocidade do J/K/L ao lado do relogio */
+.jkl-chip { color: var(--hl-accent, #ff5200); font-variant-numeric: tabular-nums; }

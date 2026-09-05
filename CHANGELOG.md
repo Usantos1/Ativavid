@@ -1,5 +1,37 @@
 # Changelog
 
+## 5.0.55
+
+- **Banco de imagens dentro da Biblioteca.** Nas abas Imagens e Vídeos,
+  uma busca no Pexels ou no Freepik/Magnific: clique em "Salvar" e o
+  arquivo entra na sua biblioteca, já na empresa ativa, para usar em
+  qualquer vídeo daqui em diante. Antes a busca só existia dentro de um
+  projeto e o arquivo sumia com ele.
+- **Transporte profissional na linha do tempo.** `J` `K` `L` como no
+  Premiere e no Resolve: voltar, parar e avançar, com cada toque
+  acelerando (1x, 1,5x, 2x, 4x) e a velocidade à vista. `↑` e `↓` pulam
+  corte a corte e já selecionam o take; `Home` e `End` vão às pontas;
+  `+`, `−` e `0` controlam o zoom com a agulha parada no lugar. Tudo na
+  lista de atalhos.
+
+## 5.0.54
+## 5.0.54
+
+- **Volume da voz e cor por take, no editor.** Clique num take e a faixa de
+  efeitos passa a mostrar as ferramentas dele: voz de -6 a +6 dB e um look
+  de cor só para aquele trecho (Marca, Neutro, Sutil, Cinematico, Frio
+  limpo, Vibrante, Preto e branco, Vintage, Teal & laranja, Pastel suave)
+  ou ajuste manual de brilho, contraste e saturacao. Vale no proximo
+  "Aplicar alteracoes".
+- **Volume geral dos efeitos sonoros**, em Estilo: Mudo, Baixo, Normal ou
+  Alto. Vale para cliques, whoosh e sons postos na mão, nos dois motores.
+- **Conserto: a busca de imagens e o b-roll automático voltaram a
+  funcionar.** Ao proteger as chaves de API no disco (5.0.47), as partes do
+  app que leem o arquivo direto passaram a receber a chave embaralhada:
+  Pexels e Freepik respondiam "chave inválida" e o b-roll automático parava
+  sem avisar. Agora todas leem pelo mesmo caminho, que decifra.
+
+## 5.0.53
 ## 5.0.53
 
 - **Oito legendas novas, no nível do Captions e do CapCut.** Quatro

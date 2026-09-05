@@ -172,7 +172,7 @@ export type EditData = {
     scatterSafeWidth?: number; // scatter: layout width budget (default 940)
     stackedOffsetY?: number;
     fontScale?: number;
-    sfx?: {enabled?: boolean; clickVolume?: number; scratchVolume?: number};
+    sfx?: {enabled?: boolean; clickVolume?: number; scratchVolume?: number; gain?: number};
   };
   // Layout do vídeo: limpa (default), split/split2 (tela dividida),
   // moldura, barra, desfocado, degrade — ver VideoStage/LayoutScrim.
@@ -207,8 +207,11 @@ const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v
 const clamp01 = (v: number) => clamp(v, 0, 1);
 
 // SFX played at an appearance (whoosh) or a pop for shapes
+// 5.0.54: `captions.sfx.gain` multiplica TODO efeito sonoro (1 = como
+// sempre, 0 = mudo). O motor proprio aplica o mesmo fator no mixer.
+const SFX_GAIN = Math.max(0, Math.min(2, Number(D.captions?.sfx?.gain ?? 1) || 0));
 export const Sfx: React.FC<{src: string; volume?: number}> = ({src, volume = 0.09}) => (
-  <Audio src={staticFile(`sfx/${src}`)} volume={volume} />
+  <Audio src={staticFile(`sfx/${src}`)} volume={volume * SFX_GAIN} />
 );
 
 // ============ DYNAMIC CAMERA (hard zoom on cuts + push-in + eye tracking) ======

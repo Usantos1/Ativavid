@@ -28,15 +28,20 @@ HELPERS_COM_CHAVE = ("auto_broll.py", "elevenlabs_music.py",
 
 
 def test_todo_helper_olha_o_env_do_usuario_primeiro():
+    """5.0.54: a ordem passou a viver num lugar so (`chave_do_env`), porque
+    as chaves ficaram CIFRADAS e cada helper que lia o arquivo cru recebia
+    `dpapi:...` — 401 nas duas APIs, b-roll mudo. O que se cobra agora e
+    que nenhum helper leia por conta propria e que a ordem la esteja certa.
+    """
+    import chave_do_env
+
+    primeiro = chave_do_env.candidatos()[0]
+    assert primeiro == Path.home() / "ATIVAVID" / ".env", primeiro
     for nome in HELPERS_COM_CHAVE:
         s = (HELPERS / nome).read_text(encoding="utf-8")
-        i = s.find("for candidate in [")
-        assert i >= 0, nome
-        while i >= 0:
-            trecho = s[i:i + 200]
-            assert 'Path.home() / "ATIVAVID" / ".env"' in trecho, (
-                f"{nome}: a lista de .env nao comeca pelo do usuario")
-            i = s.find("for candidate in [", i + 10)
+        assert "from chave_do_env import chave" in s, f"{nome} nao usa o leitor central"
+        assert 'for candidate in [Path.home() / "ATIVAVID"' not in s, (
+            f"{nome} voltou a ler o .env por conta propria — receberia `dpapi:...`")
 
 
 def test_acha_a_chave_so_com_o_env_do_usuario(monkeypatch):

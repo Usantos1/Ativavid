@@ -59,20 +59,13 @@ def load_api_key() -> str:
     # so existe na maquina de quem desenvolve. Sem esta linha o helper
     # depende de o app injetar a chave no ambiente, e quando isso falha
     # o sintoma e MUDO (a 3.26 consertou o mesmo no Groq).
-    for candidate in [Path.home() / "ATIVAVID" / ".env",
-                      Path(__file__).resolve().parent.parent / ".env",
-                      Path(".env")]:
-        if candidate.exists():
-            for line in candidate.read_text(encoding="utf-8").splitlines():
-                line = line.strip()
-                if line.startswith("ELEVENLABS_API_KEY=") and "=" in line:
-                    v = line.split("=", 1)[1].strip().strip('"').strip("'")
-                    if v:
-                        return v
-    v = os.environ.get("ELEVENLABS_API_KEY", "")
-    if not v:
-        sys.exit("ELEVENLABS_API_KEY not found in .env or environment")
-    return v
+    # 5.0.55: ver a nota em `pexels_search.load_api_key` — chave cifrada.
+    from chave_do_env import chave
+
+    v = chave("ELEVENLABS_API_KEY")
+    if v:
+        return v
+    sys.exit("ELEVENLABS_API_KEY not found in .env or environment")
 
 
 def generate(prompt: str, out: Path, api_key: str,

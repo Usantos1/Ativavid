@@ -41,23 +41,10 @@ TIMEOUT = 60
 
 def load_api_key() -> str:
     """Mesma ordem do app: `%USERPROFILE%/ATIVAVID/.env` primeiro."""
-    for candidate in [Path.home() / "ATIVAVID" / ".env",
-                      Path(__file__).resolve().parent.parent / ".env",
-                      Path(".env")]:
-        if candidate.exists():
-            try:
-                for line in candidate.read_text(encoding="utf-8").splitlines():
-                    line = line.strip()
-                    if not line or line.startswith("#") or "=" not in line:
-                        continue
-                    k, v = line.split("=", 1)
-                    if k.strip() == "FREEPIK_API_KEY":
-                        val = v.strip().strip('"').strip("'")
-                        if val:
-                            return val
-            except OSError:
-                pass
-    v = os.environ.get("FREEPIK_API_KEY", "")
+    # 5.0.55: ver a nota em `pexels_search.load_api_key` — chave cifrada.
+    from chave_do_env import chave
+
+    v = chave("FREEPIK_API_KEY")
     if not v:
         sys.exit("FREEPIK_API_KEY não encontrada — cole a chave em Integrações "
                  "(ou no .env). Chave em https://www.freepik.com/api")

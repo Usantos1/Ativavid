@@ -26,6 +26,8 @@ STYLE_KEYS = (
     # guardado no preset e NUNCA chegava ao render — foi assim que a cor da
     # empresa se perdeu em 04/09.
     "transicao",
+    # Volume geral dos efeitos sonoros (5.0.54)
+    "sfxGain",
 )
 
 

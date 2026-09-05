@@ -930,8 +930,13 @@ def extract_segment(
     streams: str = "av",
     zoom: dict | None = None,
     prepared: Path | None = None,
+    extra_vf: str = "",
 ) -> None:
     """Extract a cut range as its own MP4 with grade + 30ms audio fades baked in.
+
+    `extra_vf` (5.0.54): cor pedida para ESTE take no editor. Entra depois do
+    look global e mesmo quando a fonte veio PREPARADA (o prep ja traz o look
+    global cozido; a cor do take e por cima dele).
 
     `streams` selects what lands in the file: "av" (default), "v" (video only) or
     "a" (audio only, PCM when the path ends in .wav). The split exists for the
@@ -1010,6 +1015,10 @@ def extract_segment(
         # `grade.py --candidates` montage.
         vf_parts.append("format=yuv420p")
         vf_parts.append(grade_filter)
+    if extra_vf and streams != "a":
+        if "format=yuv420p" not in vf_parts:
+            vf_parts.append("format=yuv420p")
+        vf_parts.append(extra_vf)
     # Zoom no mesmo encode do extract — nunca cut.mp4 → zoomed.mp4.
     # `zoom_vf` anda por `t`, não por `n`, então o descarte de quadro acima
     # não mexe na geometria do push-in — só faz ele rodar 30x em vez de 60x.
@@ -1275,10 +1284,22 @@ def extract_all_segments(
         gain_db = float(r.get("gain_db", 0.0) or 0.0)
         gain_windows = r.get("gain_windows") or []
         bleep_windows = r.get("bleep_windows") or []
+        # 5.0.54: cor por take — look do grade.py ou filtro cru do editor
+        extra_vf = ""
+        if r.get("grade"):
+            try:
+                extra_vf = resolve_grade_filter(str(r["grade"]))
+                if extra_vf == "__AUTO__":
+                    extra_vf = ""
+            except Exception as e:  # noqa: BLE001
+                print(f"  [{i:02d}] cor do take ignorada: {e}", flush=True)
+                extra_vf = ""
 
         note = r.get("beat") or r.get("note") or ""
         grade_note = f"  grade: {seg_filter or '(none)'}" if is_auto else ""
         gain_note = f"  gain: {gain_db:+.1f}dB" if abs(gain_db) > 0.05 else ""
+        if extra_vf:
+            gain_note += f"  cor: {str(r.get('grade'))[:40]}"
         if gain_windows:
             gain_note += f"  +{len(gain_windows)} janela(s)"
         if bleep_windows:
@@ -1291,6 +1312,7 @@ def extract_all_segments(
             bleep_windows=bleep_windows,
             zoom=zoom_for_index(edl, i),
             prepared=prep_by_src.get(src_name),
+            extra_vf=extra_vf,
         )
         return out_path
 
@@ -1855,6 +1877,16 @@ def extract_and_assemble_jcut(
         gain_db = float(r.get("gain_db", 0.0) or 0.0)
         gain_windows = r.get("gain_windows") or []
         bleep_windows = r.get("bleep_windows") or []
+        # 5.0.54: cor por take — look do grade.py ou filtro cru do editor
+        extra_vf = ""
+        if r.get("grade"):
+            try:
+                extra_vf = resolve_grade_filter(str(r["grade"]))
+                if extra_vf == "__AUTO__":
+                    extra_vf = ""
+            except Exception as e:  # noqa: BLE001
+                print(f"  [{i:02d}] cor do take ignorada: {e}", flush=True)
+                extra_vf = ""
         vpath = clips_dir / f"seg_{i:02d}_{r['source']}_v.mp4"
         apath = clips_dir / f"seg_{i:02d}_{r['source']}_a.wav"
         if not p.get("reuse_v"):
@@ -1862,7 +1894,8 @@ def extract_and_assemble_jcut(
                             vpath, preview=preview, draft=draft,
                             keep_resolution=keep_resolution, streams="v",
                             zoom=zoom_for_index(edl, i),
-                            prepared=prep_by_src.get(r["source"]))
+                            prepared=prep_by_src.get(r["source"]),
+                            extra_vf=extra_vf)
         if not p.get("reuse_a"):
             extract_segment(p["src"], p["a_in"], p["a_out"] - p["a_in"], "",
                             apath, preview=preview, draft=draft,
@@ -1879,6 +1912,8 @@ def extract_and_assemble_jcut(
         elif p["silence_avail_ms"] is not None:
             tail_note = f"  cauda 0f (só {p['silence_avail_ms']}ms de silêncio)"
         gain_note = f"  gain: {gain_db:+.1f}dB" if abs(gain_db) > 0.05 else ""
+        if extra_vf:
+            gain_note += f"  cor: {str(r.get('grade'))[:40]}"
         if gain_windows:
             gain_note += f"  +{len(gain_windows)} janela(s)"
         if bleep_windows:

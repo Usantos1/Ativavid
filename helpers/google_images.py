@@ -38,18 +38,12 @@ def load_keys() -> tuple[str, str]:
     # so existe na maquina de quem desenvolve. Sem esta linha o helper
     # depende de o app injetar a chave no ambiente, e quando isso falha
     # o sintoma e MUDO (a 3.26 consertou o mesmo no Groq).
-    for candidate in [Path.home() / "ATIVAVID" / ".env",
-                      Path(__file__).resolve().parent.parent / ".env",
-                      Path(".env")]:
-        if candidate.exists():
-            for line in candidate.read_text(encoding="utf-8").splitlines():
-                line = line.strip()
-                if "=" in line and not line.startswith("#"):
-                    k, v = line.split("=", 1)
-                    if k.strip() in ("GOOGLE_API_KEY", "GOOGLE_CSE_ID"):
-                        vals[k.strip()] = v.strip().strip('"').strip("'")
-    key = vals.get("GOOGLE_API_KEY") or os.environ.get("GOOGLE_API_KEY", "")
-    cse = vals.get("GOOGLE_CSE_ID") or os.environ.get("GOOGLE_CSE_ID", "")
+    # 5.0.54: `chave_do_env` DECIFRA o que a 5.0.47 cifrou (DPAPI). Lendo o
+    # arquivo cru, a chave virava `dpapi:...` e a API respondia 401.
+    from chave_do_env import chave
+
+    key = chave("GOOGLE_API_KEY") or os.environ.get("GOOGLE_API_KEY", "")
+    cse = chave("GOOGLE_CSE_ID") or os.environ.get("GOOGLE_CSE_ID", "")
     if not key or not cse:
         sys.exit("GOOGLE_API_KEY and/or GOOGLE_CSE_ID not found in .env or environment "
                  "(see the skill for how to get them)")
