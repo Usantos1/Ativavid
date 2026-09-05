@@ -1,5 +1,13 @@
 # Changelog
 
+## 5.0.67
+
+- **Escrever um texto por cima do vídeo.** No botão de inserir mídia há uma
+  aba *Texto*: digite, escolha *Contorno*, *Caixa* ou *Só a letra*, ajuste
+  tamanho e cor, e ele entra na agulha. Depois é como qualquer mídia —
+  arrastar, redimensionar, enquadrar, escolher a camada e animar a entrada
+  e a saída. O texto já nasce com a fonte e a cor da sua marca.
+
 ## 5.0.66
 
 - **O zoom vira escolha sua, take a take.** No painel do take: *Zoom

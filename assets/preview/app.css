@@ -4366,3 +4366,13 @@ body > .fx-drop { position: fixed; bottom: auto; }
 
 /* 5.0.55: velocidade do J/K/L ao lado do relogio */
 .jkl-chip { color: var(--hl-accent, #ff5200); font-variant-numeric: tabular-nums; }
+
+/* 5.0.67: aba de texto do seletor de midia */
+.txt-campo { display: flex; align-items: center; gap: 8px; font-size: 12px;
+  color: var(--muted, #9aa4b2); white-space: nowrap; }
+.txt-campo input[type="range"] { width: 130px; }
+.txt-campo input[type="color"] { width: 34px; height: 26px; padding: 0;
+  border: 1px solid rgba(255,255,255,.18); border-radius: 6px; background: none; }
+.txt-preview { width: 100%; max-height: 150px; object-fit: contain;
+  margin-top: 10px; border-radius: 8px;
+  background: repeating-conic-gradient(#2a2f37 0% 25%, #232830 0% 50%) 50%/18px 18px; }

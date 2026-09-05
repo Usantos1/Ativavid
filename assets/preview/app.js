@@ -7977,6 +7977,134 @@ function projectFolder() {
   }
 }
 
+
+/* ===== 5.0.67: texto na tela ==============================================
+ *
+ * O maior buraco em relacao ao CapCut era nao dar para escrever nada por
+ * cima do video: dava para por imagem, emoji e som, texto nao. Em vez de
+ * ensinar os DOIS motores de render a desenhar um texto novo (e manter os
+ * dois iguais para sempre — o problema que a varredura de desenho existe
+ * para pegar), o texto vira um PNG transparente aqui no canvas e entra
+ * como midia manual. Arrastar, redimensionar, enquadrar, animar entrada e
+ * saida: tudo isso ja existe para midia e passa a valer para o texto.
+ *
+ * A fonte e a cor da MARCA sao o padrao — o texto nasce parecido com o
+ * resto do video, nao com um Arial branco de editor generico.
+ */
+const TXT_ESTILOS = ['contorno', 'caixa', 'limpo'];
+let TXT_ESTILO = 'contorno';
+
+function fonteDoTexto(tam) {
+  const fam = (S.style && S.style.captionFont) || 'Poppins';
+  return `800 ${tam}px '${fam}', 'Poppins', system-ui, sans-serif`;
+}
+
+/* Luminancia relativa 0-1, para decidir letra preta ou branca sobre a caixa. */
+function luzDaCor(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || ''));
+  if (!m) return 1;
+  const n = parseInt(m[1], 16);
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => {
+    const s0 = v / 255;
+    return s0 <= 0.03928 ? s0 / 12.92 : ((s0 + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+function corDaMarcaOuBranco() {
+  return (S.style && (S.style.accent || S.style.captionAccent)) || '#ff5200';
+}
+
+function quebrarTexto(ctx, texto, larguraMax) {
+  const linhas = [];
+  let atual = '';
+  for (const palavra of String(texto).split(/\s+/).filter(Boolean)) {
+    const tentativa = atual ? `${atual} ${palavra}` : palavra;
+    if (atual && ctx.measureText(tentativa).width > larguraMax) {
+      linhas.push(atual);
+      atual = palavra;
+    } else {
+      atual = tentativa;
+    }
+  }
+  if (atual) linhas.push(atual);
+  return linhas.slice(0, 3);
+}
+
+/* Desenha no canvas de previa E devolve o canvas pronto para virar arquivo.
+ * O mesmo codigo nos dois para o que ele ve ser exatamente o que entra. */
+function desenharTexto(cv, texto, tam, cor, estilo) {
+  const ctx = cv.getContext('2d');
+  const pad = Math.round(tam * 0.45);
+  ctx.font = fonteDoTexto(tam);
+  const linhas = quebrarTexto(ctx, texto || ' ', 1080 - pad * 2);
+  const alturaLinha = Math.round(tam * 1.18);
+  const larg = Math.max(...linhas.map((l) => ctx.measureText(l).width));
+  cv.width = Math.max(64, Math.ceil(larg) + pad * 2);
+  cv.height = alturaLinha * linhas.length + pad;
+  const c = cv.getContext('2d');
+  c.clearRect(0, 0, cv.width, cv.height);
+  c.font = fonteDoTexto(tam);
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  // Na caixa, a cor escolhida pinta a CAIXA e a letra vira preta ou branca
+  // pelo contraste — senao o seletor de cor ficava morto neste modo, e uma
+  // letra clara sobre caixa clara sumiria.
+  const corCaixa = estilo === 'caixa'
+    ? (cor && cor.toLowerCase() !== '#ffffff' ? cor : corDaMarcaOuBranco()) : cor;
+  const corLetra = estilo === 'caixa' ? (luzDaCor(corCaixa) > 0.55 ? '#0b0d10' : '#ffffff') : cor;
+  if (estilo === 'caixa') {
+    c.fillStyle = corCaixa;
+    const r = Math.round(tam * 0.22);
+    c.beginPath();
+    if (c.roundRect) c.roundRect(0, 0, cv.width, cv.height, r);
+    else c.rect(0, 0, cv.width, cv.height);
+    c.fill();
+  }
+  linhas.forEach((linha, i) => {
+    const y = pad / 2 + alturaLinha * (i + 0.5);
+    const x = cv.width / 2;
+    if (estilo === 'contorno') {
+      // contorno preto GROSSO por fora: o texto tem de aguentar cair sobre
+      // qualquer quadro do video, claro ou escuro
+      c.lineJoin = 'round';
+      c.miterLimit = 2;
+      c.lineWidth = Math.max(6, tam * 0.16);
+      c.strokeStyle = '#0b0d10';
+      c.strokeText(linha, x, y);
+    }
+    c.fillStyle = corLetra;
+    c.fillText(linha, x, y);
+  });
+  return cv;
+}
+
+function pintarTexto() {
+  const cv = $('txtPreview');
+  if (!cv) return;
+  desenharTexto(cv, $('txtConteudo')?.value || 'Seu texto aqui',
+    +($('txtTamanho')?.value || 96), $('txtCor')?.value || '#ffffff', TXT_ESTILO);
+}
+
+async function inserirTexto() {
+  const texto = ($('txtConteudo')?.value || '').trim();
+  if (!texto) { toast('Escreva o texto primeiro', 2000); return; }
+  if (S.tab !== 1 && S.tab !== 2) {
+    toast('Abra a Edição ou o Visual para inserir texto', 2200);
+    return;
+  }
+  const cv = document.createElement('canvas');
+  desenharTexto(cv, texto, +($('txtTamanho')?.value || 96),
+    $('txtCor')?.value || '#ffffff', TXT_ESTILO);
+  const blob = await new Promise((ok) => cv.toBlob(ok, 'image/png'));
+  if (!blob) { toast('Não consegui desenhar o texto', 2500); return; }
+  const nome = `texto-${texto.slice(0, 24).replace(/[^\p{L}\p{N}]+/gu, '-')
+    .replace(/^-|-$/g, '').toLowerCase() || 'livre'}.png`;
+  const ok = await subirArquivoParaTimeline(
+    new File([blob], nome, { type: 'image/png' }), nome);
+  if (ok) $('txtConteudo').value = '';
+}
+
 function toggleImgPicker(open) {
   $('imgModal').classList.toggle('hidden', !open);
   $('imgBackdrop').classList.toggle('hidden', !open);
@@ -7987,22 +8115,24 @@ function toggleImgPicker(open) {
 }
 
 function setImgTab(tab) {
-  IMG_TAB = (tab === 'library' || tab === 'emoji') ? tab : 'pexels';
-  const pex = $('imgTabPexels');
-  const lib = $('imgTabLibrary');
-  const emo = $('imgTabEmoji');
-  if (pex) pex.classList.toggle('active', IMG_TAB === 'pexels');
-  if (lib) lib.classList.toggle('active', IMG_TAB === 'library');
-  if (emo) emo.classList.toggle('active', IMG_TAB === 'emoji');
+  IMG_TAB = (tab === 'library' || tab === 'emoji' || tab === 'texto') ? tab : 'pexels';
+  for (const [id, chave] of [['imgTabPexels', 'pexels'], ['imgTabLibrary', 'library'],
+    ['imgTabEmoji', 'emoji'], ['imgTabTexto', 'texto']]) {
+    $(id)?.classList.toggle('active', IMG_TAB === chave);
+  }
   $('imgPexelsPane')?.classList.toggle('hidden', IMG_TAB !== 'pexels');
-  $('imgLibraryPane')?.classList.toggle('hidden', IMG_TAB === 'pexels');
+  $('imgLibraryPane')?.classList.toggle('hidden', IMG_TAB !== 'library');
+  $('imgTextoPane')?.classList.toggle('hidden', IMG_TAB !== 'texto');
   $('imgHint').textContent = IMG_TAB === 'library'
     ? 'Arquivos da pasta Biblioteca — clique para inserir na agulha.'
     : IMG_TAB === 'emoji'
       ? 'O emoji entra grande na agulha e fica 1,6s — arraste o bloco para mover.'
-      : 'A imagem escolhida entra na trilha de inserts, na posição da agulha.';
+      : IMG_TAB === 'texto'
+        ? 'O texto entra na agulha como mídia — depois é só arrastar, redimensionar e animar.'
+        : 'A imagem escolhida entra na trilha de inserts, na posição da agulha.';
   if (IMG_TAB === 'library') loadLibraryResults();
   else if (IMG_TAB === 'emoji') mostrarEmojis();
+  else if (IMG_TAB === 'texto') { $('imgResults').innerHTML = ''; pintarTexto(); }
   else $('imgResults').innerHTML = '';
 }
 
@@ -8025,6 +8155,22 @@ $('imgQuery').addEventListener('keydown', (e) => {
 $('imgTabPexels')?.addEventListener('click', () => setImgTab('pexels'));
 $('imgTabLibrary')?.addEventListener('click', () => setImgTab('library'));
 $('imgTabEmoji')?.addEventListener('click', () => setImgTab('emoji'));
+$('imgTabTexto')?.addEventListener('click', () => setImgTab('texto'));
+for (const el0 of document.querySelectorAll('.txt-estilo')) {
+  el0.addEventListener('click', () => {
+    TXT_ESTILO = TXT_ESTILOS.includes(el0.dataset.txtEstilo) ? el0.dataset.txtEstilo : 'contorno';
+    document.querySelectorAll('.txt-estilo').forEach(
+      (b) => b.classList.toggle('active', b === el0));
+    pintarTexto();
+  });
+}
+for (const id of ['txtConteudo', 'txtTamanho', 'txtCor']) {
+  $(id)?.addEventListener('input', pintarTexto);
+}
+$('txtInserir')?.addEventListener('click', inserirTexto);
+$('txtConteudo')?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); inserirTexto(); }
+});
 
 /* Os botoes de somar, na propria linha do tempo. Cada um abre o caminho que
  * ja existia — o que faltava era estar AQUI, onde a atencao esta. */

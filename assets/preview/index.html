@@ -898,6 +898,7 @@
     <button type="button" class="img-tab active" data-img-tab="pexels" id="imgTabPexels">Buscar online</button>
     <button type="button" class="img-tab" data-img-tab="library" id="imgTabLibrary">Biblioteca</button>
     <button type="button" class="img-tab" data-img-tab="emoji" id="imgTabEmoji">Emoji</button>
+    <button type="button" class="img-tab" data-img-tab="texto" id="imgTabTexto">Texto</button>
   </div>
   <div id="imgPexelsPane">
     <div class="img-search-row">
@@ -928,6 +929,31 @@
       </label>
       <button id="imgLibFolder" class="btn ghost small">Abrir pasta</button>
     </div>
+  </div>
+  <!-- 5.0.67: texto na tela. O texto vira um PNG transparente aqui mesmo,
+       no canvas, e entra como uma midia manual qualquer — os dois motores
+       de render ja sabem desenhar midia, e o arrastar/enquadrar/animar que
+       ja existe passa a valer para o texto de graca. -->
+  <div id="imgTextoPane" class="hidden">
+    <div class="img-search-row">
+      <input id="txtConteudo" type="text" maxlength="90"
+             placeholder="ex.: 50% OFF hoje, Link na bio, Antes / Depois">
+      <button id="txtInserir" class="btn primary small">Inserir</button>
+    </div>
+    <div class="img-fontes" role="radiogroup" aria-label="Estilo do texto">
+      <button type="button" class="img-fonte txt-estilo active" data-txt-estilo="contorno">Contorno</button>
+      <button type="button" class="img-fonte txt-estilo" data-txt-estilo="caixa">Caixa</button>
+      <button type="button" class="img-fonte txt-estilo" data-txt-estilo="limpo">Só a letra</button>
+    </div>
+    <div class="img-search-row">
+      <label class="txt-campo">Tamanho
+        <input id="txtTamanho" type="range" min="48" max="160" step="4" value="96">
+      </label>
+      <label class="txt-campo">Cor
+        <input id="txtCor" type="color" value="#ffffff">
+      </label>
+    </div>
+    <canvas id="txtPreview" class="txt-preview" width="1080" height="360"></canvas>
   </div>
   <div id="imgResults" class="img-results"></div>
   <span id="imgHint" class="img-hint">A mídia escolhida entra na trilha de inserts, na posição da agulha.</span>
