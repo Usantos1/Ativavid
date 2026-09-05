@@ -159,12 +159,21 @@ def _timing_mark(name: str, t0: float) -> float:
     return dt
 
 
+# Marcas que vivem DENTRO de outra fase (medem só a parte da espera) e por
+# isso não entram no total. As do corte usam o prefixo `CUT_`.
+_FASES_ANINHADAS = frozenset({"REVISAO_WAIT"})
+
+
 def write_timing(edit_dir: Path) -> dict:
     """Grava timing.json — medição, não otimização."""
     # As sub-fases do corte (`CUT_*`) estão DENTRO do `CUT`: somá-las no
     # total contaria o mesmo tempo duas vezes e faria as porcentagens
-    # mentirem.
-    total = sum(v for k, v in _TIMING.items() if not k.startswith("CUT_"))
+    # mentirem. `REVISAO_WAIT` (5.0.72) idem: é marcado dentro da janela
+    # de `CAPTIONS` (a espera pela revisão acontece ao gerar as legendas).
+    # Visto no lab de 05/09: CAPTIONS=23,2 s e REVISAO_WAIT=22,8 s no
+    # mesmo job — o total somava 46 s para 23 s de relógio.
+    total = sum(v for k, v in _TIMING.items()
+                if not k.startswith("CUT_") and k not in _FASES_ANINHADAS)
     stages = {
         k: {"sec": v, "pct": round(100.0 * v / total, 1) if total else 0.0}
         for k, v in _TIMING.items()

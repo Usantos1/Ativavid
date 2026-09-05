@@ -217,6 +217,23 @@ def test_as_legendas_esperam_e_o_fim_do_job_tambem():
     assert "if not _revisoes:\n            return" in fn, "idempotente"
 
 
+def test_a_espera_da_revisao_nao_conta_duas_vezes_no_total(tmp_path):
+    """REVISAO_WAIT e marcado dentro da janela de CAPTIONS: o total do
+    timing.json nao pode soma-lo de novo (lab de 05/09: 23,2 + 22,8 s
+    para 23 s de relogio)."""
+    import run_fast as rf
+
+    rf._TIMING.clear()
+    rf._TIMING.update({"CAPTIONS": 23.2, "REVISAO_WAIT": 22.8, "CUT": 10.0,
+                       "CUT_extrair": 8.0})
+    try:
+        payload = rf.write_timing(tmp_path)
+    finally:
+        rf._TIMING.clear()
+    assert payload["totalSec"] == 33.2
+    assert payload["stages"]["REVISAO_WAIT"]["sec"] == 22.8, "a marca continua la"
+
+
 def test_os_marcadores_novos_chegam_ao_log_do_job():
     from leitura_de_codigo import apenas_codigo
 
