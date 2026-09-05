@@ -1,5 +1,17 @@
 # Changelog
 
+## 5.0.76
+
+- **A checagem avisa quando a sessão da IA expirou.** Se o Gemini ou o
+  ChatGPT deslogaram no navegador, os vídeos passam a sair com o plano
+  pelo Groq e sem a revisão do texto — e até agora isso só aparecia no
+  log. Agora a checagem de Configurações testa a sessão de verdade e a
+  linha "Tudo funcionando corretamente" vira um aviso com o botão para a
+  tela IA.
+- **"~22 min restantes" fantasma no refazer.** Ao refazer um vídeo antigo,
+  o card mostrava por alguns segundos uma previsão gravada em agosto (a
+  previsão de tempo foi retirada há semanas). Não mostra mais.
+
 ## 5.0.75
 
 - **Alguns segundos a menos por vídeo: a cópia leve do corte é feita em

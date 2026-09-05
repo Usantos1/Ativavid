@@ -204,6 +204,11 @@ def attach_eta(job: dict, history: list[dict] | None, edit_dir: Path | None = No
     O tempo corrido responde à mesma pergunta de quem olha a Fila — "isso
     travou?" — sem prometer nada.
     """
+    # 5.0.76: o rotulo NUNCA vem do registro. 41 jobs gravados na epoca da
+    # previsao (18-20/08) ainda carregam `etaLabel` no blob ("~22min34s
+    # restantes"), e ao refazer um deles o card mostrava esse numero velho
+    # nos primeiros 20 s — ate o "ha 1 min" cobrir. Visto por ele em 05/09.
+    job.pop("etaLabel", None)
     status = str(job.get("status") or "")
     if status not in ("processing", "queued", "importing"):
         return job

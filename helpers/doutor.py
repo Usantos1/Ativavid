@@ -182,6 +182,81 @@ def checar_chaves() -> None:
 
 
 # ------------------------------------------------------------------- espaco
+def checar_ia() -> None:
+    """A sessao da IA principal (Gemini/ChatGPT pelo navegador) esta viva?
+
+    5.0.76. No lote de 04/09 as duas sessoes expiraram no meio: 17 videos
+    sairam com o plano via Groq e sem a revisao do texto, e o unico rastro
+    era `[warn]` no pipeline.log de cada um. O dado ja existia —
+    `llm-health.json` guarda o resultado REAL da ultima chamada de cada
+    provedor — mas so a tela IA olhava para ele. Aqui ele entra na linha
+    que ele le ("Tudo funcionando corretamente"), com o caminho de volta.
+    """
+    import datetime as _dt
+
+    try:
+        from app.llm_session import saude_dos_provedores
+        from app.local_server import SESSION_PROVIDERS, load_sessions
+    except Exception as e:  # noqa: BLE001
+        diz(AVISO, "Nao consegui ler as sessoes da IA", f"{type(e).__name__}: {e}")
+        return
+
+    from app.llm_session import sondar
+
+    stored = (load_sessions().get("providers") or {})
+
+    def _quando(iso: str) -> str:
+        try:
+            t = _dt.datetime.strptime(iso, "%Y-%m-%dT%H:%M:%SZ").replace(
+                tzinfo=_dt.timezone.utc)
+        except ValueError:
+            return ""
+        h = (_dt.datetime.now(_dt.timezone.utc) - t).total_seconds() / 3600
+        return f"ha {h * 60:.0f} min" if h < 1 else f"ha {h:.0f} h"
+
+    # A captura nao prova nada (a extensao recaptura a cada 2 min, com a
+    # sessao viva ou morta): a sonda pede o token de verdade, agora.
+    # So os provedores que o planejador usa (Gemini e ChatGPT) tem sonda;
+    # os outros (Claude) nao contam nem como vivos nem como caidos.
+    vivas, caidas, sondados = [], [], 0
+    for pid, info in SESSION_PROVIDERS.items():
+        st = stored.get(pid) or {}
+        if not st:
+            continue
+        ok, erro = sondar(pid)
+        if ok is None:
+            continue
+        sondados += 1
+        if ok:
+            vivas.append((info["name"], _quando(str(st.get("capturedAt") or ""))))
+        else:
+            caidas.append((info["name"], erro or "a ultima chamada falhou"))
+
+    if not sondados:
+        diz(AVISO, "IA principal sem sessao",
+            "Nenhuma sessao do Gemini ou do ChatGPT capturada nesta maquina.",
+            "Os videos saem com o plano via Groq e sem a revisao do texto. "
+            "Abra gemini.google.com ou chatgpt.com logado e capture com a extensao.",
+            acao="ia", acao_texto="Abrir IA")
+        return
+    if caidas and not vivas:
+        diz(AVISO, "Sessao da IA expirada: " + " e ".join(n for n, _ in caidas),
+            caidas[0][1][:160],
+            "Os videos estao saindo com o plano via Groq e SEM a revisao do "
+            "texto. Abra o site logado no navegador (a extensao recaptura "
+            "sozinha em 2 min) e rode a checagem de novo.",
+            acao="ia", acao_texto="Abrir IA")
+        return
+    if caidas:
+        diz(AVISO, "Uma sessao da IA expirou: " + " e ".join(n for n, _ in caidas),
+            "A outra responde (" + ", ".join(n for n, _ in vivas) + ") e os videos seguem por ela.",
+            "Se quiser as duas, abra o site logado no navegador; a extensao recaptura sozinha.",
+            acao="ia", acao_texto="Abrir IA")
+        return
+    diz(OK, "IA principal respondendo: " + ", ".join(n for n, _ in vivas),
+        "; ".join(f"{n} capturada {q}" for n, q in vivas if q))
+
+
 def checar_espaco() -> None:
     """Espaco onde o trabalho REALMENTE acontece, nao onde a skill mora.
 
@@ -549,7 +624,8 @@ def main() -> int:
 
     for fn in (checar_programas, checar_sistema, checar_motor_rapido,
                checar_pecas_opcionais, checar_caminho_de_pagamento,
-               checar_chaves, checar_python, checar_espaco, checar_processos):
+               checar_ia, checar_chaves, checar_python, checar_espaco,
+               checar_processos):
         try:
             fn()
         except Exception as e:  # noqa: BLE001 — um check quebrado nao pode derrubar o diagnostico

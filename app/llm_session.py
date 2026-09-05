@@ -474,6 +474,45 @@ def saude_dos_provedores() -> dict:
         return {}
 
 
+def sondar(provider_id: str) -> tuple[bool | None, str]:
+    """Uma chamada REAL e barata — so o passo do token, sem gerar texto.
+
+    5.0.76. `has_*_session` olha cookies, e cookies existem mesmo com a
+    sessao morta: a extensao recaptura a cada 2 min, entao `capturedAt` e
+    sempre "agora" e a regra "erro mais novo que a captura" nunca dispara
+    (no lote de 04/09 as duas sessoes ficaram mortas por um dia inteiro e
+    17 videos sairam com plano via Groq e sem revisao). O token do Gemini
+    (`SNlM0e`, na pagina) e o accessToken do ChatGPT so existem na hora
+    da chamada — e e exatamente isso que esta sonda pede. Grava a saude
+    como uma chamada de verdade gravaria.
+    """
+    cookies = _cookie_map(provider_id)
+    if not cookies:
+        return False, "sem sessao capturada"
+    try:
+        if provider_id == "gemini-web":
+            session = cffi_requests.Session(impersonate="chrome131")
+            session.get("https://www.google.com/", cookies=cookies, timeout=20)
+            r = session.get("https://gemini.google.com/app", cookies=cookies, timeout=30)
+            if r.status_code != 200:
+                raise RuntimeError(f"Gemini init HTTP {r.status_code}")
+            if not (re.search(r'"SNlM0e"\s*:\s*"(.*?)"', r.text)
+                    or re.search(r'\\"SNlM0e\\"\s*:\s*\\"(.*?)\\"', r.text)
+                    or re.search(r"SNlM0e['\"]?\s*[:=]\s*['\"]([^'\"]+)['\"]", r.text)):
+                raise RuntimeError(
+                    "Token Gemini ausente — abra gemini.google.com logado, "
+                    "aguarde a página carregar e recapture")
+        elif provider_id == "chatgpt-web":
+            chatgpt_access_token(cookies)
+        else:
+            return None, "sem sonda"   # (Claude Web) o planejador nao o usa
+    except Exception as e:  # noqa: BLE001
+        _registrar_saude(provider_id, str(e))
+        return False, str(e)[:200]
+    _registrar_saude(provider_id, None)
+    return True, ""
+
+
 def chat(messages: list[dict], model: str | None = None) -> tuple[str, str]:
     """Return (text, backend_id). Raises RuntimeError on failure."""
     prompt = _messages_to_prompt(messages)

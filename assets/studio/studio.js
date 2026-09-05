@@ -5927,6 +5927,9 @@ function wireAcoesDoDoutor(out) {
     const btn = e.target.closest(".doutor-acao");
     if (!btn) return;
     const acao = btn.dataset.acao;
+    // 5.0.76: a checagem da sessao da IA leva direto a tela IA, onde se
+    // captura de novo com a extensao.
+    if (acao === "ia") { setView("ia"); return; }
     if (acao !== "instalar_musica" && acao !== "baixar_pacote") return;
     btn.disabled = true;
     try {
