@@ -579,6 +579,24 @@ def _assinatura_do_pronto(j: dict, edit: Path, com_links: bool) -> str:
             f"|{_mt(edit)}|{_mt(edit / 'timing.json')}")
 
 
+def _aliviar_card(j: dict) -> None:
+    """Tira do card o que a tela não usa — a lista vai inteira a cada 2,5 s.
+
+    Medido em 05/09 no app dele (331 projetos, 877 KB por pedido): a
+    legenda do post era 18% e o `score.json` inteiro 10%. A tela usa a
+    legenda só como "tem/não tem" (o botão Copiar busca o arquivo FRESCO
+    em `/api/jobs/<id>/legenda`, porque o retrato envelhece) e do score só
+    `overall` e a primeira dica.
+    """
+    if j.get("legenda"):
+        j["temLegenda"] = True
+        j["legenda"] = ""
+    sc = j.get("score")
+    if isinstance(sc, dict):
+        dicas = sc.get("tips") if isinstance(sc.get("tips"), list) else []
+        j["score"] = {"overall": sc.get("overall"), "tips": [d for d in dicas if d][:1]}
+
+
 def build(store: Any, projects_root: Path, *, com_links: bool = False) -> list[dict]:
     """Cards prontos para a tela, do mais recente para o mais antigo."""
     import copy
@@ -676,6 +694,7 @@ def _montar_card(j: dict, edit: Path, com_links: bool, STAGE_LABELS, enrich_job_
                 j["score"] = json.loads(score_path.read_text(encoding="utf-8-sig"))
             except (OSError, json.JSONDecodeError):
                 pass
+        _aliviar_card(j)
         _formato_do_video(j, edit)
         _fonte_do_video(j, edit)
         _modo_de_edicao(j, edit)

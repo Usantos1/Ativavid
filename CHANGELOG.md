@@ -1,5 +1,18 @@
 # Changelog
 
+## 5.0.42
+
+- **A lista de vídeos ficou 25% mais leve.** Cada atualização da Fila e
+  dos Concluídos trazia a legenda de post inteira de cada vídeo e a nota
+  completa do corte — coisas que a tela não mostra. Com centenas de
+  projetos eram 877 KB a cada 2,5 s; agora 658 KB. "Copiar legenda do
+  post" continua igual: ele sempre busca o arquivo mais recente.
+- **A busca acha pelo que foi dito no vídeo.** Em Concluídos e em
+  Projetos, a caixa de busca agora também procura na transcrição e na
+  legenda do post — "carregador" traz todos os vídeos em que a palavra foi
+  falada, mesmo que o título não a tenha. Sem acento e sem maiúscula.
+  Responde na hora pelo título e completa pela fala em seguida.
+
 ## 5.0.41
 
 - **Segurança: o app só executa o instalador que confere com o publicado.**

@@ -20,6 +20,9 @@ const state = {
   projFilter: "todos",
   projBusca: "",
   doneBusca: "",
+  // 5.0.43: ids que o servidor achou pelo que foi DITO (transcricao e
+  // legenda do post), para o termo em `termo`. Soma-se a busca por titulo.
+  buscaFala: { termo: "", ids: new Set() },
   libraryRoot: "",
   libraryData: null,
   libAba: "image",
@@ -547,8 +550,30 @@ function filterJobs(kind) {
 function casaBusca(j, termo) {
   const q = String(termo || "").trim().toLowerCase();
   if (!q) return true;
+  const fala = state.buscaFala;
+  if (fala && fala.termo.toLowerCase() === q && fala.ids.has(String(j.id))) return true;
   return [j.title, j.name, jobFolderName(j)]
     .some((x) => String(x || "").toLowerCase().includes(q));
+}
+
+// A busca pelo que foi dito mora no servidor (le a transcricao de cada
+// projeto, com cache). Com 3+ letras, pergunta a ele com um pequeno atraso;
+// a lista responde na hora pelo titulo e completa quando a fala chega.
+let _buscaFalaTimer = null;
+function buscarNaFala(termo) {
+  const q = String(termo || "").trim();
+  clearTimeout(_buscaFalaTimer);
+  if (q.length < 3) {
+    state.buscaFala = { termo: "", ids: new Set() };
+    return;
+  }
+  _buscaFalaTimer = setTimeout(async () => {
+    try {
+      const r = await api(`/api/jobs/buscar?q=${encodeURIComponent(q)}`);
+      state.buscaFala = { termo: q, ids: new Set((r.ids || []).map(String)) };
+      renderJobs();
+    } catch { /* sem servidor: fica a busca por titulo */ }
+  }, 250);
 }
 
 function jobFolderName(j) {
@@ -729,7 +754,7 @@ function cardSig(j, opts) {
     _ws,
     clip ? `clip:${clip.folder}` : "",
     j.id, j.status, j.title || j.name, Math.round(Number(j.progress) || 0), j.hasFinal, j.hasThumb, j.finishedAt, j.finishedAtLabel,
-    j.startedAtLabel || "", j.durationSec || "", j.sourceDurationSec || "", j.legenda ? "L" : "",
+    j.startedAtLabel || "", j.durationSec || "", j.sourceDurationSec || "", (j.temLegenda || j.legenda) ? "L" : "",
     j.styleLabel || "",
     j.iaAviso || "",
     j.modoLabel || "",
@@ -956,7 +981,7 @@ function cardMenuHtml(j, opts) {
       <button type="button" class="chip-btn ghostish pc-more-btn" data-act="menu" data-id="${safeId}" data-menu-key="${menuKey}" aria-label="Mais ações" aria-expanded="false" aria-haspopup="menu">⋯</button>
       <div class="pc-menu hidden" data-menu="${menuKey}" role="menu">
         <button type="button" role="menuitem" data-act="folder" data-id="${safeId}">Abrir pasta</button>
-        ${j.legenda ? `<button type="button" role="menuitem" data-act="copylegenda" data-id="${safeId}">Copiar legenda do post</button>` : ""}
+        ${(j.temLegenda || j.legenda) ? `<button type="button" role="menuitem" data-act="copylegenda" data-id="${safeId}">Copiar legenda do post</button>` : ""}
         <button type="button" role="menuitem" data-act="copyname" data-id="${safeId}">Copiar nome</button>
         <a role="menuitem" href="${escapeHtml(links.final)}" ${canFinal ? "" : "class=\"disabled\""}>Ver vídeo final</a>
         <a role="menuitem" href="${escapeHtml(links.editor)}">Editar</a>
@@ -1526,6 +1551,7 @@ function wireProjetos() {
     busca.dataset.wired = "1";
     busca.addEventListener("input", () => {
       state.projBusca = busca.value;
+      buscarNaFala(busca.value);
       renderJobs();
     });
   }
@@ -1534,6 +1560,7 @@ function wireProjetos() {
     buscaDone.dataset.wired = "1";
     buscaDone.addEventListener("input", () => {
       state.doneBusca = buscaDone.value;
+      buscarNaFala(buscaDone.value);
       renderJobs();
     });
   }

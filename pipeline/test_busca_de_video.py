@@ -55,7 +55,9 @@ def test_o_texto_do_campo_diz_o_que_da_para_buscar():
     """"Buscar por nome…" não dizia QUAL nome — e o nome da pasta é um
     carimbo de data que ninguém decora."""
     assert "Buscar por nome…" not in HTML
-    assert HTML.count("Buscar pelo título, pelo arquivo…") == 2
+    # 5.0.43: a busca passou a olhar tambem a transcricao e a legenda do
+    # post, e o campo diz isso ("ou pelo que foi dito").
+    assert HTML.count("Buscar pelo título, pelo arquivo ou pelo que foi dito…") == 2
 
 
 def test_vazio_por_busca_nao_mente_sobre_o_acervo():

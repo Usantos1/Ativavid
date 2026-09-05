@@ -2398,6 +2398,15 @@ class StudioHandler(BaseHTTPRequestHandler):
                     lines.append(f"  {it['detalhe']}")
             self._json({"ok": True, "text": "\n".join(lines)})
             return
+        if path == "/api/jobs/buscar":
+            # 5.0.43: busca pelo que foi DITO (transcricao + legenda do post).
+            from urllib.parse import parse_qs
+
+            from app.busca_de_fala import buscar
+
+            q = (parse_qs(urlparse(self.path).query).get("q") or [""])[0]
+            self._json({"ok": True, "termo": q, "ids": buscar(self.store.list(), q)})
+            return
         if path.startswith("/api/jobs/"):
             parts = path.strip("/").split("/")
             # /api/jobs/<id> or /api/jobs/<id>/legenda or /api/jobs/<id>/final

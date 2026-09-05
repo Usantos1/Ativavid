@@ -333,6 +333,15 @@ class DesktopHandler(ps.Handler):
                     )
             self._json({"jobs": jobs, "busy": self.worker.busy_id})
             return
+        if raw == "/api/jobs/buscar":
+            # 5.0.43: busca pelo que foi DITO (transcricao + legenda do post).
+            from urllib.parse import parse_qs
+
+            from app.busca_de_fala import buscar
+
+            q = (parse_qs(urlparse(self.path).query).get("q") or [""])[0]
+            self._json({"ok": True, "termo": q, "ids": buscar(self.store.list(), q)})
+            return
         if raw.startswith("/api/jobs/"):
             # reuse local_server job media routes via a thin shim
             parts = raw.strip("/").split("/")
