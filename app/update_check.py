@@ -112,6 +112,7 @@ def check_update(*, channel: str = "stable") -> dict[str, Any]:
         "force": False,
         "releaseUrl": None,
         "downloadUrl": None,
+        "downloadSha256": None,
         "githubRepo": gh or None,
         "setupPath": str(REPO / "installer" / "setup.ps1"),
         "message": f"Build local {cur}.",
@@ -150,6 +151,10 @@ def check_update(*, channel: str = "stable") -> dict[str, Any]:
                     upd.get("force")
                     or (bool(latest_sb) and _e_mais_nova(latest_sb, cur)))
                 result["downloadUrl"] = upd.get("downloadUrl") or None
+                # O hash so vem da politica do Supabase (o GitHub e o que
+                # ele protege): instalador trocado la nao passa aqui.
+                result["downloadSha256"] = (
+                    str(upd.get("downloadSha256") or "").strip().lower() or None)
                 result["releaseUrl"] = (
                     upd.get("downloadUrl")
                     or (f"https://github.com/{gh}/releases" if gh else None)
@@ -292,6 +297,16 @@ def progresso_da_atualizacao() -> dict[str, Any]:
     return d
 
 
+def _sha256_do_arquivo(caminho: Path) -> str:
+    import hashlib
+
+    h = hashlib.sha256()
+    with open(caminho, "rb") as f:
+        for bloco in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(bloco)
+    return h.hexdigest()
+
+
 def baixar_e_instalar(assincrono: bool = False) -> dict[str, Any]:
     """Baixa o instalador da versao nova e o executa — UM clique.
 
@@ -338,6 +353,28 @@ def baixar_e_instalar(assincrono: bool = False) -> dict[str, Any]:
     if destino.stat().st_size < 1_000_000:
         _PROGRESSO.update({"estado": "erro", "erro": "instalador pequeno demais"})
         return {"ok": False, "error": "o instalador baixado veio pequeno demais — tente pelo navegador"}
+    # 5.0.41: o arquivo tem de ser O publicado. Ate aqui o app executava o
+    # que quer que viesse da URL: um instalador trocado no GitHub (conta
+    # invadida, release editada) rodaria em toda maquina de cliente no
+    # proximo "Atualizar agora". O SHA-256 vem da politica do Supabase, que
+    # o `publicar_versao.py` grava a partir do exe local; para trocar o
+    # instalador o atacante precisaria dos dois lugares. Sem hash na
+    # politica (versao antiga dela, ou caminho do GitHub) segue como antes.
+    esperado = str(info.get("downloadSha256") or "").strip().lower()
+    if esperado:
+        achado = _sha256_do_arquivo(destino)
+        if achado != esperado:
+            try:
+                destino.unlink()
+            except OSError:
+                pass
+            _PROGRESSO.update({"estado": "erro",
+                               "erro": "o instalador baixado não confere com o publicado"})
+            return {"ok": False,
+                    "error": ("o instalador baixado não confere com o publicado — "
+                              "nada foi executado. Tente de novo mais tarde ou "
+                              "baixe pelo site."),
+                    "sha256": achado, "esperado": esperado}
     # SILENCIOSO: o usuario pediu "atualizar so dando o Ok, sem estas
     # etapas" (29/08, comparando com o CapCut). Com /VERYSILENT o unico
     # clique que sobra e o do Windows perguntando se autoriza — o resto

@@ -41,6 +41,16 @@ def _get(url: str, headers: dict, timeout: int = 25):
         return 0, str(e)
 
 
+def _sha256_do_arquivo(caminho: Path) -> str:
+    import hashlib
+
+    h = hashlib.sha256()
+    with open(caminho, "rb") as f:
+        for bloco in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(bloco)
+    return h.hexdigest()
+
+
 def _release(tag: str, repo: str) -> dict | None:
     """Release publicada com o .exe — a fonte da verdade do que existe."""
     code, data = _get(
@@ -76,6 +86,23 @@ def main() -> int:
     download = exe["browser_download_url"]
     print(f"instalador: {exe['name']}")
 
+    # 5.0.41: o SHA-256 do exe vai na politica, e o app confere o download
+    # antes de executar. O hash sai do arquivo LOCAL (o que acabou de ser
+    # enviado); se o tamanho nao bater com o asset publicado, e outro
+    # arquivo — nao grava hash de coisa diferente.
+    sha = None
+    local = REPO / "installer" / "dist" / str(exe["name"])
+    if local.is_file():
+        tam = int(exe.get("size") or 0)
+        if tam and local.stat().st_size != tam:
+            print(f"ERRO: {local.name} local tem {local.stat().st_size} bytes e o publicado "
+                  f"tem {tam} — nao sao o mesmo arquivo. Nao gravo hash.")
+            return 1
+        sha = _sha256_do_arquivo(local)
+        print(f"sha256: {sha}")
+    else:
+        print(f"aviso: {local} nao existe; a politica sai SEM download_sha256")
+
     s = ss.load_settings()
     url = str(s.get("supabaseUrl") or "").strip().rstrip("/")
     service = str(s.get("supabaseServiceRoleKey") or "").strip()
@@ -101,6 +128,8 @@ def main() -> int:
         "download_url": download,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
+    if sha:
+        patch["download_sha256"] = sha
     if args.forcar:
         patch["min_version"] = versao
         patch["update_message"] = (
@@ -126,8 +155,25 @@ def main() -> int:
         with request.urlopen(req, timeout=25) as r:
             depois = json.loads(r.read().decode("utf-8"))[0]
     except error.HTTPError as e:
-        print("ERRO ao gravar:", e.code, e.read().decode("utf-8", errors="replace")[:300])
-        return 1
+        corpo = e.read().decode("utf-8", errors="replace")[:300]
+        if "download_sha256" in corpo and "download_sha256" in patch:
+            # A coluna ainda nao existe no Supabase: grava o resto e avisa.
+            print("aviso: app_config ainda nao tem `download_sha256` — rode "
+                  "supabase/hash_do_instalador.sql. Gravando sem o hash.")
+            patch.pop("download_sha256")
+            req = request.Request(f"{url}/rest/v1/app_config?id=eq.1",
+                                  data=json.dumps(patch).encode("utf-8"),
+                                  headers=h, method="PATCH")
+            try:
+                with request.urlopen(req, timeout=25) as r:
+                    depois = json.loads(r.read().decode("utf-8"))[0]
+            except error.HTTPError as e2:
+                print("ERRO ao gravar:", e2.code,
+                      e2.read().decode("utf-8", errors="replace")[:300])
+                return 1
+        else:
+            print("ERRO ao gravar:", e.code, corpo)
+            return 1
 
     print(f"depois: min={depois.get('min_version')} latest={depois.get('latest_version')}")
     print("ok")

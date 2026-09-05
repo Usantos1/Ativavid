@@ -1,5 +1,15 @@
 # Changelog
 
+## 5.0.41
+
+- **Segurança: o app só executa o instalador que confere com o publicado.**
+  "Atualizar agora" baixava o instalador e o executava sem conferir nada;
+  um instalador trocado no GitHub rodaria em todos os computadores no
+  próximo clique. Agora a política de versão carrega a impressão digital
+  (SHA-256) do instalador publicado, e o app confere o arquivo baixado
+  antes de executar. Se não bater, apaga o arquivo e avisa; nada roda.
+  Para trocar o instalador seria preciso invadir dois lugares diferentes.
+
 ## 5.0.40
 
 - **A abertura do app que não chegou ao servidor tenta de novo.** O aviso

@@ -220,6 +220,9 @@ def _normalize_update(raw: Any) -> dict[str, Any] | None:
         "minVersion": raw.get("minVersion"),
         "latestVersion": raw.get("latestVersion"),
         "downloadUrl": raw.get("downloadUrl"),
+        # 5.0.41: SHA-256 do instalador publicado. O app confere o arquivo
+        # baixado antes de executar; sem o campo (política antiga), passa.
+        "downloadSha256": (str(raw.get("downloadSha256") or "").strip().lower() or None),
         "message": raw.get("message"),
         "appVersion": raw.get("appVersion") or _app_version(),
     }
