@@ -166,7 +166,8 @@ export type EditData = {
       | 'neon' | 'degrade' | 'bandeira' | 'maquina'
       | 'pilula' | 'etiqueta' | 'fitadegrade' | 'marcador'
       | 'fitadupla' | 'etiquetacanto'
-      | 'contorno' | 'sombra3d' | 'beast' | 'sublinhado';
+      | 'contorno' | 'sombra3d' | 'beast' | 'sublinhado'
+      | 'duplo' | 'sombradura';
     scatterOffsetY?: number;   // scatter: block centre, fraction of height
     scatterFontSize?: number;  // scatter: ordinary word size (default 74)
     scatterSafeWidth?: number; // scatter: layout width budget (default 940)

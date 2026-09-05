@@ -7962,6 +7962,8 @@ const NOME_DO_ESTILO = {
     contorno: "Contorno da marca", sombra3d: "Sombra longa", beast: "Beast (amarelo)",
     sublinhado: "Sublinhado", gigante: "Gigante (Bebas)", quadrinhos: "Quadrinhos (Bangers)",
     divertida: "Divertida (Luckiest Guy)", condensada: "Condensada (Anton)",
+    duplo: "Contorno duplo", sombradura: "Sombra dura", retro: "Retrô (Righteous)",
+    minimal: "Minimalista", grosso: "Grossa (Archivo)", alerta: "Alerta (Bangers)",
   },
   manchete: {
     outline: "Contorno", card: "Cartão", realce: "Realce", misto: "Misto",

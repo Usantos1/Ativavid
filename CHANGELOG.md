@@ -1,5 +1,13 @@
 # Changelog
 
+## 5.0.58
+
+- **Mais seis legendas:** *Contorno duplo* (preto grosso por fora, a cor da
+  empresa por dentro), *Sombra dura*, *Retrô* (Righteous), *Minimalista*,
+  *Grossa* (Archivo Black) e *Alerta* (Bangers). Já são 39 estilos de
+  legenda, todos medidos contra o Remotion.
+
+## 5.0.57
 ## 5.0.57
 
 - **A trilha abaixa sozinha quando alguém fala.** Como num podcast bem

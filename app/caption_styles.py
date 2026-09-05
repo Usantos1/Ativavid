@@ -56,6 +56,13 @@ NOMES = {
     "quadrinhos": "Quadrinhos (Bangers)",
     "divertida": "Divertida (Luckiest Guy)",
     "condensada": "Condensada (Anton)",
+    # lote 2 das 50 rodadas (05/09)
+    "duplo": "Contorno duplo",
+    "sombradura": "Sombra dura",
+    "retro": "Retrô (Righteous)",
+    "minimal": "Minimalista",
+    "grosso": "Grossa (Archivo)",
+    "alerta": "Alerta (Bangers)",
     "marcador": "Marca-texto",
 }
 
@@ -83,7 +90,8 @@ USAM_COR_DA_ENFASE = frozenset({"stacked", "scatter", "impacto", "marcador",
                                 "neon", "degrade", "bandeira", "pilula",
                                 "etiqueta", "fitadegrade",
                                 "fitadupla", "etiquetacanto",
-                                "contorno", "sombra3d", "sublinhado", "divertida"})
+                                "contorno", "sombra3d", "sublinhado", "divertida",
+                                "duplo", "retro", "alerta"})
 
 
 def valido(estilo: str | None) -> bool:

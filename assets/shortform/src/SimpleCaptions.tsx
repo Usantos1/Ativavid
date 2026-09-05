@@ -23,6 +23,8 @@ import {loadFont as loadBebas} from '@remotion/google-fonts/BebasNeue';
 import {loadFont as loadAnton} from '@remotion/google-fonts/Anton';
 import {loadFont as loadBangers} from '@remotion/google-fonts/Bangers';
 import {loadFont as loadLuckiest} from '@remotion/google-fonts/LuckiestGuy';
+import {loadFont as loadRighteous} from '@remotion/google-fonts/Righteous';
+import {loadFont as loadArchivo} from '@remotion/google-fonts/ArchivoBlack';
 import {measureText} from '@remotion/layout-utils';
 import captions from '../public/captions.json';
 import editData from '../public/edit-data.json';
@@ -37,6 +39,8 @@ const BEBAS = loadBebas('normal', {weights: ['400']}).fontFamily;
 const ANTON = loadAnton('normal', {weights: ['400']}).fontFamily;
 const BANGERS = loadBangers('normal', {weights: ['400']}).fontFamily;
 const LUCKIEST = loadLuckiest('normal', {weights: ['400']}).fontFamily;
+const RIGHTEOUS = loadRighteous('normal', {weights: ['400']}).fontFamily;
+const ARCHIVO = loadArchivo('normal', {weights: ['400']}).fontFamily;
 
 const OFFWHITE = '#f4f1e9';
 
@@ -68,12 +72,13 @@ type Variant = {
     | 'neon' | 'degrade' | 'bandeira' | 'maquina'
     | 'pilula' | 'etiqueta' | 'fitadegrade' | 'marcador'
     | 'fitadupla' | 'etiquetacanto'
-    | 'contorno' | 'sombra3d' | 'beast' | 'sublinhado';
+    | 'contorno' | 'sombra3d' | 'beast' | 'sublinhado'
+    | 'duplo' | 'sombradura';
 };
 
 // Quem desenha em CAIXA ALTA. Muda a MEDIDA das linhas, entao os tres
 // motores (este, o render_proprio e a previa) tem de concordar.
-const MAIUSCULA = new Set(['metal', 'moldura', 'eco', 'degrade', 'bandeira', 'fitadegrade', 'fitadupla', 'beast']);
+const MAIUSCULA = new Set(['metal', 'moldura', 'eco', 'degrade', 'bandeira', 'fitadegrade', 'fitadupla', 'beast', 'retro']);
 
 // Opacidades do Vidro e do Metálico — os MESMOS números do render_proprio
 // (VIDRO_OPACO / VIDRO_FIO / METAL_OPACO). Um 0,32 que vira 0,30 aqui sai
@@ -263,6 +268,36 @@ export const SIMPLE_VARIANTS: Record<string, Variant> = {
     family: ANTON, weight: 400, size: 100, maxWords: 3, lines: 1,
     squeeze: 1, squeezeY: 1, tracking: 1, bottom: 430, maxW: 760,
     block: true,
+  },
+  // ---- lote 2 das 50 rodadas (05/09) --------------------------------------
+  duplo: {
+    family: POPPINS, weight: 800, size: 74, maxWords: 3, lines: 1,
+    squeeze: 1, squeezeY: 1, tracking: -1, bottom: 430, maxW: 800,
+    modo: 'duplo',
+  },
+  sombradura: {
+    family: POPPINS, weight: 800, size: 76, maxWords: 3, lines: 1,
+    squeeze: 1, squeezeY: 1, tracking: -1, bottom: 430, maxW: 800,
+    modo: 'sombradura',
+  },
+  retro: {
+    family: RIGHTEOUS, weight: 400, size: 82, maxWords: 3, lines: 1,
+    squeeze: 1, squeezeY: 1, tracking: 0, bottom: 430, maxW: 800,
+    modo: 'degrade',
+  },
+  minimal: {
+    family: INTER, weight: 500, size: 58, maxWords: 8, lines: 2,
+    squeeze: 1, squeezeY: 1, tracking: 0, bottom: 430, maxW: 820,
+  },
+  grosso: {
+    family: ARCHIVO, weight: 400, size: 88, maxWords: 3, lines: 1,
+    squeeze: 1, squeezeY: 1, tracking: -1, bottom: 430, maxW: 800,
+    sticker: true,
+  },
+  alerta: {
+    family: BANGERS, weight: 400, size: 76, maxWords: 4, lines: 1,
+    squeeze: 1, squeezeY: 1, tracking: 1, bottom: 430, maxW: 760,
+    modo: 'pilula',
   },
   marcador: {
     family: POPPINS, weight: 800, size: 74, maxWords: 3, lines: 1,
@@ -507,6 +542,7 @@ export const SimpleCaptions: React.FC<{variant: string}> = ({variant}) => {
       pilula: 1.2, etiqueta: 1.25, fitadegrade: 1.2, marcador: 1.16,
       fitadupla: 1.2, etiquetacanto: 1.25,
       contorno: 1.16, sombra3d: 1.16, beast: 1.12, sublinhado: 1.3,
+      duplo: 1.16, sombradura: 1.16,
     };
     const tipo = {
       fontFamily: V.family,
@@ -564,6 +600,34 @@ export const SimpleCaptions: React.FC<{variant: string}> = ({variant}) => {
     }
 
     // ---- lote 1 das 50 rodadas (05/09) ------------------------------------
+    if (V.modo === 'duplo') {
+      // Contorno preto grosso por fora e um fino na cor da marca por dentro.
+      // A ordem importa: a PRIMEIRA sombra da lista fica por cima.
+      const R1 = Math.max(5, Math.round(V.size * 0.085));
+      const R2 = Math.max(3, Math.round(V.size * 0.050));
+      const g = corDaSuperficie('#ff6a00');
+      return (
+        <AbsoluteFill style={fora}>
+          <div style={{...tipo, color: '#ffffff',
+                       textShadow: [...contornoCss(R2, g), ...contornoCss(R1, '#0b0d10'),
+                                    '0 10px 24px rgba(0,0,0,0.5)'].join(', ')}}>
+            {lines.map((ln, i) => <div key={i}>{txt(ln)}</div>)}
+          </div>
+        </AbsoluteFill>
+      );
+    }
+    if (V.modo === 'sombradura') {
+      // Sombra DURA (sem borrao) deslocada — o "hard shadow" de cartaz.
+      const d = Math.max(3, Math.round(V.size * 0.055));
+      return (
+        <AbsoluteFill style={fora}>
+          <div style={{...tipo, color: '#ffffff',
+                       textShadow: `${d}px ${d}px 0 #0b0d10, 0 6px 16px rgba(0,0,0,0.35)`}}>
+            {lines.map((ln, i) => <div key={i}>{txt(ln)}</div>)}
+          </div>
+        </AbsoluteFill>
+      );
+    }
     if (V.modo === 'contorno') {
       // Letra branca, contorno GROSSO na cor da enfase: o outline colorido.
       const R = Math.max(3, Math.round(V.size * 0.055));

@@ -3115,11 +3115,18 @@ class Renderizador:
         "quadrinhos": ("Bangers-Regular.ttf", None, 86, 3, 1, 1.0, 1.0, 1, 430, 820, "sticker"),
         "divertida":  ("LuckiestGuy-Regular.ttf", None, 80, 3, 1, 1.0, 1.0, 0, 430, 800, "degrade"),
         "condensada": ("Anton-Regular.ttf", None, 100, 3, 1, 1.0, 1.0, 1, 430, 760, "bloco"),
+        # --- lote 2 das 50 rodadas (05/09) ---------------------------------
+        "duplo":      ("Poppins-ExtraBold.ttf", None, 74, 3, 1, 1.0, 1.0, -1, 430, 800, "duplo"),
+        "sombradura": ("Poppins-ExtraBold.ttf", None, 76, 3, 1, 1.0, 1.0, -1, 430, 800, "sombradura"),
+        "retro":      ("Righteous-Regular.ttf", None, 82, 3, 1, 1.0, 1.0, 0, 430, 800, "degrade"),
+        "minimal":    ("Inter[opsz,wght].ttf", "Medium", 58, 8, 2, 1.0, 1.0, 0, 430, 820, ""),
+        "grosso":     ("ArchivoBlack-Regular.ttf", None, 88, 3, 1, 1.0, 1.0, -1, 430, 800, "sticker"),
+        "alerta":     ("Bangers-Regular.ttf", None, 76, 4, 1, 1.0, 1.0, 1, 430, 760, "pilula"),
     }
     # Modos que desenham em CAIXA ALTA. Isso muda a MEDIDA das linhas, entao
     # os tres motores tem de concordar sobre quem esta nesta lista.
     SIMPLE_MAIUSCULA = ("sticker", "metal", "moldura", "eco", "degrade",
-                        "bandeira", "fitadegrade", "fitadupla", "beast")
+                        "bandeira", "fitadegrade", "fitadupla", "beast", "retro")
     # Modos com um painel em volta do cue INTEIRO (e nao por linha, como o
     # bloco): a caixa e uma so para as duas linhas. O `vidro` saiu daqui —
     # ele virou uma LETRA de vidro, nao uma caixa atras da letra.
@@ -3128,7 +3135,7 @@ class Renderizador:
     # Estilos em que a cor pinta uma SUPERFICIE, e por isso sai da ENFASE
     SIMPLE_SUPERFICIE = ("neon", "degrade", "bandeira", "pilula", "etiqueta",
                          "fitadegrade", "fitadupla", "etiquetacanto",
-                         "contorno", "sombra3d", "sublinhado")
+                         "contorno", "sombra3d", "sublinhado", "duplo")
     # Peso que cada variante estatica tem no template (`capWeight(base.weight)`
     # em SimpleCaptions.tsx:218). Aqui ele fica implicito no ARQUIVO —
     # `Poppins-SemiBold.ttf` E o 600 — entao, quando a fonte da marca
@@ -3141,7 +3148,9 @@ class Renderizador:
                    "pilula": 800, "etiqueta": 600, "fitadegrade": 800,
                    "marcador": 800, "fitadupla": 800, "etiquetacanto": 600,
                    "contorno": 800, "sombra3d": 800, "beast": 900, "sublinhado": 800,
-                   "gigante": 400, "quadrinhos": 400, "divertida": 400, "condensada": 400}
+                   "gigante": 400, "quadrinhos": 400, "divertida": 400, "condensada": 400,
+                   "duplo": 800, "sombradura": 800, "retro": 400, "minimal": 500,
+                   "grosso": 400, "alerta": 400}
     # Os MESMOS padroes do SimpleCaptions.tsx (NEON_PADRAO etc.)
     NEON_PADRAO = "#4de1ff"
     DEGRADE_PADRAO = "#ff6a00"
@@ -3654,7 +3663,8 @@ class Renderizador:
               "maquina": 1.30, "pilula": 1.20, "etiqueta": 1.25,
               "fitadegrade": 1.20, "marcador": 1.16,
               "fitadupla": 1.20, "etiquetacanto": 1.25,
-              "contorno": 1.16, "sombra3d": 1.16, "beast": 1.12, "sublinhado": 1.30}.get(modo, 1.18)
+              "contorno": 1.16, "sombra3d": 1.16, "beast": 1.12, "sublinhado": 1.30,
+              "duplo": 1.16, "sombradura": 1.16}.get(modo, 1.18)
         for ci, cue in enumerate(cues):
             ini_f = int(round(cue[0]["startMs"] / 1000 * self.fps))
             nxt = cues[ci + 1] if ci + 1 < len(cues) else None
@@ -3761,7 +3771,8 @@ class Renderizador:
                                  dtype=np.float32)
                 pad_m[folga:folga + h_m, folga:folga + w_m] = m
                 if modo in ("metal", "traco", "eco", "vidro", "neon", "degrade",
-                            "contorno", "sombra3d", "beast", "sublinhado"):
+                            "contorno", "sombra3d", "beast", "sublinhado",
+                            "duplo", "sombradura"):
                     rgb, alpha, sombra = self._tinta_dos_novos(
                         modo, pad_m, folga, h_m, tam, cor_do_modo, cor_emj)
                     leg.palavras.append(Palavra(
@@ -3932,6 +3943,37 @@ class Renderizador:
             rgb = rgb * pad_m[..., None] + cor_b * (1.0 - pad_m[..., None])
             self._pintar_emoji(rgb, cor_emj, folga)
             return rgb, alpha, self._sombra_de(pad_m, [(0, 10, 24, 0.5)], k=0.5)
+
+        if modo == "duplo":
+            # Dois contornos: um preto GROSSO por fora (le sobre qualquer
+            # imagem) e um fino na cor da marca por dentro dele.
+            r_fora = max(5, round(tam * 0.085))
+            r_meio = max(3, round(tam * 0.050))
+            fora = self._contorno(pad_m, r_fora)
+            meio = self._contorno(pad_m, r_meio)
+            cor_t = self._cor("#ffffff")
+            cor_m = self._cor(accent or "#ff6a00")
+            cor_b = self._cor("#0b0d10")
+            alpha = np.maximum(fora, pad_m)
+            rgb = np.broadcast_to(cor_b, (*pad_m.shape, 3)).copy()
+            rgb = rgb * (1 - meio[..., None]) + cor_m * meio[..., None]
+            rgb = rgb * (1 - pad_m[..., None]) + cor_t * pad_m[..., None]
+            self._pintar_emoji(rgb, cor_emj, folga)
+            return rgb, alpha, self._sombra_de(pad_m, [(0, 10, 24, 0.5)], k=0.5)
+
+        if modo == "sombradura":
+            # Sombra DURA (sem borrao), deslocada, preta — o "hard shadow"
+            # de cartaz. Diferente do `sombra3d`, que e uma escada solida.
+            d = max(3, round(tam * 0.055))
+            desl = np.zeros_like(pad_m)
+            desl[d:, d:] = pad_m[:-d, :-d]
+            cor_t = self._cor("#ffffff")
+            cor_s = self._cor("#0b0d10")
+            alpha = np.maximum(desl, pad_m)
+            rgb = np.broadcast_to(cor_s, (*pad_m.shape, 3)).copy()
+            rgb = rgb * (1 - pad_m[..., None]) + cor_t * pad_m[..., None]
+            self._pintar_emoji(rgb, cor_emj, folga)
+            return rgb, alpha, self._sombra_de(pad_m, [(0, 6, 16, 0.35)], k=0.5)
 
         if modo == "contorno":
             # Letra branca, contorno GROSSO na cor da enfase (aqui `accent`

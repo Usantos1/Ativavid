@@ -346,6 +346,12 @@ const STYLE_CATALOG = {
     {id: 'quadrinhos', name: 'Quadrinhos (Bangers)', stat: 'quadrinhos'},
     {id: 'divertida', name: 'Divertida (Luckiest Guy)', stat: 'divertida'},
     {id: 'condensada', name: 'Condensada (Anton)', stat: 'condensada'},
+    {id: 'duplo', name: 'Contorno duplo', stat: 'duplo'},
+    {id: 'sombradura', name: 'Sombra dura', stat: 'sombradura'},
+    {id: 'retro', name: 'Retrô (Righteous)', stat: 'retro'},
+    {id: 'minimal', name: 'Minimalista', stat: 'minimal'},
+    {id: 'grosso', name: 'Grossa (Archivo)', stat: 'grosso'},
+    {id: 'alerta', name: 'Alerta (Bangers)', stat: 'alerta'},
     {id: 'marcador', name: 'Marca-texto', stat: 'marcador'},
     // opts out of burned captions (captions.enabled:false) — same reasoning.
     {id: 'nenhuma', name: 'Nenhuma', none: true},
@@ -960,6 +966,12 @@ const STATIC_VARIANTS = {
   quadrinhos: {family: "'Bangers',cursive", weight: 400, size: 86, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: 1, maxW: 820, sticker: true},
   divertida: {family: "'Luckiest Guy',cursive", weight: 400, size: 80, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: 0, maxW: 800, modo: 'degrade'},
   condensada: {family: "'Anton',sans-serif", weight: 400, size: 100, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: 1, maxW: 760, block: true},
+  duplo: {family: "'Poppins',sans-serif", weight: 800, size: 74, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: -1, maxW: 800, modo: 'duplo'},
+  sombradura: {family: "'Poppins',sans-serif", weight: 800, size: 76, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: -1, maxW: 800, modo: 'sombradura'},
+  retro: {family: "'Righteous',cursive", weight: 400, size: 82, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: 0, maxW: 800, modo: 'degrade'},
+  minimal: {family: "'Inter',sans-serif", weight: 500, size: 58, maxWords: 8, lines: 2, sx: 1, sy: 1, tracking: 0, maxW: 820},
+  grosso: {family: "'Archivo Black',sans-serif", weight: 400, size: 88, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: -1, maxW: 800, sticker: true},
+  alerta: {family: "'Bangers',cursive", weight: 400, size: 76, maxWords: 4, lines: 1, sx: 1, sy: 1, tracking: 1, maxW: 760, modo: 'pilula'},
   marcador: {family: "'Poppins',sans-serif", weight: 800, size: 74, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: -1, maxW: 800, modo: 'marcador'},
 };
 // os mesmos padroes do SimpleCaptions.tsx / render_proprio
@@ -982,12 +994,13 @@ function escurecer(hex, f) {
 
 // Quem desenha em CAIXA ALTA — muda a MEDIDA das linhas, entao esta lista
 // tem de ser a mesma nos tres motores (SimpleCaptions.tsx e render_proprio).
-const CAP_MAIUSCULA = new Set(['metal', 'moldura', 'eco', 'degrade', 'bandeira', 'fitadegrade', 'fitadupla', 'beast']);
+const CAP_MAIUSCULA = new Set(['metal', 'moldura', 'eco', 'degrade', 'bandeira', 'fitadegrade', 'fitadupla', 'beast', 'retro']);
 const CAP_LH = {metal: 1.1, vidro: 1.16, traco: 1.16, moldura: 1.2, eco: 1.14,
                 neon: 1.16, degrade: 1.14, bandeira: 1.2, maquina: 1.3,
                 pilula: 1.2, etiqueta: 1.25, fitadegrade: 1.2, marcador: 1.16,
                 fitadupla: 1.2, etiquetacanto: 1.25,
-                contorno: 1.16, sombra3d: 1.16, beast: 1.12, sublinhado: 1.3};
+                contorno: 1.16, sombra3d: 1.16, beast: 1.12, sublinhado: 1.3,
+                duplo: 1.16, sombradura: 1.16};
 // Os MESMOS numeros do render_proprio (VIDRO_OPACO/VIDRO_FIO/METAL_OPACO).
 const VIDRO_OPACO = 0.32;
 const VIDRO_FIO = 0.92;
@@ -1112,7 +1125,7 @@ function buildStaticDemo(host, id) {
       const t = (ln) => (caixaAlta ? ln.join(' ').toUpperCase() : ln.join(' '));
       box.style.lineHeight = String(CAP_LH[V.modo]);
       // superficie (brilho, degrade, fita, capsula, barra) = cor da ENFASE
-      const CAP_SUP = ['neon', 'degrade', 'bandeira', 'pilula', 'etiqueta', 'fitadegrade', 'fitadupla', 'etiquetacanto', 'contorno', 'sombra3d', 'sublinhado'];
+      const CAP_SUP = ['neon', 'degrade', 'bandeira', 'pilula', 'etiqueta', 'fitadegrade', 'fitadupla', 'etiquetacanto', 'contorno', 'sombra3d', 'sublinhado', 'duplo'];
       const cor = (CAP_SUP.includes(V.modo)
         ? (S.style.emphasisAccent || S.style.captionAccent)
         : S.style.captionAccent) || '';
@@ -1251,6 +1264,23 @@ function buildStaticDemo(host, id) {
         // a demo mostra a linha inteira (a digitacao e do video)
         box.style.color = cor || '#f4f1e9';
         box.style.textShadow = `0 ${2 * s}px ${9 * s}px rgba(0,0,0,0.55)`;
+        for (const ln of lines) el('div', '', box).textContent = t(ln);
+        return box;
+      }
+      if (V.modo === 'duplo') {
+        const R1 = Math.max(3, Math.round(V.size * 0.085 * s));
+        const R2 = Math.max(2, Math.round(V.size * 0.050 * s));
+        box.style.color = '#ffffff';
+        box.style.textShadow = [...contornoCss(R2, cor || '#ff6a00'),
+                                ...contornoCss(R1, '#0b0d10'),
+                                '0 5px 12px rgba(0,0,0,0.5)'].join(', ');
+        for (const ln of lines) el('div', '', box).textContent = t(ln);
+        return box;
+      }
+      if (V.modo === 'sombradura') {
+        const d = Math.max(2, Math.round(V.size * 0.055 * s));
+        box.style.color = '#ffffff';
+        box.style.textShadow = `${d}px ${d}px 0 #0b0d10, 0 4px 10px rgba(0,0,0,0.35)`;
         for (const ln of lines) el('div', '', box).textContent = t(ln);
         return box;
       }
@@ -3987,7 +4017,7 @@ const CAP_BASE_STYLES = ['karaoke', 'simples', 'serifada', 'classica', 'bloco', 
   'metal', 'vidro', 'traco', 'moldura', 'eco', 'maquina'];
 const CAP_EMPH_STYLES = ['stacked', 'scatter', 'impacto', 'marcador',
   'neon', 'degrade', 'bandeira', 'pilula', 'etiqueta', 'fitadegrade', 'fitadupla', 'etiquetacanto',
-  'contorno', 'sombra3d', 'sublinhado', 'divertida'];
+  'contorno', 'sombra3d', 'sublinhado', 'divertida', 'duplo', 'retro', 'alerta'];
 const CAP_CIRCLE_STYLES = ['stacked'];
 const legendaAccentUsed = () => capAccentUsed() && CAP_BASE_STYLES.includes(S.style.captions);
 const emphasisAccentUsed = () => capAccentUsed() && CAP_EMPH_STYLES.includes(S.style.captions);
