@@ -1,5 +1,13 @@
 # Changelog
 
+## 5.0.75
+
+- **Alguns segundos a menos por vídeo: a cópia leve do corte é feita em
+  paralelo.** O editor usa uma cópia em 720p do corte para rolar a linha do
+  tempo sem engasgar. Ela era feita antes das legendas, com tudo parado
+  esperando (8,6 s num corte de 30 s). Agora é feita ao mesmo tempo que o
+  render, e o vídeo só espera por ela se ela ainda não tiver acabado.
+
 ## 5.0.74
 
 - **Corte mais rápido em vídeo HDR: a preparação da fonte começa durante

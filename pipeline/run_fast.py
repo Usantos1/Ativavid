@@ -4693,6 +4693,29 @@ def run(
     if zoom_baked:
         _RENDER_META["zoomEngine"] = "ffmpeg"
     _timing_mark("CUT", _t_cut)
+
+    # 5.0.75: o proxy do corte (720p, para o editor rolar leve) so serve
+    # DEPOIS do job, mas rodava sequencial dentro de SEGMENTS: 8,6 s num
+    # corte real de 30 s (MEDIDO), a maior parte da fase (11,6 s de
+    # mediana nos ultimos 40 jobs). Vai para uma thread agora — o corte ja
+    # esta pronto e normalizado — e o job so espera por ele no fim
+    # (`_fechar_proxy`, PROXY_WAIT), depois do render, com quem ele se
+    # sobrepoe. Comeca so AQUI, depois do try/except do corte: o fallback
+    # do zoom refaz o cut.mp4, e um proxy do primeiro seria do arquivo errado.
+    _proxy_box: dict = {"thread": None}
+
+    def _fechar_proxy() -> None:
+        th = _proxy_box.get("thread")
+        if th is None:
+            return
+        t0 = time.perf_counter()
+        th.join()
+        _proxy_box["thread"] = None
+        _timing_mark("PROXY_WAIT", t0)
+
+    _proxy_box["thread"] = _threading.Thread(
+        target=_maybe_proxy, args=(cut_path, edit_dir), daemon=True, name="proxy")
+    _proxy_box["thread"].start()
     verify_args = [str(edl_path), str(cut_path), "--json"]
     if is_longform:
         verify_args.extend(["--min-silence", "1.2"])
@@ -4727,6 +4750,7 @@ def run(
         scaffold_thread.join(timeout=120)
         if music_thread is not None:
             music_thread.join(timeout=240)
+        _fechar_proxy()   # o editor da Fase 1 abre o corte pelo proxy
         status["status"] = "cut_ready"
         return status
 
@@ -5147,7 +5171,8 @@ def run(
     (public / "edit-data.json").write_text(
         json.dumps(edit_data, indent=2, ensure_ascii=False), encoding="utf-8"
     )
-    _maybe_proxy(cut_path, edit_dir)
+    # o proxy do corte ja esta rodando numa thread desde o fim do corte
+    # (5.0.75); `_fechar_proxy()` espera por ele antes do timing.json.
     if (not is_longform) and elems.get("tracking"):
         _helper("face_track.py", str(cut_path), "-o", str(public / "track.json"), check=False)
         if not (public / "track.json").exists():
@@ -5566,6 +5591,7 @@ def run(
     # Longform e os caminhos que nao passam pelo remap: o transcript tem de
     # estar final quando o job acaba, porque o editor abre ele em seguida.
     _fechar_revisoes()
+    _fechar_proxy()
     other = time.perf_counter() - _t_job - sum(_TIMING.values())
     if other > 0.05:
         _TIMING["OTHER"] = round(other, 3)
