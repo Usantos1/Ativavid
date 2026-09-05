@@ -97,10 +97,11 @@ def test_mover_tira_o_arquivo_do_temporario(tmp_path):
 
 
 def test_caixa_vazia_e_recusada_com_mensagem_de_gente(tmp_path):
+    """5.0.35: o papel do meio chama-se "conteúdo" na tela ("corpo não pega bem", 04/09)."""
     raiz = tmp_path / "Projetos"
     raiz.mkdir()
     arquivos = _fontes(tmp_path, 2, 0, 2)
-    with pytest.raises(MultiplicadorInvalido, match="corpo"):
+    with pytest.raises(MultiplicadorInvalido, match="conteúdo"):
         preparar_pasta_mae(raiz, arquivos)
 
 

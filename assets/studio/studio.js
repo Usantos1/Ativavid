@@ -2680,7 +2680,7 @@ function apiNativa() {
   return (api && typeof api.escolher_pasta === "function") ? api : null;
 }
 
-/** Multiplicador de criativos: variações de gancho, corpo e CTA viram TODAS
+/** Multiplicador de criativos: variações de gancho, conteúdo e CTA viram TODAS
  *  as combinações na fila (3×3×3 = 27). Dentro do app os arquivos entram por
  *  CAMINHO (escolher_videos, sem upload); arrastar entrega File e sobe por
  *  multipart — o servidor aceita os dois misturados no mesmo lote. */
@@ -2731,7 +2731,7 @@ function wireMultiplicador() {
         conta.textContent = `${itens.gancho.length} × ${itens.corpo.length} × ${itens.cta.length} = ${total} combinações — passou do teto de ${MULTI_TETO}, tire alguma variação.`;
       } else {
         const min = Math.max(3, Math.round(total * 2.5));
-        conta.textContent = `${itens.gancho.length} gancho(s) × ${itens.corpo.length} corpo(s) × ${itens.cta.length} CTA(s) = ${total} vídeo${total > 1 ? "s" : ""} na fila (~${min} min de processamento).`;
+        conta.textContent = `${itens.gancho.length} gancho(s) × ${itens.corpo.length} conteúdo(s) × ${itens.cta.length} CTA(s) = ${total} vídeo${total > 1 ? "s" : ""} na fila (~${min} min de processamento).`;
       }
     }
     const go = $("#btnMultiGo");
@@ -2823,7 +2823,7 @@ function wireMultiplicador() {
     try {
       const r = await api("/api/multiplicador", { method: "POST", body: fd });
       dlg.close();
-      toast(`✓ ${r.total} combinações na fila — gancho → corpo → CTA`, 5000);
+      toast(`✓ ${r.total} combinações na fila — gancho → conteúdo → CTA`, 5000);
       setView("fila");
       await refreshJobs();
     } catch (err) {

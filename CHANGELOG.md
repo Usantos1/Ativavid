@@ -1,5 +1,12 @@
 # Changelog
 
+## 5.0.35
+
+- **"Corpo" virou "Conteúdo".** No Multiplicador de criativos a parte do
+  meio passa a se chamar Conteúdo: Gancho → Conteúdo → CTA. "Gravar o
+  corpo" não soava bem. Os códigos dos vídeos (G4 · C3 · CTA1) e os
+  arquivos já gravados continuam iguais — Conteúdo também começa com C.
+
 ## 5.0.34
 
 - **O Diagnóstico avisa quando a memória livre é pouca.** Uma máquina com

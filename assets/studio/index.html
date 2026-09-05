@@ -1286,7 +1286,7 @@
 
   <dialog id="dlgMulti" class="dlg dlg-import">
     <h3>Multiplicador de criativos</h3>
-    <p class="hint">Grave variações de cada parte. O ATIVAVID monta <strong>todas as combinações</strong> na ordem gancho → corpo → CTA e coloca cada uma na fila como um vídeo próprio (ex.: 3 × 3 × 3 = 27 criativos para testar no tráfego pago).</p>
+    <p class="hint">Grave variações de cada parte. O ATIVAVID monta <strong>todas as combinações</strong> na ordem gancho → conteúdo → CTA e coloca cada uma na fila como um vídeo próprio (ex.: 3 × 3 × 3 = 27 criativos para testar no tráfego pago).</p>
     <div class="multi-grid">
       <div class="multi-box" data-papel="gancho">
         <h4>Ganchos</h4>
@@ -1294,8 +1294,11 @@
         <div class="multi-lista"></div>
         <button type="button" class="ghost-btn multi-add">Escolher vídeos</button>
       </div>
+      <!-- O id continua `corpo` (arquivos "c1…", codigo "G4 · C3 · CTA1", API);
+           so o que se LE mudou. Ele: "corpo nao pega bem falar que vou gravar
+           o corpo" (04/09). "Conteudo" mantem o C dos codigos. -->
       <div class="multi-box" data-papel="corpo">
-        <h4>Corpos</h4>
+        <h4>Conteúdos</h4>
         <p class="muted">o miolo: a oferta, a demonstração</p>
         <div class="multi-lista"></div>
         <button type="button" class="ghost-btn multi-add">Escolher vídeos</button>

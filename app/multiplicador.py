@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""Multiplicador de criativos: ganchos x corpos x CTAs, todas as combinações.
+"""Multiplicador de criativos: ganchos x conteúdos x CTAs, todas as combinações.
 
-O usuário grava variações de cada parte (ex.: 3 ganchos, 3 corpos, 3 CTAs) e
+O usuário grava variações de cada parte (ex.: 3 ganchos, 3 conteúdos, 3 CTAs) e
 cada combinação vira UM vídeo na fila — 3x3x3 = 27 — todos com os mesmos
 arquivos. É o fluxo de teste de criativo para tráfego pago: sobe tudo no
 gerenciador de anúncios e deixa o algoritmo achar o vencedor.
@@ -25,6 +25,10 @@ from datetime import datetime
 from itertools import product
 from pathlib import Path
 
+# O papel do meio chama-se "conteúdo" na TELA desde 04/09 ("corpo não pega
+# bem falar que vou gravar o corpo"). O id `corpo`, o prefixo `c` e o rótulo
+# `C` ficam: são o nome dos arquivos gravados e o código dos vídeos
+# (G4 · C3 · CTA1) — e "Conteúdo" começa com C, então o código continua lendo.
 PAPEIS = ("gancho", "corpo", "cta")
 _PREFIXO = {"gancho": "g", "corpo": "c", "cta": "cta"}
 _ROTULO = {"gancho": "G", "corpo": "C", "cta": "CTA"}
@@ -46,7 +50,7 @@ def contar_combos(por_papel: dict) -> int:
 
 
 def validar(por_papel: dict) -> None:
-    nomes = {"gancho": "gancho", "corpo": "corpo", "cta": "CTA"}
+    nomes = {"gancho": "gancho", "corpo": "conteúdo", "cta": "CTA"}
     for papel in PAPEIS:
         if not por_papel.get(papel):
             raise MultiplicadorInvalido(

@@ -3984,7 +3984,7 @@ class StudioHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/multiplicador":
-            # Multiplicador de criativos: N ganchos x N corpos x N CTAs viram
+            # Multiplicador de criativos: N ganchos x N conteudos x N CTAs viram
             # um job multi-take por combinação (ver app/multiplicador.py).
             from app import license as lic
             from app import multiplicador as mult
