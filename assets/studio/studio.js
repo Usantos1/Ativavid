@@ -983,6 +983,7 @@ function cardMenuHtml(j, opts) {
         <button type="button" role="menuitem" data-act="folder" data-id="${safeId}">Abrir pasta</button>
         ${(j.temLegenda || j.legenda) ? `<button type="button" role="menuitem" data-act="copylegenda" data-id="${safeId}">Copiar legenda do post</button>` : ""}
         <button type="button" role="menuitem" data-act="copyname" data-id="${safeId}">Copiar nome</button>
+        ${canFinal ? `<button type="button" role="menuitem" data-act="srt" data-id="${safeId}">Salvar legenda .srt</button>` : ""}
         <a role="menuitem" href="${escapeHtml(links.final)}" ${canFinal ? "" : "class=\"disabled\""}>Ver vídeo final</a>
         <a role="menuitem" href="${escapeHtml(links.editor)}">Editar</a>
         <a role="menuitem" href="${escapeHtml(links.estilo)}" data-id="${safeId}">Alterar estilo</a>
@@ -3604,6 +3605,20 @@ function wireList() {
       return;
     }
     if (act === "folder") {
+        await api("/api/jobs/open-folder", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id }),
+        });
+      } else if (act === "srt") {
+        // 5.0.43: legenda como arquivo, na pasta de entrega — YouTube e
+        // LinkedIn aceitam .srt; leitor de tela tambem.
+        const r = await api("/api/jobs/srt", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id }),
+        });
+        toast(`Legenda .srt salva (${r.blocos || 0} blocos) — abrindo a pasta`, 5000);
         await api("/api/jobs/open-folder", {
           method: "POST",
           headers: { "Content-Type": "application/json" },

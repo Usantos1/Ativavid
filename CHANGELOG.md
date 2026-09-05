@@ -1,5 +1,19 @@
 # Changelog
 
+## 5.0.43
+
+- **"Salvar legenda .srt" no menu do vídeo.** O vídeo sai com a legenda
+  queimada; YouTube, LinkedIn e leitores de tela querem a legenda como
+  arquivo. O .srt nasce exatamente do que foi desenhado no vídeo e vai
+  para a pasta de entrega, que abre em seguida.
+- **"Aplicar alterações" deixou de refazer o vídeo inteiro por uma
+  troca de 30 ms.** Depois de corrigir uma palavra no editor, duas
+  palavras vizinhas podiam sair do remapeamento com os inícios trocados
+  por dezenas de milissegundos; o app achava que a ordem das palavras
+  tinha mudado, recusava a correção rápida e refazia o vídeo do zero
+  (2,5 min no lugar de 1). Reproduzido com o projeto de uma cliente.
+  Agora a ordem original vence quando a diferença é pequena.
+
 ## 5.0.42
 
 - **A lista de vídeos ficou 25% mais leve.** Cada atualização da Fila e

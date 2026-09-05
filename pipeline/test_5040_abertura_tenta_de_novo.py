@@ -36,6 +36,12 @@ def _prepara(monkeypatch, tmp_path, respostas):
     """`respostas`: lista de codigos HTTP que o RPC devolve, em ordem."""
     monkeypatch.setattr(reg, "LOG_PATH", tmp_path / "aberturas.jsonl")
     monkeypatch.setattr(lic, "configured", lambda: True)
+    # `dados_da_maquina` consulta a licenca (p_action=status) quando o cache
+    # esta velho — e essa chamada entrava na contagem do RPC falso (flaky:
+    # passou as 22h, falhou as 23h). A maquina aqui e de mentira.
+    monkeypatch.setattr(reg, "dados_da_maquina", lambda: {
+        "device": "D", "versao": "5.0.40", "maquina": "M", "usuario": "u",
+        "so": "win", "licenca": "trial"})
     chamadas: list[dict] = []
     esperas: list[int] = []
 

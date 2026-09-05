@@ -332,11 +332,60 @@ def remap_captions_between_timelines(
         if not frags:
             continue
         for o0, o1, s0, s1 in frags:
-            result.append(_stamp(cap, o0, o1, unit, provenance={
+            item = _stamp(cap, o0, o1, unit, provenance={
                 "source": prov["source"], "sourceStart": s0, "sourceEnd": s1,
-            }))
+            })
+            item[_ORDEM] = len(result)
+            result.append(item)
     result.sort(key=lambda c: _item_span(c)[0])
+    _respeitar_ordem_original(result, unit)
+    for item in result:
+        item.pop(_ORDEM, None)
     return result
+
+
+_ORDEM = "_ordemOriginal"
+TROCA_PEQUENA_S = 0.30
+
+
+def _respeitar_ordem_original(result: list, unit: str) -> None:
+    """Troca pequena de posição depois do remap volta à ordem original.
+
+    Caso real (Elizangela, 04/09): uma correção de palavra deixou três
+    palavras com tempo sintético de +1 ms cada ("A" 19440, "parte" 19441,
+    "da" 19442). Remapeadas por provenance, saíram "da" 19209 e "parte"
+    19240 — o `sort` por início trocou as duas, o validador recusou
+    ("ordem das palavras invertida") e o app refez o vídeo inteiro (2,5 min
+    no lugar de 1). A ordem das palavras é o que o vídeo mostra; uma
+    diferença de dezenas de ms no início, ninguém vê. Então: quando duas
+    vizinhas estão fora da ordem original e a diferença de início é
+    pequena, as PALAVRAS trocam de lugar e os TEMPOS ficam onde estão.
+    Troca grande (> TROCA_PEQUENA_S) é reordenação de verdade: fica, e o
+    validador decide.
+    """
+    ks, ke, kt = ("startMs", "endMs", "timestampMs") if unit == "ms" else ("start", "end", None)
+    tol = TROCA_PEQUENA_S * (1000 if unit == "ms" else 1)
+    trocou = True
+    voltas = 0
+    while trocou and voltas < len(result):
+        trocou = False
+        voltas += 1
+        for i in range(len(result) - 1):
+            a, b = result[i], result[i + 1]
+            if a.get(_ORDEM) is None or b.get(_ORDEM) is None:
+                continue
+            if a[_ORDEM] <= b[_ORDEM]:
+                continue
+            if abs(float(b.get(ks) or 0) - float(a.get(ks) or 0)) > tol:
+                continue
+            tempos_a = {k: a.get(k) for k in (ks, ke, kt) if k}
+            tempos_b = {k: b.get(k) for k in (ks, ke, kt) if k}
+            result[i], result[i + 1] = b, a
+            for k, v in tempos_a.items():
+                b[k] = v
+            for k, v in tempos_b.items():
+                a[k] = v
+            trocou = True
 
 
 def retime_captions_for_edl(

@@ -535,6 +535,7 @@ class DesktopHandler(ps.Handler):
             "/api/apply-ack",
             "/api/jobs",
             "/api/jobs/open-folder",
+            "/api/jobs/srt",
             "/api/jobs/open-final",
             "/api/jobs/rename",
             "/api/jobs/retry",

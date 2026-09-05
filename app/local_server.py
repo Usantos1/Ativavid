@@ -3594,6 +3594,20 @@ class StudioHandler(BaseHTTPRequestHandler):
             self._json({"ok": True, "path": str(folder)})
             return
 
+        if path == "/api/jobs/srt":
+            # 5.0.43: legenda como ARQUIVO (.srt) para YouTube/LinkedIn e
+            # acessibilidade — o video sai com ela queimada, e so o longform
+            # gerava um .srt.
+            body = self._read_json()
+            job = self.store.get(body.get("id", ""))
+            if not job:
+                self._json({"error": "job not found"}, 404)
+                return
+            from app.legenda_srt import salvar_srt
+
+            r = salvar_srt(Path(job.get("editDir") or ""))
+            self._json(r, 200 if r.get("ok") else 404)
+            return
         if path == "/api/jobs/open-folder":
             body = self._read_json()
             job = self.store.get(body.get("id", ""))
