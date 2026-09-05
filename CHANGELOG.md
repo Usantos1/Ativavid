@@ -1,5 +1,14 @@
 # Changelog
 
+## 5.0.34
+
+- **O Diagnóstico avisa quando a memória livre é pouca.** Uma máquina com
+  7,6 GB de RAM e 0,9 livre passava por "tudo certo": a linha Sistema
+  mostrava o número sem acusar nada. O render abre um navegador inteiro
+  para desenhar as legendas e precisa de uns 2,5 GB livres; com menos, o
+  vídeo pode falhar no meio ou sair pelo caminho lento. Agora aparece um
+  aviso com o que fazer.
+
 ## 5.0.33
 
 - **Três estilos de manchete novos:** **Riscado** (um risco da cor da

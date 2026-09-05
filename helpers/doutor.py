@@ -281,6 +281,22 @@ def checar_sistema() -> None:
         diz(OK, f"Sistema {m.get('os')} {m.get('osRelease')}",
             f"CPU {m.get('cores')} núcleos · RAM {m.get('ramGb')} GB "
             f"({m.get('ramFreeGb')} livres) · Disco projetos {m.get('diskFreeGb')} GB")
+        # Memoria LIVRE, nao total. A maquina de uma cliente (04/09) tinha
+        # 7,6 GB com 0,9 livre: o render abre um navegador inteiro para
+        # desenhar, e com menos de ~2,5 GB ele morre no meio sem dizer por
+        # que — o job cai para o caminho lento ou falha. O numero total
+        # aparecia na linha de cima e nao acusava nada.
+        try:
+            livre = float(m.get("ramFreeGb") or 0)
+        except (TypeError, ValueError):
+            livre = 0.0
+        if 0 < livre < 2.5:
+            diz(AVISO, f"Pouca memória livre: {livre:.1f} GB",
+                "O render abre um navegador inteiro para desenhar as "
+                "legendas e precisa de uns 2,5 GB livres; com menos, o "
+                "vídeo pode falhar no meio ou sair pelo caminho lento.",
+                "Feche navegadores e outros programas antes de editar. "
+                "Se for sempre assim, a máquina precisa de mais memória.")
         accel = m.get("accel") or {}
         enc = accel.get("preferredEncoder") or "libx264"
         if enc != "libx264":
