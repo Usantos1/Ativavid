@@ -644,6 +644,38 @@ def _auto_extract_jobs() -> int:
     return max(1, min(4, (os.cpu_count() or 4) // 3))
 
 
+# -------- Investigacao fechada: cor cara em tabela 3D (05/09) ---------------
+#
+# MEDIDO no take de 21,13 s de um projeto real (1080p60 HEVC, melhor de 2):
+#
+#   decode sozinho ............................. 6,18 s
+#   + fps/scale + encode NVENC ................. 7,07 s
+#   + eq ....................................... 7,22 s   (+0,15)
+#   + curves ................................... 9,40 s   (+2,33)
+#   + colorbalance ............................ 19,15 s  (+12,08)
+#   a cadeia inteira do look .................. 21,17 s
+#
+# O `colorbalance` do ffmpeg nao tem caminho vetorizado: sozinho custa mais
+# que o decode e o encode somados. Ele e ~56% da extracao; a extracao e 85%
+# do corte (medido em `TIMING_CORTE`); o corte e 29% do job.
+#
+# TENTADO: trocar o trecho so-RGB da cadeia (colorbalance/curves/
+# colorlevels/colorchannelmixer, que o ffmpeg ja roda em RGB) por uma
+# tabela 3D de 64 niveis gerada da PROPRIA cadeia (`haldclutsrc` -> .cube ->
+# `lut3d=interp=tetrahedral`). Funcionou e ficou 1,20x mais rapido
+# (20,6 -> 17,1 s), mas a cor ANDA: comparando quadro a quadro nos seis
+# presets com colorbalance, o vies e sistematico e sempre para o escuro —
+# apple_log -0,96/-1,86/-2,35, vintage -2,02/-2,50/-2,01, warm_cinematic
+# -1,53/-2,00/-1,39 (RGB, de 255). Tabela de 16 bits nao corrige (-1,68/
+# -1,57/-1,57): o desvio vem da propria amostragem da grade — uma
+# `haldclut` IDENTIDADE ja devolve erro medio 0,52.
+#
+# 1,20x numa etapa que e 29% do job (~5% no total) nao paga escurecer o
+# video de todo mundo. Nao refazer sem uma forma de gerar a tabela sem esse
+# vies (LUT calculada em float pela formula do colorbalance, nao amostrada
+# pelo ffmpeg).
+
+
 # -------- Per-segment extraction (Rule 2 + Rule 3) --------------------------
 
 
@@ -1791,6 +1823,8 @@ def _mixar_audio(plan: list[dict], work: Path) -> Path:
 
 def assemble_jcut(plan: list[dict], out_path: Path, edit_dir: Path) -> None:
     """Concat the video track, sum the offset audio tracks, mux them together."""
+    import time as _t
+    _t0 = _t.perf_counter()
     work = edit_dir / "clips_graded"
     vlist = edit_dir / "_concat_jcut.txt"
     vlist.write_text("".join(f"file '{p['video_path'].resolve()}'\n" for p in plan), encoding="utf-8")
@@ -1810,6 +1844,7 @@ def assemble_jcut(plan: list[dict], out_path: Path, edit_dir: Path) -> None:
          "-t", f"{total:.6f}", "-movflags", "+faststart", str(out_path)], quiet=True)
     video_only.unlink(missing_ok=True)
     audio_only.unlink(missing_ok=True)
+    _marco_corte("montar", _t0)
 
 
 def extract_and_assemble_jcut(
@@ -1823,13 +1858,19 @@ def extract_and_assemble_jcut(
         "clips_draft" if draft else ("clips_preview" if preview else "clips_graded"))
     clips_dir.mkdir(parents=True, exist_ok=True)
 
+    import time as _t
+    _t_plano = _t.perf_counter()
     plan = plan_jcut(edl, edit_dir, cfg)
+    # Aqui moram as sondas de silêncio de cada emenda — uma chamada de
+    # ffmpeg por take antes de qualquer pixel ser tocado.
+    _marco_corte("planejar", _t_plano)
     if jobs <= 0:
         jobs = _auto_extract_jobs()
 
     # Fonte preparada (tonemap + grade uma vez só) — mesma ideia do caminho
     # sem J-cut. Montada aqui, antes do laço paralelo.
     prep_by_src: dict[str, Path | None] = {}
+    _t_prep = _t.perf_counter()
     if not (draft or preview or keep_resolution) and not is_auto:
         prep_by_src = prepare_sources_parallel(
             {r["source"] for r in edl["ranges"]},
@@ -1839,6 +1880,7 @@ def extract_and_assemble_jcut(
         _hits = [k for k, v in prep_by_src.items() if v]
         if _hits:
             print(f"  fonte preparada em uso: {', '.join(_hits)}", flush=True)
+    _marco_corte("preparar_fontes", _t_prep)
 
     # Render incremental: um re-render que só mudou parte do corte reaproveita
     # os segmentos idênticos da extração anterior (casados por CHAVE de
@@ -2025,11 +2067,17 @@ def extract_and_assemble_jcut(
               f"  {r.get('beat') or ''}{tail_note}{gain_note}{reuse_note}", flush=True)
         return p
 
-    if jobs == 1 or len(plan) == 1:
-        plan = [work(p) for p in plan]
-    else:
-        with ThreadPoolExecutor(max_workers=jobs) as ex:
-            plan = list(ex.map(work, plan))
+    _t_ext = _t.perf_counter()
+    try:
+        if jobs == 1 or len(plan) == 1:
+            plan = [work(p) for p in plan]
+        else:
+            with ThreadPoolExecutor(max_workers=jobs) as ex:
+                plan = list(ex.map(work, plan))
+    finally:
+        # o `finally` mede tambem o corte que QUEBRA — o caso que mais
+        # interessa entender
+        _marco_corte("extrair", _t_ext)
 
     # Sidecars de chave só depois da extração bem-sucedida: um crash no meio
     # nunca deixa chave apontando para arquivo incompleto.
@@ -2600,13 +2648,18 @@ def main() -> None:
     overlays = edl.get("overlays") or []
     voice_master = args.voice_master or bool(edl.get("voice_master"))
 
+    import time as _t_main
+    _t_comp = _t_main.perf_counter()
     if args.no_loudnorm and not voice_master:
         # Composite directly to final output
         build_final_composite(base_path, overlays, subs_path, out_path, edit_dir)
+        _marco_corte("compor", _t_comp)
     else:
         # Composite to a temp file, then voice master + loudnorm in ONE encode.
         tmp_composite = out_path.with_suffix(".prenorm.mp4")
         build_final_composite(base_path, overlays, subs_path, tmp_composite, edit_dir)
+        _marco_corte("compor", _t_comp)
+        _t_norm = _t_main.perf_counter()
         temps = [tmp_composite]
 
         if args.no_loudnorm:
@@ -2624,6 +2677,8 @@ def main() -> None:
                 tmp_composite, out_path, preview=args.draft,
                 pre_chain=VOICE_MASTER_CHAIN if voice_master else "")
 
+        # voz + loudnorm: mede o par de passadas que reescreve o cut inteiro
+        _marco_corte("normalizar", _t_norm)
         for t in temps:
             t.unlink(missing_ok=True)
 

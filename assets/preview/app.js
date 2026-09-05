@@ -4678,6 +4678,31 @@ function renderPainelDoTake(lane, r) {
     persistEdl();
     toast('Take duplicado — vale no próximo "Aplicar"', 2200);
   });
+  // 5.0.62: os mesmos ajustes em TODOS os takes de uma vez. Quem acerta o
+  // look num take quer o video inteiro naquele look — repetir take a take
+  // num corte de 20 e o tipo de trabalho que faz o cara voltar pro CapCut.
+  const todos = el('button', 'ent-btn', rqWrap);
+  todos.type = 'button';
+  todos.textContent = 'Aplicar a todos';
+  todos.title = 'Copia volume, cor, velocidade, congelar, enquadramento e '
+    + 'espelho deste take para todos os outros';
+  todos.addEventListener('click', () => {
+    const campos = camposDoTake(r);
+    const outros = S.draft.filter((x) => x !== r && !x.removed);
+    if (!outros.length) { toast('Só há este take', 1800); return; }
+    pushHistory();
+    for (const x of outros) {
+      for (const k of ['gain_db', 'grade', 'speed', 'freeze', 'reframe', 'flip']) {
+        delete x[k];
+      }
+      Object.assign(x, JSON.parse(JSON.stringify(campos)));
+    }
+    renderAll();
+    refreshHeader();
+    persistEdl();
+    toast(`Ajustes copiados para ${outros.length} take(s) — vale no próximo `
+      + '"Aplicar"', 2600);
+  });
   // cor do take
   const corWrap = el('span', 'take-grupo', lane);
   const manual = gradeManualDoTake(r);

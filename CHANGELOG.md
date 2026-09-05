@@ -1,5 +1,16 @@
 # Changelog
 
+## 5.0.62
+
+- **Aplicar a todos.** Acertou o volume, a cor, a velocidade, o
+  enquadramento e o espelho de um take? Um botão copia tudo para os
+  outros, em vez de repetir take a take.
+- **O relatório de tempo agora abre a etapa mais demorada.** A criação da
+  edição é a maior fatia de cada vídeo e não era detalhada em lugar
+  nenhum; agora ela aparece dividida em planejar, preparar, extrair,
+  montar, compor e normalizar. Não muda o vídeo — muda o que dá para
+  consertar depois.
+
 ## 5.0.61
 
 - **Espelhar o take.** Inverte da esquerda para a direita: casa a direção
