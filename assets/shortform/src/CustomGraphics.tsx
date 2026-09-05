@@ -69,18 +69,18 @@ type CutFlash = {
   sfx?: string;
   volume?: number;
   // 5.0.25: ate aqui so existia o feixe. Os tipos vivem em app/transicoes.py.
-  type?: 'flash' | 'brilho' | 'escurece' | 'faixa';
+  type?: 'flash' | 'brilho' | 'escurece' | 'faixa' | 'cortina' | 'blocos' | 'moldura' | 'traco';
   accent?: string;
 };
 
 export const CustomGraphics: React.FC = () => {
-  const d = editData as {splitInserts?: SplitInsert[]; transitions?: CutFlash[]};
+  const d = editData as {splitInserts?: SplitInsert[]; transitions?: CutFlash[]; hook?: {accent?: string}};
   const splits = d.splitInserts ?? [];
   const flashes = d.transitions ?? [];
   return (
     <>
       {splits.length ? <SplitScreen items={splits} /> : null}
-      {flashes.length ? <CutFlashes items={flashes} /> : null}
+      {flashes.length ? <CutFlashes items={flashes} corDaMarca={d.hook?.accent} /> : null}
     </>
   );
 };
@@ -94,9 +94,9 @@ export const CustomGraphics: React.FC = () => {
 const FLASH_LEAD = 2; // frames before the cut
 const FLASH_LEN = 7; // total, ~230ms at 30fps
 
-const CutFlashes: React.FC<{items: CutFlash[]}> = ({items}) => {
+const CutFlashes: React.FC<{items: CutFlash[]; corDaMarca?: string}> = ({items, corDaMarca}) => {
   const frame = useCurrentFrame();
-  const {fps, width} = useVideoConfig();
+  const {fps, width, height} = useVideoConfig();
 
   const active = items.find((it) => {
     const c = Math.round(it.at * fps) + VIDEO_LAG;
@@ -121,7 +121,12 @@ const CutFlashes: React.FC<{items: CutFlash[]}> = ({items}) => {
   });
 
   const tipo = active.type ?? 'flash';
-  const ac = active.accent ?? '#ff5200';
+  // 5.0.51: sem `accent` na emenda (edit-data de antes da 5.0.25, ou o
+  // apply rapido reaproveitando um antigo), a cor e a da manchete — a
+  // MESMA reserva do motor proprio (`hook.accent`). Antes o template caia
+  // no laranja de fabrica e o motor proprio na cor da marca: a varredura
+  // dos blocos saiu laranja de um lado e vermelha do outro.
+  const ac = active.accent ?? corDaMarca ?? '#ff5200';
 
   // "brilho" e "escurece": so o clarao, sem feixe. O mesmo desenho com a
   // cor trocada — branco bate na tela, preto pisca. O pico e mais alto que
@@ -146,6 +151,83 @@ const CutFlashes: React.FC<{items: CutFlash[]}> = ({items}) => {
     );
   }
 
+  // 5.0.51 — quatro transicoes novas. Como as outras, so no overlay.
+  const clamp = {extrapolateLeft: 'clamp' as const, extrapolateRight: 'clamp' as const};
+  const sfx = (
+    <Sequence from={c} durationInFrames={10} layout="none">
+      <Sfx src={active.sfx ?? 'cut-click.mp3'} volume={active.volume ?? 0.9} />
+    </Sequence>
+  );
+  // "cortina": duas faixas na cor da marca fecham de cima e de baixo, se
+  // encontram no corte e reabrem.
+  if (tipo === 'cortina') {
+    const cobre = interpolate(p, [0, 0.45, 0.55, 1], [0, 1, 1, 0], clamp);
+    const alt = `${(50 * cobre).toFixed(2)}%`;
+    return (
+      <AbsoluteFill style={{pointerEvents: 'none'}}>
+        <div style={{position: 'absolute', left: 0, top: 0, width: '100%', height: alt, background: ac, opacity: 0.95 * k}} />
+        <div style={{position: 'absolute', left: 0, bottom: 0, width: '100%', height: alt, background: ac, opacity: 0.95 * k}} />
+        {sfx}
+      </AbsoluteFill>
+    );
+  }
+  // "blocos": mosaico 6x10 na cor da marca; cada bloco entra e sai num
+  // instante proprio, deterministico (o motor rapido usa a MESMA conta).
+  if (tipo === 'blocos') {
+    const cols = 6;
+    const rows = 10;
+    const cw = width / cols;
+    const chh = height / rows;
+    const blocos: React.ReactNode[] = [];
+    for (let i = 0; i < rows; i++) {
+      for (let j = 0; j < cols; j++) {
+        const t0 = (((i * 7 + j * 13) % 10) / 10) * 0.6;
+        if (p >= t0 && p < t0 + 0.4) {
+          blocos.push(
+            <div
+              key={`${i}-${j}`}
+              style={{position: 'absolute', left: Math.round(j * cw), top: Math.round(i * chh),
+                width: Math.round((j + 1) * cw) - Math.round(j * cw) + 1,
+                height: Math.round((i + 1) * chh) - Math.round(i * chh) + 1,
+                background: ac, opacity: 0.9 * k}}
+            />,
+          );
+        }
+      }
+    }
+    return (
+      <AbsoluteFill style={{pointerEvents: 'none', overflow: 'hidden'}}>
+        {blocos}
+        {sfx}
+      </AbsoluteFill>
+    );
+  }
+  // "moldura": uma borda grossa na cor da marca pisca no corte.
+  if (tipo === 'moldura') {
+    const pico = interpolate(frame, [c - 2, c, c + 3], [0, 0.9 * k, 0], clamp);
+    const esp = Math.round(width * 0.06);
+    return (
+      <AbsoluteFill style={{pointerEvents: 'none'}}>
+        <div style={{position: 'absolute', inset: 0, boxSizing: 'border-box', border: `${esp}px solid ${ac}`, opacity: pico}} />
+        {sfx}
+      </AbsoluteFill>
+    );
+  }
+  // "traco": um traco FINO de luz cruza o quadro — o flash sem o clarao e
+  // sem o desfoque.
+  if (tipo === 'traco') {
+    const larg = width * 0.06;
+    const op = interpolate(p, [0, 0.3, 1], [0, 1 * k, 0], clamp);
+    return (
+      <AbsoluteFill style={{pointerEvents: 'none', overflow: 'hidden'}}>
+        <div
+          style={{position: 'absolute', top: '-30%', left: 0, width: larg, height: '160%',
+            transform: `translateX(${x.toFixed(1)}px) rotate(-18deg)`, background: '#fff', opacity: op}}
+        />
+        {sfx}
+      </AbsoluteFill>
+    );
+  }
   // "faixa": uma barra CHEIA na cor da marca cruza o quadro. Sem clarao —
   // quem marca o corte e a barra passando, nao a luz.
   if (tipo === 'faixa') {

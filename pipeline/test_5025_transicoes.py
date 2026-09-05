@@ -79,7 +79,8 @@ def test_os_dois_motores_desenham_as_quatro():
 
 
 def test_a_faixa_usa_a_cor_da_marca_e_o_resto_nao():
-    assert USAM_A_COR_DA_MARCA == {"faixa"}
+    # 5.0.51: cortina, blocos e moldura tambem pintam com a cor da marca.
+    assert USAM_A_COR_DA_MARCA == {"faixa", "cortina", "blocos", "moldura"}
     i = PROPRIO.index('if tipo == "faixa":')
     # ate o fim do ramo, e nao uma janela de N caracteres: so de crescer um
     # comentario dentro dele o teste quebrava sem defeito nenhum

@@ -89,6 +89,30 @@ PRESETS: dict[str, str] = {
         "curves=master='0/0 0.25/0.22 0.75/0.78 1/1'"
     ),
 
+    # 5.0.51 — quatro looks novos ("QUERO MAIS ESTILOS DE CORES", 05/09).
+    # Todos em Rec.709, mesma escala dos de cima; nenhum e padrao.
+    # Frio limpo: sombras e meios levemente azulados, contraste discreto.
+    "frio_limpo": (
+        "eq=contrast=1.10:saturation=1.02:gamma=0.98,"
+        "colorbalance=rs=-0.04:bs=0.06:rm=-0.02:bm=0.03:rh=-0.01:bh=0.02"
+    ),
+    # Vibrante: saturacao alta e curva com punch — produto, moda, comida.
+    "vibrante": (
+        "eq=contrast=1.12:saturation=1.32:gamma=0.97:brightness=0.01,"
+        "curves=master='0/0 0.25/0.22 0.75/0.79 1/1'"
+    ),
+    # Preto e branco com contraste: sem cor, pretos firmes, brancos limpos.
+    "preto_branco": (
+        "eq=contrast=1.18:saturation=0:gamma=0.95,"
+        "curves=master='0/0 0.2/0.16 0.8/0.84 1/1'"
+    ),
+    # Vintage desbotado: pretos levantados, brancos contidos, quente, menos cor.
+    "vintage": (
+        "eq=contrast=0.94:saturation=0.78:gamma=1.04,"
+        "colorbalance=rs=0.05:gs=0.02:bs=-0.06:rh=0.06:gh=0.03:bh=-0.03,"
+        "curves=master='0/0.07 0.5/0.52 1/0.95'"
+    ),
+
     # Flat — no grade. Useful as a sentinel for "skip grading this source".
     "none": "",
 

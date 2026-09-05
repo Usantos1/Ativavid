@@ -1,5 +1,15 @@
 # Changelog
 
+## 5.0.51
+
+- **Quatro transições de corte novas:** Cortina (duas faixas na cor da
+  marca fecham e abrem), Blocos (mosaico da marca), Moldura (borda pisca)
+  e Traço de luz (o flash sem clarão). Entram no estilo, no menu de cada
+  corte do editor e no cartão do preset. Saem iguais no motor rápido e no
+  Remotion (medido: 1,000 / 1,000 / 1,000 / 0,972 de tinta).
+- **Quatro estilos de cor novos:** Frio limpo, Vibrante, Preto e branco e
+  Vintage (desbotado), ao lado de Marca, Neutro, Sutil e Cinemático.
+
 ## 5.0.50
 
 - **O Início diz o que está esperando por você.** Uma linha acima dos

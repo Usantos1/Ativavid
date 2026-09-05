@@ -2492,6 +2492,9 @@ function tipoDaEmenda(i) {
 
 const COR_DA_TRANSICAO = {
   flash: '#ffd166', brilho: '#ffffff', escurece: '#8b94a3', faixa: 'var(--hl-accent, #ff5200)', nenhuma: 'transparent',
+  // 5.0.51
+  cortina: 'var(--hl-accent, #ff5200)', blocos: 'var(--hl-accent, #ff5200)',
+  moldura: 'var(--hl-accent, #ff5200)', traco: '#ffe9a8',
 };
 
 function draftRangesPayload() {

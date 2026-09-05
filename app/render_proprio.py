@@ -5051,6 +5051,10 @@ class Renderizador:
                 return None
             cor = (255.0, 255.0, 255.0) if tipo == "brilho" else (0.0, 0.0, 0.0)
             return np.full((self.h, self.w), pico, dtype=np.float32), cor
+        # 5.0.51 — quatro novas. Ficam ANTES da faixa de proposito: o teste da
+        # faixa recorta o ramo dela entre dois `est = f - (c - FLASH_LEAD)`.
+        if tipo in ("cortina", "blocos", "moldura", "traco"):
+            return self._transicao_nova(tipo, c, f, k)
         if tipo == "faixa":
             est = f - (c - FLASH_LEAD)
             p = est / (FLASH_LEN - 1)
@@ -5114,6 +5118,61 @@ class Renderizador:
                 np.asarray(img, dtype=np.float32) / 255.0 * beam, 0.0, 1.0)
         return (np.clip(np.maximum(cache[est], np.float32(bloom)) * k, 0.0, 1.0),
                 (255.0, 255.0, 255.0))
+
+    def _transicao_nova(self, tipo: str, c: int, f: int, k: float):
+        """cortina / blocos / moldura / traco (5.0.51) — mesma conta do template."""
+        p = (f - (c - FLASH_LEAD)) / (FLASH_LEN - 1)
+        marca = tuple(float(v) for v in self._cor(self._cor_transicao))
+        if tipo == "cortina":
+            cobre = float(np.interp(p, [0, 0.45, 0.55, 1], [0, 1, 1, 0]))
+            alt = int(round(self.h * 0.5 * cobre))
+            if alt <= 0:
+                return None
+            a = np.zeros((self.h, self.w), dtype=np.float32)
+            a[:alt, :] = 0.95 * k
+            a[self.h - alt:, :] = 0.95 * k
+            return a, marca
+        if tipo == "blocos":
+            cols, rows = 6, 10
+            cw, ch = self.w / cols, self.h / rows
+            a = np.zeros((self.h, self.w), dtype=np.float32)
+            algum = False
+            for i in range(rows):
+                for j in range(cols):
+                    t0 = ((i * 7 + j * 13) % 10) / 10 * 0.6
+                    if t0 <= p < t0 + 0.4:
+                        y0, y1 = int(round(i * ch)), int(round((i + 1) * ch)) + 1
+                        x0, x1 = int(round(j * cw)), int(round((j + 1) * cw)) + 1
+                        a[y0:y1, x0:x1] = 0.9 * k
+                        algum = True
+            return (a, marca) if algum else None
+        if tipo == "moldura":
+            pico = float(np.interp(f, [c - 2, c, c + 3], [0, 0.9 * k, 0]))
+            if pico <= 0.001:
+                return None
+            esp = int(round(self.w * 0.06))
+            a = np.zeros((self.h, self.w), dtype=np.float32)
+            a[:esp, :] = pico
+            a[self.h - esp:, :] = pico
+            a[:, :esp] = pico
+            a[:, self.w - esp:] = pico
+            return a, marca
+        if tipo == "traco":
+            op = float(np.interp(p, [0, 0.3, 1], [0, 1.0 * k, 0]))
+            if op <= 0.001:
+                return None
+            larg = int(self.w * 0.06)
+            x = (-1.35 + 2.7 * p) * self.w
+            img = Image.new("L", (self.w, self.h), 0)
+            # Mesmo giro do flash: CSS rotate(-18deg) = PIL .rotate(+18).
+            barra = Image.new("L", (larg, int(self.h * 1.6)), 255).rotate(
+                18, expand=True, resample=Image.BILINEAR)
+            cx = x + larg / 2.0
+            cy = -0.3 * self.h + 1.6 * self.h / 2.0
+            img.paste(barra, (int(round(cx - barra.width / 2.0)),
+                              int(round(cy - barra.height / 2.0))), barra)
+            return np.asarray(img, dtype=np.float32) / 255.0 * op, (255.0, 255.0, 255.0)
+        return None
 
     def _aplicar_flash(self, buf, sujo, a, cor=(255.0, 255.0, 255.0)):
         a_b = buf[..., 3].astype(np.float32) / 255.0

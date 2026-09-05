@@ -19,11 +19,17 @@ NOMES: dict[str, str] = {
     "brilho": "Brilho (clarao seco)",
     "escurece": "Escurece (piscada preta)",
     "faixa": "Faixa na cor da marca",
+    # 5.0.51 — "QUERO MAIS TRANSICOES" (05/09). Todas desenham SO no overlay,
+    # como as quatro de cima: nenhuma mexe no video por baixo.
+    "cortina": "Cortina (fecha e abre)",
+    "blocos": "Blocos (mosaico da marca)",
+    "moldura": "Moldura (borda pisca)",
+    "traco": "Traço de luz (fino)",
 }
 TIPOS = tuple(NOMES) + ("nenhuma",)
 
 # Quem usa a cor da marca em vez de branco/preto
-USAM_A_COR_DA_MARCA = frozenset({"faixa"})
+USAM_A_COR_DA_MARCA = frozenset({"faixa", "cortina", "blocos", "moldura"})
 
 # A chave, no edit-data do projeto, das escolhas POR CORTE feitas no editor:
 # {"<indice da emenda>": "<tipo>"}. Indice 0 = entre o 1o e o 2o trecho.
