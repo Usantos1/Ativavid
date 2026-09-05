@@ -160,6 +160,11 @@ def _avisar_servidor(linha: dict[str, Any]) -> bool:
 # Licenca mostrava "0 aberturas / versao vazia" para clientes que usam o
 # app todo dia (Vitor e Leandro, vistos as 00:30 e 23:40 de 04-05/09).
 ESPERAS_DA_RETENTATIVA = (60, 300)
+# 5.0.46: um app que fica ABERTO dias seguidos so registrava a abertura do
+# primeiro dia — o painel de Licenca mostrava versao velha e "ultima
+# abertura" de uma semana atras para quem usa todo dia sem fechar. Uma
+# vez por dia, enquanto roda, avisa de novo (evento "diario").
+INTERVALO_DIARIO_S = 24 * 3600
 
 
 def registrar_abertura() -> None:
@@ -169,17 +174,30 @@ def registrar_abertura() -> None:
             linha = anotar("abriu")
         except Exception:  # noqa: BLE001
             return
-        for espera in (0,) + tuple(ESPERAS_DA_RETENTATIVA):
-            if espera:
-                time.sleep(espera)
+        _tentar_ate_chegar(linha)
+        if os.environ.get("PYTEST_CURRENT_TEST") or os.environ.get("ATIVAVID_SEM_PING_DIARIO"):
+            return
+        while True:
+            time.sleep(INTERVALO_DIARIO_S)
             try:
-                if _avisar_servidor(linha):
-                    return
+                _tentar_ate_chegar(anotar("diario"))
             except Exception:  # noqa: BLE001
                 pass
 
     threading.Thread(target=_trabalho, daemon=True,
                      name="registro-abertura").start()
+
+
+def _tentar_ate_chegar(linha: dict[str, Any]) -> bool:
+    for espera in (0,) + tuple(ESPERAS_DA_RETENTATIVA):
+        if espera:
+            time.sleep(espera)
+        try:
+            if _avisar_servidor(linha):
+                return True
+        except Exception:  # noqa: BLE001
+            pass
+    return False
 
 
 def ler(limite: int = 200) -> list[dict[str, Any]]:

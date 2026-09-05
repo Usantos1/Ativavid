@@ -17,6 +17,7 @@ from typing import Any
 CANARY_LIMIT = 5  # fallback se state/settings não tiverem teto
 USER_DIR = Path.home() / "ATIVAVID"
 STATE_PATH = Path(os.environ.get("ATIVAVID_CANARY_STATE") or (USER_DIR / "canary-state.json"))
+JOBS_GUARDADOS = 300
 LOCK_PATH = Path(os.environ.get("ATIVAVID_OVERLAY_LOCK") or (USER_DIR / ".ativavid" / "overlay-heavy.lock"))
 
 _EMPTY = {
@@ -235,6 +236,11 @@ def record_canary_job(job: dict[str, Any]) -> None:
     with _trava_do_estado():
         st = load_state()
         jobs = list(st.get("jobs") or [])
+        # 5.0.46: a lista crescia para sempre (804 jobs, 229 KB em 05/09),
+        # lida e reescrita a CADA render. O canario decide com os ultimos
+        # `canaryLimit` (20); guardar os ultimos JOBS_GUARDADOS basta para
+        # auditoria, e o arquivo volta a caber numa leitura.
+        jobs = jobs[-(JOBS_GUARDADOS - 1):] if len(jobs) >= JOBS_GUARDADOS else jobs
         jobs.append(dict(job, at=datetime.now().astimezone().isoformat(
             timespec="seconds")))
         st["jobs"] = jobs

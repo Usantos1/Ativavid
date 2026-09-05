@@ -1,5 +1,20 @@
 # Changelog
 
+## 5.0.46
+
+- **"Aplicar correções pendentes" direto no card.** Quando um vídeo tem
+  correção rápida salva no editor e nunca aplicada, o menu do card passa a
+  oferecer aplicar ali mesmo, sem abrir o editor. Sete projetos estavam
+  assim, o mais antigo desde 18 de agosto.
+- **Atalhos na busca:** a tecla `/` leva o cursor à busca de Concluídos ou
+  Projetos; `Esc` dentro dela limpa o texto.
+- **O painel de Licença acompanha quem deixa o app aberto dias seguidos.**
+  A abertura só era registrada ao iniciar; agora, uma vez por dia enquanto
+  roda, o app avisa de novo — a versão e a "última abertura" ficam certas.
+- O histórico interno do canário de render deixou de crescer para sempre
+  (804 registros, 229 KB lidos e reescritos a cada vídeo); guarda os 300
+  últimos.
+
 ## 5.0.45
 
 - **Conserto urgente: logos, presets, perfil da empresa e miniaturas da

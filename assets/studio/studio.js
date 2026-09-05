@@ -984,6 +984,7 @@ function cardMenuHtml(j, opts) {
         ${(j.temLegenda || j.legenda) ? `<button type="button" role="menuitem" data-act="copylegenda" data-id="${safeId}">Copiar legenda do post</button>` : ""}
         <button type="button" role="menuitem" data-act="copyname" data-id="${safeId}">Copiar nome</button>
         ${canFinal ? `<button type="button" role="menuitem" data-act="srt" data-id="${safeId}">Salvar legenda .srt</button>` : ""}
+        ${j.pedidoTipo === "correcoes" ? `<button type="button" role="menuitem" data-act="aplicar-pendentes" data-id="${safeId}">Aplicar correções pendentes</button>` : ""}
         <a role="menuitem" href="${escapeHtml(links.final)}" ${canFinal ? "" : "class=\"disabled\""}>Ver vídeo final</a>
         <a role="menuitem" href="${escapeHtml(links.editor)}">Editar</a>
         <a role="menuitem" href="${escapeHtml(links.estilo)}" data-id="${safeId}">Alterar estilo</a>
@@ -3610,6 +3611,20 @@ function wireList() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ id }),
         });
+      } else if (act === "aplicar-pendentes") {
+        // 5.0.46: 7 projetos tinham correcao rapida salva e nunca aplicada
+        // (o mais velho de 18/08). A linha "Pendente" dizia; agora tambem
+        // resolve, sem abrir o editor. Mesma rota que o botao do editor.
+        const job = state.jobs.find((x) => String(x.id) === String(id));
+        const pasta = pastaDoProjeto(job);
+        const r = await api(`/p/${encodeURIComponent(pasta)}/api/corrections`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ op: "apply" }),
+        });
+        if (r && r.ok === false) throw new Error(r.error || "não consegui aplicar");
+        toast("Aplicando as correções pendentes — o card mostra o andamento", 5000);
+        setTimeout(() => refreshJobs().catch(() => {}), 1500);
       } else if (act === "srt") {
         // 5.0.43: legenda como arquivo, na pasta de entrega — YouTube e
         // LinkedIn aceitam .srt; leitor de tela tambem.
@@ -3754,6 +3769,29 @@ function wireList() {
 
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") closeCardMenus();
+  });
+  // 5.0.46: "/" leva o cursor a busca da tela (Concluidos ou Projetos);
+  // Esc dentro dela limpa. Fora de campo de texto, para nao roubar a barra
+  // de quem digita.
+  document.addEventListener("keydown", (e) => {
+    const alvo = e.target;
+    const digitando = alvo && (alvo.tagName === "INPUT" || alvo.tagName === "TEXTAREA"
+      || alvo.isContentEditable);
+    if (e.key === "/" && !digitando && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      const campo = $(state.view === "projetos" ? "#projSearch" : "#doneSearch");
+      if (campo && campo.offsetParent !== null) {
+        e.preventDefault();
+        campo.focus();
+        campo.select();
+      }
+    } else if (e.key === "Escape" && digitando && (alvo.id === "doneSearch" || alvo.id === "projSearch")) {
+      if (alvo.value) {
+        alvo.value = "";
+        alvo.dispatchEvent(new Event("input", { bubbles: true }));
+      } else {
+        alvo.blur();
+      }
+    }
   });
   // NAO passar a referencia direta: o listener recebe o Event como `scope`
   // e `$$("[data-menu-host]", event)` estoura (TypeError em todo resize,

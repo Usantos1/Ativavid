@@ -331,6 +331,11 @@ def _pedido_nao_aplicado(job: dict, edit: Path) -> None:
             continue
         job["pedidoNota"] = (f"há {oque} salvas neste projeto que ainda não "
                              f"foram aplicadas ao vídeo")
+        # 5.0.46: o card sabe O QUE esta pendente — correcao rapida tem
+        # botao de aplicar ali mesmo; marcacao/estilo abre o editor.
+        job["pedidoTipo"] = ("correcoes" if caminho.name == "corrections.json"
+                             else "estilo" if caminho.name == "preview_style.json"
+                             else "marcacoes")
         return
 
 
