@@ -45,7 +45,9 @@ def test_motor_proprio_conhece_as_seis():
         assert Renderizador.SIMPLE_VARIANTES[e][10] == modo, e
     for e in EFEITOS:
         assert Renderizador.SIMPLE_VARIANTES[e][10] == e
-    assert "retro" in Renderizador.SIMPLE_MAIUSCULA
+    # `retro` sobe a caixa pelo MODO dele (`degrade`), nao pelo id: a
+    # lista e testada contra `modo`. O id estava la e nao fazia nada.
+    assert Renderizador.SIMPLE_VARIANTES["retro"][10] in Renderizador.SIMPLE_MAIUSCULA
     assert "duplo" in Renderizador.SIMPLE_SUPERFICIE
     assert "sombradura" not in Renderizador.SIMPLE_SUPERFICIE, "a sombra dura e preta fixa"
 
@@ -89,7 +91,10 @@ def test_editor_e_hub():
         assert f'{e}: "' in SJS.split("legenda: {", 1)[1][:1800], e
     for e in EFEITOS:
         assert f"V.modo === '{e}'" in PJS, e
-    assert "'retro'" in PJS.split("const CAP_MAIUSCULA", 1)[1][:220]
+    # o editor tambem decide a caixa alta pelo MODO (`CAP_MAIUSCULA.has(V.modo)`),
+    # entao quem sobe a caixa do `retro` e o `degrade` dele
+    assert "'degrade'" in PJS.split("const CAP_MAIUSCULA", 1)[1][:220]
+    assert "modo: 'degrade'" in PJS.split("  retro: {", 1)[1][:220]
 
 
 def test_nomes_batem_com_o_catalogo():

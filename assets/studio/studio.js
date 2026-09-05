@@ -7964,6 +7964,9 @@ const NOME_DO_ESTILO = {
     divertida: "Divertida (Luckiest Guy)", condensada: "Condensada (Anton)",
     duplo: "Contorno duplo", sombradura: "Sombra dura", retro: "Retrô (Righteous)",
     minimal: "Minimalista", grosso: "Grossa (Archivo)", alerta: "Alerta (Bangers)",
+    elegante: "Elegante (Lora)", cartaz: "Cartaz (Titan One)",
+    esportiva: "Esportiva (Kanit)", estreita: "Estreita (Oswald)",
+    arredondada: "Arredondada (Nunito)", forte: "Forte (Montserrat)",
   },
   manchete: {
     outline: "Contorno", card: "Cartão", realce: "Realce", misto: "Misto",

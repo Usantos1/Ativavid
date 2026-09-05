@@ -64,6 +64,15 @@ NOMES = {
     "grosso": "Grossa (Archivo)",
     "alerta": "Alerta (Bangers)",
     "marcador": "Marca-texto",
+    # lote 3 das 50 rodadas (05/09): seis FONTES novas em modos que ja
+    # existem. Nenhum desenho novo — o que muda e a letra, que e o que o
+    # usuario ve primeiro.
+    "elegante": "Elegante (Lora)",
+    "cartaz": "Cartaz (Titan One)",
+    "esportiva": "Esportiva (Kanit)",
+    "estreita": "Estreita (Oswald)",
+    "arredondada": "Arredondada (Nunito)",
+    "forte": "Forte (Montserrat)",
 }
 
 TODOS = frozenset(NOMES)
@@ -75,6 +84,9 @@ USAM_COR_DA_LEGENDA = frozenset({
     "karaoke", "simples", "serifada", "classica", "bloco", "recorte",
     "metal", "vidro", "traco", "moldura", "eco",
     "maquina",
+    # lote 3: `elegante` nao tem efeito nenhum, entao a cor pinta a linha
+    # (mesma regra do `minimal` e do `classica`).
+    "elegante",
 })
 
 # Estilos em que a cor pinta a ÊNFASE (a palavra quente), não a linha toda.
@@ -91,7 +103,8 @@ USAM_COR_DA_ENFASE = frozenset({"stacked", "scatter", "impacto", "marcador",
                                 "etiqueta", "fitadegrade",
                                 "fitadupla", "etiquetacanto",
                                 "contorno", "sombra3d", "sublinhado", "divertida",
-                                "duplo", "retro", "alerta"})
+                                "duplo", "retro", "alerta",
+                                "esportiva", "forte", "arredondada"})
 
 
 def valido(estilo: str | None) -> bool:

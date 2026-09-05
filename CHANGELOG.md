@@ -1,5 +1,12 @@
 # Changelog
 
+## 5.0.63
+
+- **Mais seis legendas, agora são 45.** *Elegante* (serifa editorial),
+  *Cartaz* (Titan One), *Esportiva* (Kanit), *Estreita* (Oswald),
+  *Arredondada* (Nunito) e *Forte* (Montserrat). Todas medidas contra o
+  desenho de referência antes de sair.
+
 ## 5.0.62
 
 - **Aplicar a todos.** Acertou o volume, a cor, a velocidade, o

@@ -3122,11 +3122,18 @@ class Renderizador:
         "minimal":    ("Inter[opsz,wght].ttf", "Medium", 58, 8, 2, 1.0, 1.0, 0, 430, 820, ""),
         "grosso":     ("ArchivoBlack-Regular.ttf", None, 88, 3, 1, 1.0, 1.0, -1, 430, 800, "sticker"),
         "alerta":     ("Bangers-Regular.ttf", None, 76, 4, 1, 1.0, 1.0, 1, 430, 760, "pilula"),
+        # --- lote 3 das 50 rodadas (05/09): so fonte nova, modo conhecido --
+        "elegante":    ("Lora[wght].ttf", 700, 74, 8, 2, 1.0, 1.0, 0, 430, 820, ""),
+        "cartaz":      ("TitanOne-Regular.ttf", None, 74, 3, 1, 1.0, 1.0, 0, 430, 840, "sticker"),
+        "esportiva":   ("Kanit-Black.ttf", None, 88, 3, 1, 1.0, 1.0, -1, 430, 800, "duplo"),
+        "estreita":    ("Oswald[wght].ttf", 700, 96, 3, 1, 1.0, 1.0, 1, 430, 780, "sombradura"),
+        "arredondada": ("Nunito[wght].ttf", 900, 78, 4, 1, 1.0, 1.0, 0, 430, 760, "pilula"),
+        "forte":       ("Montserrat[wght].ttf", 900, 80, 3, 1, 1.0, 1.0, -1, 430, 800, "contorno"),
     }
     # Modos que desenham em CAIXA ALTA. Isso muda a MEDIDA das linhas, entao
     # os tres motores tem de concordar sobre quem esta nesta lista.
     SIMPLE_MAIUSCULA = ("sticker", "metal", "moldura", "eco", "degrade",
-                        "bandeira", "fitadegrade", "fitadupla", "beast", "retro")
+                        "bandeira", "fitadegrade", "fitadupla", "beast")
     # Modos com um painel em volta do cue INTEIRO (e nao por linha, como o
     # bloco): a caixa e uma so para as duas linhas. O `vidro` saiu daqui —
     # ele virou uma LETRA de vidro, nao uma caixa atras da letra.
@@ -3150,7 +3157,9 @@ class Renderizador:
                    "contorno": 800, "sombra3d": 800, "beast": 900, "sublinhado": 800,
                    "gigante": 400, "quadrinhos": 400, "divertida": 400, "condensada": 400,
                    "duplo": 800, "sombradura": 800, "retro": 400, "minimal": 500,
-                   "grosso": 400, "alerta": 400}
+                   "grosso": 400, "alerta": 400,
+                   "elegante": 700, "cartaz": 400, "esportiva": 900,
+                   "estreita": 700, "arredondada": 900, "forte": 900}
     # Os MESMOS padroes do SimpleCaptions.tsx (NEON_PADRAO etc.)
     NEON_PADRAO = "#4de1ff"
     DEGRADE_PADRAO = "#ff6a00"

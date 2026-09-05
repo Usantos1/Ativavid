@@ -25,6 +25,13 @@ import {loadFont as loadBangers} from '@remotion/google-fonts/Bangers';
 import {loadFont as loadLuckiest} from '@remotion/google-fonts/LuckiestGuy';
 import {loadFont as loadRighteous} from '@remotion/google-fonts/Righteous';
 import {loadFont as loadArchivo} from '@remotion/google-fonts/ArchivoBlack';
+// lote 3 (05/09): seis fontes novas em modos que ja existem.
+import {loadFont as loadLora} from '@remotion/google-fonts/Lora';
+import {loadFont as loadTitan} from '@remotion/google-fonts/TitanOne';
+import {loadFont as loadKanit} from '@remotion/google-fonts/Kanit';
+import {loadFont as loadOswald} from '@remotion/google-fonts/Oswald';
+import {loadFont as loadNunito} from '@remotion/google-fonts/Nunito';
+import {loadFont as loadMontserrat} from '@remotion/google-fonts/Montserrat';
 import {measureText} from '@remotion/layout-utils';
 import captions from '../public/captions.json';
 import editData from '../public/edit-data.json';
@@ -41,6 +48,12 @@ const BANGERS = loadBangers('normal', {weights: ['400']}).fontFamily;
 const LUCKIEST = loadLuckiest('normal', {weights: ['400']}).fontFamily;
 const RIGHTEOUS = loadRighteous('normal', {weights: ['400']}).fontFamily;
 const ARCHIVO = loadArchivo('normal', {weights: ['400']}).fontFamily;
+const LORA = loadLora('normal', {weights: ['700']}).fontFamily;
+const TITAN = loadTitan('normal', {weights: ['400']}).fontFamily;
+const KANIT = loadKanit('normal', {weights: ['900']}).fontFamily;
+const OSWALD = loadOswald('normal', {weights: ['700']}).fontFamily;
+const NUNITO = loadNunito('normal', {weights: ['900']}).fontFamily;
+const MONTSERRAT = loadMontserrat('normal', {weights: ['900']}).fontFamily;
 
 const OFFWHITE = '#f4f1e9';
 
@@ -293,6 +306,36 @@ export const SIMPLE_VARIANTS: Record<string, Variant> = {
     family: ARCHIVO, weight: 400, size: 88, maxWords: 3, lines: 1,
     squeeze: 1, squeezeY: 1, tracking: -1, bottom: 430, maxW: 800,
     sticker: true,
+  },
+  // ---- lote 3 (05/09): fonte nova, modo conhecido -----------------------
+  elegante: {
+    family: LORA, weight: 700, size: 74, maxWords: 8, lines: 2,
+    squeeze: 1, squeezeY: 1, tracking: 0, bottom: 430, maxW: 820,
+  },
+  cartaz: {
+    family: TITAN, weight: 400, size: 74, maxWords: 3, lines: 1,
+    squeeze: 1, squeezeY: 1, tracking: 0, bottom: 430, maxW: 840,
+    sticker: true,
+  },
+  esportiva: {
+    family: KANIT, weight: 900, size: 88, maxWords: 3, lines: 1,
+    squeeze: 1, squeezeY: 1, tracking: -1, bottom: 430, maxW: 800,
+    modo: 'duplo',
+  },
+  estreita: {
+    family: OSWALD, weight: 700, size: 96, maxWords: 3, lines: 1,
+    squeeze: 1, squeezeY: 1, tracking: 1, bottom: 430, maxW: 780,
+    modo: 'sombradura',
+  },
+  arredondada: {
+    family: NUNITO, weight: 900, size: 78, maxWords: 4, lines: 1,
+    squeeze: 1, squeezeY: 1, tracking: 0, bottom: 430, maxW: 760,
+    modo: 'pilula',
+  },
+  forte: {
+    family: MONTSERRAT, weight: 900, size: 80, maxWords: 3, lines: 1,
+    squeeze: 1, squeezeY: 1, tracking: -1, bottom: 430, maxW: 800,
+    modo: 'contorno',
   },
   alerta: {
     family: BANGERS, weight: 400, size: 76, maxWords: 4, lines: 1,

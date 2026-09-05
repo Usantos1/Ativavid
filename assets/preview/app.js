@@ -352,6 +352,12 @@ const STYLE_CATALOG = {
     {id: 'minimal', name: 'Minimalista', stat: 'minimal'},
     {id: 'grosso', name: 'Grossa (Archivo)', stat: 'grosso'},
     {id: 'alerta', name: 'Alerta (Bangers)', stat: 'alerta'},
+    {id: 'elegante', name: 'Elegante (Lora)', stat: 'elegante'},
+    {id: 'cartaz', name: 'Cartaz (Titan One)', stat: 'cartaz'},
+    {id: 'esportiva', name: 'Esportiva (Kanit)', stat: 'esportiva'},
+    {id: 'estreita', name: 'Estreita (Oswald)', stat: 'estreita'},
+    {id: 'arredondada', name: 'Arredondada (Nunito)', stat: 'arredondada'},
+    {id: 'forte', name: 'Forte (Montserrat)', stat: 'forte'},
     {id: 'marcador', name: 'Marca-texto', stat: 'marcador'},
     // opts out of burned captions (captions.enabled:false) — same reasoning.
     {id: 'nenhuma', name: 'Nenhuma', none: true},
@@ -973,6 +979,13 @@ const STATIC_VARIANTS = {
   grosso: {family: "'Archivo Black',sans-serif", weight: 400, size: 88, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: -1, maxW: 800, sticker: true},
   alerta: {family: "'Bangers',cursive", weight: 400, size: 76, maxWords: 4, lines: 1, sx: 1, sy: 1, tracking: 1, maxW: 760, modo: 'pilula'},
   marcador: {family: "'Poppins',sans-serif", weight: 800, size: 74, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: -1, maxW: 800, modo: 'marcador'},
+  // lote 3 (05/09): fonte nova, modo conhecido
+  elegante: {family: "'Lora',serif", weight: 700, size: 74, maxWords: 8, lines: 2, sx: 1, sy: 1, tracking: 0, maxW: 820},
+  cartaz: {family: "'Titan One',cursive", weight: 400, size: 74, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: 0, maxW: 840, sticker: true},
+  esportiva: {family: "'Kanit',sans-serif", weight: 900, size: 88, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: -1, maxW: 800, modo: 'duplo'},
+  estreita: {family: "'Oswald',sans-serif", weight: 700, size: 96, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: 1, maxW: 780, modo: 'sombradura'},
+  arredondada: {family: "'Nunito',sans-serif", weight: 900, size: 78, maxWords: 4, lines: 1, sx: 1, sy: 1, tracking: 0, maxW: 760, modo: 'pilula'},
+  forte: {family: "'Montserrat',sans-serif", weight: 900, size: 80, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: -1, maxW: 800, modo: 'contorno'},
 };
 // os mesmos padroes do SimpleCaptions.tsx / render_proprio
 const NEON_PADRAO = '#4de1ff';
@@ -994,7 +1007,7 @@ function escurecer(hex, f) {
 
 // Quem desenha em CAIXA ALTA — muda a MEDIDA das linhas, entao esta lista
 // tem de ser a mesma nos tres motores (SimpleCaptions.tsx e render_proprio).
-const CAP_MAIUSCULA = new Set(['metal', 'moldura', 'eco', 'degrade', 'bandeira', 'fitadegrade', 'fitadupla', 'beast', 'retro']);
+const CAP_MAIUSCULA = new Set(['metal', 'moldura', 'eco', 'degrade', 'bandeira', 'fitadegrade', 'fitadupla', 'beast']);
 const CAP_LH = {metal: 1.1, vidro: 1.16, traco: 1.16, moldura: 1.2, eco: 1.14,
                 neon: 1.16, degrade: 1.14, bandeira: 1.2, maquina: 1.3,
                 pilula: 1.2, etiqueta: 1.25, fitadegrade: 1.2, marcador: 1.16,
