@@ -1,5 +1,15 @@
 # Changelog
 
+## 5.0.61
+
+- **Espelhar o take.** Inverte da esquerda para a direita: casa a direção
+  de dois takes filmados de lados opostos e resolve o incômodo de quem se
+  grava de frente e se vê ao contrário.
+- **Take mudo.** No volume da voz, um botão *Mudo*: a imagem fica e o áudio
+  daquele take some — para aproveitar a cena sem o barulho.
+- **Duplicar take.** Repete o take logo em seguida, com os mesmos ajustes
+  de cor, velocidade e enquadramento.
+
 ## 5.0.60
 
 - **Reenquadrar o take, como no CapCut.** Clique num take e escolha

@@ -2246,7 +2246,8 @@ function edlDirty() {
     || +(r.gain_db || 0) !== +(r.orig.gain_db || 0) || (r.grade || '') !== (r.orig.grade || '')
     || +(r.speed || 1) !== +(r.orig.speed || 1)
     || +(r.freeze || 0) !== +(r.orig.freeze || 0)
-    || JSON.stringify(reenqDoTake(r)) !== JSON.stringify(reenqDoTake(r.orig)));
+    || JSON.stringify(reenqDoTake(r)) !== JSON.stringify(reenqDoTake(r.orig))
+    || !!r.flip !== !!r.orig.flip);
 }
 function geoDoInsert(c) {
   return JSON.stringify([+(+c.start).toFixed(3), +(+c.end).toFixed(3),
@@ -2611,6 +2612,8 @@ function camposDoTake(r) {
   // 5.0.60: reenquadramento manual (aproximacao + posicao no quadro)
   const rq = reenqDoTake(r);
   if (rq) out.reframe = { z: +rq.z.toFixed(3), x: +rq.x.toFixed(3), y: +rq.y.toFixed(3) };
+  // 5.0.61: espelhado da esquerda para a direita
+  if (r.flip) out.flip = true;
   return out;
 }
 
@@ -2628,7 +2631,7 @@ async function persistEdl() {
       if (!r.removed) {
         r.orig = { start: r.start, end: r.end, gain_db: +(r.gain_db || 0),
           grade: r.grade || '', speed: +(r.speed || 1), freeze: +(r.freeze || 0),
-          reframe: r.reframe || null };
+          reframe: r.reframe || null, flip: !!r.flip };
         r.added = false;
       }
     });
@@ -3188,11 +3191,11 @@ async function applyState(data) {
   S.draft = ranges.map((r, srcIdx) => ({
     source: r.source, start: +r.start, end: +r.end, beat: r.beat || '',
     gain_db: +(r.gain_db || 0), grade: r.grade || '', speed: +(r.speed || 1),
-    freeze: +(r.freeze || 0), reframe: r.reframe || null,
+    freeze: +(r.freeze || 0), reframe: r.reframe || null, flip: !!r.flip,
     removed: false, srcIdx,
     orig: { start: +r.start, end: +r.end, gain_db: +(r.gain_db || 0),
       grade: r.grade || '', speed: +(r.speed || 1), freeze: +(r.freeze || 0),
-      reframe: r.reframe || null },
+      reframe: r.reframe || null, flip: !!r.flip },
   }));
   S.corteRelatorio = data.corteRelatorio || null;
   if (data.intent) {
@@ -4493,7 +4496,7 @@ function _nomeDaAnim(lista, id, padrao) {
  * no take selecionado, ajustar volume do audio principal", 05/09). Volume
  * da voz em dB e cor (um look do catalogo ou brilho/contraste/saturacao
  * na mao). Tudo viaja no trecho (gain_db, grade) e o apply refaz o corte. */
-const GANHOS_DO_TAKE = [[-6, '−6 dB'], [-3, '−3 dB'], [0, 'Voz normal'], [3, '+3 dB'], [6, '+6 dB']];
+const GANHOS_DO_TAKE = [[-60, 'Mudo'], [-6, '−6 dB'], [-3, '−3 dB'], [0, 'Voz normal'], [3, '+3 dB'], [6, '+6 dB']];
 const VELOCIDADES_DO_TAKE = [
   [0.25, '0,25x'], [0.5, '0,5x'], [1, 'Normal'], [1.5, '1,5x'], [2, '2x'], [4, '4x'],
 ];
@@ -4537,14 +4540,18 @@ function renderPainelDoTake(lane, r) {
     const b = el('button', `ent-btn${(+(r.gain_db || 0) === db) ? ' on' : ''}`, volWrap);
     b.type = 'button';
     b.textContent = rotulo;
-    b.title = db === 0 ? 'Volume original deste take' : `Voz deste take ${db > 0 ? 'mais alta' : 'mais baixa'} em ${Math.abs(db)} dB`;
+    b.title = db === 0 ? 'Volume original deste take'
+      : db <= -60 ? 'Take sem som nenhum — a imagem fica, o áudio some'
+        : `Voz deste take ${db > 0 ? 'mais alta' : 'mais baixa'} em ${Math.abs(db)} dB`;
     b.addEventListener('click', () => {
       pushHistory();
       r.gain_db = db;
       renderPainelDoTake(lane, r);
       refreshHeader();
       persistEdl();
-      toast(db === 0 ? 'Voz do take no volume original' : `Voz do take: ${db > 0 ? '+' : ''}${db} dB — vale no próximo "Aplicar"`, 2200);
+      toast(db === 0 ? 'Voz do take no volume original'
+        : db <= -60 ? 'Take mudo — vale no próximo "Aplicar"'
+          : `Voz do take: ${db > 0 ? '+' : ''}${db} dB — vale no próximo "Aplicar"`, 2200);
     });
   }
   // velocidade do take (camera lenta / acelerado) — o que o CapCut chama
@@ -4635,6 +4642,42 @@ function renderPainelDoTake(lane, r) {
     });
   }
   rqSliders();
+  const esp = el('button', `ent-btn${r.flip ? ' on' : ''}`, rqWrap);
+  esp.type = 'button';
+  esp.textContent = 'Espelhar';
+  esp.title = 'Inverte o take da esquerda para a direita — o sujeito passa a '
+    + 'olhar para o outro lado';
+  esp.addEventListener('click', () => {
+    pushHistory();
+    if (r.flip) delete r.flip; else r.flip = true;
+    renderPainelDoTake(lane, r);
+    refreshHeader();
+    persistEdl();
+    toast(r.flip ? 'Take espelhado — vale no próximo "Aplicar"'
+      : 'Take volta ao lado original', 2200);
+  });
+  // duplicar: o take inteiro outra vez, logo depois, com os mesmos ajustes.
+  // srcIdx null porque a copia nao e o take original e nao herda a geometria
+  // de J-cut dele (mesma regra do corte em duas metades).
+  const dup = el('button', 'ent-btn', rqWrap);
+  dup.type = 'button';
+  dup.textContent = 'Duplicar';
+  dup.title = 'Repete este take logo em seguida, com os mesmos ajustes';
+  dup.addEventListener('click', () => {
+    const i = S.draft.indexOf(r);
+    if (i < 0) return;
+    pushHistory();
+    S.draft.splice(i + 1, 0, {
+      source: r.source, start: r.start, end: r.end, beat: r.beat,
+      ...camposDoTake(r), removed: false, srcIdx: null, added: true,
+      orig: { start: r.start, end: r.end },
+    });
+    S.selected = i + 1;
+    renderAll();
+    refreshHeader();
+    persistEdl();
+    toast('Take duplicado — vale no próximo "Aplicar"', 2200);
+  });
   // cor do take
   const corWrap = el('span', 'take-grupo', lane);
   const manual = gradeManualDoTake(r);
@@ -10179,11 +10222,11 @@ function applyRestoredEdl(edl) {
   S.draft = ranges.map((r, srcIdx) => ({
     source: r.source, start: +r.start, end: +r.end, beat: r.beat || '',
     gain_db: +(r.gain_db || 0), grade: r.grade || '', speed: +(r.speed || 1),
-    freeze: +(r.freeze || 0), reframe: r.reframe || null,
+    freeze: +(r.freeze || 0), reframe: r.reframe || null, flip: !!r.flip,
     removed: false, srcIdx,
     orig: { start: +r.start, end: +r.end, gain_db: +(r.gain_db || 0),
       grade: r.grade || '', speed: +(r.speed || 1), freeze: +(r.freeze || 0),
-      reframe: r.reframe || null },
+      reframe: r.reframe || null, flip: !!r.flip },
   }));
   renderAll();
   refreshHeader();

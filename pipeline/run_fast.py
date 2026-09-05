@@ -1118,6 +1118,8 @@ def load_preview_edit_ranges(edit_dir: Path, source_key: str) -> list[dict] | No
         _rq = reenquadrar_do_range(r)
         if _rq[0] > 1.001:
             item["reframe"] = {"z": _rq[0], "x": _rq[1], "y": _rq[2]}
+        if r.get("flip"):
+            item["flip"] = True
         _c = congelar_do_range(r)
         if _c > 0:
             item["freeze"] = _c
@@ -1272,6 +1274,8 @@ def load_manual_edl_ranges(edit_dir: Path, source_key: str, preset: dict,
         _rq = reenquadrar_do_range(r)
         if _rq[0] > 1.001:
             item["reframe"] = {"z": _rq[0], "x": _rq[1], "y": _rq[2]}
+        if r.get("flip"):
+            item["flip"] = True
         _c = congelar_do_range(r)
         if _c > 0:
             item["freeze"] = _c

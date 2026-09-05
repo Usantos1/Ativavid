@@ -932,6 +932,7 @@ def extract_segment(
     prepared: Path | None = None,
     extra_vf: str = "",
     reframe: str = "",
+    flip: bool = False,
     speed: float = 1.0,
     freeze: float = 0.0,
 ) -> None:
@@ -1005,6 +1006,10 @@ def extract_segment(
     # saida, entao ali ele nao entra.
     if reframe and streams != "a" and scale:
         vf_parts.append(reframe)
+    # 5.0.61: espelhar so troca a ordem das colunas — nao muda tamanho nem
+    # relogio —, entao vale tambem no longform, onde o crop nao entra.
+    if flip and streams != "a":
+        vf_parts.append("hflip")
     # Downscale FIRST, before any HDR tonemap / wide-gamut colour conversion.
     # TONEMAP_CHAIN runs a full-precision float pipeline (zscale linear-light +
     # gbrpf32le, i.e. 32-bit float, full chroma resolution, no subsampling) —
@@ -1376,6 +1381,7 @@ def extract_all_segments(
             prepared=prep_by_src.get(src_name),
             extra_vf=extra_vf,
             reframe=reframe_vf,
+            flip=bool(r.get("flip")),
             speed=vel,
             freeze=cong,
         )
@@ -1890,7 +1896,8 @@ def extract_and_assemble_jcut(
              # guardado do render anterior volta sem a cor, sem a
              # velocidade, sem o congelar e sem o enquadramento novos.
              str(r.get("grade") or ""),
-             _velocidade_key(r), _congelar_key(r), _reenq_key(r)],
+             _velocidade_key(r), _congelar_key(r), _reenq_key(r),
+             bool(r.get("flip"))],
         )
         akey = _seg_key(
             "a", p["src"], p["a_in"], p["a_out"],
@@ -1981,6 +1988,7 @@ def extract_and_assemble_jcut(
                             zoom=zoom_for_index(edl, i),
                             prepared=prep_by_src.get(r["source"]),
                             extra_vf=extra_vf, reframe=reframe_vf,
+                            flip=bool(r.get("flip")),
                             speed=vel, freeze=cong)
         if not p.get("reuse_a"):
             extract_segment(p["src"], p["a_in"], p["a_out"] - p["a_in"], "",

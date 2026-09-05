@@ -294,6 +294,21 @@ def reenquadrar_vf(z: float, x: float = 0.0, y: float = 0.0) -> str:
     return f"crop={cw}:{ch}:(iw-{cw})*{fx:.4f}:(ih-{ch})*{fy:.4f}"
 
 
+def espelhar_do_range(r: dict) -> bool:
+    """Espelhar este take na horizontal (5.0.61).
+
+    O "espelhar" do CapCut: o sujeito passa a olhar para o outro lado. Usado
+    para casar a direção de dois takes filmados de lados diferentes, e para
+    quem se grava de frente e estranha a própria imagem invertida.
+
+    Não mexe em tamanho nem em relógio — só na ordem das colunas —, então
+    entra no `crop` do reenquadramento e sai por cima de qualquer `scale`.
+    """
+    if not isinstance(r, dict):
+        return False
+    return bool(r.get("flip"))
+
+
 def tem_velocidade(ranges) -> bool:
     return any(velocidade_do_range(r) != 1.0 or congelar_do_range(r) > 0
                for r in (ranges or []) if isinstance(r, dict))
