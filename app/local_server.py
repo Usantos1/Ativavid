@@ -2210,9 +2210,11 @@ class StudioHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/jobs":
             from app.jobs_view import build as build_jobs
+            from app.llm_session import ia_sessao_resumo
 
             self._json({"jobs": build_jobs(self.store, self.projects_root),
-                        "busy": self.worker.busy_id})
+                        "busy": self.worker.busy_id,
+                        "iaSessao": ia_sessao_resumo()})
             return
         if path == "/api/content-types":
             from app.content_type import choices
@@ -3623,6 +3625,18 @@ class StudioHandler(BaseHTTPRequestHandler):
             body = self._read_json() or {}
             code, payload = gw.chat_completions(body if isinstance(body, dict) else {})
             self._json(payload, code)
+            return
+
+        if path == "/api/llm-proxy/sondar":
+            # 5.0.78: "Testar agora" do aviso da Fila — a mesma sonda do
+            # Doutor (pede o token de verdade), grava a saude e devolve o
+            # resumo que a Fila mostra.
+            from app.llm_session import PROVEDORES_DO_PLANO, ia_sessao_resumo, sondar
+
+            stored = load_sessions().get("providers") or {}
+            resultados = {p: sondar(p) for p in PROVEDORES_DO_PLANO if stored.get(p)}
+            self._json({"ok": True, "sondas": {p: {"ok": r[0], "erro": r[1]} for p, r in resultados.items()},
+                        "iaSessao": ia_sessao_resumo()})
             return
 
         if path == "/api/llm-proxy/test":

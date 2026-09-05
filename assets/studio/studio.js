@@ -1766,10 +1766,48 @@ async function refreshJobs() {
   maybeToastApply(state.jobs, next);
   state.jobs = next;
   state.jobsLoaded = true;
+  renderAvisoIa(data.iaSessao);
   // Retrato da lista para a PROXIMA abertura do hub pintar na hora (voltar
   // do preview recarrega a pagina; o /api/jobs leva 1-2s com 250 projetos)
   try { localStorage.setItem("ativavid.jobs.cache", JSON.stringify(incoming)); } catch { /* cheio/bloqueado */ }
   renderJobs();
+}
+
+/** 5.0.78: a sessao da IA principal expirou — os videos saem com o plano
+ *  via Groq e sem a revisao do texto. No lote de 04/09 foram 17 videos sem
+ *  ninguem ver: o unico rastro era o pipeline.log. O resumo vem no
+ *  /api/jobs (saude gravada por cada chamada real); "Testar agora" faz a
+ *  sonda de verdade e o aviso some sozinho quando a sessao volta. */
+function renderAvisoIa(ia) {
+  const box = $("#avisoIa");
+  if (!box) return;
+  if (!ia || ia.ok !== false) { box.classList.add("hidden"); return; }
+  const nomes = (ia.caidas || []).join(" e ") || "Gemini/ChatGPT";
+  $("#avisoIaTexto").textContent =
+    `Sessão da IA expirada (${nomes}): os vídeos estão saindo com o plano via Groq e sem a revisão do texto. ` +
+    "Abra o site logado no navegador — a extensão recaptura sozinha em 2 min.";
+  box.classList.remove("hidden");
+}
+
+function wireAvisoIa() {
+  const testar = $("#avisoIaTestar");
+  const abrir = $("#avisoIaAbrir");
+  if (abrir) abrir.addEventListener("click", () => setView("ia"));
+  if (testar) testar.addEventListener("click", async () => {
+    testar.disabled = true;
+    testar.textContent = "Testando…";
+    try {
+      const r = await api("/api/llm-proxy/sondar", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      renderAvisoIa(r.iaSessao);
+      if (r.iaSessao && r.iaSessao.ok !== false) toast("Sessão da IA respondendo de novo");
+      else toast("Ainda sem sessão — abra o site logado e tente de novo", 5000);
+    } catch (err) {
+      toast(err.message || "Não foi possível testar");
+    } finally {
+      testar.disabled = false;
+      testar.textContent = "Testar agora";
+    }
+  });
 }
 
 async function refreshHealth() {
@@ -8769,6 +8807,7 @@ function wireTheme() {
 }
 
 async function boot() {
+  wireAvisoIa();
   // O ultimo total conhecido das Aulas pinta ANTES de qualquer espera: o
   // `wireTitlebar` abaixo aguarda a ponte do app, e ate ela responder o
   // menu ficava mostrando o 0 do HTML.

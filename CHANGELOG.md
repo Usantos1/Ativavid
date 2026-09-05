@@ -1,5 +1,16 @@
 # Changelog
 
+## 5.0.78
+
+- **Aviso na Fila quando a sessão da IA expira.** Se o Gemini e o ChatGPT
+  deslogaram no navegador, uma faixa aparece acima da área de trabalho
+  logo depois do primeiro vídeo afetado — sem precisar abrir a checagem —
+  dizendo que os vídeos estão saindo com o plano pelo Groq e sem a revisão
+  do texto, com os botões *Testar agora* e *Abrir IA*. A faixa some sozinha
+  quando a sessão volta.
+- Medição: a espera pela revisão do texto não é mais somada duas vezes no
+  tempo total do vídeo (`timing.json`).
+
 ## 5.0.77
 
 - **Render final ~30 % mais rápido.** O desenho das legendas e a montagem

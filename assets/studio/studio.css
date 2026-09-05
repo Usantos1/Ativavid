@@ -4469,3 +4469,21 @@ body.view-roteiro-on .ws-body { overflow: hidden; }
 }
 .sys-quem-item:hover { color: var(--text); background: color-mix(in srgb, var(--text) 10%, transparent); }
 .sys-quem-item .mono { font-family: ui-monospace, Consolas, monospace; letter-spacing: 0.02em; }
+
+/* 5.0.78: aviso de sessao da IA expirada, acima da area de trabalho */
+.aviso-ia {
+  flex-basis: 100%;            /* linha inteira do cabecalho (flex-wrap) */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 2px 0 4px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(245, 185, 66, 0.14);
+  border: 1px solid rgba(245, 185, 66, 0.45);
+  color: var(--warn);
+  font-size: 13px;
+  line-height: 1.35;
+}
+.aviso-ia-acoes { display: flex; gap: 8px; flex-shrink: 0; }

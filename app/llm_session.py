@@ -474,6 +474,39 @@ def saude_dos_provedores() -> dict:
         return {}
 
 
+PROVEDORES_DO_PLANO = ("gemini-web", "chatgpt-web")
+
+
+def ia_sessao_resumo() -> dict:
+    """O que a Fila mostra sobre a IA principal (5.0.78): so avisa quando HA
+    sessao capturada e a ultima chamada real dela falhou. Sem sessao nenhuma
+    e escolha (plano via Groq) e nao gera aviso; a checagem cobre isso.
+
+    Le `llm-health.json` (gravado por cada chamada real e pela sonda) — sem
+    rede, para caber no /api/jobs que o hub pede a cada poucos segundos.
+    """
+    try:
+        from app.local_server import load_sessions
+        stored = load_sessions().get("providers") or {}
+    except Exception:  # noqa: BLE001
+        stored = {}
+    saude = saude_dos_provedores()
+    capturadas = [p for p in PROVEDORES_DO_PLANO if stored.get(p)]
+    caidas = [p for p in capturadas if (saude.get(p) or {}).get("ok") is False]
+    vivas = [p for p in capturadas if p not in caidas]
+    nomes = {"gemini-web": "Gemini Web", "chatgpt-web": "ChatGPT Web"}
+    if not capturadas or vivas:
+        return {"ok": True, "caidas": [nomes[p] for p in caidas], "vivas": [nomes[p] for p in vivas]}
+    ultimo = max((saude.get(p) or {}).get("at") or "" for p in caidas)
+    return {
+        "ok": False,
+        "caidas": [nomes[p] for p in caidas],
+        "vivas": [],
+        "erro": str((saude.get(caidas[0]) or {}).get("erro") or "")[:160],
+        "at": ultimo,
+    }
+
+
 def sondar(provider_id: str) -> tuple[bool | None, str]:
     """Uma chamada REAL e barata — so o passo do token, sem gerar texto.
 

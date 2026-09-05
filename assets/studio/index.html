@@ -186,6 +186,18 @@
         <div class="ws-head-right">
           <div class="ws-meta" id="queueMeta"></div>
         </div>
+        <!-- 5.0.78: a IA principal caiu (sessao do navegador expirou). Vem do
+             /api/jobs, entao aparece no primeiro poll depois do primeiro job
+             que falhou — sem abrir Configuracoes. Mora DENTRO do cabecalho
+             (linha inteira do flex-wrap): a area de trabalho e um grid de
+             duas linhas, e um terceiro filho quebrava o layout. -->
+        <div id="avisoIa" class="aviso-ia hidden" role="status">
+          <span class="aviso-ia-texto" id="avisoIaTexto"></span>
+          <span class="aviso-ia-acoes">
+            <button type="button" class="ghost-btn ghost-btn--sm" id="avisoIaTestar">Testar agora</button>
+            <button type="button" class="ghost-btn ghost-btn--sm" id="avisoIaAbrir">Abrir IA</button>
+          </span>
+        </div>
       </header>
 
       <main class="ws-body">

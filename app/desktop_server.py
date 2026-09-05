@@ -332,7 +332,10 @@ class DesktopHandler(ps.Handler):
                         }, indent=2, ensure_ascii=False),
                         encoding="utf-8",
                     )
-            self._json({"jobs": jobs, "busy": self.worker.busy_id})
+            from app.llm_session import ia_sessao_resumo
+
+            self._json({"jobs": jobs, "busy": self.worker.busy_id,
+                        "iaSessao": ia_sessao_resumo()})
             return
         if raw == "/api/jobs/buscar":
             # 5.0.42: busca pelo que foi DITO (transcricao + legenda do post).
@@ -534,6 +537,7 @@ class DesktopHandler(ps.Handler):
             "/api/admin/access",
             "/api/admin/devices",
             "/api/apply-ack",
+            "/api/llm-proxy/sondar",
             "/api/jobs",
             "/api/jobs/open-folder",
             "/api/jobs/srt",
