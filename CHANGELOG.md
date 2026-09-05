@@ -1,5 +1,14 @@
 # Changelog
 
+## 5.0.65
+
+- **A edição fica mais rápida.** A parte mais lenta de criar o vídeo é
+  aplicar a cor, e ela era refeita conta por conta em cada quadro. Agora o
+  ATIVAVID monta uma tabela do seu look uma única vez e consulta essa
+  tabela. No teste com um vídeo real, o trecho mais pesado caiu de 20,4
+  para 15,4 segundos. A cor é a mesma: medida quadro a quadro, a diferença
+  é de no máximo 2 tons em 255.
+
 ## 5.0.64
 
 - **Emoji nas legendas agora entende o que você fala.** O dicionário

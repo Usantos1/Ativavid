@@ -644,7 +644,7 @@ def _auto_extract_jobs() -> int:
     return max(1, min(4, (os.cpu_count() or 4) // 3))
 
 
-# -------- Investigacao fechada: cor cara em tabela 3D (05/09) ---------------
+# -------- Cor cara vira tabela (5.0.65) --------------------------------------
 #
 # MEDIDO no take de 21,13 s de um projeto real (1080p60 HEVC, melhor de 2):
 #
@@ -659,21 +659,134 @@ def _auto_extract_jobs() -> int:
 # que o decode e o encode somados. Ele e ~56% da extracao; a extracao e 85%
 # do corte (medido em `TIMING_CORTE`); o corte e 29% do job.
 #
-# TENTADO: trocar o trecho so-RGB da cadeia (colorbalance/curves/
-# colorlevels/colorchannelmixer, que o ffmpeg ja roda em RGB) por uma
-# tabela 3D de 64 niveis gerada da PROPRIA cadeia (`haldclutsrc` -> .cube ->
-# `lut3d=interp=tetrahedral`). Funcionou e ficou 1,20x mais rapido
-# (20,6 -> 17,1 s), mas a cor ANDA: comparando quadro a quadro nos seis
-# presets com colorbalance, o vies e sistematico e sempre para o escuro —
-# apple_log -0,96/-1,86/-2,35, vintage -2,02/-2,50/-2,01, warm_cinematic
-# -1,53/-2,00/-1,39 (RGB, de 255). Tabela de 16 bits nao corrige (-1,68/
-# -1,57/-1,57): o desvio vem da propria amostragem da grade — uma
-# `haldclut` IDENTIDADE ja devolve erro medio 0,52.
+# `colorbalance`, `curves`, `colorlevels` e `colorchannelmixer` sao funcoes
+# PURAS do pixel RGB — o ffmpeg ja converte para RGB so para roda-las (ele
+# insere um `auto_scale` para rgb24 sozinho). Uma tabela 3D responde a
+# mesma pergunta de uma vez, e ela nasce da PROPRIA cadeia: o `haldclutsrc`
+# passa um quadro identidade pelos mesmos filtros.
 #
-# 1,20x numa etapa que e 29% do job (~5% no total) nao paga escurecer o
-# video de todo mundo. Nao refazer sem uma forma de gerar a tabela sem esse
-# vies (LUT calculada em float pela formula do colorbalance, nao amostrada
-# pelo ffmpeg).
+# RESULTADO (mesmo take): 19,19 -> 15,32 s, 1,25x. A fidelidade foi medida
+# comparando os quadros em yuv420p CRU, que e o que o encoder recebe:
+#
+#   |d| medio 0,177 a 0,682 de 255, PIOR PIXEL 2, nos seis presets
+#
+# A primeira medicao dizia "vies de -1,5 a -2,5" e me fez descartar a
+# ideia. Estava errada: ela comparava os dois lados depois de uma
+# conversao EXTRA para rgb24, e era essa conversao que escurecia. Provado
+# depois: a mesma cadeia com a ida-e-volta explicita da |d| medio 0,000
+# contra a implicita. Medir no formato de saida de verdade e o que separa
+# um desvio real de um desvio do teste.
+#
+# `eq` e `hue` ficam de fora: rodam em YUV, e a mesma conta em RGB da outra
+# cor. Por isso a tabela cobre so o TRECHO de filtros RGB em volta do
+# `colorbalance`.
+
+_FILTROS_SO_RGB = ("colorbalance", "curves", "colorlevels", "colorchannelmixer")
+# hald level 6 = 36 niveis por canal. Medido: 16, 25, 36 e 64 dao o mesmo
+# tempo (15,1-15,5 s) e a mesma fidelidade (pior pixel 2) — entao vale o
+# arquivo menor que ainda tem folga de sobra.
+_LUT_NIVEL = 6
+_LUT_LADO = _LUT_NIVEL * _LUT_NIVEL
+
+
+def _quebrar_filtros(cadeia: str) -> list[str]:
+    """Divide por virgula, respeitando aspas simples (curves usa aspas)."""
+    partes, atual, aspas = [], [], False
+    for ch in cadeia:
+        if ch == "'":
+            aspas = not aspas
+        if ch == "," and not aspas:
+            partes.append("".join(atual))
+            atual = []
+        else:
+            atual.append(ch)
+    if atual:
+        partes.append("".join(atual))
+    return [x.strip() for x in partes if x.strip()]
+
+
+def _trecho_rgb(cadeia: str) -> tuple[str, str, str]:
+    """(antes, o que vira tabela, depois).
+
+    O trecho e o RUN de filtros so-RGB que contem o `colorbalance` — nao o
+    sufixo. O look `marca`, o mais usado, e `eq, colorbalance, hue`: com a
+    regra de sufixo o `hue` no fim deixava o filtro caro de fora e a
+    aceleracao nao valia para quase ninguem.
+
+    Sem `colorbalance` nao vale a troca: `curves` sozinho custa 2,33 s e a
+    ida e volta para RGB custa 1,46.
+    """
+    partes = _quebrar_filtros(cadeia)
+    alvo = next((i for i, f in enumerate(partes)
+                 if f.split("=", 1)[0] == "colorbalance"), None)
+    if alvo is None:
+        return cadeia, "", ""
+    ini = alvo
+    while ini > 0 and partes[ini - 1].split("=", 1)[0] in _FILTROS_SO_RGB:
+        ini -= 1
+    fim = alvo + 1
+    while fim < len(partes) and partes[fim].split("=", 1)[0] in _FILTROS_SO_RGB:
+        fim += 1
+    return (",".join(partes[:ini]), ",".join(partes[ini:fim]),
+            ",".join(partes[fim:]))
+
+
+def _escapar_para_filtro(caminho: Path) -> str:
+    """Caminho dentro de um filtro: barras normais e `:` com DOIS escapes.
+
+    Medido nas cinco formas: `E:/...`, `E\\:/...` e `'E:/...'` todas dao
+    "No option name near '/Temp/...'"; `E\\\\:/...` passa. O parser do GRAFO
+    come um nivel e o parser de OPCOES do filtro come o outro.
+    """
+    return str(caminho).replace("\\", "/").replace(":", "\\\\:")
+
+
+def _tabela_de_cor(trecho: str) -> "Path | None":
+    """A tabela .cube deste trecho, gerada uma vez e guardada em disco."""
+    alvo = Path(tempfile.gettempdir()) / "ativavid-luts"
+    chave = hashlib.sha1(
+        f"{_LUT_LADO}|{trecho}".encode("utf-8")).hexdigest()[:16]
+    cube = alvo / f"{chave}.cube"
+    n = _LUT_LADO
+    if cube.is_file() and cube.stat().st_size > 20_000:
+        return cube
+    try:
+        alvo.mkdir(parents=True, exist_ok=True)
+        bruto = _run(
+            ["ffmpeg", "-v", "error", "-f", "lavfi",
+             "-i", f"haldclutsrc=level={_LUT_NIVEL}",
+             "-vf", trecho, "-frames:v", "1",
+             "-pix_fmt", "rgb24", "-f", "rawvideo", "-"],
+            check=True, capture_output=True).stdout
+        if len(bruto) != n * n * n * 3:
+            return None
+        # A ordem do hald e a mesma do .cube: R varia mais rapido, depois G, B.
+        linhas = ['TITLE "ativavid"', f"LUT_3D_SIZE {n}"]
+        linhas += [f"{bruto[i] / 255:.6f} {bruto[i + 1] / 255:.6f} "
+                   f"{bruto[i + 2] / 255:.6f}"
+                   for i in range(0, len(bruto), 3)]
+        tmp = cube.with_suffix(f".tmp{os.getpid()}")
+        tmp.write_text("\n".join(linhas) + "\n", encoding="utf-8")
+        os.replace(tmp, cube)              # troca atomica: nunca meio arquivo
+        return cube
+    except Exception as e:  # noqa: BLE001 — sem tabela o corte segue pela cadeia
+        print(f"  [warn] tabela de cor: {e}", flush=True)
+        return None
+
+
+def acelerar_grade(cadeia: str) -> str:
+    """A mesma cor, pelo caminho barato — ou a cadeia original, intacta."""
+    if not cadeia or os.environ.get("ATIVAVID_GRADE_LUT", "").strip() == "0":
+        return cadeia
+    antes, trecho, depois = _trecho_rgb(cadeia)
+    if not trecho:
+        return cadeia
+    cube = _tabela_de_cor(trecho)
+    if cube is None:
+        return cadeia
+    tabela = (f"format=rgb24,lut3d=file={_escapar_para_filtro(cube)}"
+              f":interp=tetrahedral,format=yuv420p")
+    return ",".join(x for x in (antes, tabela, depois) if x)
 
 
 # -------- Per-segment extraction (Rule 2 + Rule 3) --------------------------
@@ -1069,7 +1182,7 @@ def extract_segment(
         # makes the render match the 8-bit frame the user approved in the
         # `grade.py --candidates` montage.
         vf_parts.append("format=yuv420p")
-        vf_parts.append(grade_filter)
+        vf_parts.append(acelerar_grade(grade_filter))
     if extra_vf and streams != "a":
         if "format=yuv420p" not in vf_parts:
             vf_parts.append("format=yuv420p")
