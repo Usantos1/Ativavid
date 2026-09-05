@@ -7853,6 +7853,7 @@ const NOME_DO_ESTILO = {
     flash: "Flash", brilho: "Brilho", escurece: "Escurece",
     faixa: "Faixa da marca", nenhuma: "Sem transição",
     cortina: "Cortina", blocos: "Blocos", moldura: "Moldura", traco: "Traço de luz",
+    cortinalado: "Cortina lateral", pulso: "Pulso da marca",
   },
   ritmo: {
     natural: "Natural", dinamico: "Dinâmico", intenso: "Intenso",

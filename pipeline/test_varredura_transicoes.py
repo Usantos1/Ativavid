@@ -59,7 +59,10 @@ def test_o_achado_fica_no_codigo_do_flash():
 def test_o_feixe_e_colado_pelo_centro():
     """`expand=True` devolve uma imagem maior que o retângulo: colar pelo
     canto empurrava o feixe +462px para a direita, em todo vídeo."""
+    # A funcao inteira, e nao uma janela de N caracteres: cada transicao
+    # nova (5.0.25, 5.0.51, 5.0.52) empurrava o feixe para fora da janela e
+    # o teste quebrava sem defeito nenhum.
     i = RP.index("def _flash_quadro(")
-    corpo = RP[i:i + 2200]
+    corpo = RP[i:RP.index("\n    def ", i + 10)]
     assert "barra.width / 2.0" in corpo and "barra.height / 2.0" in corpo
     assert "img.paste(barra, (int(x)" not in corpo

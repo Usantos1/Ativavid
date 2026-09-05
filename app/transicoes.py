@@ -25,11 +25,14 @@ NOMES: dict[str, str] = {
     "blocos": "Blocos (mosaico da marca)",
     "moldura": "Moldura (borda pisca)",
     "traco": "Traço de luz (fino)",
+    # 5.0.52 — mais duas ("Continue", 05/09 04h20)
+    "cortinalado": "Cortina lateral (esquerda e direita)",
+    "pulso": "Pulso na cor da marca",
 }
 TIPOS = tuple(NOMES) + ("nenhuma",)
 
 # Quem usa a cor da marca em vez de branco/preto
-USAM_A_COR_DA_MARCA = frozenset({"faixa", "cortina", "blocos", "moldura"})
+USAM_A_COR_DA_MARCA = frozenset({"faixa", "cortina", "blocos", "moldura", "cortinalado", "pulso"})
 
 # A chave, no edit-data do projeto, das escolhas POR CORTE feitas no editor:
 # {"<indice da emenda>": "<tipo>"}. Indice 0 = entre o 1o e o 2o trecho.

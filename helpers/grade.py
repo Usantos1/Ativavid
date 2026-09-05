@@ -113,6 +113,19 @@ PRESETS: dict[str, str] = {
         "curves=master='0/0.07 0.5/0.52 1/0.95'"
     ),
 
+    # 5.0.52 — mais dois.
+    # Teal & laranja: sombras frias (teal), altas quentes (laranja) — o look
+    # de cinema. Contido, para nao deixar a pele alaranjada.
+    "teal_laranja": (
+        "eq=contrast=1.10:saturation=1.08:gamma=0.98,"
+        "colorbalance=rs=-0.06:gs=-0.02:bs=0.08:rm=0.02:gm=0.0:bm=0.0:rh=0.08:gh=0.03:bh=-0.08"
+    ),
+    # Pastel suave: contraste baixo, cor contida, um pouco mais claro.
+    "pastel_suave": (
+        "eq=contrast=0.90:saturation=0.85:gamma=1.06:brightness=0.03,"
+        "curves=master='0/0.04 0.5/0.55 1/0.97'"
+    ),
+
     # Flat — no grade. Useful as a sentinel for "skip grading this source".
     "none": "",
 

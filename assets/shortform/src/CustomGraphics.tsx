@@ -69,7 +69,8 @@ type CutFlash = {
   sfx?: string;
   volume?: number;
   // 5.0.25: ate aqui so existia o feixe. Os tipos vivem em app/transicoes.py.
-  type?: 'flash' | 'brilho' | 'escurece' | 'faixa' | 'cortina' | 'blocos' | 'moldura' | 'traco';
+  type?: 'flash' | 'brilho' | 'escurece' | 'faixa' | 'cortina' | 'blocos' | 'moldura' | 'traco'
+    | 'cortinalado' | 'pulso';
   accent?: string;
 };
 
@@ -167,6 +168,30 @@ const CutFlashes: React.FC<{items: CutFlash[]; corDaMarca?: string}> = ({items, 
       <AbsoluteFill style={{pointerEvents: 'none'}}>
         <div style={{position: 'absolute', left: 0, top: 0, width: '100%', height: alt, background: ac, opacity: 0.95 * k}} />
         <div style={{position: 'absolute', left: 0, bottom: 0, width: '100%', height: alt, background: ac, opacity: 0.95 * k}} />
+        {sfx}
+      </AbsoluteFill>
+    );
+  }
+  // "cortinalado": a cortina deitada — duas faixas vem da esquerda e da
+  // direita, se encontram no corte e reabrem.
+  if (tipo === 'cortinalado') {
+    const cobre = interpolate(p, [0, 0.45, 0.55, 1], [0, 1, 1, 0], clamp);
+    const larg = `${(50 * cobre).toFixed(2)}%`;
+    return (
+      <AbsoluteFill style={{pointerEvents: 'none'}}>
+        <div style={{position: 'absolute', top: 0, left: 0, height: '100%', width: larg, background: ac, opacity: 0.95 * k}} />
+        <div style={{position: 'absolute', top: 0, right: 0, height: '100%', width: larg, background: ac, opacity: 0.95 * k}} />
+        {sfx}
+      </AbsoluteFill>
+    );
+  }
+  // "pulso": o clarao do brilho, mas na cor da marca — o quadro inteiro
+  // pisca na cor da empresa.
+  if (tipo === 'pulso') {
+    const pico = interpolate(frame, [c - 2, c, c + 3], [0, 0.62 * k, 0], clamp);
+    return (
+      <AbsoluteFill style={{pointerEvents: 'none'}}>
+        <AbsoluteFill style={{backgroundColor: ac, opacity: pico}} />
         {sfx}
       </AbsoluteFill>
     );

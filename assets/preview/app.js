@@ -2495,6 +2495,7 @@ const COR_DA_TRANSICAO = {
   // 5.0.51
   cortina: 'var(--hl-accent, #ff5200)', blocos: 'var(--hl-accent, #ff5200)',
   moldura: 'var(--hl-accent, #ff5200)', traco: '#ffe9a8',
+  cortinalado: 'var(--hl-accent, #ff5200)', pulso: 'var(--hl-accent, #ff5200)',
 };
 
 function draftRangesPayload() {

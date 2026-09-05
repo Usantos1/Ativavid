@@ -1,5 +1,14 @@
 # Changelog
 
+## 5.0.52
+
+- **Mais duas transições:** Cortina lateral (as faixas vêm da esquerda e
+  da direita) e Pulso na cor da marca (o quadro inteiro pisca na cor da
+  empresa). Nos dois motores, no editor e no cartão do preset (medido:
+  1,000 e 1,000 de tinta).
+- **Mais dois estilos de cor:** Teal & laranja (o look de cinema, contido
+  para não alaranjar a pele) e Pastel suave.
+
 ## 5.0.51
 
 - **Quatro transições de corte novas:** Cortina (duas faixas na cor da

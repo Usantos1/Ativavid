@@ -23,8 +23,8 @@ sys.path.insert(0, str(REPO / "helpers"))
 
 from app.transicoes import NOMES, TIPOS, USAM_A_COR_DA_MARCA  # noqa: E402
 
-NOVAS = ("cortina", "blocos", "moldura", "traco")
-CORES_NOVAS = ("frio_limpo", "vibrante", "preto_branco", "vintage")
+NOVAS = ("cortina", "blocos", "moldura", "traco", "cortinalado", "pulso")
+CORES_NOVAS = ("frio_limpo", "vibrante", "preto_branco", "vintage", "teal_laranja", "pastel_suave")
 TSX = (REPO / "assets" / "shortform" / "src" / "CustomGraphics.tsx").read_text(encoding="utf-8")
 PROPRIO = (REPO / "app" / "render_proprio.py").read_text(encoding="utf-8")
 HTML = (REPO / "assets" / "preview" / "index.html").read_text(encoding="utf-8")
@@ -35,7 +35,7 @@ SJS = (REPO / "assets" / "studio" / "studio.js").read_text(encoding="utf-8")
 def test_catalogo_e_tipos():
     for t in NOVAS:
         assert t in NOMES and t in TIPOS
-    assert USAM_A_COR_DA_MARCA == {"faixa", "cortina", "blocos", "moldura"}
+    assert USAM_A_COR_DA_MARCA == {"faixa", "cortina", "blocos", "moldura", "cortinalado", "pulso"}
     assert "traco" not in USAM_A_COR_DA_MARCA, "o traco e branco, como o flash"
 
 
@@ -44,13 +44,14 @@ def test_os_dois_motores_desenham_as_quatro():
         assert f"tipo === '{t}'" in TSX, f"o template nao desenha `{t}`"
         assert f'"{t}"' in PROPRIO, f"motor proprio sem `{t}`"
     assert "'cortina' | 'blocos' | 'moldura' | 'traco'" in TSX, "fora do tipo — o tsc reprova"
+    assert "| 'cortinalado' | 'pulso'" in TSX
     assert "def _transicao_nova(self, tipo: str, c: int, f: int, k: float):" in PROPRIO
 
 
 def test_as_novas_ficam_antes_da_faixa_no_motor_proprio():
     # O teste da faixa (5.0.25) recorta o ramo dela entre dois
     # `est = f - (c - FLASH_LEAD)`; um ramo novo no meio quebraria o recorte.
-    assert PROPRIO.index('if tipo in ("cortina", "blocos", "moldura", "traco"):') < PROPRIO.index('if tipo == "faixa":')
+    assert PROPRIO.index('if tipo in ("cortina", "blocos", "moldura", "traco", "cortinalado", "pulso"):') < PROPRIO.index('if tipo == "faixa":')
 
 
 def test_mesma_conta_nos_dois_motores():
@@ -62,6 +63,9 @@ def test_mesma_conta_nos_dois_motores():
     # moldura: pico em [c-2, c, c+3] -> 0.9k; espessura 6% da largura
     assert "[c - 2, c, c + 3], [0, 0.9 * k, 0]" in TSX and "[c - 2, c, c + 3], [0, 0.9 * k, 0]" in PROPRIO
     assert "width * 0.06" in TSX and "self.w * 0.06" in PROPRIO
+    # cortinalado: mesma cobertura, largura 50% * cobre; pulso: pico do brilho na cor da marca
+    assert "self.w * 0.5 * cobre" in PROPRIO and "(50 * cobre).toFixed(2)" in TSX
+    assert "[c - 2, c, c + 3], [0, 0.62 * k, 0]" in TSX and "[c - 2, c, c + 3], [0, 0.62 * k, 0]" in PROPRIO
     # traco: giro de -18deg no CSS = +18 no PIL
     i = PROPRIO.index('if tipo == "traco":')
     assert "rotate(\n                18, expand=True" in PROPRIO[i:i + 900] or "rotate(18" in PROPRIO[i:i + 900]

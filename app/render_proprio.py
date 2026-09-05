@@ -5053,7 +5053,7 @@ class Renderizador:
             return np.full((self.h, self.w), pico, dtype=np.float32), cor
         # 5.0.51 — quatro novas. Ficam ANTES da faixa de proposito: o teste da
         # faixa recorta o ramo dela entre dois `est = f - (c - FLASH_LEAD)`.
-        if tipo in ("cortina", "blocos", "moldura", "traco"):
+        if tipo in ("cortina", "blocos", "moldura", "traco", "cortinalado", "pulso"):
             return self._transicao_nova(tipo, c, f, k)
         if tipo == "faixa":
             est = f - (c - FLASH_LEAD)
@@ -5132,6 +5132,20 @@ class Renderizador:
             a[:alt, :] = 0.95 * k
             a[self.h - alt:, :] = 0.95 * k
             return a, marca
+        if tipo == "cortinalado":
+            cobre = float(np.interp(p, [0, 0.45, 0.55, 1], [0, 1, 1, 0]))
+            larg = int(round(self.w * 0.5 * cobre))
+            if larg <= 0:
+                return None
+            a = np.zeros((self.h, self.w), dtype=np.float32)
+            a[:, :larg] = 0.95 * k
+            a[:, self.w - larg:] = 0.95 * k
+            return a, marca
+        if tipo == "pulso":
+            pico = float(np.interp(f, [c - 2, c, c + 3], [0, 0.62 * k, 0]))
+            if pico <= 0.001:
+                return None
+            return np.full((self.h, self.w), pico, dtype=np.float32), marca
         if tipo == "blocos":
             cols, rows = 6, 10
             cw, ch = self.w / cols, self.h / rows
