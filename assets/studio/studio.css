@@ -587,6 +587,12 @@ html[data-theme="light"] .sb-item.active { background: color-mix(in srgb, var(--
   color: var(--accent);
 }
 .sb-badge { background: color-mix(in srgb, var(--teal) 12%, transparent); color: var(--teal); }
+/* 5.0.69: aula que ele ainda nao viu acende o contador. O NUMERO passou a
+   ser o total (como Fila, Concluidos e Projetos); o "novo" virou cor. */
+.sb-count[data-novo="1"] {
+  background: color-mix(in srgb, var(--teal) 16%, transparent);
+  color: var(--teal);
+}
 .sb-foot {
   display: flex;
   flex-direction: column;

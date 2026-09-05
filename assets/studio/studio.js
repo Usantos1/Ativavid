@@ -497,11 +497,14 @@ function jobRecency(j) {
 }
 
 /** Contador do menu. `data-zero` some com o ponto no sidebar recolhido. */
-function setCount(sel, n) {
+function setCount(sel, n, opcoes) {
   const el = $(sel);
   if (!el) return;
   el.textContent = String(n);
   el.dataset.zero = n ? "0" : "1";
+  // `novo` acende o contador sem mudar o numero — ver o selo das Aulas
+  if (opcoes && "novo" in opcoes) el.dataset.novo = opcoes.novo ? "1" : "0";
+  if (opcoes && opcoes.titulo) el.title = opcoes.titulo;
 }
 
 function byRecency(a, b) {
@@ -7259,26 +7262,55 @@ function aulaAtual() {
   return (state.aulas.lista || []).find((a) => a.id === state.aulas.atualId) || null;
 }
 
-/* Aulas NOVAS (5.0.14): o que o admin publicou desde a ultima visita a
- * tela vira um selo no menu, como a Fila. Abrir a tela marca tudo como
- * visto. */
+/* O selo das Aulas (5.0.14, corrigido na 5.0.69).
+ *
+ * Ele mostrava quantas aulas eram NOVAS desde a ultima visita — e por isso
+ * ficava em 0 quase sempre. Ao lado de "Fila", "Concluidos" e "Projetos",
+ * que mostram TOTAL, "Aulas 0" com uma aula publicada so podia ser lido
+ * como "nao tem aula nenhuma". Foi o que ele leu (05/09, com print).
+ *
+ * Agora o numero e o TOTAL, como os tres vizinhos, e "tem aula nova" virou
+ * a COR do selo. */
 const AULAS_VISTAS_KEY = "ativavid.aulas.vistas";
+const AULAS_TOTAL_KEY = "ativavid.aulas.total";
 function aulasVistas() {
   try { return new Set(JSON.parse(localStorage.getItem(AULAS_VISTAS_KEY) || "[]")); } catch { return new Set(); }
 }
+function pintarSeloDeAulas(lista, novas) {
+  const total = (lista || []).length;
+  try { localStorage.setItem(AULAS_TOTAL_KEY, String(total)); } catch { /* ignore */ }
+  setCount("#countAulas", total, {
+    novo: novas > 0,
+    titulo: !total ? "Nenhuma aula publicada ainda"
+      : novas > 0 ? `${total} aula${total > 1 ? "s" : ""} — ${novas} nova${novas > 1 ? "s" : ""}`
+        : `${total} aula${total > 1 ? "s" : ""}`,
+  });
+}
 function aulasMarcarVistas(lista) {
   try { localStorage.setItem(AULAS_VISTAS_KEY, JSON.stringify((lista || []).map((a) => a.id))); } catch { /* ignore */ }
-  setCount("#countAulas", 0);
+  pintarSeloDeAulas(lista, 0);
 }
+function seloDeAulasDoCache() {
+  // Sem isto o menu nasce em 0 e so corrige quando a rede volta — e um 0
+  // ao lado de "Aulas" se le como "nao tem aula nenhuma".
+  try {
+    const n = parseInt(localStorage.getItem(AULAS_TOTAL_KEY) || "", 10);
+    if (Number.isFinite(n) && n > 0) {
+      setCount("#countAulas", n, { titulo: `${n} aula${n > 1 ? "s" : ""}` });
+    }
+  } catch { /* ignore */ }
+}
+
 async function contarAulasNovas() {
+  seloDeAulasDoCache();
   try {
     const r = await api("/api/aulas");
+    const lista = r.aulas || [];
     const vistas = aulasVistas();
-    // primeira vez (nada visto ainda): nao pinta tudo de "novo", so o que
-    // chegar daqui em diante
-    if (!vistas.size) { aulasMarcarVistas(r.aulas || []); return; }
-    const novas = (r.aulas || []).filter((a) => !vistas.has(a.id)).length;
-    setCount("#countAulas", novas);
+    // primeira vez (nada visto ainda): o total aparece, mas nada fica
+    // marcado como novo — so o que chegar daqui em diante
+    if (!vistas.size) { aulasMarcarVistas(lista); return; }
+    pintarSeloDeAulas(lista, lista.filter((a) => !vistas.has(a.id)).length);
   } catch { /* sem rede, sem selo */ }
 }
 
@@ -8679,6 +8711,10 @@ function wireTheme() {
 }
 
 async function boot() {
+  // O ultimo total conhecido das Aulas pinta ANTES de qualquer espera: o
+  // `wireTitlebar` abaixo aguarda a ponte do app, e ate ela responder o
+  // menu ficava mostrando o 0 do HTML.
+  seloDeAulasDoCache();
   wireDrop();
   wireList();
   wireForms();
@@ -8725,10 +8761,13 @@ async function boot() {
   } catch { /* ignore */ }
   if (!VIEW_COPY[initial]) initial = "import";
   setView(initial);
+  // O selo das Aulas nao depende de saude, sessao nem marcas — e ficava
+  // atras dos tres `await`, entao o menu mostrava 0 por ~5 s em cada
+  // abertura. Sai na frente, e sem `await`: e so um selo.
+  contarAulasNovas().catch(() => {});
   await refreshHealth();
   await refreshAuthUi().catch(() => {});
   await loadBrandsUi().catch(() => {});
-  contarAulasNovas().catch(() => {});
   try {
     const lic = await api("/api/license");
     renderLicense(lic);

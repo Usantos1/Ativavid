@@ -124,5 +124,8 @@ def test_aulas_novas_viram_selo_no_menu():
     """5.0.14"""
     assert 'id="countAulas"' in SHTML
     assert "async function contarAulasNovas()" in SJS and "contarAulasNovas().catch(() => {});" in SJS
-    assert "aulasMarcarVistas(state.aulas.lista);" in SJS, "abrir a tela zera o selo"
-    assert 'if (!vistas.size) { aulasMarcarVistas(r.aulas || []); return; }' in SJS, "primeira vez nao pinta tudo de novo"
+    assert "aulasMarcarVistas(state.aulas.lista);" in SJS, "abrir a tela apaga o realce"
+    # 5.0.69: o numero passou a ser o TOTAL (como Fila/Concluidos/Projetos);
+    # "novo" virou a cor do selo. A primeira visita continua sem pintar
+    # tudo de novidade.
+    assert 'if (!vistas.size) { aulasMarcarVistas(lista); return; }' in SJS, "primeira vez nao pinta tudo de novo"

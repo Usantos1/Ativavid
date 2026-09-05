@@ -1,5 +1,13 @@
 # Changelog
 
+## 5.0.69
+
+- **O contador de Aulas mostrava 0 com aula publicada.** Ele contava só as
+  aulas novas desde a última visita, ao lado de contadores que mostram o
+  total. Agora mostra quantas aulas existem, como Fila, Concluídos e
+  Projetos, e acende em verde quando há aula que você ainda não viu. O
+  número também aparece na hora, sem esperar a rede.
+
 ## 5.0.68
 
 - **Um em cada cinco vídeos era transcrito duas vezes à toa — e levava o
