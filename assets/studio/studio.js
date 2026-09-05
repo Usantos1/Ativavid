@@ -7460,13 +7460,22 @@ function renderEmpresaCards() {
   const cards = brands.map((b) => {
     const on = b.id === ativa;
     const n = state.jobs.filter((x) => x.brandId === b.id).length;
+    // 5.0.47: o card diz o RITMO da empresa, nao so o total — quantos
+    // videos prontos nos ultimos 30 dias e a nota media do corte. Para
+    // quem atende varias empresas, e a resposta de "quem esta parado".
+    const prontos = state.jobs.filter((x) => x.brandId === b.id && x.status === "done");
+    const agora = Date.now();
+    const em30 = prontos.filter((x) => x.finishedAt && agora - Date.parse(x.finishedAt) < 30 * 864e5).length;
+    const notas = prontos.map((x) => Number(x.score && x.score.overall)).filter((v) => Number.isFinite(v) && v > 0);
+    const media = notas.length ? Math.round(notas.reduce((a, c) => a + c, 0) / notas.length) : null;
+    const ritmo = n ? ` · ${em30} em 30 dias${media !== null ? ` · nota ${media}` : ""}` : "";
     const logo = b.logoUrl
       ? `<img class="emp-card-logo" src="${escapeHtml(b.logoUrl)}" alt="">`
       : `<span class="emp-card-ini" style="--emp-tint:${escapeHtml(b.accent || "")}">${escapeHtml(initialsFromName(b.name || b.id))}</span>`;
     return `<button type="button" class="emp-card${on ? " on" : ""}" data-emp="${escapeHtml(b.id)}" title="${on ? "Empresa ativa" : "Clique para trabalhar nesta empresa"}">
       ${logo}
       <span class="emp-card-nome">${escapeHtml(b.name || b.id)}</span>
-      <span class="emp-card-meta">${n} vídeo${n === 1 ? "" : "s"} · ${b.presetCount || 0} preset${b.presetCount === 1 ? "" : "s"}${b.perfilOk ? "" : " · sem perfil"}</span>
+      <span class="emp-card-meta">${n} vídeo${n === 1 ? "" : "s"}${ritmo} · ${b.presetCount || 0} preset${b.presetCount === 1 ? "" : "s"}${b.perfilOk ? "" : " · sem perfil"}</span>
       ${on ? `<span class="emp-card-tag">ativa</span>` : ""}
     </button>`;
   });

@@ -962,17 +962,66 @@ def _resolve_job_title(job: dict, edit_dir: Path | None = None) -> str:
     return _default_job_title(name, job.get("createdAt"), extra_takes=extra)
 
 
-def load_env_keys() -> dict[str, str]:
+# 5.0.47: o que e SEGREDO no .env vai cifrado com a DPAPI (mesma regra do
+# refresh_token e da service role no settings.json). As chaves de
+# ElevenLabs, Freepik, Groq e Pexels estavam em texto claro em ~/ATIVAVID:
+# um backup ou uma sincronizacao de perfil levava tudo. `load_env_keys`
+# continua devolvendo texto claro para quem chama — todo leitor passa por
+# ela — e migra um arquivo antigo na primeira leitura.
+_SUFIXOS_DE_SEGREDO = ("_KEY", "_TOKEN", "_SECRET", "_PASSWORD")
+
+
+def _e_segredo(nome: str) -> bool:
+    return str(nome or "").upper().endswith(_SUFIXOS_DE_SEGREDO)
+
+
+def _ler_env_cru(path: Path) -> dict[str, str]:
     keys: dict[str, str] = {}
-    path = ENV_PATH if ENV_PATH.exists() else (_LEGACY_ENV if _LEGACY_ENV.exists() else None)
-    if path is None:
-        return keys
     for line in path.read_text(encoding="utf-8-sig").splitlines():
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
         k, v = line.split("=", 1)
         keys[k.strip()] = v.strip().strip('"').strip("'")
+    return keys
+
+
+def _gravar_env(current: dict[str, str]) -> None:
+    from app import secret_store
+
+    linhas = []
+    for k, v in sorted(current.items()):
+        val = secret_store.protect(v) if _e_segredo(k) else v
+        linhas.append(f"{k}={val}")
+    USER_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = ENV_PATH.with_suffix(".env.part")
+    tmp.write_text("\n".join(linhas) + ("\n" if linhas else ""), encoding="utf-8")
+    tmp.replace(ENV_PATH)
+
+
+def load_env_keys() -> dict[str, str]:
+    from app import secret_store
+
+    path = ENV_PATH if ENV_PATH.exists() else (_LEGACY_ENV if _LEGACY_ENV.exists() else None)
+    if path is None:
+        return {}
+    cru = _ler_env_cru(path)
+    keys: dict[str, str] = {}
+    em_claro = False
+    for k, v in cru.items():
+        if secret_store.is_protected(v):
+            keys[k] = secret_store.unprotect(v)
+        else:
+            keys[k] = v
+            if _e_segredo(k) and v:
+                em_claro = True
+    # Migracao: segredo em texto claro no arquivo do usuario e DPAPI
+    # disponivel -> regrava cifrado. Falhar aqui nao pode derrubar a leitura.
+    if em_claro and path == ENV_PATH and secret_store.available():
+        try:
+            _gravar_env(keys)
+        except OSError:
+            pass
     return keys
 
 
@@ -986,10 +1035,8 @@ def save_env_keys(updates: dict[str, str]) -> None:
             current[k] = val
         elif k in current:
             del current[k]
-    lines = [f"{k}={v}" for k, v in sorted(current.items())]
-    USER_DIR.mkdir(parents=True, exist_ok=True)
     try:
-        ENV_PATH.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
+        _gravar_env(current)
     except OSError as e:
         raise OSError(
             f"Não foi possível gravar chaves em {ENV_PATH}: {e}"

@@ -1,5 +1,17 @@
 # Changelog
 
+## 5.0.47
+
+- **Segurança: as chaves de API ficam cifradas no disco.** As chaves de
+  ElevenLabs, Freepik, Groq e Pexels estavam em texto claro no arquivo de
+  configuração do usuário; um backup ou uma sincronização de perfil levava
+  tudo. Agora ficam protegidas pelo Windows (DPAPI), amarradas à sua conta
+  — como já era com a sessão de login. O arquivo antigo é convertido na
+  primeira abertura; nada muda no uso.
+- **O card da empresa mostra o ritmo.** Além do total, quantos vídeos
+  ficaram prontos nos últimos 30 dias e a nota média do corte — para quem
+  atende várias empresas ver de relance quem está parado.
+
 ## 5.0.46
 
 - **"Aplicar correções pendentes" direto no card.** Quando um vídeo tem
