@@ -1,5 +1,15 @@
 # Changelog
 
+## 5.0.64
+
+- **Emoji nas legendas agora entende o que você fala.** O dicionário
+  dobrou para 180 palavras, escolhidas lendo os seus próprios vídeos:
+  aparelho, película, conserto, orçamento, agendamento, garantia. Antes
+  ele reconhecia 1 palavra em 22; agora, 1 em 9. O limite de um emoji a
+  cada 6 segundos continua, então a legenda não vira enfeite (nos últimos
+  60 vídeos daria 3 emojis por vídeo). Liga em Estilo › Emoji nas
+  legendas.
+
 ## 5.0.63
 
 - **Mais seis legendas, agora são 45.** *Elegante* (serifa editorial),
