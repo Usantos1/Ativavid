@@ -931,8 +931,14 @@ def extract_segment(
     zoom: dict | None = None,
     prepared: Path | None = None,
     extra_vf: str = "",
+    speed: float = 1.0,
 ) -> None:
     """Extract a cut range as its own MP4 with grade + 30ms audio fades baked in.
+
+    `speed` (5.0.56): camera lenta (<1) ou acelerado (>1) deste take.
+    Video por `setpts`, audio por `atempo` (encadeado quando sai da faixa
+    0,5-2,0 que o filtro aceita). A duracao do arquivo passa a ser
+    `(fim - inicio) / speed` — o mapa da linha do tempo usa a mesma conta.
 
     `extra_vf` (5.0.54): cor pedida para ESTE take no editor. Entra depois do
     look global e mesmo quando a fonte veio PREPARADA (o prep ja traz o look
@@ -1019,6 +1025,11 @@ def extract_segment(
         if "format=yuv420p" not in vf_parts:
             vf_parts.append("format=yuv420p")
         vf_parts.append(extra_vf)
+    vel = float(speed or 1.0)
+    if abs(vel - 1.0) > 1e-6 and streams != "a":
+        # `setpts` DEPOIS do fps/scale/grade: mexer no relogio antes faria o
+        # `fps=` reamostrar em cima do tempo ja esticado.
+        vf_parts.append(f"setpts={1.0 / vel:.6f}*PTS")
     # Zoom no mesmo encode do extract — nunca cut.mp4 → zoomed.mp4.
     # `zoom_vf` anda por `t`, não por `n`, então o descarte de quadro acima
     # não mexe na geometria do push-in — só faz ele rodar 30x em vez de 60x.
@@ -1039,6 +1050,17 @@ def extract_segment(
     # so the edges still land at true silence. A boosted segment gets a limiter
     # so a loud syllable inside a quiet take cannot clip after the gain.
     af_parts: list[str] = []
+    if abs(float(speed or 1.0) - 1.0) > 1e-6 and streams != "v":
+        # `atempo` so aceita 0,5-100 por instancia: 0,25x sai como dois de
+        # 0,5. Encadear preserva o tom (o `asetrate` nao preservaria).
+        _v = float(speed)
+        while _v < 0.5 - 1e-9:
+            af_parts.append("atempo=0.5")
+            _v *= 2.0
+        while _v > 2.0 + 1e-9:
+            af_parts.append("atempo=2.0")
+            _v /= 2.0
+        af_parts.append(f"atempo={_v:.6f}")
     # Windowed level match, applied BEFORE the flat range gain. A range holding two
     # speakers cannot be rescued by `gain_db`: the quiet one needs +7dB while the
     # close-mic one is already fine, and boosting the whole range just pushes the
@@ -1077,8 +1099,10 @@ def extract_segment(
         if b - a > 0.005:
             bleeps.append((a, b))
 
-    # 30ms audio fades at both edges (Rule 3) — prevent pops
-    fade_out_start = max(0.0, duration - 0.03)
+    # 30ms audio fades at both edges (Rule 3) — prevent pops.
+    # Com velocidade, o fim e o da SAIDA (a fonte encolhe ou estica).
+    dur_saida = duration / vel if vel > 0 else duration
+    fade_out_start = max(0.0, dur_saida - 0.03)
     fades = (f"afade=t=in:st=0:d=0.03,"
              f"afade=t=out:st={fade_out_start:.3f}:d=0.03")
     af = ",".join(af_parts + [fades])
@@ -1122,7 +1146,9 @@ def extract_segment(
         "ffmpeg", "-y",
         "-ss", f"{seg_start:.6f}",
         "-i", str(source),
-        "-t", f"{duration:.6f}",
+        # `-t` e opcao de SAIDA: com `setpts`/`atempo` a duracao pedida e a
+        # da saida. Sem isto a camera lenta saia cortada no tamanho da fonte.
+        "-t", f"{dur_saida:.6f}",
     ]
     if filter_complex:
         cmd += ["-filter_complex", filter_complex]
@@ -1284,6 +1310,10 @@ def extract_all_segments(
         gain_db = float(r.get("gain_db", 0.0) or 0.0)
         gain_windows = r.get("gain_windows") or []
         bleep_windows = r.get("bleep_windows") or []
+        # 5.0.56: velocidade deste take (camera lenta / acelerado)
+        from app.timeline_map import velocidade_do_range
+
+        vel = velocidade_do_range(r)
         # 5.0.54: cor por take — look do grade.py ou filtro cru do editor
         extra_vf = ""
         if r.get("grade"):
@@ -1300,6 +1330,8 @@ def extract_all_segments(
         gain_note = f"  gain: {gain_db:+.1f}dB" if abs(gain_db) > 0.05 else ""
         if extra_vf:
             gain_note += f"  cor: {str(r.get('grade'))[:40]}"
+        if abs(vel - 1.0) > 1e-6:
+            gain_note += f"  vel: {vel:g}x"
         if gain_windows:
             gain_note += f"  +{len(gain_windows)} janela(s)"
         if bleep_windows:
@@ -1313,6 +1345,7 @@ def extract_all_segments(
             zoom=zoom_for_index(edl, i),
             prepared=prep_by_src.get(src_name),
             extra_vf=extra_vf,
+            speed=vel,
         )
         return out_path
 
@@ -1877,6 +1910,10 @@ def extract_and_assemble_jcut(
         gain_db = float(r.get("gain_db", 0.0) or 0.0)
         gain_windows = r.get("gain_windows") or []
         bleep_windows = r.get("bleep_windows") or []
+        # 5.0.56: velocidade deste take (camera lenta / acelerado)
+        from app.timeline_map import velocidade_do_range
+
+        vel = velocidade_do_range(r)
         # 5.0.54: cor por take — look do grade.py ou filtro cru do editor
         extra_vf = ""
         if r.get("grade"):
@@ -1895,13 +1932,13 @@ def extract_and_assemble_jcut(
                             keep_resolution=keep_resolution, streams="v",
                             zoom=zoom_for_index(edl, i),
                             prepared=prep_by_src.get(r["source"]),
-                            extra_vf=extra_vf)
+                            extra_vf=extra_vf, speed=vel)
         if not p.get("reuse_a"):
             extract_segment(p["src"], p["a_in"], p["a_out"] - p["a_in"], "",
                             apath, preview=preview, draft=draft,
                             keep_resolution=keep_resolution, gain_db=gain_db,
                             gain_windows=gain_windows, bleep_windows=bleep_windows,
-                            streams="a",
+                            streams="a", speed=vel,
                             prepared=prep_by_src.get(r["source"]))
         p["video_path"], p["audio_path"] = vpath, apath
 
@@ -1914,6 +1951,8 @@ def extract_and_assemble_jcut(
         gain_note = f"  gain: {gain_db:+.1f}dB" if abs(gain_db) > 0.05 else ""
         if extra_vf:
             gain_note += f"  cor: {str(r.get('grade'))[:40]}"
+        if abs(vel - 1.0) > 1e-6:
+            gain_note += f"  vel: {vel:g}x"
         if gain_windows:
             gain_note += f"  +{len(gain_windows)} janela(s)"
         if bleep_windows:

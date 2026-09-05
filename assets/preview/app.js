@@ -1679,7 +1679,10 @@ function draftLayout() {
   return S.draft.map((r, i) => {
     if (r.removed) return { ...r, out: t, dur: 0, aout: at, adur: 0 };
     const g = jcutGeom(i);
-    const span = r.end - r.start;
+    // 5.0.56: camera lenta estica o trecho na linha do tempo; acelerado
+    // encurta. Mesma conta do `_naive_spans` do mapa (fonte / velocidade).
+    const vel = +(r.speed || 1) || 1;
+    const span = (r.end - r.start) / vel;
     const adur = Math.max(0, span - g.tail);
     const dur = Math.max(0, adur - g.lead);
     const item = { ...r, out: t, dur, aout: Math.max(0, at - g.lead), adur, lead: g.lead };
@@ -2209,7 +2212,8 @@ function redo() {
 // ---------- dirty tracking ----------
 function edlDirty() {
   return S.draft.some((r) => r.added || r.removed || r.start !== r.orig.start || r.end !== r.orig.end
-    || +(r.gain_db || 0) !== +(r.orig.gain_db || 0) || (r.grade || '') !== (r.orig.grade || ''));
+    || +(r.gain_db || 0) !== +(r.orig.gain_db || 0) || (r.grade || '') !== (r.orig.grade || '')
+    || +(r.speed || 1) !== +(r.orig.speed || 1));
 }
 function geoDoInsert(c) {
   return JSON.stringify([+(+c.start).toFixed(3), +(+c.end).toFixed(3),
@@ -2567,6 +2571,8 @@ function camposDoTake(r) {
   const out = {};
   if (r.gain_db) out.gain_db = +(+r.gain_db).toFixed(1);
   if (r.grade) out.grade = String(r.grade);
+  // 5.0.56: velocidade do take (camera lenta / acelerado)
+  if (r.speed && +r.speed !== 1) out.speed = +r.speed;
   return out;
 }
 
@@ -2582,7 +2588,8 @@ async function persistEdl() {
   if (data && data.ok) {
     S.draft.forEach((r) => {
       if (!r.removed) {
-        r.orig = { start: r.start, end: r.end, gain_db: +(r.gain_db || 0), grade: r.grade || '' };
+        r.orig = { start: r.start, end: r.end, gain_db: +(r.gain_db || 0),
+          grade: r.grade || '', speed: +(r.speed || 1) };
         r.added = false;
       }
     });
@@ -3141,9 +3148,10 @@ async function applyState(data) {
   // for those until the skill re-renders and writes a fresh jcut_timeline.
   S.draft = ranges.map((r, srcIdx) => ({
     source: r.source, start: +r.start, end: +r.end, beat: r.beat || '',
-    gain_db: +(r.gain_db || 0), grade: r.grade || '',
+    gain_db: +(r.gain_db || 0), grade: r.grade || '', speed: +(r.speed || 1),
     removed: false, srcIdx,
-    orig: { start: +r.start, end: +r.end, gain_db: +(r.gain_db || 0), grade: r.grade || '' },
+    orig: { start: +r.start, end: +r.end, gain_db: +(r.gain_db || 0),
+      grade: r.grade || '', speed: +(r.speed || 1) },
   }));
   S.corteRelatorio = data.corteRelatorio || null;
   if (data.intent) {
@@ -4445,6 +4453,9 @@ function _nomeDaAnim(lista, id, padrao) {
  * da voz em dB e cor (um look do catalogo ou brilho/contraste/saturacao
  * na mao). Tudo viaja no trecho (gain_db, grade) e o apply refaz o corte. */
 const GANHOS_DO_TAKE = [[-6, '−6 dB'], [-3, '−3 dB'], [0, 'Voz normal'], [3, '+3 dB'], [6, '+6 dB']];
+const VELOCIDADES_DO_TAKE = [
+  [0.25, '0,25x'], [0.5, '0,5x'], [1, 'Normal'], [1.5, '1,5x'], [2, '2x'], [4, '4x'],
+];
 const LOOKS_DO_TAKE = [
   ['', 'Cor: como o estilo'], ['marca', 'Marca'], ['neutral_punch', 'Neutro'], ['subtle', 'Sutil'],
   ['warm_cinematic', 'Cinemático'], ['frio_limpo', 'Frio limpo'], ['vibrante', 'Vibrante'],
@@ -4458,7 +4469,10 @@ function gradeManualDoTake(r) {
 function renderPainelDoTake(lane, r) {
   lane.innerHTML = '';
   const nome = el('span', 'fx-nome', lane);
-  nome.textContent = `Take: ${friendlyBeatLabel(r.beat, r.source)} · ${(r.end - r.start).toFixed(1)}s`;
+  const _vel = +(r.speed || 1) || 1;
+  nome.textContent = `Take: ${friendlyBeatLabel(r.beat, r.source)} · `
+    + `${((r.end - r.start) / _vel).toFixed(1)}s`
+    + (_vel !== 1 ? ` (${String(_vel).replace('.', ',')}x)` : '');
   // volume da voz
   const volWrap = el('span', 'take-grupo', lane);
   el('span', 'take-rotulo', volWrap).textContent = 'Voz';
@@ -4474,6 +4488,28 @@ function renderPainelDoTake(lane, r) {
       refreshHeader();
       persistEdl();
       toast(db === 0 ? 'Voz do take no volume original' : `Voz do take: ${db > 0 ? '+' : ''}${db} dB — vale no próximo "Aplicar"`, 2200);
+    });
+  }
+  // velocidade do take (camera lenta / acelerado) — o que o CapCut chama
+  // de "velocidade". Muda a DURACAO do trecho, entao a regua, a agulha e o
+  // remapeamento das legendas seguem junto.
+  const velWrap = el('span', 'take-grupo', lane);
+  el('span', 'take-rotulo', velWrap).textContent = 'Velocidade';
+  for (const [v, rotulo] of VELOCIDADES_DO_TAKE) {
+    const b = el('button', `ent-btn${(+(r.speed || 1) === v) ? ' on' : ''}`, velWrap);
+    b.type = 'button';
+    b.textContent = rotulo;
+    b.title = v < 1 ? `Câmera lenta ${rotulo} — o trecho fica ${(1 / v).toFixed(2).replace('.', ',')}x mais longo`
+      : v > 1 ? `Acelerado ${rotulo} — o trecho fica mais curto`
+        : 'Velocidade original';
+    b.addEventListener('click', () => {
+      pushHistory();
+      r.speed = v;
+      renderAll();
+      refreshHeader();
+      persistEdl();
+      toast(v === 1 ? 'Take na velocidade original'
+        : `Take em ${rotulo} — vale no próximo "Aplicar"`, 2400);
     });
   }
   // cor do take
@@ -10017,9 +10053,10 @@ function applyRestoredEdl(edl) {
   pushHistory();
   S.draft = ranges.map((r, srcIdx) => ({
     source: r.source, start: +r.start, end: +r.end, beat: r.beat || '',
-    gain_db: +(r.gain_db || 0), grade: r.grade || '',
+    gain_db: +(r.gain_db || 0), grade: r.grade || '', speed: +(r.speed || 1),
     removed: false, srcIdx,
-    orig: { start: +r.start, end: +r.end, gain_db: +(r.gain_db || 0), grade: r.grade || '' },
+    orig: { start: +r.start, end: +r.end, gain_db: +(r.gain_db || 0),
+      grade: r.grade || '', speed: +(r.speed || 1) },
   }));
   renderAll();
   refreshHeader();

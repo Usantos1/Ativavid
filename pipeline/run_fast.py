@@ -1106,6 +1106,12 @@ def load_preview_edit_ranges(edit_dir: Path, source_key: str) -> list[dict] | No
         _g = _grade_do_trecho(r.get("grade"))
         if _g:
             item["grade"] = _g
+        # 5.0.56: velocidade do take (camera lenta / acelerado)
+        from app.timeline_map import velocidade_do_range
+
+        _v = velocidade_do_range(r)
+        if _v != 1.0:
+            item["speed"] = _v
         out.append(item)
     if not out:
         return None
@@ -1245,6 +1251,12 @@ def load_manual_edl_ranges(edit_dir: Path, source_key: str, preset: dict,
         _g = _grade_do_trecho(r.get("grade"))
         if _g:
             item["grade"] = _g
+        # 5.0.56: velocidade do take (camera lenta / acelerado)
+        from app.timeline_map import velocidade_do_range
+
+        _v = velocidade_do_range(r)
+        if _v != 1.0:
+            item["speed"] = _v
         out.append(item)
     return out or None
 

@@ -511,6 +511,10 @@ def _norm_range(r: dict) -> tuple:
         ganho = round(float(r.get("gain_db") or 0), 1)
     except (TypeError, ValueError):
         ganho = 0.0
+    try:
+        vel = round(float(r.get("speed") or 1.0), 3)
+    except (TypeError, ValueError):
+        vel = 1.0
     return (
         str(r.get("source") or "SRC"),
         round(float(r.get("start") or 0), 3),
@@ -518,6 +522,7 @@ def _norm_range(r: dict) -> tuple:
         str(r.get("beat") or ""),
         ganho,
         str(r.get("grade") or ""),
+        vel,
     )
 
 
@@ -530,7 +535,7 @@ def _same_ranges(a: list, b: list) -> bool:
 # O que o planejador escreve em cada trecho e que a tela nao tem como
 # devolver. `quote` e a fala daquele trecho: a nota de clareza conta
 # trechos com fala, e o texto do post e montado a partir dela.
-_HERDAVEIS = ("quote", "reason", "beat", "gain_db", "grade")
+_HERDAVEIS = ("quote", "reason", "beat", "gain_db", "grade", "speed")
 
 
 def _herdar_do_anterior(novo: dict, antigos: list[dict]) -> dict:

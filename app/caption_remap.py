@@ -59,7 +59,10 @@ def source_to_output(t: float, edl: Any, source: str | None = None) -> float | N
         if x < a - 1e-9:
             continue
         if x <= b + 1e-9:
-            return float(span["outputStart"]) + max(0.0, min(x, b) - a)
+            # 5.0.56: com velocidade, um segundo de FONTE nao e um segundo de
+            # SAIDA — a legenda tem de esticar (0,5x) ou encolher (2x) junto.
+            vel = float(span.get("speed") or 1.0) or 1.0
+            return float(span["outputStart"]) + max(0.0, min(x, b) - a) / vel
     return None
 
 
@@ -79,7 +82,8 @@ def output_to_source(t: float, edl: Any, source: str | None = None) -> tuple[str
         ov = min(b, x + 0.05) - max(a, x - 0.05)
         if ov >= best_ov:
             best_ov = ov
-            rel = max(0.0, min(x, b) - a)
+            vel = float(span.get("speed") or 1.0) or 1.0
+            rel = max(0.0, min(x, b) - a) * vel
             best = (str(span["source"]), float(span["sourceStart"]) + rel)
     return best
 
@@ -100,7 +104,8 @@ def map_interval(start: float, end: float, edl: Any, source: str | None = None) 
         if hi - lo > MIN_DUR:
             base = float(span["outputStart"])
             a0 = float(span["sourceStart"])
-            frags.append((base + (lo - a0), base + (hi - a0)))
+            vel = float(span.get("speed") or 1.0) or 1.0
+            frags.append((base + (lo - a0) / vel, base + (hi - a0) / vel))
     return frags
 
 

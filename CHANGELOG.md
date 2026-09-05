@@ -1,5 +1,14 @@
 # Changelog
 
+## 5.0.56
+
+- **Câmera lenta e acelerado por take, como no CapCut.** Clique num take e
+  escolha a velocidade: 0,25x, 0,5x, normal, 1,5x, 2x ou 4x. O trecho
+  estica ou encolhe na linha do tempo na hora, as legendas acompanham, e o
+  áudio muda de duração sem ficar com voz de desenho. Vale no próximo
+  "Aplicar alterações".
+
+## 5.0.55
 ## 5.0.55
 
 - **Banco de imagens dentro da Biblioteca.** Nas abas Imagens e Vídeos,

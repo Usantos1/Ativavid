@@ -209,16 +209,42 @@ def layout_jcut_spans(
     return out
 
 
+VELOCIDADES = (0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0)
+
+
+def velocidade_do_range(r: dict) -> float:
+    """Velocidade pedida para UM trecho (5.0.56). 1 = normal.
+
+    Fora da lista o valor e ignorado: o `atempo` do ffmpeg so aceita
+    0,5-100 (abaixo disso e preciso encadear), e uma velocidade qualquer
+    vinda da tela derrubaria o corte inteiro.
+    """
+    try:
+        v = float(r.get("speed") or 1.0)
+    except (TypeError, ValueError):
+        return 1.0
+    return v if v in VELOCIDADES else 1.0
+
+
+def tem_velocidade(ranges) -> bool:
+    return any(velocidade_do_range(r) != 1.0
+               for r in (ranges or []) if isinstance(r, dict))
+
+
 def _naive_spans(ranges: list[dict]) -> list[dict]:
     acc = 0.0
     out: list[dict] = []
     for r in ranges:
         start = float(r.get("start") or 0)
         end = float(r.get("end") or 0)
-        dur = max(0.0, end - start)
+        vel = velocidade_do_range(r)
+        # camera lenta estica, acelerado encurta: a duracao na SAIDA e a da
+        # fonte dividida pela velocidade (0,5x dobra; 2x corta pela metade)
+        dur = max(0.0, end - start) / vel
         src = str(r.get("source") or "SRC")
         out.append({
             "source": src,
+            "speed": vel,
             "beat": r.get("beat"),
             "sourceStart": start,
             "sourceEnd": end,
@@ -360,7 +386,10 @@ def build_timeline_map(
     if use_jcut:
         # Só a timeline DESTE EDL. prior_jcut é o cut anterior — serve para
         # inferir tails, não para posicionar ranges novos.
-        spans = spans_from_jcut_timeline(ranges, edl_jcut or [])
+        # Com velocidade em algum trecho, o `jcut_timeline` do render ANTERIOR
+        # descreve outra geometria — cair no caminho ingenuo e o certo.
+        spans = (None if tem_velocidade(ranges)
+                 else spans_from_jcut_timeline(ranges, edl_jcut or []))
         if spans is None:
             tails = infer_tail_frames(ranges, prior_jcut=prior or edl_jcut)
             spans = layout_jcut_spans(
