@@ -19,6 +19,10 @@ import {AbsoluteFill, useCurrentFrame, useVideoConfig} from 'remotion';
 import {loadFont as loadPoppins} from '@remotion/google-fonts/Poppins';
 import {loadFont as loadBaskerville} from '@remotion/google-fonts/LibreBaskerville';
 import {loadFont as loadInter} from '@remotion/google-fonts/Inter';
+import {loadFont as loadBebas} from '@remotion/google-fonts/BebasNeue';
+import {loadFont as loadAnton} from '@remotion/google-fonts/Anton';
+import {loadFont as loadBangers} from '@remotion/google-fonts/Bangers';
+import {loadFont as loadLuckiest} from '@remotion/google-fonts/LuckiestGuy';
 import {measureText} from '@remotion/layout-utils';
 import captions from '../public/captions.json';
 import editData from '../public/edit-data.json';
@@ -27,6 +31,12 @@ import {capFamily, capTransform, capWeight} from './fonts';
 const POPPINS = loadPoppins('normal', {weights: ['600']}).fontFamily;
 const BASKERVILLE = loadBaskerville('normal', {weights: ['700']}).fontFamily;
 const INTER = loadInter('normal', {weights: ['500']}).fontFamily;
+// lote 1 das 50 rodadas (05/09): fontes display para legendas
+const POPPINS_BLACK = loadPoppins('normal', {weights: ['900']}).fontFamily;
+const BEBAS = loadBebas('normal', {weights: ['400']}).fontFamily;
+const ANTON = loadAnton('normal', {weights: ['400']}).fontFamily;
+const BANGERS = loadBangers('normal', {weights: ['400']}).fontFamily;
+const LUCKIEST = loadLuckiest('normal', {weights: ['400']}).fontFamily;
 
 const OFFWHITE = '#f4f1e9';
 
@@ -57,12 +67,13 @@ type Variant = {
   modo?: 'metal' | 'vidro' | 'traco' | 'moldura' | 'eco'
     | 'neon' | 'degrade' | 'bandeira' | 'maquina'
     | 'pilula' | 'etiqueta' | 'fitadegrade' | 'marcador'
-    | 'fitadupla' | 'etiquetacanto';
+    | 'fitadupla' | 'etiquetacanto'
+    | 'contorno' | 'sombra3d' | 'beast' | 'sublinhado';
 };
 
 // Quem desenha em CAIXA ALTA. Muda a MEDIDA das linhas, entao os tres
 // motores (este, o render_proprio e a previa) tem de concordar.
-const MAIUSCULA = new Set(['metal', 'moldura', 'eco', 'degrade', 'bandeira', 'fitadegrade', 'fitadupla']);
+const MAIUSCULA = new Set(['metal', 'moldura', 'eco', 'degrade', 'bandeira', 'fitadegrade', 'fitadupla', 'beast']);
 
 // Opacidades do Vidro e do Metálico — os MESMOS números do render_proprio
 // (VIDRO_OPACO / VIDRO_FIO / METAL_OPACO). Um 0,32 que vira 0,30 aqui sai
@@ -211,6 +222,47 @@ export const SIMPLE_VARIANTS: Record<string, Variant> = {
     family: INTER, weight: 600, size: 52, maxWords: 8, lines: 2,
     squeeze: 1, squeezeY: 1, tracking: 0, bottom: 430, maxW: 780,
     modo: 'etiquetacanto',
+  },
+  // ---- lote 1 das 50 rodadas (05/09) --------------------------------------
+  contorno: {
+    family: POPPINS, weight: 800, size: 74, maxWords: 3, lines: 1,
+    squeeze: 1, squeezeY: 1, tracking: -1, bottom: 430, maxW: 800,
+    modo: 'contorno',
+  },
+  sombra3d: {
+    family: POPPINS, weight: 800, size: 76, maxWords: 3, lines: 1,
+    squeeze: 1, squeezeY: 1, tracking: -1, bottom: 430, maxW: 800,
+    modo: 'sombra3d',
+  },
+  beast: {
+    family: POPPINS_BLACK, weight: 900, size: 78, maxWords: 3, lines: 1,
+    squeeze: 1, squeezeY: 1, tracking: -1, bottom: 430, maxW: 800,
+    modo: 'beast',
+  },
+  sublinhado: {
+    family: POPPINS, weight: 800, size: 64, maxWords: 4, lines: 1,
+    squeeze: 1, squeezeY: 1, tracking: -1, bottom: 430, maxW: 820,
+    modo: 'sublinhado',
+  },
+  gigante: {
+    family: BEBAS, weight: 400, size: 118, maxWords: 2, lines: 1,
+    squeeze: 1, squeezeY: 1, tracking: 2, bottom: 430, maxW: 860,
+    modo: 'traco',
+  },
+  quadrinhos: {
+    family: BANGERS, weight: 400, size: 86, maxWords: 3, lines: 1,
+    squeeze: 1, squeezeY: 1, tracking: 1, bottom: 430, maxW: 820,
+    sticker: true,
+  },
+  divertida: {
+    family: LUCKIEST, weight: 400, size: 80, maxWords: 3, lines: 1,
+    squeeze: 1, squeezeY: 1, tracking: 0, bottom: 430, maxW: 800,
+    modo: 'degrade',
+  },
+  condensada: {
+    family: ANTON, weight: 400, size: 100, maxWords: 3, lines: 1,
+    squeeze: 1, squeezeY: 1, tracking: 1, bottom: 430, maxW: 760,
+    block: true,
   },
   marcador: {
     family: POPPINS, weight: 800, size: 74, maxWords: 3, lines: 1,
@@ -454,6 +506,7 @@ export const SimpleCaptions: React.FC<{variant: string}> = ({variant}) => {
       neon: 1.16, degrade: 1.14, bandeira: 1.2, maquina: 1.3,
       pilula: 1.2, etiqueta: 1.25, fitadegrade: 1.2, marcador: 1.16,
       fitadupla: 1.2, etiquetacanto: 1.25,
+      contorno: 1.16, sombra3d: 1.16, beast: 1.12, sublinhado: 1.3,
     };
     const tipo = {
       fontFamily: V.family,
@@ -510,6 +563,74 @@ export const SimpleCaptions: React.FC<{variant: string}> = ({variant}) => {
       );
     }
 
+    // ---- lote 1 das 50 rodadas (05/09) ------------------------------------
+    if (V.modo === 'contorno') {
+      // Letra branca, contorno GROSSO na cor da enfase: o outline colorido.
+      const R = Math.max(3, Math.round(V.size * 0.055));
+      const g = corDaSuperficie('#ff6a00');
+      return (
+        <AbsoluteFill style={fora}>
+          <div style={{...tipo, color: '#ffffff',
+                       textShadow: [...contornoCss(R, g), '0 8px 20px rgba(0,0,0,0.45)'].join(', ')}}>
+            {lines.map((ln, i) => <div key={i}>{txt(ln)}</div>)}
+          </div>
+        </AbsoluteFill>
+      );
+    }
+    if (V.modo === 'sombra3d') {
+      // Extrusao solida na cor da enfase: n sombras em escada (i, i).
+      const n = Math.max(3, Math.round(V.size * 0.10));
+      const g = corDaSuperficie('#ff6a00');
+      const ext = Array.from({length: n}, (_, i) => `${i + 1}px ${i + 1}px 0 ${g}`);
+      return (
+        <AbsoluteFill style={fora}>
+          <div style={{...tipo, color: '#ffffff',
+                       textShadow: [...ext, '0 8px 20px rgba(0,0,0,0.4)'].join(', ')}}>
+            {lines.map((ln, i) => <div key={i}>{txt(ln)}</div>)}
+          </div>
+        </AbsoluteFill>
+      );
+    }
+    if (V.modo === 'beast') {
+      // Amarelo fixo com contorno preto grosso — nao usa a cor da marca.
+      const R = Math.max(4, Math.round(V.size * 0.075));
+      return (
+        <AbsoluteFill style={fora}>
+          <div style={{...tipo, color: '#ffe600',
+                       textShadow: [...contornoCss(R, '#000000'), '0 10px 24px rgba(0,0,0,0.5)'].join(', ')}}>
+            {lines.map((ln, i) => <div key={i}>{txt(ln)}</div>)}
+          </div>
+        </AbsoluteFill>
+      );
+    }
+    if (V.modo === 'sublinhado') {
+      // Contorno fino + barra na cor da enfase sob cada linha (10% do
+      // corpo, 5% abaixo, 4% alem das pontas). A barra nao leva sombra.
+      const R = Math.max(2, Math.round(V.size * 0.03));
+      const g = corDaSuperficie('#ff6a00');
+      const esp = Math.max(3, Math.round(V.size * 0.10));
+      const gap = Math.round(V.size * 0.05);
+      const sobra = Math.round(V.size * 0.04);
+      return (
+        <AbsoluteFill style={fora}>
+          <div style={{...tipo, color: '#ffffff',
+                       textShadow: [...contornoCss(R, '#101215'), '0 8px 20px rgba(0,0,0,0.4)'].join(', ')}}>
+            {lines.map((ln, i) => (
+              <div key={i}>
+                {/* A barra fica FORA do fluxo: com border-bottom ela entrava na
+                    altura da linha e empurrava o texto para cima (d_alfa 102,7
+                    contra o motor proprio, que desenha a barra na folga). */}
+                <span style={{position: 'relative', display: 'inline-block', padding: `0 ${sobra}px`}}>
+                  {txt(ln)}
+                  <span style={{position: 'absolute', left: 0, right: 0, bottom: -(gap + esp),
+                                height: esp, background: g}} />
+                </span>
+              </div>
+            ))}
+          </div>
+        </AbsoluteFill>
+      );
+    }
     if (V.modo === 'traco') {
       // o Recorte com contorno FINO: 3px em vez dos 7px dele
       const R = Math.max(2, Math.round(V.size * 0.035));

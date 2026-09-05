@@ -7837,6 +7837,9 @@ const NOME_DO_ESTILO = {
     neon: "Neon", degrade: "Degradê", bandeira: "Bandeira", maquina: "Máquina de escrever",
     pilula: "Pílula", etiqueta: "Etiqueta", fitadegrade: "Fita degradê", marcador: "Marca-texto",
     fitadupla: "Fita dupla", etiquetacanto: "Etiqueta recortada",
+    contorno: "Contorno da marca", sombra3d: "Sombra longa", beast: "Beast (amarelo)",
+    sublinhado: "Sublinhado", gigante: "Gigante (Bebas)", quadrinhos: "Quadrinhos (Bangers)",
+    divertida: "Divertida (Luckiest Guy)", condensada: "Condensada (Anton)",
   },
   manchete: {
     outline: "Contorno", card: "Cartão", realce: "Realce", misto: "Misto",

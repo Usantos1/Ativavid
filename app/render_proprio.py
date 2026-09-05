@@ -3104,11 +3104,20 @@ class Renderizador:
         # --- os dois de 05/09 ---------------------------------------------
         "fitadupla": ("Poppins-ExtraBold.ttf", None, 62, 4, 1, 1.0, 1.0, 0, 430, 760, "fitadupla"),
         "etiquetacanto": ("Inter[opsz,wght].ttf", "SemiBold", 52, 8, 2, 1.0, 1.0, 0, 430, 780, "etiquetacanto"),
+        # --- lote 1 das 50 rodadas (05/09) ---------------------------------
+        "contorno":   ("Poppins-ExtraBold.ttf", None, 74, 3, 1, 1.0, 1.0, -1, 430, 800, "contorno"),
+        "sombra3d":   ("Poppins-ExtraBold.ttf", None, 76, 3, 1, 1.0, 1.0, -1, 430, 800, "sombra3d"),
+        "beast":      ("Poppins-Black.ttf", None, 78, 3, 1, 1.0, 1.0, -1, 430, 800, "beast"),
+        "sublinhado": ("Poppins-ExtraBold.ttf", None, 64, 4, 1, 1.0, 1.0, -1, 430, 820, "sublinhado"),
+        "gigante":    ("BebasNeue-Regular.ttf", None, 118, 2, 1, 1.0, 1.0, 2, 430, 860, "traco"),
+        "quadrinhos": ("Bangers-Regular.ttf", None, 86, 3, 1, 1.0, 1.0, 1, 430, 820, "sticker"),
+        "divertida":  ("LuckiestGuy-Regular.ttf", None, 80, 3, 1, 1.0, 1.0, 0, 430, 800, "degrade"),
+        "condensada": ("Anton-Regular.ttf", None, 100, 3, 1, 1.0, 1.0, 1, 430, 760, "bloco"),
     }
     # Modos que desenham em CAIXA ALTA. Isso muda a MEDIDA das linhas, entao
     # os tres motores tem de concordar sobre quem esta nesta lista.
     SIMPLE_MAIUSCULA = ("sticker", "metal", "moldura", "eco", "degrade",
-                        "bandeira", "fitadegrade", "fitadupla")
+                        "bandeira", "fitadegrade", "fitadupla", "beast")
     # Modos com um painel em volta do cue INTEIRO (e nao por linha, como o
     # bloco): a caixa e uma so para as duas linhas. O `vidro` saiu daqui —
     # ele virou uma LETRA de vidro, nao uma caixa atras da letra.
@@ -3116,7 +3125,8 @@ class Renderizador:
                      "fitadupla", "etiquetacanto")
     # Estilos em que a cor pinta uma SUPERFICIE, e por isso sai da ENFASE
     SIMPLE_SUPERFICIE = ("neon", "degrade", "bandeira", "pilula", "etiqueta",
-                         "fitadegrade", "fitadupla", "etiquetacanto")
+                         "fitadegrade", "fitadupla", "etiquetacanto",
+                         "contorno", "sombra3d", "sublinhado")
     # Peso que cada variante estatica tem no template (`capWeight(base.weight)`
     # em SimpleCaptions.tsx:218). Aqui ele fica implicito no ARQUIVO —
     # `Poppins-SemiBold.ttf` E o 600 — entao, quando a fonte da marca
@@ -3127,7 +3137,9 @@ class Renderizador:
                    "moldura": 600, "eco": 800,
                    "neon": 800, "degrade": 800, "bandeira": 800, "maquina": 600,
                    "pilula": 800, "etiqueta": 600, "fitadegrade": 800,
-                   "marcador": 800, "fitadupla": 800, "etiquetacanto": 600}
+                   "marcador": 800, "fitadupla": 800, "etiquetacanto": 600,
+                   "contorno": 800, "sombra3d": 800, "beast": 900, "sublinhado": 800,
+                   "gigante": 400, "quadrinhos": 400, "divertida": 400, "condensada": 400}
     # Os MESMOS padroes do SimpleCaptions.tsx (NEON_PADRAO etc.)
     NEON_PADRAO = "#4de1ff"
     DEGRADE_PADRAO = "#ff6a00"
@@ -3639,7 +3651,8 @@ class Renderizador:
               "neon": 1.16, "degrade": 1.14, "bandeira": 1.20,
               "maquina": 1.30, "pilula": 1.20, "etiqueta": 1.25,
               "fitadegrade": 1.20, "marcador": 1.16,
-              "fitadupla": 1.20, "etiquetacanto": 1.25}.get(modo, 1.18)
+              "fitadupla": 1.20, "etiquetacanto": 1.25,
+              "contorno": 1.16, "sombra3d": 1.16, "beast": 1.12, "sublinhado": 1.30}.get(modo, 1.18)
         for ci, cue in enumerate(cues):
             ini_f = int(round(cue[0]["startMs"] / 1000 * self.fps))
             nxt = cues[ci + 1] if ci + 1 < len(cues) else None
@@ -3745,7 +3758,8 @@ class Renderizador:
                 pad_m = np.zeros((h_m + 2 * folga, w_m + 2 * folga),
                                  dtype=np.float32)
                 pad_m[folga:folga + h_m, folga:folga + w_m] = m
-                if modo in ("metal", "traco", "eco", "vidro", "neon", "degrade"):
+                if modo in ("metal", "traco", "eco", "vidro", "neon", "degrade",
+                            "contorno", "sombra3d", "beast", "sublinhado"):
                     rgb, alpha, sombra = self._tinta_dos_novos(
                         modo, pad_m, folga, h_m, tam, cor_do_modo, cor_emj)
                     leg.palavras.append(Palavra(
@@ -3916,6 +3930,76 @@ class Renderizador:
             rgb = rgb * pad_m[..., None] + cor_b * (1.0 - pad_m[..., None])
             self._pintar_emoji(rgb, cor_emj, folga)
             return rgb, alpha, self._sombra_de(pad_m, [(0, 10, 24, 0.5)], k=0.5)
+
+        if modo == "contorno":
+            # Letra branca, contorno GROSSO na cor da enfase (aqui `accent`
+            # ja e a superficie): o "outline colorido" do CapCut.
+            r = max(3, round(tam * 0.055))
+            borda = self._contorno(pad_m, r)
+            cor_t = self._cor("#ffffff")
+            cor_b = self._cor(accent or "#ff6a00")
+            alpha = np.maximum(borda, pad_m)
+            rgb = np.broadcast_to(cor_b, (*pad_m.shape, 3)).copy()
+            rgb = rgb * (1 - pad_m[..., None]) + cor_t * pad_m[..., None]
+            self._pintar_emoji(rgb, cor_emj, folga)
+            return rgb, alpha, self._sombra_de(pad_m, [(0, 8, 20, 0.45)], k=0.5)
+
+        if modo == "sombra3d":
+            # Letra branca com extrusao SOLIDA na cor da enfase: n copias
+            # deslocadas (i, i) — o `text-shadow` em escada do template.
+            n = max(3, round(tam * 0.10))
+            ext = np.zeros_like(pad_m)
+            for i in range(1, n + 1):
+                desl = np.zeros_like(pad_m)
+                desl[i:, i:] = pad_m[:-i, :-i]
+                ext = np.maximum(ext, desl)
+            cor_t = self._cor("#ffffff")
+            cor_e = self._cor(accent or "#ff6a00")
+            alpha = np.maximum(ext, pad_m)
+            rgb = np.broadcast_to(cor_e, (*pad_m.shape, 3)).copy()
+            rgb = rgb * (1 - pad_m[..., None]) + cor_t * pad_m[..., None]
+            self._pintar_emoji(rgb, cor_emj, folga)
+            return rgb, alpha, self._sombra_de(pad_m, [(0, 8, 20, 0.4)], k=0.5)
+
+        if modo == "beast":
+            # Amarelo fixo (#ffe600) com contorno preto grosso — o look que
+            # o cliente ve nos videos mais assistidos. Nao usa a cor da
+            # marca de proposito: e o amarelo que identifica o estilo.
+            r = max(4, round(tam * 0.075))
+            borda = self._contorno(pad_m, r)
+            cor_t = self._cor("#ffe600")
+            cor_b = self._cor("#000000")
+            alpha = np.maximum(borda, pad_m)
+            rgb = np.broadcast_to(cor_b, (*pad_m.shape, 3)).copy()
+            rgb = rgb * (1 - pad_m[..., None]) + cor_t * pad_m[..., None]
+            self._pintar_emoji(rgb, cor_emj, folga)
+            return rgb, alpha, self._sombra_de(pad_m, [(0, 10, 24, 0.5)], k=0.5)
+
+        if modo == "sublinhado":
+            # Letra branca com contorno fino e uma BARRA na cor da enfase sob
+            # a linha (esp 10% do corpo, 5% abaixo do glifo, 4% alem das
+            # pontas) — o `border-bottom` do template.
+            r = max(2, round(tam * 0.03))
+            borda = self._contorno(pad_m, r)
+            cor_t = self._cor("#ffffff")
+            cor_b = self._cor("#101215")
+            cor_s = self._cor(accent or "#ff6a00")
+            alpha = np.maximum(borda, pad_m)
+            rgb = np.broadcast_to(cor_b, (*pad_m.shape, 3)).copy()
+            rgb = rgb * (1 - pad_m[..., None]) + cor_t * pad_m[..., None]
+            esp = max(3, round(tam * 0.10))
+            gap = round(tam * 0.05)
+            sobra = round(tam * 0.04)
+            cols = np.where(pad_m.max(axis=0) > 0.05)[0]
+            if len(cols):
+                x0 = max(0, int(cols.min()) - sobra)
+                x1 = min(pad_m.shape[1], int(cols.max()) + 1 + sobra)
+                y0 = min(pad_m.shape[0] - 1, folga + h_m + gap)
+                y1 = min(pad_m.shape[0], y0 + esp)
+                rgb[y0:y1, x0:x1, :] = cor_s
+                alpha[y0:y1, x0:x1] = 1.0
+            self._pintar_emoji(rgb, cor_emj, folga)
+            return rgb, alpha, self._sombra_de(pad_m, [(0, 8, 20, 0.4)], k=0.5)
 
         if modo == "traco":
             # o Recorte com contorno FINO: 3px em vez dos 7px dele

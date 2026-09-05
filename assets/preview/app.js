@@ -338,6 +338,14 @@ const STYLE_CATALOG = {
     {id: 'fitadegrade', name: 'Fita degradê', stat: 'fitadegrade'},
     {id: 'fitadupla', name: 'Fita dupla', stat: 'fitadupla'},
     {id: 'etiquetacanto', name: 'Etiqueta recortada', stat: 'etiquetacanto'},
+    {id: 'contorno', name: 'Contorno da marca', stat: 'contorno'},
+    {id: 'sombra3d', name: 'Sombra longa', stat: 'sombra3d'},
+    {id: 'beast', name: 'Beast (amarelo)', stat: 'beast'},
+    {id: 'sublinhado', name: 'Sublinhado', stat: 'sublinhado'},
+    {id: 'gigante', name: 'Gigante (Bebas)', stat: 'gigante'},
+    {id: 'quadrinhos', name: 'Quadrinhos (Bangers)', stat: 'quadrinhos'},
+    {id: 'divertida', name: 'Divertida (Luckiest Guy)', stat: 'divertida'},
+    {id: 'condensada', name: 'Condensada (Anton)', stat: 'condensada'},
     {id: 'marcador', name: 'Marca-texto', stat: 'marcador'},
     // opts out of burned captions (captions.enabled:false) — same reasoning.
     {id: 'nenhuma', name: 'Nenhuma', none: true},
@@ -944,6 +952,14 @@ const STATIC_VARIANTS = {
   fitadegrade: {family: "'Poppins',sans-serif", weight: 800, size: 62, maxWords: 4, lines: 1, sx: 1, sy: 1, tracking: 0, maxW: 760, modo: 'fitadegrade'},
   fitadupla: {family: "'Poppins',sans-serif", weight: 800, size: 62, maxWords: 4, lines: 1, sx: 1, sy: 1, tracking: 0, maxW: 760, modo: 'fitadupla'},
   etiquetacanto: {family: "'Inter',sans-serif", weight: 600, size: 52, maxWords: 8, lines: 2, sx: 1, sy: 1, tracking: 0, maxW: 780, modo: 'etiquetacanto'},
+  contorno: {family: "'Poppins',sans-serif", weight: 800, size: 74, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: -1, maxW: 800, modo: 'contorno'},
+  sombra3d: {family: "'Poppins',sans-serif", weight: 800, size: 76, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: -1, maxW: 800, modo: 'sombra3d'},
+  beast: {family: "'Poppins',sans-serif", weight: 900, size: 78, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: -1, maxW: 800, modo: 'beast'},
+  sublinhado: {family: "'Poppins',sans-serif", weight: 800, size: 64, maxWords: 4, lines: 1, sx: 1, sy: 1, tracking: -1, maxW: 820, modo: 'sublinhado'},
+  gigante: {family: "'Bebas Neue',sans-serif", weight: 400, size: 118, maxWords: 2, lines: 1, sx: 1, sy: 1, tracking: 2, maxW: 860, modo: 'traco'},
+  quadrinhos: {family: "'Bangers',cursive", weight: 400, size: 86, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: 1, maxW: 820, sticker: true},
+  divertida: {family: "'Luckiest Guy',cursive", weight: 400, size: 80, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: 0, maxW: 800, modo: 'degrade'},
+  condensada: {family: "'Anton',sans-serif", weight: 400, size: 100, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: 1, maxW: 760, block: true},
   marcador: {family: "'Poppins',sans-serif", weight: 800, size: 74, maxWords: 3, lines: 1, sx: 1, sy: 1, tracking: -1, maxW: 800, modo: 'marcador'},
 };
 // os mesmos padroes do SimpleCaptions.tsx / render_proprio
@@ -966,11 +982,12 @@ function escurecer(hex, f) {
 
 // Quem desenha em CAIXA ALTA — muda a MEDIDA das linhas, entao esta lista
 // tem de ser a mesma nos tres motores (SimpleCaptions.tsx e render_proprio).
-const CAP_MAIUSCULA = new Set(['metal', 'moldura', 'eco', 'degrade', 'bandeira', 'fitadegrade', 'fitadupla']);
+const CAP_MAIUSCULA = new Set(['metal', 'moldura', 'eco', 'degrade', 'bandeira', 'fitadegrade', 'fitadupla', 'beast']);
 const CAP_LH = {metal: 1.1, vidro: 1.16, traco: 1.16, moldura: 1.2, eco: 1.14,
                 neon: 1.16, degrade: 1.14, bandeira: 1.2, maquina: 1.3,
                 pilula: 1.2, etiqueta: 1.25, fitadegrade: 1.2, marcador: 1.16,
-                fitadupla: 1.2, etiquetacanto: 1.25};
+                fitadupla: 1.2, etiquetacanto: 1.25,
+                contorno: 1.16, sombra3d: 1.16, beast: 1.12, sublinhado: 1.3};
 // Os MESMOS numeros do render_proprio (VIDRO_OPACO/VIDRO_FIO/METAL_OPACO).
 const VIDRO_OPACO = 0.32;
 const VIDRO_FIO = 0.92;
@@ -1095,7 +1112,7 @@ function buildStaticDemo(host, id) {
       const t = (ln) => (caixaAlta ? ln.join(' ').toUpperCase() : ln.join(' '));
       box.style.lineHeight = String(CAP_LH[V.modo]);
       // superficie (brilho, degrade, fita, capsula, barra) = cor da ENFASE
-      const CAP_SUP = ['neon', 'degrade', 'bandeira', 'pilula', 'etiqueta', 'fitadegrade', 'fitadupla', 'etiquetacanto'];
+      const CAP_SUP = ['neon', 'degrade', 'bandeira', 'pilula', 'etiqueta', 'fitadegrade', 'fitadupla', 'etiquetacanto', 'contorno', 'sombra3d', 'sublinhado'];
       const cor = (CAP_SUP.includes(V.modo)
         ? (S.style.emphasisAccent || S.style.captionAccent)
         : S.style.captionAccent) || '';
@@ -1235,6 +1252,52 @@ function buildStaticDemo(host, id) {
         box.style.color = cor || '#f4f1e9';
         box.style.textShadow = `0 ${2 * s}px ${9 * s}px rgba(0,0,0,0.55)`;
         for (const ln of lines) el('div', '', box).textContent = t(ln);
+        return box;
+      }
+      if (V.modo === 'contorno') {
+        const R = Math.max(2, Math.round(V.size * 0.055 * s));
+        box.style.color = '#ffffff';
+        box.style.textShadow = [...contornoCss(R, cor || '#ff6a00'), '0 4px 10px rgba(0,0,0,0.45)'].join(', ');
+        for (const ln of lines) el('div', '', box).textContent = t(ln);
+        return box;
+      }
+      if (V.modo === 'sombra3d') {
+        const n = Math.max(2, Math.round(V.size * 0.10 * s));
+        const g = cor || '#ff6a00';
+        const ext = Array.from({length: n}, (_, i) => `${i + 1}px ${i + 1}px 0 ${g}`);
+        box.style.color = '#ffffff';
+        box.style.textShadow = [...ext, '0 4px 10px rgba(0,0,0,0.4)'].join(', ');
+        for (const ln of lines) el('div', '', box).textContent = t(ln);
+        return box;
+      }
+      if (V.modo === 'beast') {
+        const R = Math.max(2, Math.round(V.size * 0.075 * s));
+        box.style.color = '#ffe600';
+        box.style.textShadow = [...contornoCss(R, '#000000'), '0 5px 12px rgba(0,0,0,0.5)'].join(', ');
+        for (const ln of lines) el('div', '', box).textContent = t(ln);
+        return box;
+      }
+      if (V.modo === 'sublinhado') {
+        const R = Math.max(1, Math.round(V.size * 0.03 * s));
+        const g = cor || '#ff6a00';
+        box.style.color = '#ffffff';
+        box.style.textShadow = [...contornoCss(R, '#101215'), '0 4px 10px rgba(0,0,0,0.4)'].join(', ');
+        for (const ln of lines) {
+          const linha = el('div', '', box);
+          const sp = el('span', '', linha);
+          sp.style.position = 'relative';
+          sp.style.display = 'inline-block';
+          sp.style.padding = `0 ${Math.round(V.size * 0.04 * s)}px`;
+          sp.textContent = t(ln);
+          const esp = Math.max(2, Math.round(V.size * 0.10 * s));
+          const barra = el('span', '', sp);
+          barra.style.position = 'absolute';
+          barra.style.left = '0';
+          barra.style.right = '0';
+          barra.style.bottom = `${-(Math.round(V.size * 0.05 * s) + esp)}px`;
+          barra.style.height = `${esp}px`;
+          barra.style.background = g;
+        }
         return box;
       }
       if (V.modo === 'traco' || V.modo === 'eco') {
@@ -3897,7 +3960,8 @@ const capAccentUsed = () => S.style.captions !== 'nenhuma';
 const CAP_BASE_STYLES = ['karaoke', 'simples', 'serifada', 'classica', 'bloco', 'recorte', 'bolha',
   'metal', 'vidro', 'traco', 'moldura', 'eco', 'maquina'];
 const CAP_EMPH_STYLES = ['stacked', 'scatter', 'impacto', 'marcador',
-  'neon', 'degrade', 'bandeira', 'pilula', 'etiqueta', 'fitadegrade', 'fitadupla', 'etiquetacanto'];
+  'neon', 'degrade', 'bandeira', 'pilula', 'etiqueta', 'fitadegrade', 'fitadupla', 'etiquetacanto',
+  'contorno', 'sombra3d', 'sublinhado', 'divertida'];
 const CAP_CIRCLE_STYLES = ['stacked'];
 const legendaAccentUsed = () => capAccentUsed() && CAP_BASE_STYLES.includes(S.style.captions);
 const emphasisAccentUsed = () => capAccentUsed() && CAP_EMPH_STYLES.includes(S.style.captions);

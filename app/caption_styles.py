@@ -47,6 +47,15 @@ NOMES = {
     # os dois de 05/09 (pedido de 04/09: "fita dupla, etiqueta com canto recortado")
     "fitadupla": "Fita dupla",
     "etiquetacanto": "Etiqueta recortada",
+    # lote 1 das 50 rodadas (05/09): "mais estilos como o Captions e o CapCut"
+    "contorno": "Contorno da marca",
+    "sombra3d": "Sombra longa",
+    "beast": "Beast (amarelo)",
+    "sublinhado": "Sublinhado",
+    "gigante": "Gigante (Bebas)",
+    "quadrinhos": "Quadrinhos (Bangers)",
+    "divertida": "Divertida (Luckiest Guy)",
+    "condensada": "Condensada (Anton)",
     "marcador": "Marca-texto",
 }
 
@@ -73,7 +82,8 @@ USAM_COR_DA_LEGENDA = frozenset({
 USAM_COR_DA_ENFASE = frozenset({"stacked", "scatter", "impacto", "marcador",
                                 "neon", "degrade", "bandeira", "pilula",
                                 "etiqueta", "fitadegrade",
-                                "fitadupla", "etiquetacanto"})
+                                "fitadupla", "etiquetacanto",
+                                "contorno", "sombra3d", "sublinhado", "divertida"})
 
 
 def valido(estilo: str | None) -> bool:

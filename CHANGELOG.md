@@ -1,5 +1,16 @@
 # Changelog
 
+## 5.0.53
+
+- **Oito legendas novas, no nível do Captions e do CapCut.** Quatro
+  efeitos de letra: *Contorno da marca* (contorno grosso na cor da
+  empresa), *Sombra longa* (extrusão na cor da empresa), *Beast* (amarelo
+  com contorno preto, o look dos vídeos mais assistidos) e *Sublinhado*
+  (barra na cor da empresa sob cada linha). Quatro com fontes de impacto:
+  *Gigante* (Bebas Neue), *Quadrinhos* (Bangers), *Divertida* (Luckiest
+  Guy) e *Condensada* (Anton). Todas no editor, no preset e nos dois
+  motores de render, medidas contra o Remotion (1,01 a 1,03 de tinta).
+
 ## 5.0.52
 
 - **Mais duas transições:** Cortina lateral (as faixas vêm da esquerda e
