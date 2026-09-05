@@ -1,5 +1,16 @@
 # Changelog
 
+## 5.0.73
+
+- **Transcrição mais rápida em sequência: o modelo fica carregado entre
+  vídeos.** Cada vídeo carregava o modelo de reconhecimento de fala do
+  zero (4 a 8 segundos, às vezes muito mais num lote). Agora ele fica
+  pronto na memória num serviço próprio: o primeiro vídeo transcreve como
+  antes e sobe o serviço; do segundo em diante a transcrição começa na
+  hora. Sem uso por 5 minutos o serviço devolve a memória da placa de
+  vídeo; por 30 minutos, encerra sozinho. O resultado é idêntico ao de
+  antes, palavra por palavra — conferido em três vídeos reais.
+
 ## 5.0.72
 
 - **Vídeo pronto mais cedo: a revisão do texto saiu da fila.** Depois de

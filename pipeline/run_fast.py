@@ -575,6 +575,8 @@ _MARCADORES_TRANSCRICAO = (
     "REVISAO_JA_FEITA",
     "REVISAO_SEM_BASE",
     "REVISAO_DESLIGADA",
+    # 5.0.73: hit/carga/fallback do modelo residente.
+    "WHISPER_RESIDENTE",
 )
 
 

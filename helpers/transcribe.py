@@ -1199,8 +1199,12 @@ def _transcrever_local(
             t_audio = time.time()
             _extrair_wav16k(video, audio)
             t_audio = time.time() - t_audio
-            resultado = motor.transcrever(audio, idioma=language,
-                                          fonte_original=video)
+            # 5.0.73: pelo servico residente quando ele existe (o modelo
+            # fica carregado entre jobs); senao aqui mesmo, como antes.
+            from app.transcricao import residente
+
+            resultado = residente.transcrever(motor, audio, idioma=language,
+                                              fonte_original=video)
 
         payload = resultado.para_schema_scribe()
         payload["_seg_transcricao"] = round(
@@ -1252,6 +1256,8 @@ def _transcrever_local(
         seg_audio=round(resultado.duracao, 2),
         seg_transcricao=round(seg_tr, 3),
         seg_carregar_modelo=resultado.tempos.get("carregar_modelo"),
+        residente=residente.ultimo(),
+        seg_residente=resultado.tempos.get("residente"),
         seg_extrair_audio=round(t_audio, 3),
         seg_total=tempos["total"],
         realtime=(round(resultado.duracao / seg_tr, 2) if seg_tr > 0 else None),

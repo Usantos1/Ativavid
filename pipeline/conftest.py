@@ -55,3 +55,21 @@ def _sem_rede(request, monkeypatch):
 def pytest_configure(config):
     config.addinivalue_line(
         "markers", "rede: o teste fala com um host de fora, de propósito")
+
+
+@pytest.fixture(autouse=True)
+def _sem_servico_residente(monkeypatch):
+    """Nenhum teste sobe o servico residente de verdade (5.0.73).
+
+    Caso real (05/09): os testes do caminho local do `transcribe.py`, com o
+    motor falso, chegaram em `residente.transcrever` e SUBIRAM dois
+    servicos reais na maquina — com a rede bloqueada por `_sem_rede` o
+    anuncio nunca respondia e cada teste tentava de novo. Quem quer o
+    servico liga a variavel e troca `_subir` por conta propria."""
+    monkeypatch.setenv("ATIVAVID_WHISPER_RESIDENTE", "0")
+    try:
+        from app.transcricao import residente
+
+        monkeypatch.setattr(residente, "_subir", lambda: None)
+    except Exception:  # noqa: BLE001
+        pass
