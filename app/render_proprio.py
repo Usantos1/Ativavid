@@ -5029,13 +5029,27 @@ class Renderizador:
         sub[..., 3] = sub[..., 3] * inv + a_t
 
     @staticmethod
-    def _converter(tela: np.ndarray) -> np.ndarray:
+    def _converter(tela: np.ndarray, op_saida: float = 1.0) -> np.ndarray:
+        """Canvas premultiplicado float32 -> RGBA uint8 (alfa reto).
+
+        5.0.74: as MESMAS contas, na mesma ordem, sem o `out` float32 de
+        quatro canais que existia so para ser convertido em seguida — o
+        cast para uint8 acontece na atribuicao, com a mesma truncagem do
+        `astype`. `op_saida` e a opacidade de saida da legenda: aplicada
+        so no canal alfa, ja em uint8, exatamente como o chamador fazia
+        (uint8 -> float32 -> uint8), sem passar os tres canais de cor por
+        duas conversoes a mais. Perfil de 900 quadros: `_converter` +
+        `astype` eram 7,3 s de 28,7 s do desenho.
+        """
         a = np.clip(tela[..., 3:4], 0.0, 1.0)
-        rgb = np.clip(tela[..., :3] / np.maximum(a, 1e-6), 0.0, 255.0)
-        out = np.empty(tela.shape, dtype=np.float32)
-        out[..., :3] = rgb
-        out[..., 3] = a[..., 0] * 255.0
-        return out.astype(np.uint8)
+        rgb = tela[..., :3] / np.maximum(a, 1e-6)
+        np.clip(rgb, 0.0, 255.0, out=rgb)
+        out8 = np.empty(tela.shape, dtype=np.uint8)
+        out8[..., :3] = rgb
+        out8[..., 3] = a[..., 0] * 255.0
+        if op_saida < 1.0:
+            out8[..., 3] = (out8[..., 3].astype(np.float32) * op_saida).astype(np.uint8)
+        return out8
 
     def _blit(self, pronto8, leg, buf, sujo, bx0, by0, bx1, by1, dy, mesclar):
         dy0, dy1 = by0 + dy, by1 + dy
@@ -5119,9 +5133,7 @@ class Renderizador:
                                 mode="RGBA").filter(ImageFilter.GaussianBlur(blur_cue / 2)),
                 dtype=np.float32)
             tela[..., 3] /= 255.0
-        pronto = self._converter(tela).astype(np.float32)
-        pronto[..., 3] *= op_cue
-        self._blit(pronto.astype(np.uint8), leg, buf, sujo, bx0, by0, bx1, by1,
+        self._blit(self._converter(tela, op_cue), leg, buf, sujo, bx0, by0, bx1, by1,
                    int(round(dy_cue)), mesclar)
 
     def _blend_em(self, sub, p, op, abs_x0, abs_y0):
@@ -5378,14 +5390,27 @@ class Renderizador:
         x0, x1 = int(colunas[0]), int(colunas[-1]) + 1
         sub = buf[y0:y1, x0:x1]
         a_c = a[y0:y1, x0:x1]
-        a_b = sub[..., 3].astype(np.float32) / 255.0
-        a_o = a_c + a_b * (1.0 - a_c)
-        peso = (a_b * (1.0 - a_c))[..., None]
-        c3 = np.asarray(cor, dtype=np.float32)[None, None, :]
-        rgb = (c3 * a_c[..., None] + sub[..., :3].astype(np.float32) * peso) \
-            / np.maximum(a_o[..., None], 1e-6)
-        sub[..., :3] = np.clip(rgb, 0, 255).astype(np.uint8)
-        sub[..., 3] = (np.clip(a_o, 0, 1) * 255.0).astype(np.uint8)
+        # 5.0.74: a MESMA conta (over com alfa reto), bit a bit, em menos
+        # passagens: nos 3 quadros do "bloom" a mascara cobre o quadro
+        # inteiro (2 M pixels), e cada temporario de tres canais custava
+        # ~8 MB de trafego. A soma e comutativa em IEEE, entao
+        # `sub*peso + cor*a_c` da o mesmo bit que `cor*a_c + sub*peso`;
+        # o clip da cor saia (a conta e uma media ponderada, ja fica em
+        # 0..255) e o do alfa tambem (a_o <= 1). Flash branco, que e o
+        # comum: `cor*a_c` e o mesmo nos tres canais e e calculado uma vez.
+        peso = sub[..., 3].astype(np.float32) / 255.0
+        peso *= (1.0 - a_c)                      # a_b * (1 - a_c)
+        a_o = a_c + peso
+        den = np.maximum(a_o, 1e-6)
+        num = sub[..., :3].astype(np.float32)
+        num *= peso[..., None]
+        if cor[0] == cor[1] == cor[2]:
+            num += (np.float32(cor[0]) * a_c)[..., None]
+        else:
+            num += np.asarray(cor, dtype=np.float32)[None, None, :] * a_c[..., None]
+        num /= den[..., None]
+        sub[..., :3] = num
+        sub[..., 3] = a_o * 255.0
         sujo[0] = min(sujo[0], x0) if sujo[2] > sujo[0] else x0
         sujo[1] = min(sujo[1], y0) if sujo[3] > sujo[1] else y0
         sujo[2] = max(sujo[2], x1)

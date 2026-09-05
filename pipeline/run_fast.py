@@ -4129,6 +4129,54 @@ def run(
                         pass
         _timing_mark("REVISAO_WAIT", t0)
 
+    # 5.0.74: a fonte HDR e preparada (escala + tonemap + grade, uma vez)
+    # ao fim da analise de cada take, em paralelo com o plano da IA, em vez
+    # de dentro do corte. E o mesmo `prepared_source` do render.py, pela
+    # mesma chave: o corte acha o arquivo pronto (PREPARED_SOURCE HIT) e
+    # `PREP_WAIT` mede so o que sobrou da espera. MEDIDO nos jobs reais: o
+    # corte e 31% do job e, numa fonte HDR, o prep e a parte cara dele; o
+    # plano (5,9-10,8 s de mediana) rodava antes com a CPU parada.
+    # `ATIVAVID_PREP_CEDO=0` desliga (o corte prepara como sempre).
+    _preps: list[dict] = []
+    _prep_vagas = _threading_rev.Semaphore(2)   # regra do corte: 2 por vez
+
+    def _preparar_cedo(src_: Path, grade_field_: str) -> None:
+        if os.environ.get("ATIVAVID_PREP_CEDO", "").strip() == "0":
+            return
+        item: dict = {"src": src_, "proc": None}
+
+        def _rodar() -> None:
+            with _prep_vagas:
+                try:
+                    item["proc"] = _helper(
+                        "prep_source.py", str(src_), "--grade-field", grade_field_,
+                        *(["--sem-nvdec"] if len(sources) > 1 else []), check=False)
+                except Exception as e:  # noqa: BLE001
+                    print(f"PREP_CEDO_FALHOU {type(e).__name__}: {str(e)[:120]}",
+                          flush=True)
+
+        th = _threading_rev.Thread(target=_rodar, daemon=True,
+                                   name=f"prep-{src_.stem[:16]}")
+        item["thread"] = th
+        th.start()
+        _preps.append(item)
+
+    def _fechar_preps() -> None:
+        """Espera os preps que ainda rodam. Idempotente; marca PREP_WAIT."""
+        if not _preps:
+            return
+        t0 = time.perf_counter()
+        pendentes, _preps[:] = list(_preps), []
+        for item in pendentes:
+            item["thread"].join()
+            proc = item.get("proc")
+            for fluxo in ((getattr(proc, "stdout", "") or ""),
+                          (getattr(proc, "stderr", "") or "")):
+                for linha in fluxo.splitlines():
+                    if "PREP_CEDO" in linha or "PREPARED_SOURCE" in linha:
+                        print(linha.rstrip(), flush=True)
+        _timing_mark("PREP_WAIT", t0)
+
     for idx, src in enumerate(sources):
         w, h = _display_wh(src)
         dur_i = _ffprobe_duration(src)
@@ -4220,6 +4268,11 @@ def run(
             dur = dur_i
             spoken = spoken_i
             source_key = key
+        # O grade do EDL e o da PRIMEIRA fonte (`grade_field`), para todas.
+        # Longform corta em resolucao original (sem prep) e o job-mae de
+        # clipes nao corta.
+        if not is_longform and intent_mode != "clips":
+            _preparar_cedo(src, grade_field)
 
         if len(sources) > 1:
             if intent_mode == "intact":
@@ -4619,6 +4672,10 @@ def run(
     render_args = [str(edl_path), "-o", str(cut_path), "--no-subtitles", "--voice-master"]
     if is_longform:
         render_args.append("--keep-resolution")
+    # A fonte preparada que comecou na analise (5.0.74): o que sobrou da
+    # espera fica em PREP_WAIT, fora do CUT — assim CUT_preparar_fontes
+    # continua dizendo o que o corte pagou de verdade.
+    _fechar_preps()
     _t_cut = time.perf_counter()
     try:
         _recolher_marcos_do_corte(_helper("render.py", *render_args))

@@ -1,5 +1,20 @@
 # Changelog
 
+## 5.0.74
+
+- **Corte mais rápido em vídeo HDR: a preparação da fonte começa durante
+  o plano.** Em vídeo HDR (a maioria dos celulares atuais) o passo mais
+  caro do corte é converter a fonte inteira para SDR uma vez. Ele esperava
+  o plano da IA terminar para começar; agora começa assim que a análise do
+  vídeo acaba e corre em paralelo com o plano, e o corte só paga o que
+  sobrou. O resultado do vídeo é o mesmo — é o mesmo arquivo preparado,
+  pela mesma regra.
+- **Legendas e transições desenhadas em menos passagens.** As duas contas
+  mais pesadas do desenho (a conversão da caixa da legenda e o clarão das
+  transições) fazem exatamente as mesmas operações com menos cópias na
+  memória: quadros idênticos bit a bit, conferidos um a um contra a versão
+  anterior.
+
 ## 5.0.73
 
 - **Transcrição mais rápida em sequência: o modelo fica carregado entre
